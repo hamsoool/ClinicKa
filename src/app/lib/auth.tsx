@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
+import { clearStoredSession, getStoredSession, setStoredSession, signInWithPassword, signOut, signUpWithPassword } from './api';
 import type { AuthMe, AuthSession, UserRole } from './api';
-import { getMockStudentById } from './mock-data';
 
 type AuthContextValue = {
   loading: boolean;
@@ -9,157 +9,166 @@ type AuthContextValue = {
   me: AuthMe | null;
   role: UserRole | null;
   signIn: (email: string, password: string) => Promise<AuthMe>;
+  signUp: (fullName: string, email: string, password: string) => Promise<{
+    me: AuthMe | null;
+    emailConfirmationRequired: boolean;
+  }>;
   logout: () => Promise<void>;
   refresh: () => Promise<AuthMe | null>;
 };
 
-const AuthContext = createContext<AuthContextValue | null>(null);
-
-const previewStudent = getMockStudentById('202310417');
-
-const PREVIEW_USERS: Record<UserRole, AuthMe> = {
-  student: {
-    profile: {
-      id: 'preview-student',
-      role: 'student',
-      email: previewStudent?.email || '202310417@gordoncollege.edu.ph',
-      student_id: previewStudent?.student_id || '202310417',
-      first_name: previewStudent?.first_name || 'Demo',
-      last_name: previewStudent?.last_name || 'Student',
-      department: previewStudent?.department || 'CCS',
-      course: previewStudent?.course || 'BS Computer Science',
-    },
-    student: {
-      student_id: previewStudent?.student_id || '202310417',
-      first_name: previewStudent?.first_name || 'Demo',
-      last_name: previewStudent?.last_name || 'Student',
-      middle_initial: previewStudent?.middle_initial || 'A',
-      department: previewStudent?.department || 'CCS',
-      course: previewStudent?.course || 'BS Computer Science',
-      year_level: previewStudent?.year_level || 3,
-      age: previewStudent?.age || 20,
-      sex: previewStudent?.sex || 'male',
-      birthday: previewStudent?.birthday || '2005-01-15',
-      civil_status: previewStudent?.civil_status || 'Single',
-      contact_number: previewStudent?.contact_number || '09123456789',
-      address: previewStudent?.address || 'Olongapo City',
-    },
-    staff: null,
-  },
-  staff: {
-    profile: {
-      id: 'preview-staff',
-      role: 'staff',
-      email: 'clinic.staff@gordoncollege.edu.ph',
-      first_name: 'Clinic',
-      last_name: 'Staff',
-      department: 'Health Services',
-      course: null,
-    },
-    student: null,
-    staff: {
-      id: 'staff-demo-001',
-      first_name: 'Clinic',
-      last_name: 'Staff',
-      middle_initial: 'B',
-      position: 'Clinic Staff',
-      phone: '09170000001',
-      is_active: true,
-    },
-  },
-  admin: {
-    profile: {
-      id: 'preview-admin',
-      role: 'admin',
-      email: 'clinic.admin@gordoncollege.edu.ph',
-      first_name: 'Clinic',
-      last_name: 'Admin',
-      department: 'Health Services',
-      course: null,
-    },
-    student: null,
-    staff: {
-      id: 'staff-demo-002',
-      first_name: 'Clinic',
-      last_name: 'Admin',
-      middle_initial: 'C',
-      position: 'Administrator',
-      phone: '09170000002',
-      is_active: true,
-    },
-  },
+const AUTH_CONTEXT_KEY = Symbol.for('gc.auth.context');
+const authGlobal = globalThis as typeof globalThis & {
+  [AUTH_CONTEXT_KEY]?: ReturnType<typeof createContext<AuthContextValue | null>>;
 };
+const AuthContext =
+  authGlobal[AUTH_CONTEXT_KEY] ?? createContext<AuthContextValue | null>(null);
 
-function cloneMe(role: UserRole): AuthMe {
-  return structuredClone(PREVIEW_USERS[role]);
+if (!authGlobal[AUTH_CONTEXT_KEY]) {
+  authGlobal[AUTH_CONTEXT_KEY] = AuthContext;
 }
 
-function getRoleFromPath(pathname: string): UserRole | null {
-  if (pathname.startsWith('/student')) return 'student';
-  if (pathname.startsWith('/staff')) return 'staff';
-  if (pathname.startsWith('/admin')) return 'admin';
-  return null;
-}
+function buildMeFromSession(role: UserRole, session: AuthSession | null): AuthMe {
+  const email = session?.user?.email || null;
+  const emailUser = email?.split('@')[0] || '';
+  const derivedStudentId = /^[0-9]{9}$/.test(emailUser) ? emailUser : null;
 
-function notifyLocationChange() {
-  window.dispatchEvent(new Event('locationchange'));
-}
-
-function installLocationChangeEvents() {
-  if (typeof window === 'undefined') return;
-  const historyWithPatch = window.history as History & { __previewPatched?: boolean };
-  if (historyWithPatch.__previewPatched) return;
-
-  const originalPushState = window.history.pushState;
-  const originalReplaceState = window.history.replaceState;
-
-  window.history.pushState = function (...args) {
-    const result = originalPushState.apply(this, args);
-    notifyLocationChange();
-    return result;
+  return {
+    profile: {
+      id: session?.user?.id || 'unknown-user',
+      role,
+      email,
+      student_id: role === 'student' ? derivedStudentId : null,
+      first_name: null,
+      last_name: null,
+      department: null,
+      course: null,
+    },
+    student: null,
+    staff: null,
   };
+}
 
-  window.history.replaceState = function (...args) {
-    const result = originalReplaceState.apply(this, args);
-    notifyLocationChange();
-    return result;
-  };
+function getRoleFromSession(session: AuthSession | null): UserRole | null {
+  if (!session) return null;
+  return resolveRoleFromEmail(session.user?.email);
+}
 
-  window.addEventListener('popstate', notifyLocationChange);
-  historyWithPatch.__previewPatched = true;
+function resolveRoleFromEmail(email?: string | null): UserRole {
+  const normalized = (email || '').toLowerCase();
+  if (normalized.includes('admin')) return 'admin';
+  if (normalized.includes('staff')) return 'staff';
+  return 'student';
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = useState<UserRole | null>(() =>
-    typeof window === 'undefined' ? null : getRoleFromPath(window.location.pathname),
+  const [session, setSession] = useState<AuthSession | null>(() =>
+    typeof window === 'undefined' ? null : getStoredSession(),
   );
+  const [loading, setLoading] = useState(false);
+  const [role, setRole] = useState<UserRole | null>(() => getRoleFromSession(getStoredSession()));
 
   useEffect(() => {
-    installLocationChangeEvents();
-    const updateRole = () => setRole(getRoleFromPath(window.location.pathname));
-    window.addEventListener('locationchange', updateRole);
-    updateRole();
-    return () => window.removeEventListener('locationchange', updateRole);
+    if (typeof window === 'undefined') return;
+    if (!window.location.hash.includes('access_token=')) return;
+
+    const hash = window.location.hash.replace(/^#/, '');
+    const params = new URLSearchParams(hash);
+    const accessToken = params.get('access_token');
+    const authType = params.get('type');
+
+    if (!accessToken) return;
+
+    if (authType === 'signup') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('mode', 'signin');
+      url.searchParams.set('verified', '1');
+      window.history.replaceState({}, document.title, url.pathname + url.search);
+      return;
+    }
+
+    const nextSession: AuthSession = {
+      access_token: accessToken,
+      refresh_token: params.get('refresh_token') || undefined,
+      token_type: params.get('token_type') || undefined,
+      expires_in: params.get('expires_in') ? Number(params.get('expires_in')) : undefined,
+      user: {
+        id: params.get('user_id') || 'verified-user',
+        email: params.get('email') || undefined,
+      },
+    };
+
+    setStoredSession(nextSession);
+    setSession(nextSession);
+    setRole(getRoleFromSession(nextSession));
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
   }, []);
 
-  const me = role ? cloneMe(role) : null;
+  useEffect(() => {
+    setRole(getRoleFromSession(session));
+  }, [session]);
+
+  const me = role ? buildMeFromSession(role, session) : null;
 
   const value = useMemo<AuthContextValue>(() => ({
-    loading: false,
-    session: role ? { access_token: `preview-${role}` } : null,
+    loading,
+    session,
     me,
     role,
-    signIn: async (email: string) => {
-      const normalized = email.toLowerCase();
-      if (normalized.includes('admin')) return cloneMe('admin');
-      if (normalized.includes('staff')) return cloneMe('staff');
-      return cloneMe('student');
+    signIn: async (email: string, password: string) => {
+      setLoading(true);
+      try {
+        const nextSession = await signInWithPassword(email, password);
+        setSession(nextSession);
+        const signedInRole = getRoleFromSession(nextSession) ?? resolveRoleFromEmail(email);
+        setRole(signedInRole);
+        return buildMeFromSession(signedInRole, nextSession);
+      } finally {
+        setLoading(false);
+      }
+    },
+    signUp: async (fullName: string, email: string, password: string) => {
+      setLoading(true);
+      try {
+        const { session: nextSession, emailConfirmationRequired } = await signUpWithPassword(
+          fullName,
+          email,
+          password,
+        );
+
+        if (!nextSession) {
+          setSession(null);
+          setRole(null);
+          return {
+            me: null,
+            emailConfirmationRequired,
+          };
+        }
+
+        setSession(nextSession);
+        const signedInRole = getRoleFromSession(nextSession) ?? resolveRoleFromEmail(email);
+        setRole(signedInRole);
+        return {
+          me: buildMeFromSession(signedInRole, nextSession),
+          emailConfirmationRequired,
+        };
+      } finally {
+        setLoading(false);
+      }
     },
     logout: async () => {
-      return;
+      setLoading(true);
+      try {
+        await signOut();
+      } finally {
+        clearStoredSession();
+        setSession(null);
+        setRole(null);
+        setLoading(false);
+      }
     },
-    refresh: async () => me,
-  }), [me, role]);
+    refresh: async () => (role ? buildMeFromSession(role, session) : null),
+  }), [loading, me, role, session]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -193,12 +202,8 @@ export function RequireAuth({
   children: React.ReactNode;
   allowedRoles?: UserRole[];
 }) {
-  const { loading, role } = useAuth();
+  const { role } = useAuth();
   const location = useLocation();
-
-  if (loading) {
-    return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading...</div>;
-  }
 
   if (!role) {
     return <Navigate to="/" replace state={{ from: location.pathname }} />;
@@ -212,11 +217,7 @@ export function RequireAuth({
 }
 
 export function RedirectIfAuthenticated({ children }: { children: React.ReactNode }) {
-  const { loading, role } = useAuth();
-
-  if (loading) {
-    return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading...</div>;
-  }
+  const { role } = useAuth();
 
   if (role) {
     return <Navigate to={getHomePath(role)} replace />;

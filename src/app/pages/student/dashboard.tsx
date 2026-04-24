@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { ArrowLeft, Plus, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { getStudentRecords } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -11,6 +11,13 @@ import { useAuth } from '../../lib/auth';
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
+  const displayName = [
+    me?.student?.first_name || me?.profile.first_name || '',
+    me?.student?.last_name || me?.profile.last_name || '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim() || 'Student';
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,14 +61,10 @@ export default function StudentDashboard() {
   return (
     <div className="min-h-screen bg-muted/40 p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
-        <Button
-          variant="ghost"
-          onClick={() => navigate('/')}
-          className="mb-6"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Role Selection
-        </Button>
+        <div className="mb-6">
+          <p className="text-sm text-muted-foreground">Welcome</p>
+          <h2 className="text-2xl font-semibold">Welcome, {displayName}</h2>
+        </div>
 
         {studentId && (
           <Card className="mb-8">

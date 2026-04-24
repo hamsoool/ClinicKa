@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router";
 import RoleSelection from "./pages/role-selection";
+import CheckEmailPage from "./pages/check-email";
 import StudentDashboard from "./pages/student/dashboard";
 import StudentYearSelection from "./pages/student/year-selection";
 import StudentMedicalForm from "./pages/student/medical-form";
@@ -22,15 +23,32 @@ import AdminSystemSettings from "./pages/admin/system-settings";
 import AdminStaffManagement from "./pages/admin/staff-management";
 import AdminUserAccounts from "./pages/admin/user-accounts";
 import AdminReports from "./pages/admin/reports";
+import { RedirectIfAuthenticated, RequireAuth } from "./lib/auth";
 
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <RoleSelection />,
+    element: (
+      <RedirectIfAuthenticated>
+        <RoleSelection />
+      </RedirectIfAuthenticated>
+    ),
+  },
+  {
+    path: "/check-email",
+    element: (
+      <RedirectIfAuthenticated>
+        <CheckEmailPage />
+      </RedirectIfAuthenticated>
+    ),
   },
   {
     path: "/student",
-    element: <StudentLayout />,
+    element: (
+      <RequireAuth allowedRoles={['student']}>
+        <StudentLayout />
+      </RequireAuth>
+    ),
     children: [
       { index: true, Component: StudentDashboard },
       { path: "records", Component: StudentRecords },
@@ -43,7 +61,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/staff",
-    element: <StaffLayout />,
+    element: (
+      <RequireAuth allowedRoles={['staff']}>
+        <StaffLayout />
+      </RequireAuth>
+    ),
     children: [
       { index: true, Component: StaffDashboard },
       { path: "submissions", Component: StaffSubmissions },
@@ -56,7 +78,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/admin",
-    element: <AdminLayout />,
+    element: (
+      <RequireAuth allowedRoles={['admin']}>
+        <AdminLayout />
+      </RequireAuth>
+    ),
     children: [
       { index: true, Component: AdminDashboard },
       { path: "settings", Component: AdminSystemSettings },

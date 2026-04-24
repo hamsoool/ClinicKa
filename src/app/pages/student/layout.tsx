@@ -9,6 +9,15 @@ export default function StudentLayout() {
   const { me, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profilePic, setProfilePic] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const displayName = [
+    me?.student?.first_name || me?.profile.first_name || '',
+    me?.student?.last_name || me?.profile.last_name || '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim() || 'Student';
 
   const isActive = (path: string) => {
     if (path === '/student') {
@@ -36,8 +45,7 @@ export default function StudentLayout() {
       </button>
 
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-30 w-64 bg-sidebar text-sidebar-foreground transform transition-transform duration-200 ease-in-out ${menuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-          }`}
+        className={`fixed lg:static inset-y-0 left-0 z-30 w-64 bg-sidebar text-sidebar-foreground transform transition-transform duration-200 ease-in-out ${menuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         <div className="flex flex-col h-full">
           <div className="p-6 border-b border-sidebar-border">
@@ -93,8 +101,13 @@ export default function StudentLayout() {
                   {me?.student?.student_id || me?.profile.student_id} {me?.student?.course ? `• ${me.student.course}` : ''}
                 </p>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="relative group">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen((prev) => !prev)}
+                  className="relative"
+                  aria-label="Open profile menu"
+                >
                   <div className="w-10 h-10 rounded-full border bg-muted flex items-center justify-center overflow-hidden">
                     {profilePic ? (
                       <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
@@ -102,31 +115,50 @@ export default function StudentLayout() {
                       <User className="w-5 h-5 text-muted-foreground" />
                     )}
                   </div>
-                  <label htmlFor="profile-upload" className="absolute inset-0 bg-black/50 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                    <Camera className="w-4 h-4" />
-                  </label>
-                  <input
-                    id="profile-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    aria-label="Upload student profile picture"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setProfilePic(URL.createObjectURL(e.target.files[0]));
-                      }
-                    }}
-                  />
-                </div>
-                <button
-                  onClick={async () => {
-                    await logout();
-                    navigate('/');
-                  }}
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Logout
                 </button>
+                {profileOpen && (
+                  <div className="absolute right-0 mt-2 w-72 rounded-lg border bg-background p-4 shadow-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="relative group">
+                        <div className="w-14 h-14 rounded-full border bg-muted flex items-center justify-center overflow-hidden">
+                          {profilePic ? (
+                            <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-6 h-6 text-muted-foreground" />
+                          )}
+                        </div>
+                        <label htmlFor="profile-upload" className="absolute inset-0 bg-black/50 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                          <Camera className="w-4 h-4" />
+                        </label>
+                        <input
+                          id="profile-upload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          aria-label="Upload student profile picture"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setProfilePic(URL.createObjectURL(e.target.files[0]));
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold truncate">{displayName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{me?.profile.email || ''}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await logout();
+                        navigate('/');
+                      }}
+                      className="mt-4 w-full rounded-md border px-3 py-2 text-sm hover:bg-muted"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -153,8 +185,7 @@ export default function StudentLayout() {
                 key={item.label}
                 onClick={() => navigate(item.path)}
                 aria-current={active ? 'page' : undefined}
-                className={`flex flex-col items-center justify-center gap-1 rounded-md py-2 text-xs transition-colors ${active ? 'text-primary' : 'text-muted-foreground'
-                  }`}
+                className={`flex flex-col items-center justify-center gap-1 rounded-md py-2 text-xs transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}
               >
                 <Icon className="w-5 h-5" />
                 <span>{item.label}</span>
