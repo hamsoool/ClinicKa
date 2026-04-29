@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Eye, EyeOff } from 'lucide-react';
+import { signInWithGoogle } from '../lib/api';
 import { useAuth } from '../lib/auth';
+
+const GC_DOMAIN = 'gordoncollege.edu.ph';
 
 function getHomePath(role: 'student' | 'staff' | 'admin') {
   if (role === 'staff') return '/staff';
@@ -17,6 +20,7 @@ export default function RoleSelection() {
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const startsInSignInMode = query.get('mode') === 'signin';
   const verifiedFromEmail = query.get('verified') === '1';
+  const googleError = query.get('google_error');
 
   const [mode, setMode] = useState<'signin' | 'signup'>(startsInSignInMode ? 'signin' : 'signup');
   const [showSignInPassword, setShowSignInPassword] = useState(false);
@@ -80,6 +84,12 @@ export default function RoleSelection() {
     }
   }
 
+  function handleGoogleSignIn() {
+    setError(null);
+    setSuccessMessage(null);
+    signInWithGoogle();
+  }
+
   async function handleSignUp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -91,6 +101,10 @@ export default function RoleSelection() {
     }
     if (!signUpForm.email.trim()) {
       setError('Please enter your email.');
+      return;
+    }
+    if (!signUpForm.email.trim().toLowerCase().endsWith(`@${GC_DOMAIN}`)) {
+      setError(`Please register using your @${GC_DOMAIN} email address.`);
       return;
     }
     if (signUpForm.password.length < 6) {
@@ -201,6 +215,7 @@ export default function RoleSelection() {
 
                     <button
                       type="button"
+                      onClick={handleGoogleSignIn}
                       className="mx-auto flex h-9 w-20 items-center justify-center rounded-sm bg-white text-sm font-semibold text-[#3b4953]"
                     >
                       G
@@ -283,6 +298,16 @@ export default function RoleSelection() {
                     </div>
 
                     {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
+                    {googleError === 'invalid_domain' ? (
+                      <p className="text-sm font-semibold text-red-700">
+                        Only @gordoncollege.edu.ph Google accounts are allowed.
+                      </p>
+                    ) : null}
+                    {googleError === 'invalid_token' ? (
+                      <p className="text-sm font-semibold text-red-700">
+                        Google sign-in failed. Please try again.
+                      </p>
+                    ) : null}
                     {successMessage ? <p className="text-sm font-semibold text-green-800">{successMessage}</p> : null}
 
                     <button
@@ -300,6 +325,7 @@ export default function RoleSelection() {
 
                     <button
                       type="button"
+                      onClick={handleGoogleSignIn}
                       className="mx-auto flex h-9 w-20 items-center justify-center rounded-sm bg-white text-sm font-semibold text-[#3b4953]"
                     >
                       G

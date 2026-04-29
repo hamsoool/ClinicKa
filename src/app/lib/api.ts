@@ -15,6 +15,7 @@ const publicAnonKey =
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 const DEMO_SUBMISSIONS_KEY = 'gc_demo_submissions';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
+const GC_DOMAIN = 'gordoncollege.edu.ph';
 const previewStudent = getMockStudentById('202310417');
 const STORAGE_BUCKET = 'medical-files';
 
@@ -80,6 +81,26 @@ type RequestOptions = {
   headers?: Record<string, string>;
   body?: BodyInit | null;
 };
+
+function normalizeEmail(email?: string | null) {
+  return (email || '').trim().toLowerCase();
+}
+
+function isGCDomainEmail(email?: string | null) {
+  return normalizeEmail(email).endsWith(`@${GC_DOMAIN}`);
+}
+
+function resolveRoleFromEmail(email?: string | null): UserRole {
+  const normalized = normalizeEmail(email);
+  if (normalized.includes('admin')) return 'admin';
+  if (normalized.includes('staff')) return 'staff';
+  return 'student';
+}
+
+function deriveStudentIdFromEmail(email?: string | null) {
+  const localPart = normalizeEmail(email).split('@')[0] || '';
+  return /^[0-9]{9}$/.test(localPart) ? localPart : null;
+}
 
 function cloneSubmission(record: MockSubmission): MockSubmission {
   return JSON.parse(JSON.stringify(record)) as MockSubmission;
@@ -309,6 +330,26 @@ async function authRequest<T>(path: string, options: RequestOptions = {}): Promi
   }
 
   return payload as T;
+}
+
+export function signInWithGoogle() {
+  if (typeof window === 'undefined') return;
+  if (!supabaseUrl) {
+    throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL in your .env file.');
+  }
+
+  const redirectTo = `${window.location.origin}/?mode=signin`;
+  const url = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(
+    redirectTo,
+  )}`;
+  window.location.assign(url);
+}
+
+export async function getUserByToken(token: string | null) {
+  if (!token) {
+    throw new Error('Missing access token.');
+  }
+  return authRequest<{ id: string; email?: string | null }>('/auth/v1/user', { token });
 }
 
 async function getCurrentAuthUser(token?: string | null) {
@@ -541,6 +582,9 @@ export async function signInWithPassword(email: string, password: string) {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
   }
+  if (!isGCDomainEmail(email)) {
+    throw new Error(`Only @${GC_DOMAIN} email accounts are allowed.`);
+  }
 
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST',
@@ -581,6 +625,9 @@ export async function signInWithPassword(email: string, password: string) {
 export async function signUpWithPassword(fullName: string, email: string, password: string) {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+  }
+  if (!isGCDomainEmail(email)) {
+    throw new Error(`Please use your @${GC_DOMAIN} email address to register.`);
   }
 
   const emailRedirectTo =
@@ -712,19 +759,42 @@ export async function getMe(token?: string | null) {
     },
   );
   const profile = profileRows[0];
-  if (!profile) {
+  const resolvedProfile =
+    profile ||
+    (
+      await restRequest<any[]>(
+        'profiles',
+        'select=*',
+        {
+          method: 'POST',
+          token,
+          headers: {
+            'Content-Type': 'application/json',
+            Prefer: 'return=representation',
+          },
+          body: JSON.stringify({
+            id: user.id,
+            role: resolveRoleFromEmail(user.email),
+            email: normalizeEmail(user.email) || null,
+            student_id: deriveStudentIdFromEmail(user.email),
+          }),
+        },
+      )
+    )[0];
+
+  if (!resolvedProfile) {
     throw new Error('Profile not found for authenticated user.');
   }
 
   const [studentRows, staffRows] = await Promise.all([
-    profile.student_id
-      ? restRequest<any[]>('students', `student_id=eq.${encodeURIComponent(profile.student_id)}&select=*`, { token })
+    resolvedProfile.student_id
+      ? restRequest<any[]>('students', `student_id=eq.${encodeURIComponent(resolvedProfile.student_id)}&select=*`, { token })
       : Promise.resolve([]),
     restRequest<any[]>('staff_users', `profile_id=eq.${user.id}&select=*`, { token }),
   ]);
 
   return {
-    profile,
+    profile: resolvedProfile,
     student: studentRows[0] || null,
     staff: staffRows[0] || null,
   } satisfies AuthMe;

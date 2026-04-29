@@ -1,7 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { clearStoredSession, getStoredSession, setStoredSession, signInWithPassword, signOut, signUpWithPassword } from './api';
+import { clearStoredSession, getStoredSession, getUserByToken, setStoredSession, signInWithPassword, signOut, signUpWithPassword } from './api';
 import type { AuthMe, AuthSession, UserRole } from './api';
+
+const GC_DOMAIN = 'gordoncollege.edu.ph';
+
+function isGCDomain(email?: string | null) {
+  return !!email?.toLowerCase().endsWith(`@${GC_DOMAIN}`);
+}
 
 type AuthContextValue = {
   loading: boolean;
@@ -79,29 +85,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!accessToken) return;
 
-    if (authType === 'signup') {
-      const url = new URL(window.location.href);
-      url.searchParams.set('mode', 'signin');
-      url.searchParams.set('verified', '1');
-      window.history.replaceState({}, document.title, url.pathname + url.search);
-      return;
+    async function processAuthRedirect() {
+      if (authType === 'signup') {
+        const url = new URL(window.location.href);
+        url.hash = '';
+        url.searchParams.set('mode', 'signin');
+        url.searchParams.set('verified', '1');
+        window.history.replaceState({}, document.title, url.pathname + url.search);
+        return;
+      }
+
+      try {
+        const authUser = await getUserByToken(accessToken);
+        const email = authUser.email || params.get('email') || undefined;
+
+        if (!isGCDomain(email)) {
+          clearStoredSession();
+          setSession(null);
+          setRole(null);
+          const url = new URL(window.location.href);
+          url.hash = '';
+          url.searchParams.set('mode', 'signin');
+          url.searchParams.set('google_error', 'invalid_domain');
+          window.history.replaceState({}, document.title, url.pathname + url.search);
+          return;
+        }
+
+        const nextSession: AuthSession = {
+          access_token: accessToken,
+          refresh_token: params.get('refresh_token') || undefined,
+          token_type: params.get('token_type') || undefined,
+          expires_in: params.get('expires_in') ? Number(params.get('expires_in')) : undefined,
+          user: {
+            id: authUser.id || params.get('user_id') || 'verified-user',
+            email,
+          },
+        };
+
+        setStoredSession(nextSession);
+        setSession(nextSession);
+        setRole(getRoleFromSession(nextSession));
+        const url = new URL(window.location.href);
+        url.hash = '';
+        window.history.replaceState({}, document.title, url.pathname + url.search);
+      } catch {
+        clearStoredSession();
+        setSession(null);
+        setRole(null);
+        const url = new URL(window.location.href);
+        url.hash = '';
+        url.searchParams.set('mode', 'signin');
+        url.searchParams.set('google_error', 'invalid_token');
+        window.history.replaceState({}, document.title, url.pathname + url.search);
+      }
     }
 
-    const nextSession: AuthSession = {
-      access_token: accessToken,
-      refresh_token: params.get('refresh_token') || undefined,
-      token_type: params.get('token_type') || undefined,
-      expires_in: params.get('expires_in') ? Number(params.get('expires_in')) : undefined,
-      user: {
-        id: params.get('user_id') || 'verified-user',
-        email: params.get('email') || undefined,
-      },
-    };
-
-    setStoredSession(nextSession);
-    setSession(nextSession);
-    setRole(getRoleFromSession(nextSession));
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    void processAuthRedirect();
   }, []);
 
   useEffect(() => {
