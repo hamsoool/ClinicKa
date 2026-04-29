@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 *.crdownload
+design-import/
 
 node_modules/
 
