@@ -4,6 +4,7 @@
 !.env.example
 *.crdownload
 design-import/
+"GC General Privacy Notice_files"/
 
 node_modules/
 
