@@ -71,38 +71,40 @@ export default function StudentMedicalForm() {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="mx-auto max-w-4xl">
-        <Button variant="ghost" onClick={() => navigate('/student/year-selection')} className="mb-6">
+    <div className="min-h-screen px-4 py-4 md:px-8 md:py-6">
+      <div className="flex w-full flex-col gap-5">
+        <Button variant="ghost" onClick={() => navigate('/student/year-selection')} className="w-fit">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Year Selection
         </Button>
 
-        <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-bold text-primary">Year {year} Medical Record Form</h1>
-          <p className="text-muted-foreground">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold text-primary md:text-4xl">Year {year} Medical Record Form</h1>
+          <p className="text-lg text-muted-foreground">
             Step {step} of {totalSteps}
           </p>
         </div>
 
-        <div className="mb-8">
+        <div>
           <Progress value={(step / totalSteps) * 100} className="h-2" />
         </div>
 
-        <Card>
-          <CardContent className="pt-6">
-            <MedicalFormStepContent
-              step={step}
-              formData={formData}
-              onFieldChange={updateField}
-              onEmergencyContactChange={updateEmergencyContact}
-              onMedicalConditionChange={updateMedicalCondition}
-              onMeasurementChange={updateMeasurement}
-              onFileChange={handleFileChange}
-              getBmiCategory={getBmiCategory}
-            />
+        <Card className="border-border/70 bg-white/90 shadow-[0_20px_60px_rgba(16,24,40,0.08)] lg:min-h-[calc(100vh-15.5rem)]">
+          <CardContent className="flex h-full flex-col px-5 py-6 md:px-8 md:py-8 xl:px-10">
+            <div className="flex-1">
+              <MedicalFormStepContent
+                step={step}
+                formData={formData}
+                onFieldChange={updateField}
+                onEmergencyContactChange={updateEmergencyContact}
+                onMedicalConditionChange={updateMedicalCondition}
+                onMeasurementChange={updateMeasurement}
+                onFileChange={handleFileChange}
+                getBmiCategory={getBmiCategory}
+              />
+            </div>
 
-            <div className="mt-8 flex justify-between border-t pt-6">
+            <div className="mt-10 flex justify-between border-t border-border/70 pt-6">
               <Button variant="outline" onClick={() => setStep((value) => Math.max(1, value - 1))} disabled={step === 1}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Previous

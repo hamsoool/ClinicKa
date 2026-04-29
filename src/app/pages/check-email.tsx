@@ -16,7 +16,7 @@ export default function CheckEmailPage() {
         </p>
         <div className="mt-6">
           <Link
-            to="/?mode=signin"
+            to="/auth?mode=signin"
             className="inline-flex h-10 items-center rounded-sm bg-[#3bf839] px-4 font-semibold text-[#173312] transition hover:bg-[#35e134]"
           >
             Back to sign in

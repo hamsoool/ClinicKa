@@ -34,10 +34,16 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   switch (step) {
     case 1:
       return (
-        <div className="space-y-4">
-          <h3 className="mb-4 text-xl font-semibold">Personal Information</h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <h3 className="text-2xl font-semibold tracking-tight">Personal Information</h3>
+            <p className="text-sm text-muted-foreground">
+              Fill in your current student and contact details. Fields marked with an asterisk are required before you can proceed.
+            </p>
+          </div>
+
+          <div className="grid gap-x-5 gap-y-5 md:grid-cols-2 xl:grid-cols-12">
+            <div className="xl:col-span-3">
               <Label htmlFor="studentId">Student ID *</Label>
               <Input
                 id="studentId"
@@ -46,7 +52,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 placeholder="e.g. 202310417"
               />
             </div>
-            <div>
+            <div className="xl:col-span-3">
               <Label htmlFor="department">Department *</Label>
               <Select value={formData.department} onValueChange={(value) => onFieldChange('department', value)}>
                 <SelectTrigger id="department">
@@ -61,7 +67,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="xl:col-span-2">
               <Label htmlFor="yearLevel">Year Level *</Label>
               <Select value={formData.yearLevel} onValueChange={(value) => onFieldChange('yearLevel', value)}>
                 <SelectTrigger id="yearLevel">
@@ -76,7 +82,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="md:col-span-2 xl:col-span-4">
               <Label htmlFor="course">Course / Program *</Label>
               <Input
                 id="course"
@@ -85,17 +91,15 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 placeholder="e.g., BS Computer Science"
               />
             </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
+            <div className="xl:col-span-4">
               <Label htmlFor="lastName">Last Name *</Label>
               <Input id="lastName" value={formData.lastName} onChange={(event) => onFieldChange('lastName', event.target.value)} />
             </div>
-            <div>
+            <div className="xl:col-span-4">
               <Label htmlFor="firstName">First Name *</Label>
               <Input id="firstName" value={formData.firstName} onChange={(event) => onFieldChange('firstName', event.target.value)} />
             </div>
-            <div>
+            <div className="xl:col-span-1">
               <Label htmlFor="middleInitial">M.I.</Label>
               <Input
                 id="middleInitial"
@@ -104,13 +108,11 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 maxLength={1}
               />
             </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-4">
-            <div>
+            <div className="xl:col-span-3">
               <Label htmlFor="birthday">Birthday *</Label>
               <Input id="birthday" type="date" value={formData.birthday} onChange={(event) => onFieldChange('birthday', event.target.value)} />
             </div>
-            <div>
+            <div className="xl:col-span-3">
               <Label htmlFor="civilStatus">Civil Status</Label>
               <Select value={formData.civilStatus} onValueChange={(value) => onFieldChange('civilStatus', value)}>
                 <SelectTrigger id="civilStatus">
@@ -122,14 +124,14 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="xl:col-span-2">
               <Label htmlFor="age">Age *</Label>
               <Input id="age" type="number" value={formData.age} onChange={(event) => onFieldChange('age', event.target.value)} />
             </div>
-            <div>
+            <div className="xl:col-span-3">
               <Label htmlFor="sex">Sex *</Label>
-              <RadioGroup value={formData.sex} onValueChange={(value) => onFieldChange('sex', value)}>
-                <div className="mt-2 flex gap-4">
+              <RadioGroup value={formData.sex} onValueChange={(value) => onFieldChange('sex', value)} className="pt-3">
+                <div className="flex gap-6">
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="female" id="female" />
                     <Label htmlFor="female" className="font-normal">
@@ -145,9 +147,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 </div>
               </RadioGroup>
             </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
+            <div className="xl:col-span-4">
               <Label htmlFor="contactNumber">Tel./CP #</Label>
               <Input
                 id="contactNumber"
@@ -156,7 +156,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 placeholder="e.g., 09123456789"
               />
             </div>
-            <div>
+            <div className="md:col-span-2 xl:col-span-8">
               <Label htmlFor="address">Present Address</Label>
               <Input
                 id="address"
