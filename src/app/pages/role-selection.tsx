@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Activity, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { signInWithGoogle } from '../lib/api';
 import { useAuth } from '../lib/auth';
+
+const GC_DOMAIN = 'gordoncollege.edu.ph';
 
 function getHomePath(role: 'student' | 'staff' | 'admin') {
   if (role === 'staff') return '/staff';
@@ -13,10 +16,11 @@ function getHomePath(role: 'student' | 'staff' | 'admin') {
 export default function RoleSelection() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signIn, signUp, loading } = useAuth();
+  const { signIn, signUp, loading, requiresPasswordSetup, completePasswordSetup } = useAuth();
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const startsInSignInMode = query.get('mode') === 'signin';
   const verifiedFromEmail = query.get('verified') === '1';
+  const googleError = query.get('google_error');
 
   const [mode, setMode] = useState<'signin' | 'signup'>(startsInSignInMode ? 'signin' : 'signup');
   const [showSignInPassword, setShowSignInPassword] = useState(false);
@@ -35,6 +39,10 @@ export default function RoleSelection() {
     name: '',
     email: '',
     password: '',
+  });
+  const [passwordSetupForm, setPasswordSetupForm] = useState({
+    password: '',
+    confirmPassword: '',
   });
 
   const fromPath = useMemo(() => {
@@ -80,6 +88,12 @@ export default function RoleSelection() {
     }
   }
 
+  function handleGoogleSignIn() {
+    setError(null);
+    setSuccessMessage(null);
+    signInWithGoogle();
+  }
+
   async function handleSignUp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -91,6 +105,10 @@ export default function RoleSelection() {
     }
     if (!signUpForm.email.trim()) {
       setError('Please enter your email.');
+      return;
+    }
+    if (!signUpForm.email.trim().toLowerCase().endsWith(`@${GC_DOMAIN}`)) {
+      setError(`Please register using your @${GC_DOMAIN} email address.`);
       return;
     }
     if (signUpForm.password.length < 6) {
@@ -111,6 +129,98 @@ export default function RoleSelection() {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Unable to create account.');
     }
+  }
+
+  async function handlePasswordSetup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+
+    if (passwordSetupForm.password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (passwordSetupForm.password !== passwordSetupForm.confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    try {
+      await completePasswordSetup(passwordSetupForm.password);
+      setSuccessMessage('Password set successfully. You can now sign in manually.');
+      navigate('/', { replace: true });
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Unable to set password.');
+    }
+  }
+
+  const googleErrorMessage =
+    googleError === 'invalid_domain'
+      ? `Only @${GC_DOMAIN} Google accounts are allowed.`
+      : googleError === 'invalid_token'
+        ? 'Google sign-in failed. Please try again.'
+        : null;
+
+  if (requiresPasswordSetup) {
+    return (
+      <div className="min-h-screen bg-surface">
+        <div className="flex min-h-screen items-center justify-center px-6 py-10 sm:px-10">
+          <div className="w-full max-w-md rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
+            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
+              <Lock className="h-6 w-6" />
+            </div>
+            <h1 className="text-3xl font-semibold text-on-surface">Set Your Password</h1>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              You signed in with Google. Set a password now so manual sign-in will work too.
+            </p>
+
+            <form className="mt-6 space-y-5" onSubmit={handlePasswordSetup}>
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-on-surface">New password</label>
+                <input
+                  type="password"
+                  required
+                  value={passwordSetupForm.password}
+                  onChange={(event) =>
+                    setPasswordSetupForm((prev) => ({ ...prev, password: event.target.value }))
+                  }
+                  placeholder="At least 6 characters"
+                  className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-on-surface">Confirm password</label>
+                <input
+                  type="password"
+                  required
+                  value={passwordSetupForm.confirmPassword}
+                  onChange={(event) =>
+                    setPasswordSetupForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                  }
+                  placeholder="Re-enter password"
+                  className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+
+              {error ? <p className="text-sm font-semibold text-on-error-container">{error}</p> : null}
+              {successMessage ? (
+                <p className="text-sm font-semibold text-on-primary-container">{successMessage}</p>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-semibold text-on-primary transition hover:bg-primary/90 disabled:opacity-70"
+              >
+                {loading ? 'Saving Password...' : 'Save Password'}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -147,12 +257,14 @@ export default function RoleSelection() {
               <div className="space-y-6">
                 <div>
                   <h1 className="text-3xl font-semibold text-on-surface">Welcome Back</h1>
-                  <p className="mt-2 text-sm text-on-surface-variant">Sign in to your Student Portal account.</p>
+                  <p className="mt-2 text-sm text-on-surface-variant">
+                    Sign in to your Gordon College clinic account.
+                  </p>
                 </div>
 
                 <form className="space-y-5" onSubmit={handleSignIn}>
                   <div>
-                    <label className="mb-2 block text-xs font-semibold text-on-surface">Student Email</label>
+                    <label className="mb-2 block text-xs font-semibold text-on-surface">Gordon College Email</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
                       <input
@@ -162,7 +274,7 @@ export default function RoleSelection() {
                         onChange={(event) =>
                           setSignInForm((prev) => ({ ...prev, email: event.target.value }))
                         }
-                        placeholder="student@gordoncollege.edu"
+                        placeholder={`name@${GC_DOMAIN}`}
                         className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest pl-10 pr-4 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
                       />
                     </div>
@@ -211,6 +323,9 @@ export default function RoleSelection() {
                   </div>
 
                   {error ? <p className="text-sm font-semibold text-on-error-container">{error}</p> : null}
+                  {googleErrorMessage ? (
+                    <p className="text-sm font-semibold text-on-error-container">{googleErrorMessage}</p>
+                  ) : null}
                   {successMessage ? (
                     <p className="text-sm font-semibold text-on-primary-container">{successMessage}</p>
                   ) : null}
@@ -234,6 +349,7 @@ export default function RoleSelection() {
 
                 <button
                   type="button"
+                  onClick={handleGoogleSignIn}
                   className="flex w-full items-center justify-center gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest py-3 text-xs font-semibold text-on-surface hover:bg-surface-container-low"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -264,7 +380,9 @@ export default function RoleSelection() {
               <div className="space-y-6">
                 <div>
                   <h1 className="text-3xl font-semibold text-on-surface">Create an account</h1>
-                  <p className="mt-2 text-sm text-on-surface-variant">Provide your details to get started.</p>
+                  <p className="mt-2 text-sm text-on-surface-variant">
+                    Register with your Gordon College email to get started.
+                  </p>
                 </div>
 
                 <form className="space-y-5" onSubmit={handleSignUp}>
@@ -290,7 +408,7 @@ export default function RoleSelection() {
                       onChange={(event) =>
                         setSignUpForm((prev) => ({ ...prev, email: event.target.value }))
                       }
-                      placeholder="you@email.com"
+                      placeholder={`name@${GC_DOMAIN}`}
                       className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
                     />
                   </div>
@@ -326,6 +444,9 @@ export default function RoleSelection() {
                   </p>
 
                   {error ? <p className="text-sm font-semibold text-on-error-container">{error}</p> : null}
+                  {googleErrorMessage ? (
+                    <p className="text-sm font-semibold text-on-error-container">{googleErrorMessage}</p>
+                  ) : null}
                   {successMessage ? (
                     <p className="text-sm font-semibold text-on-primary-container">{successMessage}</p>
                   ) : null}
@@ -349,6 +470,7 @@ export default function RoleSelection() {
 
                 <button
                   type="button"
+                  onClick={handleGoogleSignIn}
                   className="flex w-full items-center justify-center gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest py-3 text-xs font-semibold text-on-surface hover:bg-surface-container-low"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -357,16 +479,17 @@ export default function RoleSelection() {
                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                   </svg>
-                  Sign up with Google
+                  Continue with Google
                 </button>
 
                 <p className="text-center text-sm text-on-surface-variant">
-                  Already a Member?{' '}
+                  Already a member?{' '}
                   <button
                     type="button"
                     className="font-semibold text-primary"
                     onClick={() => {
                       setError(null);
+                      setSuccessMessage(null);
                       setMode('signin');
                     }}
                   >

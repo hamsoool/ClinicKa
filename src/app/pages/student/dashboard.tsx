@@ -47,7 +47,13 @@ export default function StudentDashboard() {
       setRecords((data.records || []) as StudentRecord[]);
     } catch (error) {
       console.error('Error loading records:', error);
-      toast.error('Failed to load records');
+      const message =
+        error instanceof Error ? error.message : 'Failed to load records';
+      if (message.toLowerCase().includes('profile not found')) {
+        toast.error('Your account is not fully set up yet. Please sign out and sign in again.');
+        return;
+      }
+      toast.error(message);
     } finally {
       setLoading(false);
     }
