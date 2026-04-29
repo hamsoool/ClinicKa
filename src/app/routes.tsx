@@ -1,36 +1,46 @@
-import { createBrowserRouter } from "react-router";
-import RoleSelection from "./pages/role-selection";
-import CheckEmailPage from "./pages/check-email";
-import StudentDashboard from "./pages/student/dashboard";
-import StudentYearSelection from "./pages/student/year-selection";
-import StudentMedicalForm from "./pages/student/medical-form";
-import StudentLayout from "./pages/student/layout";
-import StudentRecords from "./pages/student/records";
-import StudentRequirements from "./pages/student/requirements";
-import StudentProfile from "./pages/student/profile";
-import StudentCertificate from "./pages/student/certificate";
-import StaffLayout from "./pages/staff/layout";
-import StaffDashboard from "./pages/staff/dashboard";
-import StaffSubmissions from "./pages/staff/submissions";
-import StaffRecordReview from "./pages/staff/record-review";
-import StaffRecords from "./pages/staff/records";
-import StaffReports from "./pages/staff/reports";
-import StaffCertificates from "./pages/staff/certificates";
-import StaffSettings from "./pages/staff/settings";
-import AdminLayout from "./pages/admin/layout";
-import AdminDashboard from "./pages/admin/dashboard";
-import AdminSystemSettings from "./pages/admin/system-settings";
-import AdminStaffManagement from "./pages/admin/staff-management";
-import AdminUserAccounts from "./pages/admin/user-accounts";
-import AdminReports from "./pages/admin/reports";
-import { RedirectIfAuthenticated, RequireAuth } from "./lib/auth";
+import { lazy, Suspense, type ComponentType } from 'react';
+import { createBrowserRouter } from 'react-router';
+import { RedirectIfAuthenticated, RequireAuth } from './lib/auth';
+
+const RoleSelection = lazy(() => import('./pages/role-selection'));
+const CheckEmailPage = lazy(() => import('./pages/check-email'));
+const StudentDashboard = lazy(() => import('./pages/student/dashboard'));
+const StudentYearSelection = lazy(() => import('./pages/student/year-selection'));
+const StudentMedicalForm = lazy(() => import('./pages/student/medical-form'));
+const StudentLayout = lazy(() => import('./pages/student/layout'));
+const StudentRecords = lazy(() => import('./pages/student/records'));
+const StudentRequirements = lazy(() => import('./pages/student/requirements'));
+const StudentProfile = lazy(() => import('./pages/student/profile'));
+const StudentCertificate = lazy(() => import('./pages/student/certificate'));
+const StaffLayout = lazy(() => import('./pages/staff/layout'));
+const StaffDashboard = lazy(() => import('./pages/staff/dashboard'));
+const StaffSubmissions = lazy(() => import('./pages/staff/submissions'));
+const StaffRecordReview = lazy(() => import('./pages/staff/record-review'));
+const StaffRecords = lazy(() => import('./pages/staff/records'));
+const StaffReports = lazy(() => import('./pages/staff/reports'));
+const StaffCertificates = lazy(() => import('./pages/staff/certificates'));
+const StaffSettings = lazy(() => import('./pages/staff/settings'));
+const AdminLayout = lazy(() => import('./pages/admin/layout'));
+const AdminDashboard = lazy(() => import('./pages/admin/dashboard'));
+const AdminSystemSettings = lazy(() => import('./pages/admin/system-settings'));
+const AdminStaffManagement = lazy(() => import('./pages/admin/staff-management'));
+const AdminUserAccounts = lazy(() => import('./pages/admin/user-accounts'));
+const AdminReports = lazy(() => import('./pages/admin/reports'));
+
+function withSuspense(Component: ComponentType) {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading...</div>}>
+      <Component />
+    </Suspense>
+  );
+}
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: (
       <RedirectIfAuthenticated>
-        <RoleSelection />
+        {withSuspense(RoleSelection)}
       </RedirectIfAuthenticated>
     ),
   },
@@ -38,7 +48,7 @@ export const router = createBrowserRouter([
     path: "/check-email",
     element: (
       <RedirectIfAuthenticated>
-        <CheckEmailPage />
+        {withSuspense(CheckEmailPage)}
       </RedirectIfAuthenticated>
     ),
   },
@@ -46,49 +56,49 @@ export const router = createBrowserRouter([
     path: "/student",
     element: (
       <RequireAuth allowedRoles={['student']}>
-        <StudentLayout />
+        {withSuspense(StudentLayout)}
       </RequireAuth>
     ),
     children: [
-      { index: true, Component: StudentDashboard },
-      { path: "records", Component: StudentRecords },
-      { path: "year-selection", Component: StudentYearSelection },
-      { path: "medical-form/:year", Component: StudentMedicalForm },
-      { path: "requirements", Component: StudentRequirements },
-      { path: "profile", Component: StudentProfile },
-      { path: "certificate", Component: StudentCertificate },
+      { index: true, element: withSuspense(StudentDashboard) },
+      { path: "records", element: withSuspense(StudentRecords) },
+      { path: "year-selection", element: withSuspense(StudentYearSelection) },
+      { path: "medical-form/:year", element: withSuspense(StudentMedicalForm) },
+      { path: "requirements", element: withSuspense(StudentRequirements) },
+      { path: "profile", element: withSuspense(StudentProfile) },
+      { path: "certificate", element: withSuspense(StudentCertificate) },
     ],
   },
   {
     path: "/staff",
     element: (
       <RequireAuth allowedRoles={['staff']}>
-        <StaffLayout />
+        {withSuspense(StaffLayout)}
       </RequireAuth>
     ),
     children: [
-      { index: true, Component: StaffDashboard },
-      { path: "submissions", Component: StaffSubmissions },
-      { path: "records", Component: StaffRecords },
-      { path: "review/:submissionId", Component: StaffRecordReview },
-      { path: "reports", Component: StaffReports },
-      { path: "certificates", Component: StaffCertificates },
-      { path: "settings", Component: StaffSettings },
+      { index: true, element: withSuspense(StaffDashboard) },
+      { path: "submissions", element: withSuspense(StaffSubmissions) },
+      { path: "records", element: withSuspense(StaffRecords) },
+      { path: "review/:submissionId", element: withSuspense(StaffRecordReview) },
+      { path: "reports", element: withSuspense(StaffReports) },
+      { path: "certificates", element: withSuspense(StaffCertificates) },
+      { path: "settings", element: withSuspense(StaffSettings) },
     ],
   },
   {
     path: "/admin",
     element: (
       <RequireAuth allowedRoles={['admin']}>
-        <AdminLayout />
+        {withSuspense(AdminLayout)}
       </RequireAuth>
     ),
     children: [
-      { index: true, Component: AdminDashboard },
-      { path: "settings", Component: AdminSystemSettings },
-      { path: "staff", Component: AdminStaffManagement },
-      { path: "users", Component: AdminUserAccounts },
-      { path: "reports", Component: AdminReports },
+      { index: true, element: withSuspense(AdminDashboard) },
+      { path: "settings", element: withSuspense(AdminSystemSettings) },
+      { path: "staff", element: withSuspense(AdminStaffManagement) },
+      { path: "users", element: withSuspense(AdminUserAccounts) },
+      { path: "reports", element: withSuspense(AdminReports) },
     ],
   },
 ]);
