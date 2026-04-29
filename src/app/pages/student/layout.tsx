@@ -1,7 +1,28 @@
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { useState } from 'react';
-import { Home, ClipboardList, FilePlus, FileCheck2, User, Menu, X, Camera, Award } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Home,
+  ClipboardList,
+  FilePlus,
+  FileCheck2,
+  Menu,
+  X,
+  Bell,
+  Settings,
+  HelpCircle,
+  Award,
+  LogOut,
+  Camera,
+} from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+
+const navItems = [
+  { path: '/student', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
+  { path: '/student/records', label: 'Record History', mobileLabel: 'Records', icon: ClipboardList },
+  { path: '/student/year-selection', label: 'Submit Record', mobileLabel: 'Submit', icon: FilePlus },
+  { path: '/student/requirements', label: 'Requirements', mobileLabel: 'Reqs', icon: FileCheck2 },
+  { path: '/student/certificate', label: 'Certificate', mobileLabel: 'Cert', icon: Award },
+] as const;
 
 export default function StudentLayout() {
   const navigate = useNavigate();
@@ -19,6 +40,16 @@ export default function StudentLayout() {
     .join(' ')
     .trim() || 'Student';
 
+  const studentId = me?.student?.student_id || me?.profile.student_id || '';
+  const course = me?.student?.course || me?.profile.course || '';
+  const initials = displayName
+    .split(' ')
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   const isActive = (path: string) => {
     if (path === '/student') {
       return location.pathname === '/student';
@@ -26,51 +57,79 @@ export default function StudentLayout() {
     return location.pathname.startsWith(path);
   };
 
-  const topNavItems = [
-    { path: '/student', label: 'Dashboard', icon: Home },
-    { path: '/student/records', label: 'Record History', icon: ClipboardList },
-    { path: '/student/year-selection', label: 'Submit Record', icon: FilePlus },
-    { path: '/student/requirements', label: 'Requirements', icon: FileCheck2 },
-    { path: '/student/certificate', label: 'Certificate', icon: Award },
-  ];
+  const currentPage = navItems.find((item) => isActive(item.path))?.label || 'Student Portal';
+
+  useEffect(() => {
+    setMenuOpen(false);
+    setProfileOpen(false);
+  }, [location.pathname]);
+
+  const goTo = (path: string) => {
+    navigate(path);
+    setMenuOpen(false);
+  };
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#ffffff_0%,#f4fcf2_45%,#eef6ec_100%)]">
       <button
-        className="lg:hidden fixed top-4 left-4 z-40 p-2 rounded-md bg-primary text-white"
+        className="fixed left-4 top-4 z-50 rounded-xl bg-primary px-3 py-2 text-white shadow-lg md:hidden"
         onClick={() => setMenuOpen(!menuOpen)}
         aria-label={menuOpen ? 'Close student navigation menu' : 'Open student navigation menu'}
       >
-        {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </button>
 
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-30 w-64 bg-sidebar text-sidebar-foreground transform transition-transform duration-200 ease-in-out ${menuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        className={`fixed inset-y-0 left-0 z-40 w-72 border-r border-emerald-950/40 bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-200 ${
+          menuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
       >
-        <div className="flex flex-col h-full">
-          <div className="p-6 border-b border-sidebar-border">
-            <h2 className="text-xl font-bold">Gordon College</h2>
-            <p className="text-sm opacity-90">Student Portal</p>
+        <div className="flex h-full flex-col px-4 py-6">
+          <div className="px-2 pb-6">
+            <div className="rounded-[1.25rem] border border-white/10 bg-white/5 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)] backdrop-blur">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-emerald-300/30 bg-emerald-50 text-primary">
+                  {profilePic ? (
+                    <img src={profilePic} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-sm font-bold">{initials || 'ST'}</span>
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight text-white">Gordon College</h2>
+                  <p className="text-xs font-medium uppercase tracking-[0.24em] text-emerald-200/80">
+                    Clinic Portal
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl bg-black/10 p-3">
+                <p className="truncate text-sm font-semibold text-white">{displayName}</p>
+                <p className="mt-1 text-xs text-emerald-100/80">
+                  {[studentId, course].filter(Boolean).join(' | ') || 'Student account'}
+                </p>
+              </div>
+            </div>
           </div>
 
-          <nav className="flex-1 p-4">
+          <nav className="flex-1 px-2">
             <ul className="space-y-2">
-              {topNavItems.map((item) => {
+              {navItems.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.path);
+
                 return (
                   <li key={item.path}>
                     <button
-                      onClick={() => {
-                        navigate(item.path);
-                        setMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${active
-                        ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                        : 'text-sidebar-foreground hover:bg-sidebar-accent'
-                        }`}
+                      onClick={() => goTo(item.path)}
+                      aria-current={active ? 'page' : undefined}
+                      className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium tracking-tight transition-all ${
+                        active
+                          ? 'border-l-4 border-emerald-300 bg-emerald-800 text-white shadow-[0_10px_24px_rgba(0,0,0,0.12)]'
+                          : 'text-emerald-100/70 hover:bg-emerald-800/50 hover:text-white'
+                      }`}
                     >
-                      <Icon className="w-5 h-5" />
+                      <Icon className="h-5 w-5" />
                       <span>{item.label}</span>
                     </button>
                   </li>
@@ -78,117 +137,153 @@ export default function StudentLayout() {
               })}
             </ul>
           </nav>
+
+          <div className="mt-auto px-2 pt-4">
+            <div className="space-y-2 border-t border-white/10 pt-4">
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-emerald-100/70 transition-colors hover:bg-emerald-800/50 hover:text-white"
+              >
+                <HelpCircle className="h-5 w-5" />
+                <span>Help Center</span>
+              </button>
+              <button
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-emerald-100/70 transition-colors hover:bg-emerald-800/50 hover:text-white"
+                onClick={async () => {
+                  await logout();
+                  navigate('/');
+                }}
+              >
+                <LogOut className="h-5 w-5" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </div>
         </div>
       </aside>
 
       {menuOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-20"
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
           onClick={() => setMenuOpen(false)}
         />
       )}
 
-      <main className="flex-1 overflow-auto">
-        <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-          <div className="px-4 md:px-8 py-3">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Gordon College Health Services
-                </p>
-                <h1 className="text-lg font-semibold">Student Portal</h1>
-                <p className="text-xs text-muted-foreground">
-                  {me?.student?.student_id || me?.profile.student_id} {me?.student?.course ? `• ${me.student.course}` : ''}
-                </p>
-              </div>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setProfileOpen((prev) => !prev)}
-                  className="relative"
-                  aria-label="Open profile menu"
-                >
-                  <div className="w-10 h-10 rounded-full border bg-muted flex items-center justify-center overflow-hidden">
-                    {profilePic ? (
-                      <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-5 h-5 text-muted-foreground" />
-                    )}
-                  </div>
-                </button>
-                {profileOpen && (
-                  <div className="absolute right-0 mt-2 w-72 rounded-lg border bg-background p-4 shadow-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="relative group">
-                        <div className="w-14 h-14 rounded-full border bg-muted flex items-center justify-center overflow-hidden">
-                          {profilePic ? (
-                            <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
-                          ) : (
-                            <User className="w-6 h-6 text-muted-foreground" />
-                          )}
-                        </div>
-                        <label htmlFor="profile-upload" className="absolute inset-0 bg-black/50 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                          <Camera className="w-4 h-4" />
-                        </label>
-                        <input
-                          id="profile-upload"
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          aria-label="Upload student profile picture"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              setProfilePic(URL.createObjectURL(e.target.files[0]));
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold truncate">{displayName}</p>
-                        <p className="text-xs text-muted-foreground truncate">{me?.profile.email || ''}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        await logout();
-                        navigate('/');
-                      }}
-                      className="mt-4 w-full rounded-md border px-3 py-2 text-sm hover:bg-muted"
-                    >
-                      Logout
-                    </button>
-                  </div>
+      <header className="fixed left-0 right-0 top-0 z-30 h-16 border-b border-outline-variant/40 bg-white/85 backdrop-blur md:left-72">
+        <div className="flex h-full items-center justify-between px-4 md:px-8">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-on-surface-variant">
+              Clinic Management System
+            </p>
+            <p className="truncate text-sm font-semibold text-on-surface">{currentPage}</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-surface-container-low">
+              <Bell className="h-5 w-5" />
+            </button>
+            <button className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-surface-container-low">
+              <Settings className="h-5 w-5" />
+            </button>
+            <button className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-surface-container-low">
+              <HelpCircle className="h-5 w-5" />
+            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileOpen((prev) => !prev)}
+                className="ml-1 flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-outline-variant/70 bg-surface-container-lowest shadow-sm"
+                aria-label="Open profile menu"
+              >
+                {profilePic ? (
+                  <img src={profilePic} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-xs font-bold text-on-surface-variant">{initials || 'ST'}</span>
                 )}
-              </div>
+              </button>
+              {profileOpen && (
+                <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-4 shadow-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="group relative">
+                      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface-container-low">
+                        {profilePic ? (
+                          <img src={profilePic} alt="Profile" className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-sm font-bold text-on-surface-variant">
+                            {initials || 'ST'}
+                          </span>
+                        )}
+                      </div>
+                      <label
+                        htmlFor="profile-upload"
+                        className="absolute inset-0 cursor-pointer rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                      >
+                        <span className="flex h-full w-full items-center justify-center">
+                          <Camera className="h-4 w-4" />
+                        </span>
+                      </label>
+                      <input
+                        id="profile-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        aria-label="Upload student profile picture"
+                        onChange={(event) => {
+                          if (event.target.files && event.target.files[0]) {
+                            setProfilePic(URL.createObjectURL(event.target.files[0]));
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-on-surface">{displayName}</p>
+                      <p className="truncate text-xs text-on-surface-variant">
+                        {me?.profile.email || 'student@gordoncollege.edu.ph'}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-on-surface-variant">
+                        {[studentId, course].filter(Boolean).join(' | ') || 'Student account'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await logout();
+                      navigate('/');
+                    }}
+                    className="mt-4 w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-container-low"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           </div>
-        </header>
+        </div>
+      </header>
 
-        <div className="p-4 md:p-8 pb-20">
+      <main className="pt-20 md:pl-72">
+        <div className="px-4 pb-20 md:px-8">
           <Outlet />
         </div>
       </main>
 
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t bg-background/95 backdrop-blur">
+      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/40 bg-surface-container-lowest/95 backdrop-blur md:hidden">
         <div className="grid grid-cols-5 px-2 py-2 pb-[env(safe-area-inset-bottom)]">
-          {[
-            { path: '/student', label: 'Home', icon: Home },
-            { path: '/student/records', label: 'Records', icon: ClipboardList },
-            { path: '/student/year-selection', label: 'Submit', icon: FilePlus },
-            { path: '/student/requirements', label: 'Reqs', icon: FileCheck2 },
-            { path: '/student/certificate', label: 'Cert', icon: Award },
-          ].map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);
+
             return (
               <button
-                key={item.label}
-                onClick={() => navigate(item.path)}
+                key={item.path}
+                onClick={() => goTo(item.path)}
                 aria-current={active ? 'page' : undefined}
-                className={`flex flex-col items-center justify-center gap-1 rounded-md py-2 text-xs transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}
+                className={`flex flex-col items-center justify-center gap-1 rounded-md py-2 text-xs transition-colors ${
+                  active ? 'text-primary' : 'text-on-surface-variant'
+                }`}
               >
-                <Icon className="w-5 h-5" />
-                <span>{item.label}</span>
+                <Icon className="h-5 w-5" />
+                <span>{item.mobileLabel}</span>
               </button>
             );
           })}

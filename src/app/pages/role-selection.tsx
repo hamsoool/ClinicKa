@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Eye, EyeOff } from 'lucide-react';
+import { Activity, ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 
 function getHomePath(role: 'student' | 'staff' | 'admin') {
@@ -114,123 +114,47 @@ export default function RoleSelection() {
   }
 
   return (
-    <div className="min-h-screen bg-[#17810f] px-4 py-8 sm:px-6 md:py-12">
-      <div className="mx-auto max-w-4xl">
-        <h1 className="text-center text-3xl font-semibold text-white sm:text-4xl">
-          Gordon College Student Portal
-        </h1>
+    <div className="min-h-screen bg-surface">
+      <div className="flex min-h-screen flex-col lg:flex-row">
+        <div className="relative hidden w-full items-center justify-center overflow-hidden bg-surface-container lg:flex lg:w-1/2">
+          <img
+            className="absolute inset-0 h-full w-full object-cover opacity-80"
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAd3VwXj5OK8iMBqqOqTv48Fh_xNptG3ee5ZdqghkjB8IaP3a5YLn-71b7Gxl4Fw_9PUNwxunKhkfKLRl_aFnPgYGh7-GHSU1lva8H-qtjbTwMNSmkeCUU3Q2l-MQTDTE8FHOkwbZ2eqqno2VJLejqHilJbTswkVkX5OnnF01j8CzM0EttphMup6DGf8yxbYlihttn0ZdnOs5gqs1LT6WIFeYP0tIjczjOR_0Il6ElGeUkO7TfoIQwaoR7r5UBJX4b71OYdanswMx4"
+            alt="Gordon College campus"
+          />
+          <div className="absolute inset-0 bg-gradient-to-tr from-tertiary to-transparent opacity-70" />
+          <div className="relative z-10 max-w-lg px-12 text-center text-inverse-on-surface">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-xl bg-surface-container-lowest text-primary shadow-lg">
+              <Activity className="h-8 w-8" />
+            </div>
+            <h2 className="text-3xl font-semibold text-surface-container-lowest">Clinic Management System</h2>
+            <p className="mt-3 text-base text-inverse-on-surface">
+              Streamlining health records and clinical administrative tasks for the Gordon College student body.
+            </p>
+          </div>
+        </div>
 
-        <div className="mt-6 overflow-hidden border border-[#3f8f3b] bg-[#4f9a47] shadow-xl">
-          <div className="grid min-h-[520px] grid-cols-1 md:grid-cols-2">
-            {mode === 'signup' ? (
-              <>
-                <div className="hidden border-r-2 border-[#2f99ff] bg-[#4a9543] md:block" />
-                <section className="bg-[#78bd6f] p-6 sm:p-8">
-                  <h2 className="text-2xl font-bold text-[#102410]">Create an account</h2>
-                  <p className="mt-1 text-sm text-[#1f3b1b]">Provide your details.</p>
+        <div className="flex w-full items-center justify-center bg-surface-container-lowest px-6 py-10 sm:px-10 lg:w-1/2">
+          <div className="w-full max-w-md space-y-6">
+            <div className="text-center lg:hidden">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary-container text-on-primary-container">
+                <Activity className="h-6 w-6" />
+              </div>
+              <h2 className="text-xl font-semibold text-on-surface">Gordon College</h2>
+            </div>
 
-                  <form className="mt-6 space-y-4" onSubmit={handleSignUp}>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-[#183015]">Your name</label>
-                      <input
-                        required
-                        value={signUpForm.name}
-                        onChange={(event) =>
-                          setSignUpForm((prev) => ({ ...prev, name: event.target.value }))
-                        }
-                        placeholder="First Last"
-                        className="h-10 w-full rounded-sm border border-black/20 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#36f13c]"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-[#183015]">Email</label>
-                      <input
-                        type="email"
-                        required
-                        value={signUpForm.email}
-                        onChange={(event) =>
-                          setSignUpForm((prev) => ({ ...prev, email: event.target.value }))
-                        }
-                        placeholder="you@email.com"
-                        className="h-10 w-full rounded-sm border border-black/20 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#36f13c]"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-[#183015]">Password</label>
-                      <div className="relative">
-                        <input
-                          type={showSignUpPassword ? 'text' : 'password'}
-                          required
-                          value={signUpForm.password}
-                          onChange={(event) =>
-                            setSignUpForm((prev) => ({ ...prev, password: event.target.value }))
-                          }
-                          placeholder="At least 6 characters"
-                          className="h-10 w-full rounded-sm border border-black/20 bg-white px-3 pr-10 text-sm outline-none focus:ring-2 focus:ring-[#36f13c]"
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-2 top-2 text-[#496046]"
-                          onClick={() => setShowSignUpPassword((prev) => !prev)}
-                          aria-label={showSignUpPassword ? 'Hide password' : 'Show password'}
-                        >
-                          {showSignUpPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                        </button>
-                      </div>
-                    </div>
+            {mode === 'signin' ? (
+              <div className="space-y-6">
+                <div>
+                  <h1 className="text-3xl font-semibold text-on-surface">Welcome Back</h1>
+                  <p className="mt-2 text-sm text-on-surface-variant">Sign in to your Student Portal account.</p>
+                </div>
 
-                    <p className="text-xs text-[#274824]">
-                      By signing up I agree to the <span className="font-semibold underline">terms & conditions</span> and <span className="font-semibold underline">privacy policy</span>
-                    </p>
-
-                    {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
-                    {successMessage ? <p className="text-sm font-semibold text-green-800">{successMessage}</p> : null}
-
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="h-10 w-full rounded-sm bg-[#3bf839] font-semibold text-[#173312] transition hover:bg-[#35e134] disabled:opacity-70"
-                    >
-                      {loading ? 'Creating Account...' : 'Create Account'}
-                    </button>
-
+                <form className="space-y-5" onSubmit={handleSignIn}>
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold text-on-surface">Student Email</label>
                     <div className="relative">
-                      <div className="h-px bg-[#588c53]" />
-                      <p className="absolute inset-x-0 -top-2 mx-auto w-fit bg-[#78bd6f] px-2 text-xs text-[#2f4f2b]">OR</p>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="mx-auto flex h-9 w-20 items-center justify-center rounded-sm bg-white text-sm font-semibold text-[#3b4953]"
-                    >
-                      G
-                    </button>
-
-                    <p className="pt-2 text-center text-sm text-[#31572d]">
-                      Already a Member?{' '}
-                      <button
-                        type="button"
-                        className="font-semibold text-[#1f7f1e]"
-                        onClick={() => {
-                          setError(null);
-                          setMode('signin');
-                        }}
-                      >
-                        Sign In.
-                      </button>
-                    </p>
-                  </form>
-                </section>
-              </>
-            ) : (
-              <>
-                <section className="bg-[#78bd6f] p-6 sm:p-8">
-                  <h2 className="text-2xl font-bold text-[#102410]">Welcome</h2>
-                  <p className="mt-1 text-sm text-[#1f3b1b]">Track your Medical Forms</p>
-
-                  <form className="mt-6 space-y-4" onSubmit={handleSignIn}>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-[#183015]">Email</label>
+                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
                       <input
                         type="email"
                         required
@@ -238,91 +162,218 @@ export default function RoleSelection() {
                         onChange={(event) =>
                           setSignInForm((prev) => ({ ...prev, email: event.target.value }))
                         }
-                        placeholder="Enter your email"
-                        className="h-10 w-full rounded-sm border border-black/20 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#36f13c]"
+                        placeholder="student@gordoncollege.edu"
+                        className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest pl-10 pr-4 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
                       />
                     </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-[#183015]">Password</label>
-                      <div className="relative">
-                        <input
-                          type={showSignInPassword ? 'text' : 'password'}
-                          required
-                          value={signInForm.password}
-                          onChange={(event) =>
-                            setSignInForm((prev) => ({ ...prev, password: event.target.value }))
-                          }
-                          placeholder="Password"
-                          className="h-10 w-full rounded-sm border border-black/20 bg-white px-3 pr-10 text-sm outline-none focus:ring-2 focus:ring-[#36f13c]"
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-2 top-2 text-[#496046]"
-                          onClick={() => setShowSignInPassword((prev) => !prev)}
-                          aria-label={showSignInPassword ? 'Hide password' : 'Show password'}
-                        >
-                          {showSignInPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                        </button>
-                      </div>
-                    </div>
+                  </div>
 
-                    <div className="flex items-center justify-between text-xs">
-                      <label className="flex items-center gap-2 text-[#274824]">
-                        <input
-                          type="checkbox"
-                          checked={signInForm.remember}
-                          onChange={(event) =>
-                            setSignInForm((prev) => ({ ...prev, remember: event.target.checked }))
-                          }
-                        />
-                        Remember me
-                      </label>
-                      <button type="button" className="font-semibold text-[#f24141]">
-                        Forgot Password?
-                      </button>
-                    </div>
-
-                    {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
-                    {successMessage ? <p className="text-sm font-semibold text-green-800">{successMessage}</p> : null}
-
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="h-10 w-full rounded-sm bg-[#3bf839] font-semibold text-[#173312] transition hover:bg-[#35e134] disabled:opacity-70"
-                    >
-                      {loading ? 'Signing In...' : 'Sign In'}
-                    </button>
-
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold text-on-surface">Password</label>
                     <div className="relative">
-                      <div className="h-px bg-[#588c53]" />
-                      <p className="absolute inset-x-0 -top-2 mx-auto w-fit bg-[#78bd6f] px-2 text-xs text-[#2f4f2b]">OR</p>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="mx-auto flex h-9 w-20 items-center justify-center rounded-sm bg-white text-sm font-semibold text-[#3b4953]"
-                    >
-                      G
-                    </button>
-
-                    <p className="pt-2 text-center text-sm text-[#31572d]">
-                      Don't have an account?{' '}
+                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
+                      <input
+                        type={showSignInPassword ? 'text' : 'password'}
+                        required
+                        value={signInForm.password}
+                        onChange={(event) =>
+                          setSignInForm((prev) => ({ ...prev, password: event.target.value }))
+                        }
+                        placeholder="••••••••"
+                        className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest pl-10 pr-10 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                      />
                       <button
                         type="button"
-                        className="font-semibold text-[#1f7f1e]"
-                        onClick={() => {
-                          setError(null);
-                          setSuccessMessage(null);
-                          setMode('signup');
-                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-outline"
+                        onClick={() => setShowSignInPassword((prev) => !prev)}
+                        aria-label={showSignInPassword ? 'Hide password' : 'Show password'}
                       >
-                        Sign Up
+                        {showSignInPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
-                    </p>
-                  </form>
-                </section>
-                <div className="hidden bg-[#4a9543] md:block" />
-              </>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <label className="flex items-center gap-2 text-on-surface-variant">
+                      <input
+                        type="checkbox"
+                        checked={signInForm.remember}
+                        onChange={(event) =>
+                          setSignInForm((prev) => ({ ...prev, remember: event.target.checked }))
+                        }
+                        className="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary"
+                      />
+                      Remember me
+                    </label>
+                    <button type="button" className="font-semibold text-primary">
+                      Forgot Password?
+                    </button>
+                  </div>
+
+                  {error ? <p className="text-sm font-semibold text-on-error-container">{error}</p> : null}
+                  {successMessage ? (
+                    <p className="text-sm font-semibold text-on-primary-container">{successMessage}</p>
+                  ) : null}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-semibold text-on-primary transition hover:bg-primary/90 disabled:opacity-70"
+                  >
+                    {loading ? 'Signing In...' : 'Sign In'}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </form>
+
+                <div className="relative py-2">
+                  <div className="h-px bg-outline-variant" />
+                  <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-surface-container-lowest px-3 text-xs text-on-surface-variant">
+                    Or continue with
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest py-3 text-xs font-semibold text-on-surface hover:bg-surface-container-low"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                  </svg>
+                  Sign in with Google
+                </button>
+
+                <p className="text-center text-sm text-on-surface-variant">
+                  Don't have an account?{' '}
+                  <button
+                    type="button"
+                    className="font-semibold text-primary"
+                    onClick={() => {
+                      setError(null);
+                      setSuccessMessage(null);
+                      setMode('signup');
+                    }}
+                  >
+                    Sign Up
+                  </button>
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div>
+                  <h1 className="text-3xl font-semibold text-on-surface">Create an account</h1>
+                  <p className="mt-2 text-sm text-on-surface-variant">Provide your details to get started.</p>
+                </div>
+
+                <form className="space-y-5" onSubmit={handleSignUp}>
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold text-on-surface">Your name</label>
+                    <input
+                      required
+                      value={signUpForm.name}
+                      onChange={(event) =>
+                        setSignUpForm((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                      placeholder="First Last"
+                      className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold text-on-surface">Email</label>
+                    <input
+                      type="email"
+                      required
+                      value={signUpForm.email}
+                      onChange={(event) =>
+                        setSignUpForm((prev) => ({ ...prev, email: event.target.value }))
+                      }
+                      placeholder="you@email.com"
+                      className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold text-on-surface">Password</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
+                      <input
+                        type={showSignUpPassword ? 'text' : 'password'}
+                        required
+                        value={signUpForm.password}
+                        onChange={(event) =>
+                          setSignUpForm((prev) => ({ ...prev, password: event.target.value }))
+                        }
+                        placeholder="At least 6 characters"
+                        className="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest pl-10 pr-10 text-sm text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-outline"
+                        onClick={() => setShowSignUpPassword((prev) => !prev)}
+                        aria-label={showSignUpPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showSignUpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-on-surface-variant">
+                    By signing up I agree to the <span className="font-semibold underline">terms & conditions</span> and{' '}
+                    <span className="font-semibold underline">privacy policy</span>.
+                  </p>
+
+                  {error ? <p className="text-sm font-semibold text-on-error-container">{error}</p> : null}
+                  {successMessage ? (
+                    <p className="text-sm font-semibold text-on-primary-container">{successMessage}</p>
+                  ) : null}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-semibold text-on-primary transition hover:bg-primary/90 disabled:opacity-70"
+                  >
+                    {loading ? 'Creating Account...' : 'Create Account'}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </form>
+
+                <div className="relative py-2">
+                  <div className="h-px bg-outline-variant" />
+                  <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-surface-container-lowest px-3 text-xs text-on-surface-variant">
+                    Or continue with
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest py-3 text-xs font-semibold text-on-surface hover:bg-surface-container-low"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                  </svg>
+                  Sign up with Google
+                </button>
+
+                <p className="text-center text-sm text-on-surface-variant">
+                  Already a Member?{' '}
+                  <button
+                    type="button"
+                    className="font-semibold text-primary"
+                    onClick={() => {
+                      setError(null);
+                      setMode('signin');
+                    }}
+                  >
+                    Sign In
+                  </button>
+                </p>
+              </div>
             )}
           </div>
         </div>

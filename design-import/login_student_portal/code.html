@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login - Gordon College Student Portal</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<!-- Tailwind CSS & Config -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#f4fcf2",
+                        "on-tertiary-fixed-variant": "#2a4e3a",
+                        "outline-variant": "#bccabc",
+                        "primary-fixed": "#70fda7",
+                        "on-secondary-fixed-variant": "#00522c",
+                        "primary": "#006d3c",
+                        "on-secondary-fixed": "#00210f",
+                        "on-tertiary-fixed": "#002112",
+                        "secondary": "#006d3d",
+                        "on-tertiary-container": "#1a3e2b",
+                        "on-primary-fixed-variant": "#00522c",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-fixed": "#88f9b0",
+                        "on-primary-fixed": "#00210e",
+                        "on-secondary-container": "#007240",
+                        "primary-fixed-dim": "#51df8e",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed-dim": "#a8d0b6",
+                        "on-surface": "#161d18",
+                        "surface-container-highest": "#dde5db",
+                        "on-primary": "#ffffff",
+                        "on-surface-variant": "#3d4a3f",
+                        "secondary-container": "#85f6ae",
+                        "on-primary-container": "#004021",
+                        "surface-container": "#e8f0e6",
+                        "surface-tint": "#006d3c",
+                        "surface": "#f4fcf2",
+                        "surface-container-high": "#e2eae1",
+                        "tertiary-container": "#82a991",
+                        "inverse-on-surface": "#ebf3e9",
+                        "on-background": "#161d18",
+                        "on-tertiary": "#ffffff",
+                        "background": "#f4fcf2",
+                        "outline": "#6d7b6e",
+                        "surface-dim": "#d4dcd3",
+                        "error": "#ba1a1a",
+                        "secondary-fixed-dim": "#6bdc96",
+                        "tertiary": "#426651",
+                        "inverse-surface": "#2b322c",
+                        "on-error": "#ffffff",
+                        "surface-variant": "#dde5db",
+                        "on-secondary": "#ffffff",
+                        "tertiary-fixed": "#c3ecd2",
+                        "inverse-primary": "#51df8e",
+                        "surface-container-low": "#eef6ec",
+                        "primary-container": "#12b76a",
+                        "on-error-container": "#93000a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "24px",
+                        "stack-sm": "8px",
+                        "unit": "4px",
+                        "card-padding": "24px",
+                        "stack-lg": "24px",
+                        "container-padding": "32px",
+                        "stack-md": "16px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "h2": ["Inter"],
+                        "h3": ["Inter"],
+                        "h1": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "h2": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "h3": ["18px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "h1": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-md": ["12px", { "lineHeight": "18px", "fontWeight": "500" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased">
+<!-- Split Screen Container -->
+<div class="min-h-screen flex flex-col lg:flex-row w-full">
+<!-- Left Side: Graphic / Branding (Hidden on Mobile) -->
+<div class="hidden lg:flex lg:w-1/2 relative bg-surface-container items-center justify-center overflow-hidden">
+<!-- Background Image -->
+<img class="absolute inset-0 w-full h-full object-cover opacity-80" data-alt="A bright, sunlit view of a modern university campus building featuring clean architectural lines and expansive glass windows. The scene is shot during the day with clear blue skies, conveying a strong sense of academic excellence, orderliness, and reliable institutional authority. The lighting is soft yet crisp, highlighting the modern facade and lush green surroundings, perfectly aligning with a soft-professional, health-tech aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAd3VwXj5OK8iMBqqOqTv48Fh_xNptG3ee5ZdqghkjB8IaP3a5YLn-71b7Gxl4Fw_9PUNwxunKhkfKLRl_aFnPgYGh7-GHSU1lva8H-qtjbTwMNSmkeCUU3Q2l-MQTDTE8FHOkwbZ2eqqno2VJLejqHilJbTswkVkX5OnnF01j8CzM0EttphMup6DGf8yxbYlihttn0ZdnOs5gqs1LT6WIFeYP0tIjczjOR_0Il6ElGeUkO7TfoIQwaoR7r5UBJX4b71OYdanswMx4"/>
+<!-- Tonal Gradient Overlay -->
+<div class="absolute inset-0 bg-gradient-to-tr from-on-tertiary-fixed to-transparent opacity-60"></div>
+<!-- Branding Overlay -->
+<div class="relative z-10 p-12 text-center max-w-lg">
+<div class="flex justify-center mb-6">
+<div class="w-16 h-16 bg-surface-container-lowest rounded-xl shadow-lg flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-4xl" data-weight="fill" style="font-variation-settings: 'FILL' 1;">medical_services</span>
+</div>
+</div>
+<h2 class="font-h1 text-h1 text-surface-container-lowest mb-4 drop-shadow-md">Clinic Management System</h2>
+<p class="font-body-lg text-body-lg text-inverse-on-surface drop-shadow-sm">Streamlining health records and clinical administrative tasks for the Gordon College student body.</p>
+</div>
+</div>
+<!-- Right Side: Login Form -->
+<div class="w-full lg:w-1/2 flex items-center justify-center p-8 sm:p-12 xl:p-24 bg-surface-container-lowest">
+<div class="w-full max-w-md space-y-stack-lg">
+<!-- Mobile Branding (Visible only on small screens) -->
+<div class="lg:hidden text-center mb-8">
+<div class="inline-flex items-center justify-center w-12 h-12 bg-primary-container text-on-primary-container rounded-lg mb-4">
+<span class="material-symbols-outlined text-2xl" data-weight="fill" style="font-variation-settings: 'FILL' 1;">medical_services</span>
+</div>
+<h2 class="font-h2 text-h2 text-on-surface">Gordon College</h2>
+</div>
+<!-- Form Header -->
+<div class="text-left mb-8">
+<h1 class="font-h1 text-h1 text-on-surface mb-2 tracking-tight">Welcome Back</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Sign in to your Student Portal account.</p>
+</div>
+<!-- Form -->
+<form class="space-y-6">
+<!-- Email Input -->
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-2" for="email">Student Email</label>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined text-[20px]">mail</span>
+</div>
+<input class="block w-full pl-10 pr-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest text-body-md font-body-md text-on-surface placeholder-outline focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-shadow duration-200" id="email" name="email" placeholder="student@gordoncollege.edu" required="" type="email"/>
+</div>
+</div>
+<!-- Password Input -->
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-2" for="password">Password</label>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+</div>
+<input class="block w-full pl-10 pr-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest text-body-md font-body-md text-on-surface placeholder-outline focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-shadow duration-200" id="password" name="password" placeholder="••••••••" required="" type="password"/>
+</div>
+</div>
+<!-- Options Row -->
+<div class="flex items-center justify-between mt-4">
+<div class="flex items-center">
+<input class="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary bg-surface-container-lowest" id="remember-me" name="remember-me" type="checkbox"/>
+<label class="ml-2 block font-body-md text-body-md text-on-surface-variant cursor-pointer" for="remember-me">
+                                Remember me
+                            </label>
+</div>
+<div class="text-sm">
+<a class="font-label-md text-label-md text-primary hover:text-primary-fixed-dim transition-colors duration-200" href="#">
+                                Forgot Password?
+                            </a>
+</div>
+</div>
+<!-- Submit Button -->
+<div class="pt-2">
+<button class="w-full flex justify-center items-center py-3 px-4 rounded-lg shadow-sm font-label-md text-label-md text-on-primary bg-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-200 active:scale-[0.98]" type="submit">
+                            Sign In
+                            <span class="material-symbols-outlined ml-2 text-[18px]">arrow_forward</span>
+</button>
+</div>
+</form>
+<!-- Divider -->
+<div class="relative py-4">
+<div aria-hidden="true" class="absolute inset-0 flex items-center">
+<div class="w-full border-t border-outline-variant"></div>
+</div>
+<div class="relative flex justify-center">
+<span class="bg-surface-container-lowest px-4 font-label-md text-label-md text-on-surface-variant">Or continue with</span>
+</div>
+</div>
+<!-- Social Login -->
+<div>
+<button class="w-full flex justify-center items-center gap-3 py-3 px-4 rounded-lg border border-outline-variant bg-surface-container-lowest font-label-md text-label-md text-on-surface hover:bg-surface-container-low transition-colors duration-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-outline-variant" type="button">
+<!-- Standard Google 'G' SVG for visual fidelity of social login requirements -->
+<svg class="w-5 h-5" fill="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+<path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+<path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"></path>
+<path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
+</svg>
+                        Sign in with Google
+                    </button>
+</div>
+</div>
+</div>
+</div>
+</body></html>
