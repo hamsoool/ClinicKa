@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { clearStoredSession, getStoredSession, getUserByToken, setStoredSession, signInWithPassword, signOut, signUpWithPassword } from './api';
+import { clearStoredSession, getMe, getStoredSession, getUserByToken, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -21,6 +21,8 @@ type AuthContextValue = {
   }>;
   logout: () => Promise<void>;
   refresh: () => Promise<AuthMe | null>;
+  requiresPasswordSetup: boolean;
+  completePasswordSetup: (newPassword: string) => Promise<void>;
 };
 
 const AUTH_CONTEXT_KEY = Symbol.for('gc.auth.context');
@@ -55,11 +57,6 @@ function buildMeFromSession(role: UserRole, session: AuthSession | null): AuthMe
   };
 }
 
-function getRoleFromSession(session: AuthSession | null): UserRole | null {
-  if (!session) return null;
-  return resolveRoleFromEmail(session.user?.email);
-}
-
 function resolveRoleFromEmail(email?: string | null): UserRole {
   const normalized = (email || '').toLowerCase();
   if (normalized.includes('admin')) return 'admin';
@@ -72,7 +69,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     typeof window === 'undefined' ? null : getStoredSession(),
   );
   const [loading, setLoading] = useState(false);
-  const [role, setRole] = useState<UserRole | null>(() => getRoleFromSession(getStoredSession()));
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [me, setMe] = useState<AuthMe | null>(null);
+  const [requiresPasswordSetup, setRequiresPasswordSetup] = useState(false);
+
+  useEffect(() => {
+    if (!session?.access_token) {
+      setMe(null);
+      setRole(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const resolvedMe = await getMe(session.access_token);
+        if (cancelled) return;
+        setMe(resolvedMe);
+        if (!requiresPasswordSetup) {
+          setRole(resolvedMe.profile.role);
+        }
+      } catch {
+        if (cancelled) return;
+        const fallbackRole = resolveRoleFromEmail(session.user?.email);
+        setMe(buildMeFromSession(fallbackRole, session));
+        if (!requiresPasswordSetup) {
+          setRole(fallbackRole);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requiresPasswordSetup, session]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -122,16 +152,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
         };
 
+        const hasPasswordIdentity = (authUser.identities || []).some(
+          (identity) => identity.provider === 'email',
+        );
+
         setStoredSession(nextSession);
         setSession(nextSession);
-        setRole(getRoleFromSession(nextSession));
+        setRequiresPasswordSetup(!hasPasswordIdentity);
+        try {
+          const resolvedMe = await getMe(accessToken);
+          setMe(resolvedMe);
+          setRole(hasPasswordIdentity ? resolvedMe.profile.role : null);
+        } catch {
+          const fallbackRole = resolveRoleFromEmail(email);
+          setMe(buildMeFromSession(fallbackRole, nextSession));
+          setRole(hasPasswordIdentity ? fallbackRole : null);
+        }
         const url = new URL(window.location.href);
         url.hash = '';
+        if (!hasPasswordIdentity) {
+          url.searchParams.set('mode', 'signin');
+          url.searchParams.set('password_setup', '1');
+        }
         window.history.replaceState({}, document.title, url.pathname + url.search);
       } catch {
         clearStoredSession();
         setSession(null);
+        setMe(null);
         setRole(null);
+        setRequiresPasswordSetup(false);
         const url = new URL(window.location.href);
         url.hash = '';
         url.searchParams.set('mode', 'signin');
@@ -143,12 +192,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void processAuthRedirect();
   }, []);
 
-  useEffect(() => {
-    setRole(getRoleFromSession(session));
-  }, [session]);
-
-  const me = role ? buildMeFromSession(role, session) : null;
-
   const value = useMemo<AuthContextValue>(() => ({
     loading,
     session,
@@ -159,9 +202,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const nextSession = await signInWithPassword(email, password);
         setSession(nextSession);
-        const signedInRole = getRoleFromSession(nextSession) ?? resolveRoleFromEmail(email);
-        setRole(signedInRole);
-        return buildMeFromSession(signedInRole, nextSession);
+        try {
+          const resolvedMe = await getMe(nextSession.access_token);
+          setMe(resolvedMe);
+          setRole(resolvedMe.profile.role);
+          return resolvedMe;
+        } catch {
+          const fallbackRole = resolveRoleFromEmail(email);
+          const fallbackMe = buildMeFromSession(fallbackRole, nextSession);
+          setMe(fallbackMe);
+          setRole(fallbackRole);
+          return fallbackMe;
+        }
       } finally {
         setLoading(false);
       }
@@ -177,7 +229,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!nextSession) {
           setSession(null);
+          setMe(null);
           setRole(null);
+          setRequiresPasswordSetup(false);
           return {
             me: null,
             emailConfirmationRequired,
@@ -185,12 +239,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setSession(nextSession);
-        const signedInRole = getRoleFromSession(nextSession) ?? resolveRoleFromEmail(email);
-        setRole(signedInRole);
-        return {
-          me: buildMeFromSession(signedInRole, nextSession),
-          emailConfirmationRequired,
-        };
+        setRequiresPasswordSetup(false);
+        try {
+          const resolvedMe = await getMe(nextSession.access_token);
+          setMe(resolvedMe);
+          setRole(resolvedMe.profile.role);
+          return {
+            me: resolvedMe,
+            emailConfirmationRequired,
+          };
+        } catch {
+          const fallbackRole = resolveRoleFromEmail(email);
+          const fallbackMe = buildMeFromSession(fallbackRole, nextSession);
+          setMe(fallbackMe);
+          setRole(fallbackRole);
+          return {
+            me: fallbackMe,
+            emailConfirmationRequired,
+          };
+        }
       } finally {
         setLoading(false);
       }
@@ -202,12 +269,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } finally {
         clearStoredSession();
         setSession(null);
+        setMe(null);
         setRole(null);
+        setRequiresPasswordSetup(false);
         setLoading(false);
       }
     },
-    refresh: async () => (role ? buildMeFromSession(role, session) : null),
-  }), [loading, me, role, session]);
+    refresh: async () => {
+      if (!session?.access_token) {
+        setMe(null);
+        setRole(null);
+        setRequiresPasswordSetup(false);
+        return null;
+      }
+      try {
+        const refreshedMe = await getMe(session.access_token);
+        setMe(refreshedMe);
+        setRole(refreshedMe.profile.role);
+        return refreshedMe;
+      } catch {
+        const fallbackRole = resolveRoleFromEmail(session.user?.email);
+        const fallbackMe = buildMeFromSession(fallbackRole, session);
+        setMe(fallbackMe);
+        setRole(fallbackRole);
+        return fallbackMe;
+      }
+    },
+    requiresPasswordSetup,
+    completePasswordSetup: async (newPassword: string) => {
+      if (!session?.access_token) {
+        throw new Error('No active session found. Please sign in with Google again.');
+      }
+      await updateUserPassword(newPassword, session.access_token);
+      const resolvedMe = await getMe(session.access_token);
+      setMe(resolvedMe);
+      setRole(resolvedMe.profile.role);
+      setRequiresPasswordSetup(false);
+    },
+  }), [loading, me, requiresPasswordSetup, role, session]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -256,9 +355,9 @@ export function RequireAuth({
 }
 
 export function RedirectIfAuthenticated({ children }: { children: React.ReactNode }) {
-  const { role } = useAuth();
+  const { role, requiresPasswordSetup } = useAuth();
 
-  if (role) {
+  if (role && !requiresPasswordSetup) {
     return <Navigate to={getHomePath(role)} replace />;
   }
 

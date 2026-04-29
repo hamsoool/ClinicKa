@@ -35,7 +35,7 @@ export type AuthSession = {
 type SupabaseAuthUser = {
   id: string;
   email?: string;
-  identities?: Array<{ id?: string }>;
+  identities?: Array<{ id?: string; provider?: string }>;
 };
 
 export type AuthMe = {
@@ -349,7 +349,25 @@ export async function getUserByToken(token: string | null) {
   if (!token) {
     throw new Error('Missing access token.');
   }
-  return authRequest<{ id: string; email?: string | null }>('/auth/v1/user', { token });
+  return authRequest<SupabaseAuthUser>('/auth/v1/user', { token });
+}
+
+export async function updateUserPassword(newPassword: string, token?: string | null) {
+  const password = newPassword?.trim();
+  if (!password || password.length < 6) {
+    throw new Error('Password must be at least 6 characters.');
+  }
+
+  return authRequest<{ id: string; email?: string | null }>('/auth/v1/user', {
+    method: 'PUT',
+    token,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      password,
+    }),
+  });
 }
 
 async function getCurrentAuthUser(token?: string | null) {

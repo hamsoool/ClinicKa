@@ -16,7 +16,7 @@ function getHomePath(role: 'student' | 'staff' | 'admin') {
 export default function RoleSelection() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signIn, signUp, loading } = useAuth();
+  const { signIn, signUp, loading, requiresPasswordSetup, completePasswordSetup } = useAuth();
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const startsInSignInMode = query.get('mode') === 'signin';
   const verifiedFromEmail = query.get('verified') === '1';
@@ -39,6 +39,10 @@ export default function RoleSelection() {
     name: '',
     email: '',
     password: '',
+  });
+  const [passwordSetupForm, setPasswordSetupForm] = useState({
+    password: '',
+    confirmPassword: '',
   });
 
   const fromPath = useMemo(() => {
@@ -66,12 +70,7 @@ export default function RoleSelection() {
 
     try {
       const me = await signIn(signInForm.email, signInForm.password);
-      const fallbackRole = signInForm.email.toLowerCase().includes('admin')
-        ? 'admin'
-        : signInForm.email.toLowerCase().includes('staff')
-          ? 'staff'
-          : 'student';
-      const role = me.profile.role ?? fallbackRole;
+      const role = me.profile.role;
       navigate(fromPath || getHomePath(role), { replace: true });
     } catch (nextError) {
       const message =
@@ -125,6 +124,82 @@ export default function RoleSelection() {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Unable to create account.');
     }
+  }
+
+  async function handlePasswordSetup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+
+    if (passwordSetupForm.password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (passwordSetupForm.password !== passwordSetupForm.confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    try {
+      await completePasswordSetup(passwordSetupForm.password);
+      setSuccessMessage('Password set successfully. You can now sign in manually.');
+      navigate('/', { replace: true });
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Unable to set password.');
+    }
+  }
+
+  if (requiresPasswordSetup) {
+    return (
+      <div className="min-h-screen bg-[#17810f] px-4 py-8 sm:px-6 md:py-12">
+        <div className="mx-auto max-w-md overflow-hidden border border-[#3f8f3b] bg-[#4f9a47] p-6 shadow-xl sm:p-8">
+          <h2 className="text-2xl font-bold text-white">Set Your Password</h2>
+          <p className="mt-2 text-sm text-white/90">
+            You signed in with Google. Set a password now to enable manual sign-in.
+          </p>
+
+          <form className="mt-6 space-y-4" onSubmit={handlePasswordSetup}>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white">New password</label>
+              <input
+                type="password"
+                required
+                value={passwordSetupForm.password}
+                onChange={(event) =>
+                  setPasswordSetupForm((prev) => ({ ...prev, password: event.target.value }))
+                }
+                placeholder="At least 6 characters"
+                className="h-10 w-full rounded-sm border border-black/20 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#36f13c]"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-white">Confirm password</label>
+              <input
+                type="password"
+                required
+                value={passwordSetupForm.confirmPassword}
+                onChange={(event) =>
+                  setPasswordSetupForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                }
+                placeholder="Re-enter password"
+                className="h-10 w-full rounded-sm border border-black/20 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#36f13c]"
+              />
+            </div>
+
+            {error ? <p className="text-sm font-semibold text-red-200">{error}</p> : null}
+            {successMessage ? <p className="text-sm font-semibold text-green-100">{successMessage}</p> : null}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="h-10 w-full rounded-sm bg-[#3bf839] font-semibold text-[#173312] transition hover:bg-[#35e134] disabled:opacity-70"
+            >
+              {loading ? 'Saving Password...' : 'Save Password'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   return (
