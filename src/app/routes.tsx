@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router';
 import { RedirectIfAuthenticated, RequireAuth } from './lib/auth';
 
 const RoleSelection = lazy(() => import('./pages/role-selection'));
+const AuthAccessPage = lazy(() => import('./pages/auth-access'));
 const CheckEmailPage = lazy(() => import('./pages/check-email'));
 const StudentDashboard = lazy(() => import('./pages/student/dashboard'));
 const StudentYearSelection = lazy(() => import('./pages/student/year-selection'));
@@ -41,6 +42,14 @@ export const router = createBrowserRouter([
     element: (
       <RedirectIfAuthenticated>
         {withSuspense(RoleSelection)}
+      </RedirectIfAuthenticated>
+    ),
+  },
+  {
+    path: "/auth",
+    element: (
+      <RedirectIfAuthenticated>
+        {withSuspense(AuthAccessPage)}
       </RedirectIfAuthenticated>
     ),
   },

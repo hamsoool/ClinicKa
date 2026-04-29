@@ -338,7 +338,7 @@ export function signInWithGoogle() {
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL in your .env file.');
   }
 
-  const redirectTo = `${window.location.origin}/?mode=signin`;
+  const redirectTo = `${window.location.origin}/auth?mode=signin`;
   const url = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(
     redirectTo,
   )}`;
@@ -650,7 +650,7 @@ export async function signUpWithPassword(fullName: string, email: string, passwo
 
   const emailRedirectTo =
     typeof window !== 'undefined'
-      ? `${window.location.origin}/?mode=signin&verified=1`
+      ? `${window.location.origin}/auth?mode=signin&verified=1`
       : undefined;
 
   const response = await fetch(`${supabaseUrl}/auth/v1/signup`, {
