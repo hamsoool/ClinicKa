@@ -66,10 +66,11 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
-    "@types/node": "^22.15.3",
     "@tailwindcss/vite": "4.1.12",
+    "@types/node": "^22.15.3",
     "@vitejs/plugin-react": "4.7.0",
     "playwright": "^1.58.2",
+    "supabase": "^2.96.0",
     "tailwindcss": "4.1.12",
     "typescript": "^5.8.3",
     "vite": "6.3.5",

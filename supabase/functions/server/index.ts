@@ -4,7 +4,7 @@ import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const app = new Hono();
+const app = new Hono().basePath("/server");
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,15 +31,74 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 const bucketName = 'medical-files';
+const storageBuckets = [
+  bucketName,
+  'profile',
+  'student_signature',
+  'lab_chest_xray',
+  'lab_cbc',
+  'lab_urinalysis',
+];
 
 type Requester = {
   user: any;
   profile: any;
   student: any;
   staff: any;
+  archivedAccount?: any;
 };
 
 const isStaffRole = (role?: string) => role === 'staff' || role === 'admin';
+
+function normalizeEmail(email?: string | null) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function resolveRoleFromEmail(email?: string | null) {
+  const normalized = normalizeEmail(email);
+  if (normalized.includes('admin')) return 'admin';
+  if (normalized.includes('staff')) return 'staff';
+  return 'student';
+}
+
+function deriveStudentIdFromEmail(email?: string | null) {
+  const localPart = normalizeEmail(email).split('@')[0] || '';
+  return /^[0-9]{9}$/.test(localPart) ? localPart : null;
+}
+
+function roleLabel(role?: string) {
+  if (role === 'admin') return 'Administrator';
+  if (role === 'staff') return 'Clinic Staff';
+  return 'Student';
+}
+
+function inferStorageBucket(file: any) {
+  const explicitBucket = String(file?.storage_bucket || '').trim();
+  if (explicitBucket) return explicitBucket;
+
+  const storagePath = String(file?.storage_path || '').replace(/^\/+/, '');
+  const firstSegment = storagePath.split('/')[0]?.trim();
+  if (firstSegment && storageBuckets.includes(firstSegment)) return firstSegment;
+
+  const type = String(file?.type || '').toLowerCase();
+  if (type === 'photo') return 'profile';
+  if (type === 'signature') return 'student_signature';
+  if (type === 'xray') return 'lab_chest_xray';
+  if (type === 'cbc') return 'lab_cbc';
+  if (type === 'urinalysis') return 'lab_urinalysis';
+
+  return bucketName;
+}
+
+function normalizeStoragePath(storagePath?: string | null, targetBucket?: string | null) {
+  const path = String(storagePath || '').replace(/^\/+/, '');
+  const normalizedBucket = String(targetBucket || '').trim();
+  if (!path) return '';
+  if (normalizedBucket && path.startsWith(`${normalizedBucket}/`)) {
+    return path.slice(normalizedBucket.length + 1);
+  }
+  return path;
+}
 
 function badRequest(message: string) {
   return new Response(JSON.stringify({ error: message }), {
@@ -62,12 +121,146 @@ function forbidden(message = 'Forbidden') {
   });
 }
 
+function archivedAccountForbidden() {
+  return forbidden('This account has been archived. Please contact an administrator for assistance.');
+}
+
+function requireActiveRequester(requester: Requester | null) {
+  if (!requester) return unauthorized();
+  if (requester.archivedAccount) return archivedAccountForbidden();
+  return null;
+}
+
+function isMissingArchivedAccountsTableError(error: any) {
+  const message = String(error?.message || error?.details || error || '');
+  return message.includes("Could not find the table 'public.archived_accounts'");
+}
+
+async function getArchivedAccountsTableState() {
+  const { data, error } = await supabase.from('archived_accounts').select('*').limit(1);
+
+  if (error) {
+    if (isMissingArchivedAccountsTableError(error)) {
+      return {
+        available: false,
+        rows: [] as any[],
+      };
+    }
+
+    throw new Error(error.message);
+  }
+
+  return {
+    available: true,
+    rows: data || [],
+  };
+}
+
+async function getArchivedUserIds() {
+  const state = await getArchivedAccountsTableState();
+  if (!state.available) {
+    return {
+      available: false,
+      userIds: new Set<string>(),
+    };
+  }
+
+  const { data, error } = await supabase.from('archived_accounts').select('user_id');
+  if (error) {
+    if (isMissingArchivedAccountsTableError(error)) {
+      return {
+        available: false,
+        userIds: new Set<string>(),
+      };
+    }
+
+    throw new Error(error.message);
+  }
+
+  return {
+    available: true,
+    userIds: new Set((data || []).map((row) => row.user_id).filter(Boolean)),
+  };
+}
+
+function archivedAccountsMigrationRequired() {
+  return new Response(JSON.stringify({
+    error: 'Archived accounts migration is not applied yet. Run supabase/archived_accounts_migration.sql first.',
+  }), {
+    status: 409,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 async function ensureBucket() {
   const { data: buckets } = await supabase.storage.listBuckets();
   const exists = buckets?.some((bucket) => bucket.name === bucketName);
 
   if (!exists) {
     await supabase.storage.createBucket(bucketName, { public: false });
+  }
+}
+
+async function ensureProfile(user: any) {
+  const { data: existingProfile, error: existingProfileError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (existingProfileError) {
+    throw existingProfileError;
+  }
+
+  if (existingProfile) {
+    return existingProfile;
+  }
+
+  const { data: createdProfile, error: createdProfileError } = await supabase
+    .from('profiles')
+    .upsert({
+      id: user.id,
+      role: resolveRoleFromEmail(user.email),
+      email: normalizeEmail(user.email) || null,
+      student_id: deriveStudentIdFromEmail(user.email),
+    })
+    .select('*')
+    .single();
+
+  if (createdProfileError) {
+    throw createdProfileError;
+  }
+
+  return createdProfile;
+}
+
+async function deleteStoredFiles(files: any[]) {
+  const filesByBucket = (files || []).reduce((acc, file) => {
+    const resolvedBucket = inferStorageBucket(file);
+    const storagePath = normalizeStoragePath(file?.storage_path, resolvedBucket);
+    if (!resolvedBucket || !storagePath) return acc;
+    acc[resolvedBucket] = acc[resolvedBucket] || [];
+    acc[resolvedBucket].push(storagePath);
+    return acc;
+  }, {} as Record<string, string[]>);
+
+  for (const [targetBucket, paths] of Object.entries(filesByBucket)) {
+    if (!paths.length) continue;
+    const uniquePaths = [...new Set(paths)];
+    const { error } = await supabase.storage.from(targetBucket).remove(uniquePaths);
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+}
+
+async function setArchivedAuthState(userId: string) {
+  const { error } = await supabase.auth.admin.updateUserById(userId, {
+    ban_duration: '876000h',
+  } as any);
+
+  if (error) {
+    throw new Error(error.message);
   }
 }
 
@@ -84,13 +277,42 @@ async function authenticate(c: any): Promise<Requester | null> {
 
   const user = authData.user;
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .maybeSingle();
+  let archivedAccount = null;
+  const { available: archiveTableAvailable } = await getArchivedAccountsTableState().catch(() => ({
+    available: true,
+    rows: [],
+  }));
 
-  if (!profile) {
+  if (archiveTableAvailable) {
+    const { data, error: archivedError } = await supabase
+      .from('archived_accounts')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (archivedError) {
+      if (!isMissingArchivedAccountsTableError(archivedError)) {
+        return null;
+      }
+    } else {
+      archivedAccount = data || null;
+    }
+  }
+
+  if (archivedAccount) {
+    return {
+      user,
+      profile: null,
+      student: null,
+      staff: null,
+      archivedAccount,
+    };
+  }
+
+  let profile = null;
+  try {
+    profile = await ensureProfile(user);
+  } catch {
     return null;
   }
 
@@ -107,7 +329,7 @@ async function authenticate(c: any): Promise<Requester | null> {
       .maybeSingle(),
   ]);
 
-  return { user, profile, student, staff };
+  return { user, profile, student, staff, archivedAccount: null };
 }
 
 function mapMedicalHistory(row: any) {
@@ -353,7 +575,8 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.get("/me", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
 
   return c.json({
     profile: requester.profile,
@@ -364,7 +587,8 @@ app.get("/me", async (c) => {
 
 app.post("/submit-record", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (requester.profile.role !== 'student') return forbidden();
 
   try {
@@ -473,7 +697,8 @@ app.post("/submit-record", async (c) => {
 
 app.get("/student-records", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
 
   try {
     if (!requester.profile.student_id && !isStaffRole(requester.profile.role)) {
@@ -493,7 +718,8 @@ app.get("/student-records", async (c) => {
 
 app.get("/student-records/:studentId", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
 
   try {
     const studentId = c.req.param('studentId');
@@ -512,7 +738,8 @@ app.get("/student-records/:studentId", async (c) => {
 
 app.get("/submissions", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
@@ -526,7 +753,8 @@ app.get("/submissions", async (c) => {
 
 app.get("/submission/:id", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
 
   try {
     const id = c.req.param('id');
@@ -546,7 +774,8 @@ app.get("/submission/:id", async (c) => {
 
 app.put("/submission/:id/status", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
@@ -574,7 +803,8 @@ app.put("/submission/:id/status", async (c) => {
 
 app.put("/submission/:id/measurements", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
@@ -629,7 +859,8 @@ app.put("/submission/:id/measurements", async (c) => {
 
 app.post("/upload-file", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
 
   try {
     await ensureBucket();
@@ -709,7 +940,8 @@ app.post("/upload-file", async (c) => {
 
 app.get("/analytics", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
@@ -739,25 +971,33 @@ app.get("/analytics", async (c) => {
 
 app.get("/staff-users", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (requester.profile.role !== 'admin') return forbidden();
 
   try {
-    const { data: staff, error } = await supabase
-      .from('staff_users')
-      .select('*')
-      .order('last_name', { ascending: true });
+    const [{ data: staff, error }, archivedState] = await Promise.all([
+      supabase
+        .from('staff_users')
+        .select('*')
+        .order('last_name', { ascending: true }),
+      getArchivedUserIds(),
+    ]);
 
     if (error) throw new Error(error.message);
+    const archivedUserIds = archivedState.userIds;
 
     return c.json({
-      staff: (staff || []).map((member) => ({
-        id: member.staff_code || member.id,
-        name: `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.name || 'Unnamed Staff',
-        role: member.position || 'Clinic Staff',
-        status: member.is_active ? 'Active' : 'Inactive',
-        email: member.email || '',
-      })),
+      staff: (staff || [])
+        .filter((member) => !member.profile_id || !archivedUserIds.has(member.profile_id))
+        .map((member) => ({
+          id: member.staff_code || member.id,
+          userId: member.profile_id || member.id,
+          name: `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.name || 'Unnamed Staff',
+          role: member.position || 'Clinic Staff',
+          status: member.is_active ? 'Active' : 'Inactive',
+          email: member.email || '',
+        })),
     });
   } catch (error) {
     console.log('Error fetching staff users:', error);
@@ -767,13 +1007,19 @@ app.get("/staff-users", async (c) => {
 
 app.get("/user-accounts", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (requester.profile.role !== 'admin') return forbidden();
 
   try {
-    const [{ data: profiles, error: profilesError }, { data: staffUsers, error: staffError }] = await Promise.all([
+    const [
+      { data: profiles, error: profilesError },
+      { data: staffUsers, error: staffError },
+      archivedState,
+    ] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('staff_users').select('*'),
+      getArchivedUserIds(),
     ]);
 
     if (profilesError) throw new Error(profilesError.message);
@@ -783,28 +1029,30 @@ app.get("/user-accounts", async (c) => {
       if (staff.profile_id) acc[staff.profile_id] = staff;
       return acc;
     }, {} as Record<string, any>);
+    const archivedUserIds = archivedState.userIds;
 
     return c.json({
-      users: (profiles || []).map((profile) => {
-        const linkedStaff = staffByProfileId[profile.id];
-        const name = [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim()
-          || [linkedStaff?.first_name, linkedStaff?.last_name].filter(Boolean).join(' ').trim()
-          || profile.email
-          || 'Unnamed User';
+      users: (profiles || [])
+        .filter((profile) => !archivedUserIds.has(profile.id))
+        .map((profile) => {
+          const linkedStaff = staffByProfileId[profile.id];
+          const name = [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim()
+            || [linkedStaff?.first_name, linkedStaff?.last_name].filter(Boolean).join(' ').trim()
+            || profile.email
+            || 'Unnamed User';
 
-        return {
-          id: profile.student_id || linkedStaff?.staff_code || profile.id,
-          name,
-          role:
-            profile.role === 'admin'
-              ? 'Administrator'
-              : profile.role === 'staff'
-                ? 'Clinic Staff'
-                : 'Student',
-          status: linkedStaff?.is_active === false ? 'Inactive' : 'Active',
-          lastActive: profile.created_at,
-        };
-      }),
+          return {
+            userId: profile.id,
+            id: profile.student_id || linkedStaff?.staff_code || profile.id,
+            name,
+            email: profile.email || linkedStaff?.email || '',
+            role: roleLabel(profile.role),
+            roleKey: profile.role,
+            status: linkedStaff?.is_active === false ? 'Inactive' : 'Active',
+            lastActive: profile.updated_at || profile.created_at,
+            canArchive: profile.role === 'student' || profile.role === 'staff',
+          };
+        }),
     });
   } catch (error) {
     console.log('Error fetching user accounts:', error);
@@ -812,9 +1060,284 @@ app.get("/user-accounts", async (c) => {
   }
 });
 
+app.get("/archived-accounts", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  try {
+    const archiveState = await getArchivedAccountsTableState();
+    if (!archiveState.available) {
+      return c.json({ users: [] });
+    }
+
+    const { data: archivedAccounts, error } = await supabase
+      .from('archived_accounts')
+      .select('*')
+      .order('archived_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    return c.json({
+      users: (archivedAccounts || []).map((account) => ({
+        archiveId: account.id,
+        userId: account.user_id,
+        id: account.account_identifier || account.user_id,
+        name: account.display_name || account.email || 'Archived Account',
+        email: account.email || '',
+        role: roleLabel(account.role),
+        roleKey: account.role,
+        status: 'Archived',
+        archivedAt: account.archived_at,
+        archivedReason: account.archive_reason || '',
+      })),
+    });
+  } catch (error) {
+    console.log('Error fetching archived accounts:', error);
+    return c.json({ error: 'Failed to fetch archived accounts', details: String(error) }, 500);
+  }
+});
+
+app.post("/admin/archive-account", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  try {
+    const archiveState = await getArchivedAccountsTableState();
+    if (!archiveState.available) return archivedAccountsMigrationRequired();
+
+    const { userId, reason } = await c.req.json();
+    if (!userId) return badRequest('userId is required');
+    if (userId === requester.profile.id) return badRequest('You cannot archive your own administrator account.');
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profileError) throw new Error(profileError.message);
+    if (!profile) return badRequest('User account not found.');
+    if (!['student', 'staff'].includes(profile.role)) {
+      return badRequest('Only student and clinic staff accounts can be archived.');
+    }
+
+    const [{ data: linkedStaff }, { data: linkedStudent }, { data: submissions, error: submissionsError }] = await Promise.all([
+      supabase.from('staff_users').select('*').eq('profile_id', userId).maybeSingle(),
+      profile.student_id
+        ? supabase.from('students').select('*').eq('student_id', profile.student_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      profile.student_id
+        ? supabase.from('submissions').select('id,submitted_at').eq('student_id', profile.student_id)
+        : Promise.resolve({ data: [] as any[], error: null }),
+    ]);
+
+    if (submissionsError) throw new Error(submissionsError.message);
+
+    const displayName =
+      [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim()
+      || [linkedStaff?.first_name, linkedStaff?.last_name].filter(Boolean).join(' ').trim()
+      || profile.email
+      || 'Unnamed User';
+
+    const archivePayload = {
+      user_id: userId,
+      role: profile.role,
+      email: profile.email || linkedStaff?.email || null,
+      display_name: displayName,
+      account_identifier: profile.student_id || linkedStaff?.staff_code || linkedStaff?.id || profile.id,
+      archived_by: requester.profile.id,
+      archive_reason: reason?.trim() || null,
+      snapshot: {
+        profile: {
+          role: profile.role,
+          first_name: profile.first_name || null,
+          last_name: profile.last_name || null,
+          department: profile.department || null,
+          course: profile.course || null,
+          student_id: profile.student_id || null,
+        },
+        student: linkedStudent
+          ? {
+              student_id: linkedStudent.student_id,
+              department: linkedStudent.department || null,
+              course: linkedStudent.course || null,
+              year_level: linkedStudent.year_level || null,
+            }
+          : null,
+        staff: linkedStaff
+          ? {
+              staff_code: linkedStaff.staff_code || null,
+              position: linkedStaff.position || null,
+              is_active: linkedStaff.is_active ?? null,
+            }
+          : null,
+        submissions: {
+          count: submissions?.length || 0,
+          last_submitted_at: (submissions || [])
+            .map((entry) => entry.submitted_at)
+            .filter(Boolean)
+            .sort()
+            .slice(-1)[0] || null,
+        },
+      },
+      archived_at: new Date().toISOString(),
+    };
+
+    const { error: archiveError } = await supabase
+      .from('archived_accounts')
+      .upsert(archivePayload, { onConflict: 'user_id' });
+
+    if (archiveError) throw new Error(archiveError.message);
+
+    if (linkedStaff?.profile_id) {
+      const { error: staffUpdateError } = await supabase
+        .from('staff_users')
+        .update({ is_active: false })
+        .eq('profile_id', linkedStaff.profile_id);
+
+      if (staffUpdateError) throw new Error(staffUpdateError.message);
+    }
+
+    await setArchivedAuthState(userId);
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error archiving account:', error);
+    return c.json({ error: 'Failed to archive account', details: String(error) }, 500);
+  }
+});
+
+app.delete("/admin/archive-account/:archiveId", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  try {
+    const archiveState = await getArchivedAccountsTableState();
+    if (!archiveState.available) return archivedAccountsMigrationRequired();
+
+    const archiveId = c.req.param('archiveId');
+    if (!archiveId) return badRequest('archiveId is required');
+
+    const { data: archivedAccount, error: archiveLookupError } = await supabase
+      .from('archived_accounts')
+      .select('*')
+      .eq('id', archiveId)
+      .maybeSingle();
+
+    if (archiveLookupError) throw new Error(archiveLookupError.message);
+    if (!archivedAccount) return badRequest('Archived account not found.');
+
+    const userId = archivedAccount.user_id;
+    const role = archivedAccount.role;
+
+    const [{ data: profile }, { data: linkedStaff }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      supabase.from('staff_users').select('*').eq('profile_id', userId).maybeSingle(),
+    ]);
+
+    if (role === 'student') {
+      const studentId =
+        profile?.student_id
+        || archivedAccount.snapshot?.student?.student_id
+        || archivedAccount.snapshot?.profile?.student_id
+        || null;
+
+      if (studentId) {
+        const { data: submissions, error: submissionsError } = await supabase
+          .from('submissions')
+          .select('id')
+          .eq('student_id', studentId);
+
+        if (submissionsError) throw new Error(submissionsError.message);
+
+        const submissionIds = (submissions || []).map((entry) => entry.id).filter(Boolean);
+
+        if (submissionIds.length) {
+          const { data: files, error: filesLookupError } = await supabase
+            .from('files')
+            .select('*')
+            .in('submission_id', submissionIds);
+
+          if (filesLookupError) throw new Error(filesLookupError.message);
+
+          await deleteStoredFiles(files || []);
+
+          const deletionTables = [
+            'emergency_contacts',
+            'medical_history',
+            'staff_measurements',
+            'lab_chest_xray',
+            'lab_cbc',
+            'lab_urinalysis',
+            'certificates',
+            'files',
+          ];
+
+          for (const tableName of deletionTables) {
+            const { error } = await supabase.from(tableName).delete().in('submission_id', submissionIds);
+            if (error) throw new Error(error.message);
+          }
+        }
+
+        const { error: submissionDeleteError } = await supabase
+          .from('submissions')
+          .delete()
+          .eq('student_id', studentId);
+
+        if (submissionDeleteError) throw new Error(submissionDeleteError.message);
+
+        const studentDeleteBuilder = supabase.from('students').delete().eq('student_id', studentId);
+        const { error: studentDeleteError } = await studentDeleteBuilder;
+        if (studentDeleteError) throw new Error(studentDeleteError.message);
+      }
+    }
+
+    if (role === 'staff' || linkedStaff?.id) {
+      const staffId = linkedStaff?.id || null;
+
+      if (staffId) {
+        const updates = [
+          supabase.from('submissions').update({ reviewed_by: null }).eq('reviewed_by', staffId),
+          supabase.from('staff_measurements').update({ updated_by: null }).eq('updated_by', staffId),
+          supabase.from('certificates').update({ issued_by: null }).eq('issued_by', staffId),
+        ];
+
+        for (const updatePromise of updates) {
+          const { error } = await updatePromise;
+          if (error) throw new Error(error.message);
+        }
+      }
+
+      const { error: staffDeleteError } = await supabase.from('staff_users').delete().eq('profile_id', userId);
+      if (staffDeleteError) throw new Error(staffDeleteError.message);
+    }
+
+    const { error: profileDeleteError } = await supabase.from('profiles').delete().eq('id', userId);
+    if (profileDeleteError) throw new Error(profileDeleteError.message);
+
+    const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId);
+    if (authDeleteError) throw new Error(authDeleteError.message);
+
+    const { error: archiveDeleteError } = await supabase.from('archived_accounts').delete().eq('id', archiveId);
+    if (archiveDeleteError) throw new Error(archiveDeleteError.message);
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error permanently deleting archived account:', error);
+    return c.json({ error: 'Failed to permanently delete archived account', details: String(error) }, 500);
+  }
+});
+
 app.post("/admin/create-account", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (requester.profile.role !== 'admin') return forbidden();
 
   try {
@@ -869,7 +1392,8 @@ app.post("/admin/create-account", async (c) => {
 
 app.post("/admin/create-staff", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (requester.profile.role !== 'admin') return forbidden();
 
   try {
@@ -920,7 +1444,8 @@ app.post("/admin/create-staff", async (c) => {
 
 app.post("/issue-certificate", async (c) => {
   const requester = await authenticate(c);
-  if (!requester) return unauthorized();
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {

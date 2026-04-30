@@ -23,11 +23,11 @@ export default function AdminSystemSettings() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="clinicEmail">Primary Contact Email</Label>
-            <Input id="clinicEmail" type="email" defaultValue="clinic@gordoncollege.edu" />
+            <Input id="clinicEmail" type="email" defaultValue="digitalduo.clinicka@gmail.com" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="clinicPhone">Contact Number</Label>
-            <Input id="clinicPhone" defaultValue="+63 2 8123 4567" />
+            <Input id="clinicPhone" defaultValue="+63 928 041 0729" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="clinicHours">Clinic Hours</Label>
@@ -35,7 +35,7 @@ export default function AdminSystemSettings() {
           </div>
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="clinicAddress">Address</Label>
-            <Input id="clinicAddress" defaultValue="Gordon College Campus, Olongapo City" />
+            <Input id="clinicAddress" defaultValue="Gordon College, Olongapo City" />
           </div>
         </CardContent>
       </Card>

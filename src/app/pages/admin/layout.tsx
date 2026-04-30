@@ -49,6 +49,7 @@ export default function AdminLayout() {
       portalLabel="Admin Control Center"
       brandSubtitle="Admin Control"
       brandIcon={ShieldCheck}
+      brandImageSrc="/gchsu.png"
       displayName={displayName}
       profileSubtitle={roleLabel}
       email={email}

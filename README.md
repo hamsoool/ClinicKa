@@ -1,6 +1,6 @@
-# ClinicKa
+# ClinicKa!
 
-ClinicKa is a Gordon College clinic management portal for student medical records, clearance review, clinic staff workflows, and administrator oversight. The app runs as a Vite + React single page application with Supabase for authentication, database access, storage, and edge functions.
+ClinicKa! is a Gordon College clinic management portal for student medical records, clearance review, clinic staff workflows, and administrator oversight. The app runs as a Vite + React single page application with Supabase for authentication, database access, storage, and edge functions.
 
 ## Core Features
 

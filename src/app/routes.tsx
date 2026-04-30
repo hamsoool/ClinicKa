@@ -34,7 +34,7 @@ function withSuspense(Component: ComponentType) {
       fallback={
         <div className="flex min-h-[50vh] items-center justify-center p-6" aria-busy="true" aria-live="polite">
           <div className="w-full max-w-sm rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
-            <span className="sr-only">Loading page</span>
+            <span className="sr-only">Loading page...</span>
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 animate-pulse rounded-full bg-surface-container-high" />
               <div className="min-w-0 flex-1 space-y-2">

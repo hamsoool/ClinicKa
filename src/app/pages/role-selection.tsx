@@ -93,7 +93,7 @@ export default function RoleSelection() {
             {logoVisible ? (
               <img
                 src={AUTH_LOGO_SRC}
-                alt="ClinicKa logo"
+                alt="ClinicKa! logo"
                 className="h-11 w-11 rounded-full object-cover"
                 onError={() => setLogoVisible(false)}
               />
@@ -103,7 +103,7 @@ export default function RoleSelection() {
               </div>
             )}
             <div>
-              <p className="text-lg font-bold tracking-[-0.03em] text-[#0b1c30]">ClinicKa</p>
+              <p className="text-lg font-bold tracking-[-0.03em] text-[#0b1c30]">ClinicKa!</p>
               <p className="text-xs uppercase tracking-[0.18em] text-[#60717e]">Gordon College Health Services</p>
             </div>
           </button>
@@ -163,7 +163,7 @@ export default function RoleSelection() {
                   Your Academic Health Journey, <span className="text-[#065f46]">Streamlined.</span>
                 </h1>
                 <p className="max-w-xl text-lg leading-8 text-[#4a5b68]">
-                  ClinicKa brings Gordon College clinic services into a calmer, clearer digital workflow. Submit medical records, complete health forms, and track clearance progress without the paperwork pileup.
+                  ClinicKa! brings Gordon College clinic services into a calmer, clearer digital workflow. Submit medical records, complete health forms, and track clearance progress without the paperwork pileup.
                 </p>
               </div>
 
@@ -221,7 +221,7 @@ export default function RoleSelection() {
                   <div className="relative h-[420px] overflow-hidden bg-[#eef4ff]">
                     <img
                       src={DASHBOARD_PREVIEW_SRC}
-                      alt="ClinicKa student dashboard preview"
+                      alt="ClinicKa! student dashboard preview"
                       className="h-full w-full object-cover object-left-top"
                     />
                     <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0)_22%,rgba(248,249,255,0.14)_100%)]" />
@@ -334,7 +334,7 @@ export default function RoleSelection() {
                 Hello Clarity.
               </h2>
               <p className="max-w-xl text-lg leading-8 text-[#4a5b68]">
-                Health requirements should not feel like guesswork. ClinicKa transforms the old paper-heavy routine into a guided digital process that is easier for students to finish and easier for clinic staff to review.
+                Health requirements should not feel like guesswork. ClinicKa! transforms the old paper-heavy routine into a guided digital process that is easier for students to finish and easier for clinic staff to review.
               </p>
 
               <div className="space-y-6 pt-2">
@@ -435,7 +435,7 @@ export default function RoleSelection() {
                 <div>
                   <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30]">Uncompromising security</h2>
                   <p className="mt-3 max-w-3xl text-sm leading-7 text-[#4a5b68]">
-                    Student health records are sensitive. ClinicKa uses controlled account access, school-managed workflows, and privacy-aware handling to support the Gordon College clinic team and protect student data with care.
+                    Student health records are sensitive. ClinicKa! uses controlled account access, school-managed workflows, and privacy-aware handling to support the Gordon College clinic team and protect student data with care.
                   </p>
                 </div>
               </div>
