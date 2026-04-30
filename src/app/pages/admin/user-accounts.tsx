@@ -3,6 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
+import { Label } from '../../components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import {
   Table,
   TableBody,
@@ -13,7 +23,7 @@ import {
 } from '../../components/ui/table';
 import { Filter, Search, UserPlus, Download, Printer } from 'lucide-react';
 import { toast } from 'sonner';
-import { getUserAccounts } from '../../lib/api';
+import { createAdminAccount, getUserAccounts } from '../../lib/api';
 
 const roleTone = (role: string) => {
   if (role === 'Administrator') {
@@ -34,15 +44,72 @@ const statusTone = (status: string) => {
 
 export default function AdminUserAccounts() {
   const [userAccounts, setUserAccounts] = useState<any[]>([]);
+  const [openCreate, setOpenCreate] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    role: 'student' as 'student' | 'staff' | 'admin',
+    firstName: '',
+    lastName: '',
+    studentId: '',
+    department: '',
+    course: '',
+  });
 
-  useEffect(() => {
+  const loadUsers = () =>
     getUserAccounts()
       .then((data) => setUserAccounts(data.users || []))
       .catch((error) => {
         console.error('Error loading user accounts:', error);
         toast.error('Failed to load user accounts');
       });
+
+  useEffect(() => {
+    loadUsers();
   }, []);
+
+  const submitCreate = async () => {
+    if (!form.email || !form.password) {
+      toast.error('Email and password are required');
+      return;
+    }
+    if (form.role === 'student' && !form.studentId.trim()) {
+      toast.error('Student ID is required for student accounts');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await createAdminAccount({
+        email: form.email.trim(),
+        password: form.password,
+        role: form.role,
+        firstName: form.firstName.trim() || undefined,
+        lastName: form.lastName.trim() || undefined,
+        studentId: form.role === 'student' ? form.studentId.trim() : undefined,
+        department: form.department.trim() || undefined,
+        course: form.course.trim() || undefined,
+      });
+      toast.success('Account created without email verification');
+      setOpenCreate(false);
+      setForm({
+        email: '',
+        password: '',
+        role: 'student',
+        firstName: '',
+        lastName: '',
+        studentId: '',
+        department: '',
+        course: '',
+      });
+      await loadUsers();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to create account');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const exportToPDF = () => {
     window.print();
@@ -77,11 +144,73 @@ export default function AdminUserAccounts() {
           <h1 className="text-3xl font-bold text-primary mb-2">User Accounts</h1>
           <p className="text-muted-foreground">Manage access, roles, and account status</p>
         </div>
-        <Button className="self-start md:self-auto">
+        <Button className="self-start md:self-auto" onClick={() => setOpenCreate(true)}>
           <UserPlus className="w-4 h-4 mr-2" />
           Create Account
         </Button>
       </div>
+
+      <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Account</DialogTitle>
+            <DialogDescription>Admin-created accounts bypass email verification.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="ua-email">Email</Label>
+              <Input id="ua-email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="ua-password">Password</Label>
+              <Input id="ua-password" type="password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Role</Label>
+              <Select value={form.role} onValueChange={(value: 'student' | 'staff' | 'admin') => setForm((prev) => ({ ...prev, role: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="student">Student</SelectItem>
+                  <SelectItem value="staff">Staff</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="ua-first">First Name</Label>
+                <Input id="ua-first" value={form.firstName} onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="ua-last">Last Name</Label>
+                <Input id="ua-last" value={form.lastName} onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))} />
+              </div>
+            </div>
+            {form.role === 'student' ? (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="ua-student-id">Student ID</Label>
+                  <Input id="ua-student-id" value={form.studentId} onChange={(e) => setForm((prev) => ({ ...prev, studentId: e.target.value }))} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="ua-department">Department</Label>
+                  <Input id="ua-department" value={form.department} onChange={(e) => setForm((prev) => ({ ...prev, department: e.target.value }))} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="ua-course">Course</Label>
+                  <Input id="ua-course" value={form.course} onChange={(e) => setForm((prev) => ({ ...prev, course: e.target.value }))} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenCreate(false)} disabled={isSubmitting}>Cancel</Button>
+            <Button onClick={submitCreate} disabled={isSubmitting}>{isSubmitting ? 'Creating...' : 'Create Account'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

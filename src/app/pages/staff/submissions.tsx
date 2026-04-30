@@ -9,7 +9,7 @@ import { Search, Eye, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { getSubmissions } from '../../lib/api';
 
-const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAS', 'CED'];
+const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = {
   '1': '1st Year',
   '2': '2nd Year',

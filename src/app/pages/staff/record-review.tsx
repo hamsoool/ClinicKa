@@ -42,6 +42,11 @@ export default function StaffRecordReview() {
     urinalysisProtein: '',
   });
 
+  const sanitizeMeasurementValue = (value: unknown) => {
+    if (value === null || value === undefined) return '';
+    return String(value);
+  };
+
   useEffect(() => {
     loadSubmission();
   }, [submissionId]);
@@ -62,10 +67,15 @@ export default function StaffRecordReview() {
       
       // Pre-fill measurements if they exist
       if (loadedSubmission.staffMeasurements || loadedSubmission.labResults) {
-        setMeasurements(prev => ({
-          ...prev,
+        const merged = {
           ...loadedSubmission.staffMeasurements,
           ...loadedSubmission.labResults,
+        } as Record<string, unknown>;
+        setMeasurements(prev => ({
+          ...prev,
+          ...Object.fromEntries(
+            Object.keys(prev).map((key) => [key, sanitizeMeasurementValue(merged[key])]),
+          ),
         }));
       } else {
         // Pre-fill with student's submitted data
@@ -567,10 +577,12 @@ export default function StaffRecordReview() {
               </CardContent>
             </Card>
 
-            <Button onClick={handleSaveMeasurements}>
-              <Save className="w-4 h-4 mr-2" />
-              Save Laboratory Results
-            </Button>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveMeasurements}>
+                <Save className="w-4 h-4 mr-2" />
+                Save Laboratory Results
+              </Button>
+            </div>
           </div>
         </TabsContent>
 
