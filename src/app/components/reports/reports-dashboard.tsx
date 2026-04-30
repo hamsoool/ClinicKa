@@ -12,7 +12,12 @@ import { getAnalytics, getSubmissions } from '../../lib/api';
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const SURNAME_FILTERS = ['all', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
 const YEAR_LABELS: Record<string, string> = { '1': '1st Year', '2': '2nd Year', '3': '3rd Year', '4': '4th Year' };
-const STATUS_LABELS: Record<string, string> = { pending: 'Under Review', approved: 'Approved', returned: 'Returned' };
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Under Review',
+  approved: 'Approved',
+  returned: 'Returned',
+  physical_exam_done: 'Physical Exam Done',
+};
 const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', issued: 'Issued Only', not_issued: 'Not Issued' };
 
 function buildSimplePdf(
@@ -201,6 +206,26 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     return true;
   }), [submissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, surnameFilter, fromDate, toDate]);
 
+  const dedupedFilteredSubmissions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const s of filteredSubmissions) {
+      const signature = [
+        s.studentId || '',
+        (s.firstName || '').trim().toLowerCase(),
+        (s.lastName || '').trim().toLowerCase(),
+        s.year || '',
+        s.status || '',
+        s.course || '',
+        s.submittedAt ? new Date(s.submittedAt).toISOString().slice(0, 10) : '',
+      ].join('|');
+      if (seen.has(signature)) continue;
+      seen.add(signature);
+      out.push(s);
+    }
+    return out;
+  }, [filteredSubmissions]);
+
   const dateRange = useMemo(() => {
     const timestamps = submissions
       .map((s) => (s.submittedAt ? new Date(s.submittedAt).getTime() : NaN))
@@ -217,21 +242,21 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   }, [submissions, fromDate, toDate, dateRange.minDate, dateRange.maxDate]);
 
   const summary = useMemo(() => {
-    const total = filteredSubmissions.length;
-    const approved = filteredSubmissions.filter((s) => s.status === 'approved').length;
-    const pending = filteredSubmissions.filter((s) => s.status === 'pending').length;
-    const firstYears = filteredSubmissions.filter((s) => String(s.year) === '1');
+    const total = dedupedFilteredSubmissions.length;
+    const approved = dedupedFilteredSubmissions.filter((s) => s.status === 'approved').length;
+    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending').length;
+    const firstYears = dedupedFilteredSubmissions.filter((s) => String(s.year) === '1');
     const firstYearUnderReview = firstYears.filter((s) => s.status === 'pending').length;
     const firstYearNotUnderReview = firstYears.length - firstYearUnderReview;
-    const withCertificate = filteredSubmissions.filter((s) => Boolean(s.clearanceInfo?.issuedDate)).length;
+    const withCertificate = dedupedFilteredSubmissions.filter((s) => Boolean(s.clearanceInfo?.issuedDate)).length;
     const approvalRate = total > 0 ? Math.round((approved / total) * 100) : 0;
-    const byCourse = filteredSubmissions.reduce((acc, sub) => {
+    const byCourse = dedupedFilteredSubmissions.reduce((acc, sub) => {
       const course = sub.course || 'Unknown';
       acc[course] = (acc[course] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     return { total, approved, pending, firstYears: firstYears.length, firstYearUnderReview, firstYearNotUnderReview, withCertificate, approvalRate, byCourse };
-  }, [filteredSubmissions]);
+  }, [dedupedFilteredSubmissions]);
 
   const downloadPdf = () => {
     try {
@@ -255,7 +280,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         { label: '1st year not under review', value: String(summary.firstYearNotUnderReview) },
         { label: 'Top course totals', value: Object.entries(summary.byCourse).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([course, count]) => `${course}: ${count}`).join(' | ') || '-' },
       ];
-      const studentRows = filteredSubmissions.map((s) => {
+      const studentRows = dedupedFilteredSubmissions.map((s) => {
         const middle = s.middleInitial ? ` ${String(s.middleInitial).charAt(0)}.` : '';
         const fullName = `${s.lastName || '-'}, ${s.firstName || '-'}${middle}`;
         return {
@@ -307,7 +332,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         <CardContent className="grid md:grid-cols-4 gap-3">
           <Select value={departmentFilter} onValueChange={setDepartmentFilter}><SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger><SelectContent><SelectItem value="all">All Departments</SelectItem>{DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select>
           <Select value={yearFilter} onValueChange={setYearFilter}><SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger><SelectContent><SelectItem value="all">All Years</SelectItem>{Object.entries(YEAR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="all">All Statuses</SelectItem><SelectItem value="pending">Under Review</SelectItem><SelectItem value="approved">Approved</SelectItem><SelectItem value="returned">Returned</SelectItem></SelectContent></Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="all">All Statuses</SelectItem><SelectItem value="pending">Under Review</SelectItem><SelectItem value="physical_exam_done">Physical Exam Done</SelectItem><SelectItem value="approved">Approved</SelectItem><SelectItem value="returned">Returned</SelectItem></SelectContent></Select>
           <Select value={certificateFilter} onValueChange={setCertificateFilter}><SelectTrigger><SelectValue placeholder="Certificate" /></SelectTrigger><SelectContent><SelectItem value="all">All Certificates</SelectItem><SelectItem value="issued">Issued Only</SelectItem><SelectItem value="not_issued">Not Issued</SelectItem></SelectContent></Select>
           <Select value={courseFilter} onValueChange={setCourseFilter}><SelectTrigger><SelectValue placeholder="Course" /></SelectTrigger><SelectContent><SelectItem value="all">All Courses</SelectItem>{allCourses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
           <Select value={conditionFilter} onValueChange={setConditionFilter}><SelectTrigger><SelectValue placeholder="Medical Condition" /></SelectTrigger><SelectContent><SelectItem value="all">All Conditions</SelectItem>{allConditions.map((k) => <SelectItem key={k} value={k}>{k.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase())}</SelectItem>)}</SelectContent></Select>
@@ -360,7 +385,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           <Table>
             <TableHeader><TableRow><TableHead>Student</TableHead><TableHead>Course</TableHead><TableHead>Year</TableHead><TableHead>Status</TableHead><TableHead>Submitted</TableHead><TableHead>Certificate</TableHead></TableRow></TableHeader>
             <TableBody>
-              {filteredSubmissions.map((s) => (
+              {dedupedFilteredSubmissions.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell>{s.firstName} {s.lastName} ({s.studentId})</TableCell>
                   <TableCell>{s.course || '-'}</TableCell>

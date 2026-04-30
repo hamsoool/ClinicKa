@@ -27,6 +27,15 @@ export default function StaffRecordReview() {
     weight: '',
     height: '',
     bmi: '',
+    visualAcuity: '',
+    skin: '',
+    heent: '',
+    chestLungs: '',
+    heart: '',
+    abdomen: '',
+    extremities: '',
+    others: '',
+    examinedBy: '',
     // Lab results
     xrayDate: '',
     xrayResult: 'normal',
@@ -95,7 +104,7 @@ export default function StaffRecordReview() {
     }
   };
 
-  const handleStatusUpdate = async (newStatus: string) => {
+  const handleStatusUpdate = async (newStatus: string, shouldNavigate = true) => {
     if (!submissionId) return;
     
     try {
@@ -106,8 +115,10 @@ export default function StaffRecordReview() {
         staffNotes,
         updatedAt: new Date().toISOString(),
       }) : prev);
-      toast.success(`Submission ${newStatus}`);
-      navigate('/staff/submissions');
+      toast.success(`Submission status updated to ${newStatus.replace(/_/g, ' ')}`);
+      if (shouldNavigate) {
+        navigate('/staff/submissions');
+      }
     } catch (error) {
       console.error('Error updating status:', error);
       toast.error('Failed to update status');
@@ -129,6 +140,15 @@ export default function StaffRecordReview() {
           weight: measurements.weight,
           height: measurements.height,
           bmi: measurements.bmi,
+          visualAcuity: measurements.visualAcuity,
+          skin: measurements.skin,
+          heent: measurements.heent,
+          chestLungs: measurements.chestLungs,
+          heart: measurements.heart,
+          abdomen: measurements.abdomen,
+          extremities: measurements.extremities,
+          others: measurements.others,
+          examinedBy: measurements.examinedBy,
         },
         labResults: {
           xrayDate: measurements.xrayDate,
@@ -147,6 +167,17 @@ export default function StaffRecordReview() {
     } catch (error) {
       console.error('Error saving measurements:', error);
       toast.error('Failed to save measurements');
+    }
+  };
+
+  const handlePhysicalExamDone = async () => {
+    if (!submissionId) return;
+    try {
+      await updateMeasurements(submissionId, measurements);
+      await handleStatusUpdate('physical_exam_done', false);
+    } catch (error) {
+      console.error('Error marking physical exam done:', error);
+      toast.error('Failed to mark physical exam as done');
     }
   };
 
@@ -181,6 +212,8 @@ export default function StaffRecordReview() {
         return <Badge className="bg-green-100 text-green-800">Approved</Badge>;
       case 'returned':
         return <Badge className="bg-red-100 text-red-800">Returned</Badge>;
+      case 'physical_exam_done':
+        return <Badge className="bg-blue-100 text-blue-800">Physical Exam Done</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -464,11 +497,98 @@ export default function StaffRecordReview() {
                         onChange={(e) => updateMeasurement('bmi', e.target.value)}
                       />
                     </div>
+                    <div>
+                      <Label htmlFor="visualAcuity">Visual Acuity</Label>
+                      <Input
+                        id="visualAcuity"
+                        value={measurements.visualAcuity}
+                        onChange={(e) => updateMeasurement('visualAcuity', e.target.value)}
+                        placeholder="e.g., 20/20"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="skin">Skin</Label>
+                      <Input
+                        id="skin"
+                        value={measurements.skin}
+                        onChange={(e) => updateMeasurement('skin', e.target.value)}
+                        placeholder="e.g., Normal"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="heent">HEENT</Label>
+                      <Input
+                        id="heent"
+                        value={measurements.heent}
+                        onChange={(e) => updateMeasurement('heent', e.target.value)}
+                        placeholder="Head, eyes, ears, nose, throat findings"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="chestLungs">Chest/Lungs</Label>
+                      <Input
+                        id="chestLungs"
+                        value={measurements.chestLungs}
+                        onChange={(e) => updateMeasurement('chestLungs', e.target.value)}
+                        placeholder="e.g., Clear breath sounds"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="heart">Heart</Label>
+                      <Input
+                        id="heart"
+                        value={measurements.heart}
+                        onChange={(e) => updateMeasurement('heart', e.target.value)}
+                        placeholder="e.g., Regular rate and rhythm"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="abdomen">Abdomen</Label>
+                      <Input
+                        id="abdomen"
+                        value={measurements.abdomen}
+                        onChange={(e) => updateMeasurement('abdomen', e.target.value)}
+                        placeholder="e.g., Soft, non-tender"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="extremities">Extremities</Label>
+                      <Input
+                        id="extremities"
+                        value={measurements.extremities}
+                        onChange={(e) => updateMeasurement('extremities', e.target.value)}
+                        placeholder="e.g., No edema"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="others">Other / Specify</Label>
+                      <Input
+                        id="others"
+                        value={measurements.others}
+                        onChange={(e) => updateMeasurement('others', e.target.value)}
+                        placeholder="Additional findings"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="examinedBy">Examined By</Label>
+                      <Input
+                        id="examinedBy"
+                        value={measurements.examinedBy}
+                        onChange={(e) => updateMeasurement('examinedBy', e.target.value)}
+                        placeholder="Examiner name"
+                      />
+                    </div>
                   </div>
-                  <Button onClick={handleSaveMeasurements} className="mt-4">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Measurements
-                  </Button>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Button onClick={handleSaveMeasurements}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Measurements
+                    </Button>
+                    <Button onClick={handlePhysicalExamDone} variant="secondary">
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Physical Exam Done
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardContent>

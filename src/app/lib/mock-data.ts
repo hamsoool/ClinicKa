@@ -90,7 +90,7 @@ export type MockSubmission = {
   course: string;
   department?: string;
   year: string;
-  status: 'pending' | 'approved' | 'returned';
+  status: 'pending' | 'physical_exam_done' | 'approved' | 'returned';
   submittedAt: string;
   updatedAt?: string;
   staffNotes?: string;
