@@ -7,6 +7,7 @@ const AuthAccessPage = lazy(() => import('./pages/auth-access'));
 const CheckEmailPage = lazy(() => import('./pages/check-email'));
 const StudentDashboard = lazy(() => import('./pages/student/dashboard'));
 const StudentYearSelection = lazy(() => import('./pages/student/year-selection'));
+const StudentPrivacyWaiver = lazy(() => import('./pages/student/privacy-waiver'));
 const StudentMedicalForm = lazy(() => import('./pages/student/medical-form'));
 const StudentLayout = lazy(() => import('./pages/student/layout'));
 const StudentRecords = lazy(() => import('./pages/student/records'));
@@ -91,6 +92,7 @@ export const router = createBrowserRouter([
       { index: true, element: withSuspense(StudentDashboard) },
       { path: "records", element: withSuspense(StudentRecords) },
       { path: "year-selection", element: withSuspense(StudentYearSelection) },
+      { path: "privacy-waiver/:year", element: withSuspense(StudentPrivacyWaiver) },
       { path: "medical-form/:year", element: withSuspense(StudentMedicalForm) },
       { path: "requirements", element: withSuspense(StudentRequirements) },
       { path: "profile", element: withSuspense(StudentProfile) },

@@ -13,6 +13,7 @@ const publicAnonKey =
   import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+export const IS_DEMO_MODE = DEMO_MODE;
 const DEMO_SUBMISSIONS_KEY = 'gc_demo_submissions';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -131,6 +132,7 @@ export type AuthMe = {
   };
   student?: {
     student_id: string;
+    profile_id?: string | null;
     first_name?: string | null;
     last_name?: string | null;
     middle_initial?: string | null;
@@ -153,6 +155,24 @@ export type AuthMe = {
     phone?: string | null;
     is_active?: boolean | null;
   } | null;
+};
+
+export type StudentProfileAssets = {
+  photoUrl: string | null;
+  signatureUrl: string | null;
+  photoFileName?: string | null;
+  signatureFileName?: string | null;
+};
+
+export type StudentProfileUpdateInput = {
+  studentId?: string | null;
+  firstName: string;
+  lastName: string;
+  department: string;
+  course: string;
+  birthday: string;
+  contactNumber: string;
+  address: string;
 };
 
 export type AdminUserAccount = {
@@ -756,6 +776,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
   const cbcFileByHint = findLabFileByHint(submissionFiles, 'cbc');
   const urinalysisFileByHint = findLabFileByHint(submissionFiles, 'urinalysis');
   const genericLabFile = findGenericLabFile(submissionFiles);
+  const profileAssets = student?.profile_id ? related.profileAssetsByProfileId?.[student.profile_id] || {} : {};
 
   return {
     id: row.id,
@@ -819,8 +840,8 @@ function mapSubmission(row: any, related: Record<string, any>) {
           issuedDate: certificate.issued_date || certificate.issued_at,
         }
       : undefined,
-    photoUrl: normalizeStorageFileUrl(files.photo?.url),
-    signatureUrl: normalizeStorageFileUrl(files.signature?.url),
+    photoUrl: normalizeStorageFileUrl(files.photo?.url || profileAssets.photo?.url),
+    signatureUrl: normalizeStorageFileUrl(files.signature?.url || profileAssets.signature?.url),
     xrayFileUrl: normalizeStorageFileUrl(xrayFileFromLab?.url || files.xray?.url || xrayFileByHint?.url || genericLabFile?.url),
     cbcFileUrl: normalizeStorageFileUrl(cbcFileFromLab?.url || files.cbc?.url || cbcFileByHint?.url || genericLabFile?.url),
     urinalysisFileUrl: normalizeStorageFileUrl(urinalysisFileFromLab?.url || files.urinalysis?.url || urinalysisFileByHint?.url || genericLabFile?.url),
@@ -875,32 +896,7 @@ async function loadRelatedData(rows: any[]) {
       : Promise.resolve([]),
   ]);
 
-  const normalizedFiles = await Promise.all(
-    (files || []).map(async (file) => {
-      if (file?.storage_path) {
-        const resolvedBucket =
-          String(file?.storage_bucket || '').trim() ||
-          inferBucketFromStoragePath(file.storage_path) ||
-          inferBucketFromType(file.type) ||
-          inferBucketFromNameOrPath(file.file_name, file.storage_path) ||
-          STORAGE_BUCKET;
-        const signedUrl = await createSignedStorageUrlWithBucketFallbacks(
-          file.storage_path,
-          token,
-          resolvedBucket,
-          file.type,
-        );
-        return {
-          ...file,
-          storage_bucket: resolvedBucket,
-          // Always prefer fresh signed URL over stored URL because stored URL can be stale
-          // after bucket migrations/renames.
-          url: signedUrl || normalizeStorageFileUrl(file.url) || null,
-        };
-      }
-      return { ...file, url: normalizeStorageFileUrl(file?.url) || null };
-    }),
-  );
+  const normalizedFiles = await normalizeFileRows(files, token);
 
   const filesBySubmissionCurrent = (normalizedFiles || []).reduce((acc, file) => {
     acc[file.submission_id] = acc[file.submission_id] || [];
@@ -918,6 +914,40 @@ async function loadRelatedData(rows: any[]) {
     )
   ).flat();
   const allFiles = [...(normalizedFiles || []), ...listedFallbackFiles];
+  const studentRows = students || [];
+  const studentProfileIds = [...new Set(studentRows.map((student) => student?.profile_id).filter(Boolean))];
+  const studentProfileIdList = studentProfileIds.map((id) => encodeURIComponent(id)).join(',');
+  const profileAssetFilesRaw = studentProfileIds.length
+    ? await restRequest<any[]>(
+        'files',
+        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc`,
+      ).catch(() => [])
+    : [];
+  const normalizedProfileAssetFiles = await normalizeFileRows(profileAssetFilesRaw, token);
+  const profileAssetsByUploadedBy = normalizedProfileAssetFiles.reduce((acc, file) => {
+    if (!file?.uploaded_by) return acc;
+    acc[file.uploaded_by] = acc[file.uploaded_by] || [];
+    acc[file.uploaded_by].push(file);
+    return acc;
+  }, {} as Record<string, any[]>);
+  const missingProfileAssetStudents = studentRows.filter((student) => {
+    const latest = latestFilesByType(profileAssetsByUploadedBy[student?.profile_id] || []);
+    return !latest.photo || !latest.signature;
+  });
+  const fallbackProfileAssets = await Promise.all(
+    missingProfileAssetStudents.map(async (student) => ({
+      profileId: student.profile_id,
+      files: await listProfileAssetsFromStorage(student.student_id, token),
+    })),
+  );
+  const profileAssetsByProfileId = studentRows.reduce((acc, student) => {
+    if (!student?.profile_id) return acc;
+    const metadataFiles = profileAssetsByUploadedBy[student.profile_id] || [];
+    const storageFallbackFiles =
+      fallbackProfileAssets.find((entry) => entry.profileId === student.profile_id)?.files || [];
+    acc[student.profile_id] = latestFilesByType([...metadataFiles, ...storageFallbackFiles]);
+    return acc;
+  }, {} as Record<string, Record<string, any>>);
 
   const byKey = (rowsData: any[] | null | undefined, key: string) =>
     (rowsData || []).reduce((acc, item) => {
@@ -940,6 +970,7 @@ async function loadRelatedData(rows: any[]) {
     cbc: byKey(cbc, 'submission_id'),
     urinalysis: byKey(urinalysis, 'submission_id'),
     certificates: byKey(certificates, 'submission_id'),
+    profileAssetsByProfileId,
     files: filesBySubmission,
     filesById: byId(allFiles),
   };
@@ -1202,6 +1233,219 @@ export async function getMe(token?: string | null) {
   }
 }
 
+async function listProfileAssetsFromStorage(studentId: string, token?: string | null) {
+  const targetStudentId = String(studentId || '').trim();
+  if (!targetStudentId || !supabaseUrl || !publicAnonKey) return [] as any[];
+
+  const prefix = `profiles/${targetStudentId}/`;
+  const assetConfigs = [
+    { type: 'photo', bucket: 'profile' },
+    { type: 'signature', bucket: 'student_signature' },
+  ] as const;
+
+  try {
+    const results = await Promise.all(
+      assetConfigs.map(async ({ type, bucket }) => {
+        const response = await fetch(
+          `${supabaseUrl}/storage/v1/object/list/${bucket}`,
+          {
+            method: 'POST',
+            headers: {
+              apikey: publicAnonKey,
+              Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prefix,
+              limit: 20,
+              offset: 0,
+            }),
+          },
+        );
+
+        const payload = await response.json().catch(() => []);
+        if (!response.ok || !Array.isArray(payload)) return [] as any[];
+
+        const mapped = await Promise.all(
+          payload
+            .filter((item: any) => item?.name)
+            .map(async (item: any) => {
+              const storagePath = `${prefix}${String(item.name)}`;
+              const signedUrl = await createSignedStorageUrl(storagePath, token, bucket);
+              return {
+                id: `profile-${bucket}-${targetStudentId}-${item.name}`,
+                submission_id: null,
+                type,
+                file_name: String(item.name),
+                storage_bucket: bucket,
+                storage_path: storagePath,
+                mime_type: null,
+                uploaded_at: new Date().toISOString(),
+                uploaded_by: null,
+                url: signedUrl || null,
+              };
+            }),
+        );
+
+        return mapped.filter((item) => item.url);
+      }),
+    );
+
+    return results.flat();
+  } catch {
+    return [] as any[];
+  }
+}
+
+async function normalizeFileRows(files: any[] | null | undefined, token?: string | null) {
+  return Promise.all(
+    (files || []).map(async (file) => {
+      if (file?.storage_path) {
+        const resolvedBucket =
+          String(file?.storage_bucket || '').trim() ||
+          inferBucketFromStoragePath(file.storage_path) ||
+          inferBucketFromType(file.type) ||
+          inferBucketFromNameOrPath(file.file_name, file.storage_path) ||
+          STORAGE_BUCKET;
+        const signedUrl = await createSignedStorageUrlWithBucketFallbacks(
+          file.storage_path,
+          token,
+          resolvedBucket,
+          file.type,
+        );
+        return {
+          ...file,
+          storage_bucket: resolvedBucket,
+          url: signedUrl || normalizeStorageFileUrl(file.url) || null,
+        };
+      }
+      return { ...file, url: normalizeStorageFileUrl(file?.url) || null };
+    }),
+  );
+}
+
+export async function updateStudentProfile(data: StudentProfileUpdateInput) {
+  const payload = {
+    studentId: data.studentId || null,
+    firstName: data.firstName || '',
+    lastName: data.lastName || '',
+    department: data.department || '',
+    course: data.course || '',
+    birthday: data.birthday || '',
+    contactNumber: data.contactNumber || '',
+    address: data.address || '',
+  };
+
+  if (DEMO_MODE) {
+    return {
+      success: true as const,
+      profile: {
+        id: 'demo-user',
+        role: 'student' as const,
+        email: previewStudent?.student_id ? `${previewStudent.student_id}@${GC_DOMAIN}` : `student@${GC_DOMAIN}`,
+        student_id: payload.studentId || previewStudent?.student_id || '202310417',
+        first_name: payload.firstName || null,
+        last_name: payload.lastName || null,
+        department: payload.department || null,
+        course: payload.course || null,
+      },
+      student: {
+        student_id: payload.studentId || previewStudent?.student_id || '202310417',
+        first_name: payload.firstName || null,
+        last_name: payload.lastName || null,
+        middle_initial: previewStudent?.middle_initial || null,
+        department: payload.department || null,
+        course: payload.course || null,
+        year_level: previewStudent?.year_level || null,
+        age: previewStudent?.age || null,
+        sex: previewStudent?.sex || null,
+        birthday: payload.birthday || null,
+        civil_status: previewStudent?.civil_status || null,
+        contact_number: payload.contactNumber || null,
+        address: payload.address || null,
+      },
+    };
+  }
+
+  try {
+    return await apiRequest<{
+      success: boolean;
+      profile: AuthMe['profile'];
+      student: AuthMe['student'];
+    }>('/functions/v1/server/student-profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+
+    if (!missingRoute) {
+      throw error;
+    }
+  }
+
+  const me = await getMe();
+  const studentId = me.profile.student_id || payload.studentId;
+
+  if (!studentId) {
+    throw new Error('Student ID is required.');
+  }
+
+  const updatedProfileRows = await restRequest<any[]>(
+    'profiles',
+    `id=eq.${encodeURIComponent(me.profile.id)}&select=*`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        first_name: payload.firstName || null,
+        last_name: payload.lastName || null,
+        department: payload.department || null,
+        course: payload.course || null,
+        student_id: studentId,
+      }),
+    },
+  );
+
+  await restRequest<any[]>(
+    'students',
+    'on_conflict=student_id',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        student_id: studentId,
+        profile_id: me.profile.id,
+        first_name: payload.firstName || null,
+        last_name: payload.lastName || null,
+        department: payload.department || null,
+        course: payload.course || null,
+        birthday: payload.birthday || null,
+        contact_number: payload.contactNumber || null,
+        address: payload.address || null,
+      }),
+    },
+  );
+
+  const refreshedMe = await getMe();
+
+  return {
+    success: true as const,
+    profile: updatedProfileRows[0] || refreshedMe.profile,
+    student: refreshedMe.student,
+  };
+}
+
 export async function submitMedicalRecord(data: any) {
   if (DEMO_MODE) {
     const records = getDemoSubmissions();
@@ -1394,7 +1638,52 @@ export async function getStudentRecords(studentId?: string) {
   return { records };
 }
 
+export async function getStudentProfileAssets(studentId?: string, profileId?: string | null) {
+  if (DEMO_MODE) {
+    return {
+      photoUrl: null,
+      signatureUrl: null,
+      photoFileName: null,
+      signatureFileName: null,
+    } satisfies StudentProfileAssets;
+  }
+
+  const me = await getMe();
+  const resolvedStudentId = studentId || me.student?.student_id || me.profile.student_id || '';
+  const resolvedProfileId = profileId || me.student?.profile_id || me.profile.id || '';
+  const token = getAccessToken();
+
+  let assetRows: any[] = [];
+  if (resolvedProfileId) {
+    assetRows = await restRequest<any[]>(
+      'files',
+      `uploaded_by=eq.${encodeURIComponent(resolvedProfileId)}&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc`,
+    ).catch(() => []);
+  }
+
+  const normalizedAssetRows = await normalizeFileRows(assetRows, token);
+  const latestAssets = latestFilesByType(normalizedAssetRows);
+  const needsStorageFallback = !latestAssets.photo || !latestAssets.signature;
+  const storageFallbackRows =
+    needsStorageFallback && resolvedStudentId
+      ? await listProfileAssetsFromStorage(resolvedStudentId, token)
+      : [];
+  const finalAssets = latestFilesByType([...(normalizedAssetRows || []), ...storageFallbackRows]);
+
+  return {
+    photoUrl: normalizeStorageFileUrl(finalAssets.photo?.url) || null,
+    signatureUrl: normalizeStorageFileUrl(finalAssets.signature?.url) || null,
+    photoFileName: finalAssets.photo?.file_name || null,
+    signatureFileName: finalAssets.signature?.file_name || null,
+  } satisfies StudentProfileAssets;
+}
+
 export async function getStudentProfilePhoto(studentId?: string) {
+  const assets = await getStudentProfileAssets(studentId);
+  if (assets.photoUrl) {
+    return { photoUrl: assets.photoUrl };
+  }
+
   if (DEMO_MODE) {
     return { photoUrl: null as string | null };
   }
@@ -2096,6 +2385,114 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
         body: JSON.stringify({ submission_id: recordId, file_id: fileId }),
       },
     );
+  }
+
+  return {
+    success: true as const,
+    url: fileUrl || undefined,
+    fileName: storagePath,
+  };
+}
+
+export async function uploadStudentProfileAsset(file: File, studentId: string, fileType: 'photo' | 'signature') {
+  if (DEMO_MODE) {
+    return {
+      success: true as const,
+      url: URL.createObjectURL(file),
+      fileName: `profiles/${studentId}/${fileType}_${file.name}`,
+    };
+  }
+
+  const targetStudentId = String(studentId || '').trim();
+  if (!targetStudentId) {
+    throw new Error('Student ID is required to upload profile assets.');
+  }
+
+  const storageBucket = STORAGE_BUCKET_BY_FILE_TYPE[fileType];
+  const token = getAccessToken();
+  if (!token || !supabaseUrl || !publicAnonKey) {
+    throw new Error('You must be signed in to upload files.');
+  }
+
+  const objectName = buildStorageObjectName(fileType, file);
+  const storagePath = `profiles/${targetStudentId}/${objectName}`;
+  const uploadResponse = await fetch(
+    `${supabaseUrl}/storage/v1/object/${storageBucket}/${storagePath}`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: publicAnonKey,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': file.type || 'application/octet-stream',
+      },
+      body: file,
+    },
+  );
+
+  if (!uploadResponse.ok) {
+    const raw = await uploadResponse.text().catch(() => '');
+    let payload: Record<string, any> = {};
+    try {
+      payload = raw ? JSON.parse(raw) : {};
+    } catch {
+      payload = {};
+    }
+    throw new Error(
+      payload.message ||
+      payload.error ||
+      payload.details ||
+      raw ||
+      `Failed to upload file (${uploadResponse.status})`,
+    );
+  }
+
+  const signedResponse = await fetch(
+    `${supabaseUrl}/storage/v1/object/sign/${storageBucket}/${storagePath}`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: publicAnonKey,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
+    },
+  );
+
+  const signedPayload = await signedResponse.json().catch(() => ({}));
+  const rawSignedUrl =
+    signedPayload?.signedURL || signedPayload?.signedUrl || signedPayload?.signed_url || null;
+  const fileUrl =
+    typeof rawSignedUrl === 'string'
+      ? (/^https?:\/\//i.test(rawSignedUrl) ? rawSignedUrl : `${supabaseUrl}/storage/v1${rawSignedUrl}`)
+      : null;
+
+  try {
+    const authUser = await getCurrentAuthUser();
+    await restRequest<any[]>(
+      'files',
+      'select=*',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify({
+          submission_id: null,
+          type: fileType,
+          file_name: file.name,
+          mime_type: file.type,
+          url: fileUrl,
+          storage_bucket: storageBucket,
+          storage_path: storagePath,
+          uploaded_by: authUser.id,
+        }),
+      },
+    );
+  } catch {
+    // Storage is the source of truth for profile assets; metadata is best-effort
+    // so older schemas can still function.
   }
 
   return {
