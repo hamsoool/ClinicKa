@@ -3,6 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
+import { Label } from '../../components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -13,7 +22,7 @@ import {
 } from '../../components/ui/table';
 import { Plus, Search, Download, Printer } from 'lucide-react';
 import { toast } from 'sonner';
-import { getStaffUsers } from '../../lib/api';
+import { createAdminStaff, getStaffUsers } from '../../lib/api';
 
 const statusTone = (status: string) => {
   if (status === 'Active') {
@@ -24,15 +33,61 @@ const statusTone = (status: string) => {
 
 export default function AdminStaffManagement() {
   const [staffList, setStaffList] = useState<any[]>([]);
+  const [openCreate, setOpenCreate] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    firstName: '',
+    lastName: '',
+    position: 'Clinic Staff',
+    staffCode: '',
+  });
 
-  useEffect(() => {
+  const loadStaff = () =>
     getStaffUsers()
       .then((data) => setStaffList(data.staff || []))
       .catch((error) => {
         console.error('Error loading staff:', error);
         toast.error('Failed to load staff directory');
       });
+
+  useEffect(() => {
+    loadStaff();
   }, []);
+
+  const submitCreate = async () => {
+    if (!form.email || !form.password || !form.firstName || !form.lastName) {
+      toast.error('Email, password, first name, and last name are required');
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      await createAdminStaff({
+        email: form.email.trim(),
+        password: form.password,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        position: form.position.trim() || 'Clinic Staff',
+        staffCode: form.staffCode.trim() || undefined,
+      });
+      toast.success('Staff account created without email verification');
+      setOpenCreate(false);
+      setForm({
+        email: '',
+        password: '',
+        firstName: '',
+        lastName: '',
+        position: 'Clinic Staff',
+        staffCode: '',
+      });
+      await loadStaff();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to add staff');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const exportToPDF = () => {
     window.print();
@@ -67,11 +122,54 @@ export default function AdminStaffManagement() {
           <h1 className="text-3xl font-bold text-primary mb-2">Clinic Staff Management</h1>
           <p className="text-muted-foreground">Manage staff roles, access, and availability</p>
         </div>
-        <Button className="self-start md:self-auto">
+        <Button className="self-start md:self-auto" onClick={() => setOpenCreate(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Add Staff
         </Button>
       </div>
+
+      <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Staff</DialogTitle>
+            <DialogDescription>Admin-created staff bypasses email verification.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="sm-email">Email</Label>
+              <Input id="sm-email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="sm-password">Password</Label>
+              <Input id="sm-password" type="password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="sm-first">First Name</Label>
+                <Input id="sm-first" value={form.firstName} onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="sm-last">Last Name</Label>
+                <Input id="sm-last" value={form.lastName} onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="sm-position">Position</Label>
+                <Input id="sm-position" value={form.position} onChange={(e) => setForm((prev) => ({ ...prev, position: e.target.value }))} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="sm-code">Staff Code (optional)</Label>
+                <Input id="sm-code" value={form.staffCode} onChange={(e) => setForm((prev) => ({ ...prev, staffCode: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenCreate(false)} disabled={isSubmitting}>Cancel</Button>
+            <Button onClick={submitCreate} disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Add Staff'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

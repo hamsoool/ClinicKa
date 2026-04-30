@@ -812,6 +812,112 @@ app.get("/user-accounts", async (c) => {
   }
 });
 
+app.post("/admin/create-account", async (c) => {
+  const requester = await authenticate(c);
+  if (!requester) return unauthorized();
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  try {
+    const { email, password, role = 'student', firstName, lastName, studentId, department, course } = await c.req.json();
+    if (!email || !password) return badRequest('email and password are required');
+    if (!['student', 'staff', 'admin'].includes(role)) return badRequest('invalid role');
+
+    const { data: created, error: createError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName || null,
+        last_name: lastName || null,
+      },
+    });
+    if (createError || !created?.user) throw new Error(createError?.message || 'Failed to create user');
+
+    const userId = created.user.id;
+
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: userId,
+      role,
+      email: email.toLowerCase(),
+      first_name: firstName || null,
+      last_name: lastName || null,
+      student_id: role === 'student' ? (studentId || null) : null,
+      department: department || null,
+      course: course || null,
+      created_at: new Date().toISOString(),
+    });
+    if (profileError) throw new Error(profileError.message);
+
+    if (role === 'student' && studentId) {
+      const { error: studentError } = await supabase.from('students').upsert({
+        student_id: studentId,
+        profile_id: userId,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        department: department || null,
+        course: course || null,
+      }, { onConflict: 'student_id' });
+      if (studentError) throw new Error(studentError.message);
+    }
+
+    return c.json({ success: true, userId });
+  } catch (error) {
+    console.log('Error creating account:', error);
+    return c.json({ error: 'Failed to create account', details: String(error) }, 500);
+  }
+});
+
+app.post("/admin/create-staff", async (c) => {
+  const requester = await authenticate(c);
+  if (!requester) return unauthorized();
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  try {
+    const { email, password, firstName, lastName, position = 'Clinic Staff', staffCode } = await c.req.json();
+    if (!email || !password || !firstName || !lastName) return badRequest('email, password, firstName, and lastName are required');
+
+    const { data: created, error: createError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+      },
+    });
+    if (createError || !created?.user) throw new Error(createError?.message || 'Failed to create user');
+
+    const userId = created.user.id;
+    const normalizedEmail = email.toLowerCase();
+
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: userId,
+      role: 'staff',
+      email: normalizedEmail,
+      first_name: firstName,
+      last_name: lastName,
+      created_at: new Date().toISOString(),
+    });
+    if (profileError) throw new Error(profileError.message);
+
+    const { error: staffError } = await supabase.from('staff_users').upsert({
+      profile_id: userId,
+      email: normalizedEmail,
+      first_name: firstName,
+      last_name: lastName,
+      position,
+      staff_code: staffCode || null,
+      is_active: true,
+    });
+    if (staffError) throw new Error(staffError.message);
+
+    return c.json({ success: true, userId });
+  } catch (error) {
+    console.log('Error creating staff:', error);
+    return c.json({ error: 'Failed to create staff', details: String(error) }, 500);
+  }
+});
+
 app.post("/issue-certificate", async (c) => {
   const requester = await authenticate(c);
   if (!requester) return unauthorized();

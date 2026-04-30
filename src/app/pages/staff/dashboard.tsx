@@ -60,6 +60,8 @@ function getStatusLabel(status: MockSubmission['status']) {
   switch (status) {
     case 'pending':
       return 'Pending review';
+    case 'physical_exam_done':
+      return 'Physical exam done';
     case 'approved':
       return 'Approved';
     case 'returned':
@@ -75,6 +77,8 @@ function getStatusStyles(status: MockSubmission['status']) {
       return 'bg-primary-container/20 text-on-primary-container';
     case 'pending':
       return 'bg-amber-100 text-amber-800';
+    case 'physical_exam_done':
+      return 'bg-blue-100 text-blue-800';
     case 'returned':
       return 'bg-error-container/70 text-on-error-container';
     default:

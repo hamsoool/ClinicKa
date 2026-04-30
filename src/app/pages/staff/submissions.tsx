@@ -9,7 +9,7 @@ import { Search, Eye, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { getSubmissions } from '../../lib/api';
 
-const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAS', 'CED'];
+const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = {
   '1': '1st Year',
   '2': '2nd Year',
@@ -88,6 +88,8 @@ export default function StaffSubmissions() {
     switch (status) {
       case 'pending':
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
+      case 'physical_exam_done':
+        return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Physical Exam Done</Badge>;
       case 'approved':
         return <Badge variant="secondary" className="bg-green-100 text-green-800">Approved</Badge>;
       case 'returned':
@@ -126,6 +128,7 @@ export default function StaffSubmissions() {
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="returned">Returned</SelectItem>
               </SelectContent>
