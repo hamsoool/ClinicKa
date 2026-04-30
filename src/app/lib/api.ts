@@ -18,6 +18,85 @@ export const AUTH_STORAGE_KEY = 'gc_supabase_session';
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 const previewStudent = getMockStudentById('202310417');
 const STORAGE_BUCKET = 'medical-files';
+const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
+  photo: 'profile',
+  signature: 'student_signature',
+  xray: 'lab_chest_xray',
+  cbc: 'lab_cbc',
+  urinalysis: 'lab_urinalysis',
+};
+
+function inferBucketFromStoragePath(storagePath?: string | null) {
+  const path = String(storagePath || '').replace(/^\/+/, '');
+  if (!path) return null;
+  const first = path.split('/')[0]?.trim();
+  if (!first) return null;
+  const known = new Set([STORAGE_BUCKET, ...Object.values(STORAGE_BUCKET_BY_FILE_TYPE)]);
+  return known.has(first) ? first : null;
+}
+
+function inferBucketFromType(fileType?: string | null) {
+  const key = String(fileType || '').trim().toLowerCase();
+  return STORAGE_BUCKET_BY_FILE_TYPE[key] || null;
+}
+
+function inferBucketFromNameOrPath(fileName?: string | null, storagePath?: string | null) {
+  const haystack = `${String(fileName || '').toLowerCase()} ${String(storagePath || '').toLowerCase()}`;
+  if (haystack.includes('xray_') || haystack.includes('chest_xray')) return 'lab_chest_xray';
+  if (haystack.includes('cbc_')) return 'lab_cbc';
+  if (haystack.includes('urinalysis_') || haystack.includes('ua_')) return 'lab_urinalysis';
+  if (haystack.includes('signature_')) return 'student_signature';
+  if (haystack.includes('photo_') || haystack.includes('profile_')) return 'profile';
+  return null;
+}
+
+function buildStorageObjectName(fileType: string, file?: File | null) {
+  const normalizedType = String(fileType || 'file')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'file';
+
+  const mime = String(file?.type || '').toLowerCase();
+  const originalName = String(file?.name || '');
+  const originalExt = originalName.includes('.') ? originalName.split('.').pop() || '' : '';
+
+  let ext = '';
+  if (mime.includes('png')) ext = 'png';
+  else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
+  else if (mime.includes('webp')) ext = 'webp';
+  else if (mime.includes('gif')) ext = 'gif';
+  else if (mime.includes('pdf')) ext = 'pdf';
+  else if (originalExt) ext = originalExt.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const timestamp = Date.now();
+  return ext ? `${normalizedType}_${timestamp}.${ext}` : `${normalizedType}_${timestamp}`;
+}
+
+async function createSignedStorageUrlWithBucketFallbacks(
+  storagePath?: string | null,
+  token?: string | null,
+  explicitBucket?: string | null,
+  fileType?: string | null,
+) {
+  const buckets = [
+    explicitBucket || null,
+    inferBucketFromStoragePath(storagePath),
+    inferBucketFromType(fileType),
+    STORAGE_BUCKET,
+  ]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+
+  const seen = new Set<string>();
+  for (const bucketName of buckets) {
+    if (seen.has(bucketName)) continue;
+    seen.add(bucketName);
+    const signed = await createSignedStorageUrl(storagePath, token, bucketName);
+    if (signed && !signed.includes('"Bucket not found"')) return signed;
+  }
+  return null;
+}
 
 export type UserRole = 'student' | 'staff' | 'admin';
 
@@ -43,6 +122,7 @@ export type AuthMe = {
     id: string;
     role: UserRole;
     email?: string | null;
+    password_setup_completed?: boolean | null;
     student_id?: string | null;
     first_name?: string | null;
     last_name?: string | null;
@@ -370,6 +450,46 @@ export async function updateUserPassword(newPassword: string, token?: string | n
   });
 }
 
+export async function hasServerPasswordSetupCompleted(token?: string | null) {
+  if (DEMO_MODE) return false;
+
+  try {
+    const user = await getCurrentAuthUser(token);
+    const rows = await restRequest<Array<{ password_setup_completed?: boolean | null }>>(
+      'profiles',
+      `id=eq.${user.id}&select=password_setup_completed`,
+      { token },
+    );
+    return Boolean(rows?.[0]?.password_setup_completed);
+  } catch {
+    return false;
+  }
+}
+
+export async function markServerPasswordSetupCompleted(token?: string | null) {
+  if (DEMO_MODE) return;
+
+  try {
+    const user = await getCurrentAuthUser(token);
+    await restRequest(
+      'profiles',
+      `id=eq.${user.id}`,
+      {
+        method: 'PATCH',
+        token,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          password_setup_completed: true,
+        }),
+      },
+    );
+  } catch {
+    // Keep auth flow working even if the column is not available yet.
+  }
+}
+
 async function getCurrentAuthUser(token?: string | null) {
   const session = getStoredSession();
   if (session?.user?.id) {
@@ -437,6 +557,162 @@ function latestFilesByType(files: any[]) {
   }, {} as Record<string, any>);
 }
 
+function byId(rows: any[] | null | undefined) {
+  return (rows || []).reduce((acc, row) => {
+    if (row?.id) acc[row.id] = row;
+    return acc;
+  }, {} as Record<string, any>);
+}
+
+function findLabFileByHint(files: any[], hint: string) {
+  const keys =
+    hint.toLowerCase() === 'xray'
+      ? ['xray', 'x-ray', 'chest']
+      : hint.toLowerCase() === 'cbc'
+      ? ['cbc', 'blood', 'complete blood count', 'hematology']
+      : ['urinalysis', 'urine', 'ua', 'u/a'];
+  const match = (files || []).find((file) => {
+    const name = String(file?.file_name || '').toLowerCase();
+    const path = String(file?.storage_path || '').toLowerCase();
+    const type = String(file?.type || '').toLowerCase();
+    return keys.some((key) => name.includes(key) || path.includes(key) || type.includes(key));
+  });
+  return match || null;
+}
+
+function findGenericLabFile(files: any[]) {
+  return (files || []).find((file) => {
+    const type = String(file?.type || '').toLowerCase();
+    if (['photo', 'signature', 'certificate'].includes(type)) return false;
+    const mimeType = String(file?.mime_type || '').toLowerCase();
+    const name = String(file?.file_name || '').toLowerCase();
+    return mimeType.includes('pdf') || mimeType.includes('image') || /\.(pdf|png|jpe?g|webp|gif)$/i.test(name);
+  }) || null;
+}
+
+function normalizeStorageFileUrl(url?: string | null) {
+  if (!url || !supabaseUrl) return url || undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('/storage/v1/')) return `${supabaseUrl}${trimmed}`;
+  if (trimmed.startsWith('/object/')) return `${supabaseUrl}/storage/v1${trimmed}`;
+  if (trimmed.startsWith('storage/v1/')) return `${supabaseUrl}/${trimmed}`;
+  if (trimmed.startsWith('object/')) return `${supabaseUrl}/storage/v1/${trimmed}`;
+  return trimmed;
+}
+
+async function createSignedStorageUrl(storagePath?: string | null, token?: string | null, bucket?: string | null) {
+  const targetBucket = (bucket || STORAGE_BUCKET).trim() || STORAGE_BUCKET;
+  const rawPath = (storagePath || '').trim();
+  let path = rawPath.replace(/^\/+/, '');
+  if (path.startsWith(`${targetBucket}/`)) {
+    path = path.slice(targetBucket.length + 1);
+  }
+  if (!path || !supabaseUrl || !publicAnonKey) return null;
+
+  const trySign = async (targetPath: string) => {
+    const response = await fetch(
+      `${supabaseUrl}/storage/v1/object/sign/${targetBucket}/${targetPath}`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: publicAnonKey,
+          Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
+      },
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return null;
+
+    const rawSigned =
+      payload?.signedURL || payload?.signedUrl || payload?.signed_url || null;
+    if (!rawSigned) return null;
+    if (/^https?:\/\//i.test(rawSigned)) return rawSigned as string;
+    return `${supabaseUrl}/storage/v1${rawSigned}`;
+  };
+
+  try {
+    const signedDirect = await trySign(path);
+    if (signedDirect) return signedDirect;
+
+    const encodedPath = path
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+    const signedEncoded = encodedPath && encodedPath !== path ? await trySign(encodedPath) : null;
+    if (signedEncoded) return signedEncoded;
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function listStorageFilesForSubmission(submissionId: string, token?: string | null, bucket?: string) {
+  const targetBucket = (bucket || STORAGE_BUCKET).trim() || STORAGE_BUCKET;
+  if (!submissionId || !supabaseUrl || !publicAnonKey) return [] as any[];
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/storage/v1/object/list/${targetBucket}`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: publicAnonKey,
+          Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prefix: `${submissionId}/`,
+          limit: 100,
+          offset: 0,
+        }),
+      },
+    );
+    const payload = await response.json().catch(() => []);
+    if (!response.ok || !Array.isArray(payload)) return [];
+
+    const inferred = await Promise.all(
+      payload
+        .filter((item: any) => item?.name)
+        .map(async (item: any) => {
+          const fileName = String(item.name);
+          const storagePath = `${submissionId}/${fileName}`;
+          const lower = fileName.toLowerCase();
+          const inferredType = lower.startsWith('cbc_')
+            ? 'cbc'
+            : lower.startsWith('xray_')
+            ? 'xray'
+            : lower.startsWith('urinalysis_')
+            ? 'urinalysis'
+            : lower.startsWith('photo_')
+            ? 'photo'
+            : lower.startsWith('signature_')
+            ? 'signature'
+            : 'other';
+          const signedUrl = await createSignedStorageUrl(storagePath, token, targetBucket);
+          return {
+            id: `storage-${submissionId}-${fileName}`,
+            submission_id: submissionId,
+            type: inferredType,
+            file_name: fileName,
+            storage_bucket: targetBucket,
+            storage_path: storagePath,
+            mime_type: null,
+            uploaded_at: new Date().toISOString(),
+            url: signedUrl || null,
+          };
+        }),
+    );
+    return inferred.filter((row) => row.url);
+  } catch {
+    return [];
+  }
+}
+
 function mapSubmission(row: any, related: Record<string, any>) {
   const student = related.students[row.student_id] || {};
   const emergencyContact = related.emergencyContacts[row.id];
@@ -447,6 +723,14 @@ function mapSubmission(row: any, related: Record<string, any>) {
   const urinalysis = related.urinalysis[row.id];
   const certificate = related.certificates[row.id];
   const files = latestFilesByType(related.files[row.id] || []);
+  const submissionFiles = related.files[row.id] || [];
+  const xrayFileFromLab = xray?.file_id ? related.filesById[xray.file_id] : null;
+  const cbcFileFromLab = cbc?.file_id ? related.filesById[cbc.file_id] : null;
+  const urinalysisFileFromLab = urinalysis?.file_id ? related.filesById[urinalysis.file_id] : null;
+  const xrayFileByHint = findLabFileByHint(submissionFiles, 'xray');
+  const cbcFileByHint = findLabFileByHint(submissionFiles, 'cbc');
+  const urinalysisFileByHint = findLabFileByHint(submissionFiles, 'urinalysis');
+  const genericLabFile = findGenericLabFile(submissionFiles);
 
   return {
     id: row.id,
@@ -510,12 +794,12 @@ function mapSubmission(row: any, related: Record<string, any>) {
           issuedDate: certificate.issued_date || certificate.issued_at,
         }
       : undefined,
-    photoUrl: files.photo?.url,
-    signatureUrl: files.signature?.url,
-    xrayFileUrl: files.xray?.url,
-    cbcFileUrl: files.cbc?.url,
-    urinalysisFileUrl: files.urinalysis?.url,
-    certificatePdfUrl: files.certificate?.url || certificate?.pdf_url,
+    photoUrl: normalizeStorageFileUrl(files.photo?.url),
+    signatureUrl: normalizeStorageFileUrl(files.signature?.url),
+    xrayFileUrl: normalizeStorageFileUrl(xrayFileFromLab?.url || files.xray?.url || xrayFileByHint?.url || genericLabFile?.url),
+    cbcFileUrl: normalizeStorageFileUrl(cbcFileFromLab?.url || files.cbc?.url || cbcFileByHint?.url || genericLabFile?.url),
+    urinalysisFileUrl: normalizeStorageFileUrl(urinalysisFileFromLab?.url || files.urinalysis?.url || urinalysisFileByHint?.url || genericLabFile?.url),
+    certificatePdfUrl: normalizeStorageFileUrl(files.certificate?.url || certificate?.pdf_url),
   };
 }
 
@@ -525,6 +809,7 @@ async function loadRelatedData(rows: any[]) {
   const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
   const studentIdList = studentIds.map((id) => encodeURIComponent(id)).join(',');
 
+  const token = getAccessToken();
   const [
     students,
     emergencyContacts,
@@ -565,13 +850,57 @@ async function loadRelatedData(rows: any[]) {
       : Promise.resolve([]),
   ]);
 
+  const normalizedFiles = await Promise.all(
+    (files || []).map(async (file) => {
+      if (file?.storage_path) {
+        const resolvedBucket =
+          String(file?.storage_bucket || '').trim() ||
+          inferBucketFromStoragePath(file.storage_path) ||
+          inferBucketFromType(file.type) ||
+          inferBucketFromNameOrPath(file.file_name, file.storage_path) ||
+          STORAGE_BUCKET;
+        const signedUrl = await createSignedStorageUrlWithBucketFallbacks(
+          file.storage_path,
+          token,
+          resolvedBucket,
+          file.type,
+        );
+        return {
+          ...file,
+          storage_bucket: resolvedBucket,
+          // Always prefer fresh signed URL over stored URL because stored URL can be stale
+          // after bucket migrations/renames.
+          url: signedUrl || normalizeStorageFileUrl(file.url) || null,
+        };
+      }
+      return { ...file, url: normalizeStorageFileUrl(file?.url) || null };
+    }),
+  );
+
+  const filesBySubmissionCurrent = (normalizedFiles || []).reduce((acc, file) => {
+    acc[file.submission_id] = acc[file.submission_id] || [];
+    acc[file.submission_id].push(file);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  const submissionsMissingFiles = submissionIds.filter((id) => !(filesBySubmissionCurrent[id]?.length));
+  const fallbackBuckets = [...new Set([STORAGE_BUCKET, ...Object.values(STORAGE_BUCKET_BY_FILE_TYPE)])];
+  const listedFallbackFiles = (
+    await Promise.all(
+      submissionsMissingFiles.flatMap((id) =>
+        fallbackBuckets.map((bucketName) => listStorageFilesForSubmission(id, token, bucketName)),
+      ),
+    )
+  ).flat();
+  const allFiles = [...(normalizedFiles || []), ...listedFallbackFiles];
+
   const byKey = (rowsData: any[] | null | undefined, key: string) =>
     (rowsData || []).reduce((acc, item) => {
       acc[item[key]] = item;
       return acc;
     }, {} as Record<string, any>);
 
-  const filesBySubmission = (files || []).reduce((acc, file) => {
+  const filesBySubmission = allFiles.reduce((acc, file) => {
     acc[file.submission_id] = acc[file.submission_id] || [];
     acc[file.submission_id].push(file);
     return acc;
@@ -587,6 +916,7 @@ async function loadRelatedData(rows: any[]) {
     urinalysis: byKey(urinalysis, 'submission_id'),
     certificates: byKey(certificates, 'submission_id'),
     files: filesBySubmission,
+    filesById: byId(allFiles),
   };
 }
 
@@ -600,10 +930,6 @@ export async function signInWithPassword(email: string, password: string) {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
   }
-  if (!isGCDomainEmail(email)) {
-    throw new Error(`Only @${GC_DOMAIN} email accounts are allowed.`);
-  }
-
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: {
@@ -637,6 +963,30 @@ export async function signInWithPassword(email: string, password: string) {
 
   const session: AuthSession = payload as AuthSession;
   setStoredSession(session);
+
+  // Enforce domain restriction using actual persisted role:
+  // only student accounts must use @gordoncollege.edu.ph.
+  try {
+    const profileId = session.user?.id;
+    if (profileId) {
+      const profiles = await restRequest<any[]>(
+        'profiles',
+        `id=eq.${encodeURIComponent(profileId)}&select=role,email`,
+        { token: session.access_token },
+      );
+      const profile = (profiles || [])[0];
+      if (profile?.role === 'student' && !isGCDomainEmail(email)) {
+        clearStoredSession();
+        throw new Error(`Only @${GC_DOMAIN} email accounts are allowed for students.`);
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('@gordoncollege.edu.ph')) {
+      throw error;
+    }
+    // If profile lookup fails, keep sign-in behavior unchanged rather than locking out valid users.
+  }
+
   return session;
 }
 
@@ -1010,6 +1360,53 @@ export async function getStudentRecords(studentId?: string) {
   return { records };
 }
 
+export async function getStudentProfilePhoto(studentId?: string) {
+  if (DEMO_MODE) {
+    return { photoUrl: null as string | null };
+  }
+
+  const me = await getMe();
+  const targetStudentId = studentId || me.profile.student_id;
+  if (!targetStudentId) return { photoUrl: null as string | null };
+
+  const submissions = await restRequest<any[]>(
+    'submissions',
+    `select=id&student_id=eq.${encodeURIComponent(targetStudentId)}&order=submitted_at.desc&limit=20`,
+  );
+  const submissionIds = (submissions || []).map((row) => row.id).filter(Boolean);
+  if (!submissionIds.length) return { photoUrl: null as string | null };
+
+  const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
+  const token = getAccessToken();
+  const photoFiles = await restRequest<any[]>(
+    'files',
+    `submission_id=in.(${idList})&type=eq.photo&order=uploaded_at.desc`,
+  );
+
+  for (const file of photoFiles || []) {
+    const resolvedBucket =
+      String(file?.storage_bucket || '').trim() ||
+      inferBucketFromStoragePath(file?.storage_path) ||
+      inferBucketFromType(file?.type) ||
+      inferBucketFromNameOrPath(file?.file_name, file?.storage_path) ||
+      'profile';
+
+    const signed = file?.storage_path
+      ? await createSignedStorageUrlWithBucketFallbacks(
+          file.storage_path,
+          token,
+          resolvedBucket,
+          file.type,
+        )
+      : null;
+
+    const finalUrl = signed || normalizeStorageFileUrl(file?.url) || null;
+    if (finalUrl) return { photoUrl: finalUrl };
+  }
+
+  return { photoUrl: null as string | null };
+}
+
 export async function getSubmissions() {
   if (DEMO_MODE) {
     return {
@@ -1038,6 +1435,332 @@ export async function getSubmission(id: string) {
     throw new Error('Record not found');
   }
   return { submission };
+}
+
+export async function saveSubmissionReview(id: string, review: any) {
+  const personalInfo = review.personalInfo || {};
+  const emergencyContact = review.emergencyContact || {};
+  const medicalHistory = review.medicalHistory || {};
+  const studentMeasurements = review.studentMeasurements || {};
+  const staffMeasurements = review.staffMeasurements || {};
+  const labResults = review.labResults || {};
+  const clearanceInfo = review.clearanceInfo || {};
+  const nextStatus = review.status;
+  const now = new Date().toISOString();
+
+  if (DEMO_MODE) {
+    const records = getDemoSubmissions();
+    const nextRecords = records.map((record) =>
+      record.id === id
+        ? {
+            ...record,
+            firstName: personalInfo.firstName || record.firstName,
+            lastName: personalInfo.lastName || record.lastName,
+            middleInitial: personalInfo.middleInitial || '',
+            department: personalInfo.department || '',
+            course: personalInfo.course || '',
+            year: String(personalInfo.year || record.year || ''),
+            age: personalInfo.age || '',
+            sex: personalInfo.sex || '',
+            birthday: personalInfo.birthday || '',
+            civilStatus: personalInfo.civilStatus || '',
+            contactNumber: personalInfo.contactNumber || '',
+            address: personalInfo.address || '',
+            allergyDetails: review.allergyDetails || '',
+            hadOperation: review.hadOperation || 'no',
+            operationDetails: review.operationDetails || '',
+            bloodPressure: studentMeasurements.bloodPressure || '',
+            weight: studentMeasurements.weight || '',
+            height: studentMeasurements.height || '',
+            bmi: studentMeasurements.bmi || '',
+            emergencyContact: {
+              name: emergencyContact.name || '',
+              relationship: emergencyContact.relationship || '',
+              phone: emergencyContact.phone || '',
+              address: emergencyContact.address || '',
+            },
+            medicalHistory,
+            staffMeasurements: {
+              bloodPressure: staffMeasurements.bloodPressure || '',
+              cardiacRate: staffMeasurements.cardiacRate || '',
+              respiratoryRate: staffMeasurements.respiratoryRate || '',
+              temperature: staffMeasurements.temperature || '',
+              weight: staffMeasurements.weight || '',
+              height: staffMeasurements.height || '',
+              bmi: staffMeasurements.bmi || '',
+              visualAcuity: staffMeasurements.visualAcuity || '',
+              skin: staffMeasurements.skin || '',
+              heent: staffMeasurements.heent || '',
+              chestLungs: staffMeasurements.chestLungs || '',
+              heart: staffMeasurements.heart || '',
+              abdomen: staffMeasurements.abdomen || '',
+              extremities: staffMeasurements.extremities || '',
+              others: staffMeasurements.others || '',
+              examinedBy: staffMeasurements.examinedBy || '',
+            },
+            labResults: {
+              xrayDate: labResults.xrayDate || '',
+              xrayResult: labResults.xrayResult || 'normal',
+              xrayFindings: labResults.xrayFindings || '',
+              cbcDate: labResults.cbcDate || '',
+              hemoglobin: labResults.hemoglobin || '',
+              hematocrit: labResults.hematocrit || '',
+              wbc: labResults.wbc || '',
+              plateletCount: labResults.plateletCount || '',
+              bloodType: labResults.bloodType || '',
+              glucose: labResults.glucose || '',
+              protein: labResults.protein || '',
+              urinalysisDate: labResults.urinalysisDate || '',
+              urinalysisGlucose: labResults.urinalysisGlucose || '',
+              urinalysisProtein: labResults.urinalysisProtein || '',
+              others: labResults.others || '',
+            },
+            clearanceInfo: {
+              findingsNormal: typeof clearanceInfo.findingsNormal === 'boolean' ? clearanceInfo.findingsNormal : true,
+              diagnosis: clearanceInfo.diagnosis || '',
+              remarks: clearanceInfo.remarks || '',
+              purpose: clearanceInfo.purpose || 'enrolment',
+              controlNo: clearanceInfo.controlNo || '',
+              issuedDate: clearanceInfo.issuedDate || '',
+            },
+            staffNotes: review.staffNotes ?? record.staffNotes,
+            status: (nextStatus || record.status) as MockSubmission['status'],
+            updatedAt: now,
+          }
+        : record,
+    );
+    setDemoSubmissions(nextRecords);
+    return { success: true as const };
+  }
+
+  const me = await getMe();
+  const reviewedBy = me.staff?.id || null;
+
+  await Promise.all([
+    restRequest(
+      'submissions',
+      `id=eq.${id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          first_name: personalInfo.firstName || null,
+          last_name: personalInfo.lastName || null,
+          middle_initial: personalInfo.middleInitial || null,
+          department: personalInfo.department || null,
+          course: personalInfo.course || null,
+          year_level: personalInfo.year || null,
+          age: personalInfo.age ? Number(personalInfo.age) : null,
+          sex: personalInfo.sex || null,
+          birthday: personalInfo.birthday || null,
+          civil_status: personalInfo.civilStatus || null,
+          contact_number: personalInfo.contactNumber || null,
+          address: personalInfo.address || null,
+          allergy_details: review.allergyDetails || null,
+          had_operation: review.hadOperation || null,
+          operation_details: review.operationDetails || null,
+          blood_pressure: studentMeasurements.bloodPressure || null,
+          weight: studentMeasurements.weight || null,
+          height: studentMeasurements.height || null,
+          bmi: studentMeasurements.bmi || null,
+          staff_notes: review.staffNotes || null,
+          status: nextStatus || undefined,
+          reviewed_by: reviewedBy,
+          updated_at: now,
+        }),
+      },
+    ),
+    personalInfo.studentId
+      ? restRequest(
+          'students',
+          `student_id=eq.${encodeURIComponent(personalInfo.studentId)}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              first_name: personalInfo.firstName || null,
+              last_name: personalInfo.lastName || null,
+              middle_initial: personalInfo.middleInitial || null,
+              department: personalInfo.department || null,
+              course: personalInfo.course || null,
+              year_level: personalInfo.year ? Number(personalInfo.year) : null,
+              age: personalInfo.age ? Number(personalInfo.age) : null,
+              sex: personalInfo.sex || null,
+              birthday: personalInfo.birthday || null,
+              civil_status: personalInfo.civilStatus || null,
+              contact_number: personalInfo.contactNumber || null,
+              address: personalInfo.address || null,
+            }),
+          },
+        )
+      : Promise.resolve({}),
+    restRequest(
+      'emergency_contacts',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          name: emergencyContact.name || null,
+          relationship: emergencyContact.relationship || null,
+          phone: emergencyContact.phone || null,
+          address: emergencyContact.address || null,
+        }),
+      },
+    ),
+    restRequest(
+      'medical_history',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          allergy: Boolean(medicalHistory.allergy),
+          asthma: Boolean(medicalHistory.asthma),
+          chicken_pox: Boolean(medicalHistory.chickenPox),
+          diabetes: Boolean(medicalHistory.diabetes),
+          dysmenorrhea: Boolean(medicalHistory.dysmenorrhea),
+          epilepsy_seizure: Boolean(medicalHistory.epilepsySeizure),
+          heart_disorder: Boolean(medicalHistory.heartDisorder),
+          hepatitis: Boolean(medicalHistory.hepatitis),
+          hypertension: Boolean(medicalHistory.hypertension),
+          measles: Boolean(medicalHistory.measles),
+          mumps: Boolean(medicalHistory.mumps),
+          anxiety_disorder: Boolean(medicalHistory.anxietyDisorder),
+          panic_attack: Boolean(medicalHistory.panicAttack),
+          pneumonia: Boolean(medicalHistory.pneumonia),
+          ptb_primary_complex: Boolean(medicalHistory.ptbPrimaryComplex),
+          typhoid_fever: Boolean(medicalHistory.typhoidFever),
+          covid19: Boolean(medicalHistory.covid19),
+          uti: Boolean(medicalHistory.uti),
+        }),
+      },
+    ),
+    restRequest(
+      'staff_measurements',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          blood_pressure: staffMeasurements.bloodPressure || null,
+          cardiac_rate: staffMeasurements.cardiacRate || null,
+          respiratory_rate: staffMeasurements.respiratoryRate || null,
+          temperature: staffMeasurements.temperature || null,
+          weight: staffMeasurements.weight || null,
+          height: staffMeasurements.height || null,
+          bmi: staffMeasurements.bmi || null,
+          visual_acuity: staffMeasurements.visualAcuity || null,
+          skin: staffMeasurements.skin || null,
+          heent: staffMeasurements.heent || null,
+          chest_lungs: staffMeasurements.chestLungs || null,
+          heart: staffMeasurements.heart || null,
+          abdomen: staffMeasurements.abdomen || null,
+          extremities: staffMeasurements.extremities || null,
+          others: staffMeasurements.others || null,
+          examined_by: staffMeasurements.examinedBy || null,
+          updated_by: reviewedBy,
+          updated_at: now,
+        }),
+      },
+    ),
+    restRequest(
+      'lab_chest_xray',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          xray_date: labResults.xrayDate || null,
+          xray_result: labResults.xrayResult || null,
+          xray_findings: labResults.xrayFindings || null,
+        }),
+      },
+    ),
+    restRequest(
+      'lab_cbc',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          cbc_date: labResults.cbcDate || null,
+          hemoglobin: labResults.hemoglobin || null,
+          hematocrit: labResults.hematocrit || null,
+          wbc: labResults.wbc || null,
+          platelet_count: labResults.plateletCount || null,
+          blood_type: labResults.bloodType || null,
+          glucose: labResults.glucose || null,
+          protein: labResults.protein || null,
+        }),
+      },
+    ),
+    restRequest(
+      'lab_urinalysis',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          urinalysis_date: labResults.urinalysisDate || null,
+          glucose: labResults.urinalysisGlucose || null,
+          protein: labResults.urinalysisProtein || null,
+        }),
+      },
+    ),
+    restRequest(
+      'certificates',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          findings_normal: typeof clearanceInfo.findingsNormal === 'boolean' ? clearanceInfo.findingsNormal : null,
+          diagnosis: clearanceInfo.diagnosis || null,
+          remarks: clearanceInfo.remarks || null,
+          purpose: clearanceInfo.purpose || null,
+          control_no: clearanceInfo.controlNo || null,
+          issued_date: clearanceInfo.issuedDate || null,
+          issued_at: clearanceInfo.issuedDate || null,
+          updated_at: now,
+        }),
+      },
+    ),
+  ]);
+
+  return { success: true as const };
 }
 
 export async function updateSubmissionStatus(id: string, status: string, staffNotes?: string) {
@@ -1243,33 +1966,46 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
     };
   }
 
+  const storageBucket = STORAGE_BUCKET_BY_FILE_TYPE[fileType] || STORAGE_BUCKET;
   const token = getAccessToken();
   if (!token || !supabaseUrl || !publicAnonKey) {
     throw new Error('You must be signed in to upload files.');
   }
 
-  const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const storagePath = `${recordId}/${fileType}_${Date.now()}_${safeFileName}`;
+  const objectName = buildStorageObjectName(fileType, file);
+  const storagePath = `${recordId}/${objectName}`;
   const uploadResponse = await fetch(
-    `${supabaseUrl}/storage/v1/object/${STORAGE_BUCKET}/${storagePath}`,
+    `${supabaseUrl}/storage/v1/object/${storageBucket}/${storagePath}`,
     {
       method: 'POST',
       headers: {
         apikey: publicAnonKey,
         Authorization: `Bearer ${token}`,
         'Content-Type': file.type || 'application/octet-stream',
-        'x-upsert': 'true',
       },
       body: file,
     },
   );
 
   if (!uploadResponse.ok) {
-    throw new Error(`Failed to upload file (${uploadResponse.status})`);
+    const raw = await uploadResponse.text().catch(() => '');
+    let payload: Record<string, any> = {};
+    try {
+      payload = raw ? JSON.parse(raw) : {};
+    } catch {
+      payload = {};
+    }
+    const message =
+      payload.message ||
+      payload.error ||
+      payload.details ||
+      raw ||
+      `Failed to upload file (${uploadResponse.status})`;
+    throw new Error(message);
   }
 
   const signedResponse = await fetch(
-    `${supabaseUrl}/storage/v1/object/sign/${STORAGE_BUCKET}/${storagePath}`,
+    `${supabaseUrl}/storage/v1/object/sign/${storageBucket}/${storagePath}`,
     {
       method: 'POST',
       headers: {
@@ -1282,7 +2018,12 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
   );
 
   const signedPayload = await signedResponse.json().catch(() => ({}));
-  const fileUrl = signedPayload?.signedURL ? `${supabaseUrl}/storage/v1${signedPayload.signedURL}` : null;
+  const rawSignedUrl =
+    signedPayload?.signedURL || signedPayload?.signedUrl || signedPayload?.signed_url || null;
+  const fileUrl =
+    typeof rawSignedUrl === 'string'
+      ? (/^https?:\/\//i.test(rawSignedUrl) ? rawSignedUrl : `${supabaseUrl}/storage/v1${rawSignedUrl}`)
+      : null;
 
   const inserted = await restRequest<any[]>(
     'files',
@@ -1299,7 +2040,7 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
         file_name: file.name,
         mime_type: file.type,
         url: fileUrl,
-        storage_bucket: STORAGE_BUCKET,
+        storage_bucket: storageBucket,
         storage_path: storagePath,
         uploaded_by: (await getCurrentAuthUser()).id,
       }),
@@ -1368,6 +2109,54 @@ export async function getStaffUsers() {
       email: member.email || '',
     })),
   };
+}
+
+type AdminCreateAccountInput = {
+  email: string;
+  password: string;
+  role: UserRole;
+  firstName?: string;
+  lastName?: string;
+  studentId?: string;
+  department?: string;
+  course?: string;
+};
+
+export async function createAdminAccount(input: AdminCreateAccountInput) {
+  if (DEMO_MODE) {
+    return { success: true as const };
+  }
+
+  return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-account', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+}
+
+type AdminCreateStaffInput = {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  position?: string;
+  staffCode?: string;
+};
+
+export async function createAdminStaff(input: AdminCreateStaffInput) {
+  if (DEMO_MODE) {
+    return { success: true as const };
+  }
+
+  return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-staff', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
 }
 
 export async function getUserAccounts() {

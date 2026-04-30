@@ -1,152 +1,537 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ClipboardCheck,
+  FileCheck2,
+  FlaskConical,
+  Save,
+  ShieldCheck,
+  Stethoscope,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Textarea } from '../../components/ui/textarea';
-import { Badge } from '../../components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { ArrowLeft, Save, CheckCircle, XCircle, Camera } from 'lucide-react';
-import { toast } from 'sonner';
-import { getSubmission, updateMeasurements, updateSubmissionStatus } from '../../lib/api';
+import { Textarea } from '../../components/ui/textarea';
+import { getSubmission, saveSubmissionReview } from '../../lib/api';
+import type { MedicalHistory, MockSubmission } from '../../lib/mock-data';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
+
+type SubmissionDetails = MockSubmission & {
+  photoUrl?: string;
+  xrayFileUrl?: string;
+  cbcFileUrl?: string;
+  urinalysisFileUrl?: string;
+  signatureUrl?: string;
+};
+
+type ReviewStatus = MockSubmission['status'];
+
+type RecordForm = {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  middleInitial: string;
+  department: string;
+  course: string;
+  year: string;
+  age: string;
+  sex: string;
+  birthday: string;
+  civilStatus: string;
+  contactNumber: string;
+  address: string;
+  allergyDetails: string;
+  hadOperation: 'yes' | 'no';
+  operationDetails: string;
+  bloodPressure: string;
+  weight: string;
+  height: string;
+  bmi: string;
+  emergencyContact: {
+    name: string;
+    relationship: string;
+    phone: string;
+    address: string;
+  };
+  medicalHistory: MedicalHistory;
+};
+
+type AssessmentForm = {
+  bloodPressure: string;
+  cardiacRate: string;
+  respiratoryRate: string;
+  temperature: string;
+  weight: string;
+  height: string;
+  bmi: string;
+  visualAcuity: string;
+  skin: string;
+  heent: string;
+  chestLungs: string;
+  heart: string;
+  abdomen: string;
+  extremities: string;
+  others: string;
+  examinedBy: string;
+  xrayDate: string;
+  xrayResult: 'normal' | 'abnormal';
+  xrayFindings: string;
+  cbcDate: string;
+  hemoglobin: string;
+  hematocrit: string;
+  wbc: string;
+  plateletCount: string;
+  bloodType: string;
+  glucose: string;
+  protein: string;
+  urinalysisDate: string;
+  urinalysisGlucose: string;
+  urinalysisProtein: string;
+};
+
+type ClearanceForm = {
+  findingsNormal: boolean;
+  diagnosis: string;
+  remarks: string;
+  purpose: 'enrolment' | 'ojt' | 'rle';
+  controlNo: string;
+  issuedDate: string;
+};
+
+const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }> = [
+  { key: 'allergy', label: 'Allergy' },
+  { key: 'asthma', label: 'Asthma' },
+  { key: 'chickenPox', label: 'Chicken Pox' },
+  { key: 'diabetes', label: 'Diabetes' },
+  { key: 'dysmenorrhea', label: 'Dysmenorrhea' },
+  { key: 'epilepsySeizure', label: 'Epilepsy / Seizure' },
+  { key: 'heartDisorder', label: 'Heart Disorder' },
+  { key: 'hepatitis', label: 'Hepatitis' },
+  { key: 'hypertension', label: 'Hypertension' },
+  { key: 'measles', label: 'Measles' },
+  { key: 'mumps', label: 'Mumps' },
+  { key: 'anxietyDisorder', label: 'Anxiety Disorder' },
+  { key: 'panicAttack', label: 'Panic Attack' },
+  { key: 'pneumonia', label: 'Pneumonia' },
+  { key: 'ptbPrimaryComplex', label: 'PTB Primary Complex' },
+  { key: 'typhoidFever', label: 'Typhoid Fever' },
+  { key: 'covid19', label: 'COVID-19' },
+  { key: 'uti', label: 'UTI' },
+];
+
+const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAS', 'CED'];
+const YEAR_OPTIONS = ['1', '2', '3', '4'];
+
+function createEmptyMedicalHistory(): MedicalHistory {
+  return MEDICAL_HISTORY_FIELDS.reduce((acc, item) => {
+    acc[item.key] = false;
+    return acc;
+  }, {} as MedicalHistory);
+}
+
+function calculateBmi(weight: string, height: string) {
+  const weightValue = Number(weight);
+  const heightValue = Number(height);
+
+  if (!weightValue || !heightValue) return '';
+
+  const meters = heightValue / 100;
+  if (!meters) return '';
+
+  return (weightValue / (meters * meters)).toFixed(2);
+}
+
+function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
+  return {
+    studentId: submission?.studentId || '',
+    firstName: submission?.firstName || '',
+    lastName: submission?.lastName || '',
+    middleInitial: submission?.middleInitial || '',
+    department: submission?.department || '',
+    course: submission?.course || '',
+    year: submission?.year || '',
+    age: submission?.age || '',
+    sex: submission?.sex || '',
+    birthday: submission?.birthday || '',
+    civilStatus: submission?.civilStatus || '',
+    contactNumber: submission?.contactNumber || '',
+    address: submission?.address || '',
+    allergyDetails: submission?.allergyDetails || '',
+    hadOperation: submission?.hadOperation || 'no',
+    operationDetails: submission?.operationDetails || '',
+    bloodPressure: submission?.bloodPressure || '',
+    weight: submission?.weight || '',
+    height: submission?.height || '',
+    bmi: submission?.bmi || calculateBmi(submission?.weight || '', submission?.height || ''),
+    emergencyContact: {
+      name: submission?.emergencyContact?.name || '',
+      relationship: submission?.emergencyContact?.relationship || '',
+      phone: submission?.emergencyContact?.phone || '',
+      address: submission?.emergencyContact?.address || '',
+    },
+    medicalHistory: {
+      ...createEmptyMedicalHistory(),
+      ...(submission?.medicalHistory || {}),
+    },
+  };
+}
+
+function createAssessmentForm(submission?: SubmissionDetails | null): AssessmentForm {
+  return {
+    bloodPressure: submission?.staffMeasurements?.bloodPressure || submission?.bloodPressure || '',
+    cardiacRate: submission?.staffMeasurements?.cardiacRate || '',
+    respiratoryRate: submission?.staffMeasurements?.respiratoryRate || '',
+    temperature: submission?.staffMeasurements?.temperature || '',
+    weight: submission?.staffMeasurements?.weight || submission?.weight || '',
+    height: submission?.staffMeasurements?.height || submission?.height || '',
+    bmi:
+      submission?.staffMeasurements?.bmi ||
+      submission?.bmi ||
+      calculateBmi(
+        submission?.staffMeasurements?.weight || submission?.weight || '',
+        submission?.staffMeasurements?.height || submission?.height || '',
+      ),
+    visualAcuity: submission?.staffMeasurements?.visualAcuity || '',
+    skin: submission?.staffMeasurements?.skin || '',
+    heent: submission?.staffMeasurements?.heent || '',
+    chestLungs: submission?.staffMeasurements?.chestLungs || '',
+    heart: submission?.staffMeasurements?.heart || '',
+    abdomen: submission?.staffMeasurements?.abdomen || '',
+    extremities: submission?.staffMeasurements?.extremities || '',
+    others: submission?.staffMeasurements?.others || '',
+    examinedBy: submission?.staffMeasurements?.examinedBy || '',
+    xrayDate: submission?.labResults?.xrayDate || '',
+    xrayResult: submission?.labResults?.xrayResult || 'normal',
+    xrayFindings: submission?.labResults?.xrayFindings || '',
+    cbcDate: submission?.labResults?.cbcDate || '',
+    hemoglobin: submission?.labResults?.hemoglobin || '',
+    hematocrit: submission?.labResults?.hematocrit || '',
+    wbc: submission?.labResults?.wbc || '',
+    plateletCount: submission?.labResults?.plateletCount || '',
+    bloodType: submission?.labResults?.bloodType || '',
+    glucose: submission?.labResults?.glucose || '',
+    protein: submission?.labResults?.protein || '',
+    urinalysisDate: submission?.labResults?.urinalysisDate || '',
+    urinalysisGlucose: submission?.labResults?.urinalysisGlucose || '',
+    urinalysisProtein: submission?.labResults?.urinalysisProtein || '',
+  };
+}
+
+function createClearanceForm(submission?: SubmissionDetails | null): ClearanceForm {
+  return {
+    findingsNormal: submission?.clearanceInfo?.findingsNormal ?? true,
+    diagnosis: submission?.clearanceInfo?.diagnosis || '',
+    remarks: submission?.clearanceInfo?.remarks || '',
+    purpose: submission?.clearanceInfo?.purpose || 'enrolment',
+    controlNo: submission?.clearanceInfo?.controlNo || '',
+    issuedDate: submission?.clearanceInfo?.issuedDate || '',
+  };
+}
+
+function getStatusBadge(status: ReviewStatus) {
+  switch (status) {
+    case 'pending':
+      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending Review</Badge>;
+    case 'physical_exam_done':
+      return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Physical Exam Done</Badge>;
+    case 'approved':
+      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved</Badge>;
+    case 'returned':
+      return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Returned</Badge>;
+    default:
+      return <Badge>{status}</Badge>;
+  }
+}
+
+function countVerifiedConditions(history: MedicalHistory) {
+  return Object.values(history).filter(Boolean).length;
+}
 
 export default function StaffRecordReview() {
   const navigate = useNavigate();
   const { submissionId } = useParams();
-  const [submission, setSubmission] = useState<any>(null);
+  const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [recordForm, setRecordForm] = useState<RecordForm>(() => createRecordForm());
+  const [assessmentForm, setAssessmentForm] = useState<AssessmentForm>(() => createAssessmentForm());
+  const [clearanceForm, setClearanceForm] = useState<ClearanceForm>(() => createClearanceForm());
   const [staffNotes, setStaffNotes] = useState('');
-  const [staffPhotoFile, setStaffPhotoFile] = useState<File | null>(null);
-  const [measurements, setMeasurements] = useState({
-    bloodPressure: '',
-    cardiacRate: '',
-    respiratoryRate: '',
-    temperature: '',
-    weight: '',
-    height: '',
-    bmi: '',
-    // Lab results
-    xrayDate: '',
-    xrayResult: 'normal',
-    xrayFindings: '',
-    hemoglobin: '',
-    hematocrit: '',
-    wbc: '',
-    plateletCount: '',
-    bloodType: '',
-    glucose: '',
-    protein: '',
-    urinalysisGlucose: '',
-    urinalysisProtein: '',
-  });
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('pending');
 
   useEffect(() => {
-    loadSubmission();
+    void loadSubmission();
   }, [submissionId]);
 
-  const loadSubmission = async () => {
+  async function loadSubmission() {
     if (!submissionId) return;
-    
+
     setLoading(true);
     try {
       const data = await getSubmission(submissionId);
-      const loadedSubmission = data.submission;
+      const loadedSubmission = (data.submission || null) as SubmissionDetails | null;
+
       if (!loadedSubmission) {
         setSubmission(null);
         return;
       }
+
       setSubmission(loadedSubmission);
+      setRecordForm(createRecordForm(loadedSubmission));
+      setAssessmentForm(createAssessmentForm(loadedSubmission));
+      setClearanceForm(createClearanceForm(loadedSubmission));
       setStaffNotes(loadedSubmission.staffNotes || '');
-      
-      // Pre-fill measurements if they exist
-      if (loadedSubmission.staffMeasurements || loadedSubmission.labResults) {
-        setMeasurements(prev => ({
-          ...prev,
-          ...loadedSubmission.staffMeasurements,
-          ...loadedSubmission.labResults,
-        }));
-      } else {
-        // Pre-fill with student's submitted data
-        setMeasurements(prev => ({
-          ...prev,
-          bloodPressure: loadedSubmission.bloodPressure || '',
-          weight: loadedSubmission.weight || '',
-          height: loadedSubmission.height || '',
-          bmi: loadedSubmission.bmi || '',
-        }));
-      }
+      setReviewStatus(loadedSubmission.status);
     } catch (error) {
       console.error('Error loading submission:', error);
       toast.error('Failed to load submission');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const handleStatusUpdate = async (newStatus: string) => {
-    if (!submissionId) return;
-    
-    try {
-      await updateSubmissionStatus(submissionId, newStatus, staffNotes);
-      setSubmission(prev => prev ? ({
-        ...prev,
-        status: newStatus,
-        staffNotes,
-        updatedAt: new Date().toISOString(),
-      }) : prev);
-      toast.success(`Submission ${newStatus}`);
-      navigate('/staff/submissions');
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast.error('Failed to update status');
-    }
-  };
+  function updateRecordField<K extends keyof RecordForm>(field: K, value: RecordForm[K]) {
+    setRecordForm((prev) => {
+      const next = { ...prev, [field]: value };
 
-  const handleSaveMeasurements = async () => {
-    if (!submissionId) return;
-    
+      if (field === 'weight' || field === 'height') {
+        next.bmi = calculateBmi(
+          field === 'weight' ? String(value) : prev.weight,
+          field === 'height' ? String(value) : prev.height,
+        );
+      }
+
+      if (field === 'hadOperation' && value === 'no') {
+        next.operationDetails = '';
+      }
+
+      return next;
+    });
+  }
+
+  function updateEmergencyContact(field: keyof RecordForm['emergencyContact'], value: string) {
+    setRecordForm((prev) => ({
+      ...prev,
+      emergencyContact: {
+        ...prev.emergencyContact,
+        [field]: value,
+      },
+    }));
+  }
+
+  function toggleMedicalHistory(field: keyof MedicalHistory, checked: boolean) {
+    setRecordForm((prev) => ({
+      ...prev,
+      medicalHistory: {
+        ...prev.medicalHistory,
+        [field]: checked,
+      },
+      allergyDetails:
+        field === 'allergy' && !checked
+          ? ''
+          : prev.allergyDetails,
+    }));
+  }
+
+  function updateAssessmentField<K extends keyof AssessmentForm>(field: K, value: AssessmentForm[K]) {
+    setAssessmentForm((prev) => {
+      const next = { ...prev, [field]: value };
+
+      if (field === 'weight' || field === 'height') {
+        next.bmi = calculateBmi(
+          field === 'weight' ? String(value) : prev.weight,
+          field === 'height' ? String(value) : prev.height,
+        );
+      }
+
+      return next;
+    });
+  }
+
+  function updateClearanceField<K extends keyof ClearanceForm>(field: K, value: ClearanceForm[K]) {
+    setClearanceForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
+  async function persistReview(nextStatus?: ReviewStatus) {
+    if (!submissionId || !submission) return;
+
+    setSaving(true);
     try {
-      await updateMeasurements(submissionId, measurements);
-      setSubmission(prev => prev ? ({
-        ...prev,
+      const statusToSave = nextStatus || reviewStatus;
+
+      await saveSubmissionReview(submissionId, {
+        personalInfo: {
+          studentId: recordForm.studentId,
+          firstName: recordForm.firstName,
+          lastName: recordForm.lastName,
+          middleInitial: recordForm.middleInitial,
+          department: recordForm.department,
+          course: recordForm.course,
+          year: recordForm.year,
+          age: recordForm.age,
+          sex: recordForm.sex,
+          birthday: recordForm.birthday,
+          civilStatus: recordForm.civilStatus,
+          contactNumber: recordForm.contactNumber,
+          address: recordForm.address,
+        },
+        emergencyContact: recordForm.emergencyContact,
+        medicalHistory: recordForm.medicalHistory,
+        allergyDetails: recordForm.allergyDetails,
+        hadOperation: recordForm.hadOperation,
+        operationDetails: recordForm.operationDetails,
+        studentMeasurements: {
+          bloodPressure: recordForm.bloodPressure,
+          weight: recordForm.weight,
+          height: recordForm.height,
+          bmi: recordForm.bmi,
+        },
         staffMeasurements: {
-          bloodPressure: measurements.bloodPressure,
-          cardiacRate: measurements.cardiacRate,
-          respiratoryRate: measurements.respiratoryRate,
-          temperature: measurements.temperature,
-          weight: measurements.weight,
-          height: measurements.height,
-          bmi: measurements.bmi,
+          bloodPressure: assessmentForm.bloodPressure,
+          cardiacRate: assessmentForm.cardiacRate,
+          respiratoryRate: assessmentForm.respiratoryRate,
+          temperature: assessmentForm.temperature,
+          weight: assessmentForm.weight,
+          height: assessmentForm.height,
+          bmi: assessmentForm.bmi,
+          visualAcuity: assessmentForm.visualAcuity,
+          skin: assessmentForm.skin,
+          heent: assessmentForm.heent,
+          chestLungs: assessmentForm.chestLungs,
+          heart: assessmentForm.heart,
+          abdomen: assessmentForm.abdomen,
+          extremities: assessmentForm.extremities,
+          others: assessmentForm.others,
+          examinedBy: assessmentForm.examinedBy,
         },
         labResults: {
-          xrayDate: measurements.xrayDate,
-          xrayResult: measurements.xrayResult,
-          xrayFindings: measurements.xrayFindings,
-          hemoglobin: measurements.hemoglobin,
-          hematocrit: measurements.hematocrit,
-          wbc: measurements.wbc,
-          plateletCount: measurements.plateletCount,
-          bloodType: measurements.bloodType,
-          urinalysisGlucose: measurements.urinalysisGlucose,
-          urinalysisProtein: measurements.urinalysisProtein,
+          xrayDate: assessmentForm.xrayDate,
+          xrayResult: assessmentForm.xrayResult,
+          xrayFindings: assessmentForm.xrayFindings,
+          cbcDate: assessmentForm.cbcDate,
+          hemoglobin: assessmentForm.hemoglobin,
+          hematocrit: assessmentForm.hematocrit,
+          wbc: assessmentForm.wbc,
+          plateletCount: assessmentForm.plateletCount,
+          bloodType: assessmentForm.bloodType,
+          glucose: assessmentForm.glucose,
+          protein: assessmentForm.protein,
+          urinalysisDate: assessmentForm.urinalysisDate,
+          urinalysisGlucose: assessmentForm.urinalysisGlucose,
+          urinalysisProtein: assessmentForm.urinalysisProtein,
         },
-      }) : prev);
-      toast.success('Measurements saved');
-    } catch (error) {
-      console.error('Error saving measurements:', error);
-      toast.error('Failed to save measurements');
-    }
-  };
+        clearanceInfo: clearanceForm,
+        staffNotes,
+        status: statusToSave,
+      });
 
-  const updateMeasurement = (field: string, value: string) => {
-    setMeasurements(prev => ({ ...prev, [field]: value }));
-  };
+      const updatedSubmission: SubmissionDetails = {
+        ...submission,
+        firstName: recordForm.firstName,
+        lastName: recordForm.lastName,
+        middleInitial: recordForm.middleInitial,
+        department: recordForm.department,
+        course: recordForm.course,
+        year: recordForm.year,
+        age: recordForm.age,
+        sex: recordForm.sex,
+        birthday: recordForm.birthday,
+        civilStatus: recordForm.civilStatus,
+        contactNumber: recordForm.contactNumber,
+        address: recordForm.address,
+        allergyDetails: recordForm.allergyDetails,
+        hadOperation: recordForm.hadOperation,
+        operationDetails: recordForm.operationDetails,
+        bloodPressure: recordForm.bloodPressure,
+        weight: recordForm.weight,
+        height: recordForm.height,
+        bmi: recordForm.bmi,
+        emergencyContact: recordForm.emergencyContact,
+        medicalHistory: recordForm.medicalHistory,
+        staffMeasurements: {
+          bloodPressure: assessmentForm.bloodPressure,
+          cardiacRate: assessmentForm.cardiacRate,
+          respiratoryRate: assessmentForm.respiratoryRate,
+          temperature: assessmentForm.temperature,
+          weight: assessmentForm.weight,
+          height: assessmentForm.height,
+          bmi: assessmentForm.bmi,
+          visualAcuity: assessmentForm.visualAcuity,
+          skin: assessmentForm.skin,
+          heent: assessmentForm.heent,
+          chestLungs: assessmentForm.chestLungs,
+          heart: assessmentForm.heart,
+          abdomen: assessmentForm.abdomen,
+          extremities: assessmentForm.extremities,
+          others: assessmentForm.others,
+          examinedBy: assessmentForm.examinedBy,
+        },
+        labResults: {
+          xrayDate: assessmentForm.xrayDate,
+          xrayResult: assessmentForm.xrayResult,
+          xrayFindings: assessmentForm.xrayFindings,
+          cbcDate: assessmentForm.cbcDate,
+          hemoglobin: assessmentForm.hemoglobin,
+          hematocrit: assessmentForm.hematocrit,
+          wbc: assessmentForm.wbc,
+          plateletCount: assessmentForm.plateletCount,
+          bloodType: assessmentForm.bloodType,
+          glucose: assessmentForm.glucose,
+          protein: assessmentForm.protein,
+          urinalysisDate: assessmentForm.urinalysisDate,
+          urinalysisGlucose: assessmentForm.urinalysisGlucose,
+          urinalysisProtein: assessmentForm.urinalysisProtein,
+        },
+        clearanceInfo: clearanceForm,
+        staffNotes,
+        status: statusToSave,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setSubmission(updatedSubmission);
+      setReviewStatus(statusToSave);
+      toast.success(
+        nextStatus
+          ? `Medical clearance ${
+              nextStatus === 'approved'
+                ? 'approved'
+                : nextStatus === 'returned'
+                  ? 'returned for correction'
+                  : nextStatus === 'physical_exam_done'
+                    ? 'marked as physical exam done'
+                    : 'marked pending'
+            }`
+          : 'Review changes saved',
+      );
+    } catch (error) {
+      console.error('Error saving review:', error);
+      toast.error('Failed to save review changes');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <div className="text-muted-foreground">Loading submission...</div>
       </div>
     );
@@ -154,8 +539,8 @@ export default function StaffRecordReview() {
 
   if (!submission) {
     return (
-      <div className="text-center py-8">
-        <p className="text-muted-foreground">Submission not found</p>
+      <div className="py-8 text-center">
+        <p className="text-muted-foreground">Submission not found.</p>
         <Button onClick={() => navigate('/staff/submissions')} className="mt-4">
           Back to Submissions
         </Button>
@@ -163,470 +548,934 @@ export default function StaffRecordReview() {
     );
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>;
-      case 'approved':
-        return <Badge className="bg-green-100 text-green-800">Approved</Badge>;
-      case 'returned':
-        return <Badge className="bg-red-100 text-red-800">Returned</Badge>;
-      default:
-        return <Badge>{status}</Badge>;
-    }
-  };
+  const labUploadsCount = [submission.xrayFileUrl, submission.cbcFileUrl, submission.urinalysisFileUrl].filter(Boolean).length;
+  const persistedStatus = submission.status;
+  const hasUnsavedStatusChange = reviewStatus !== persistedStatus;
 
   return (
-    <div>
-      <Button 
-        variant="ghost" 
+    <div className="space-y-6">
+      <Button
+        variant="ghost"
         onClick={() => navigate('/staff/submissions')}
-        className="mb-6"
+        className="pl-0 text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="w-4 h-4 mr-2" />
+        <ArrowLeft className="mr-2 h-4 w-4" />
         Back to Submissions
       </Button>
 
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-primary mb-2">
-            Review Medical Record
-          </h1>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold text-primary">Clinic Nurse / Doctor Review</h1>
+            {getStatusBadge(persistedStatus)}
+          </div>
           <p className="text-muted-foreground">
-            {submission.firstName} {submission.lastName} ({submission.studentId})
+            Review, verify, and update the student medical record before deciding the medical clearance status.
+          </p>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {recordForm.firstName} {recordForm.lastName}
+            </span>
+            <span>{recordForm.studentId}</span>
+            <span>{recordForm.course || 'Course not set'}</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-card px-4 py-3 text-sm shadow-sm">
+          <p className="font-medium text-foreground">Current recommendation</p>
+          <p className="mt-1 text-muted-foreground">
+            {reviewStatus === 'approved'
+              ? 'Ready for clearance release'
+              : reviewStatus === 'physical_exam_done'
+                ? 'Physical exam completed and ready for final clearance decision'
+              : reviewStatus === 'returned'
+                ? 'Needs student correction'
+                : 'Still under clinical review'}
           </p>
         </div>
-        {getStatusBadge(submission.status)}
       </div>
 
-      <Tabs defaultValue="personal" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="personal">Personal</TabsTrigger>
-          <TabsTrigger value="medical">Medical History</TabsTrigger>
-          <TabsTrigger value="measurements">Measurements</TabsTrigger>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-emerald-100 p-3 text-emerald-700">
+                <ClipboardCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Submitted</p>
+                <p className="font-semibold">
+                  {new Date(submission.submittedAt).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-sky-100 p-3 text-sky-700">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Reported conditions</p>
+                <p className="font-semibold">{countVerifiedConditions(recordForm.medicalHistory)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-amber-100 p-3 text-amber-700">
+                <FileCheck2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Uploaded lab files</p>
+                <p className="font-semibold">{labUploadsCount} of 3 received</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-rose-100 p-3 text-rose-700">
+                <Stethoscope className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Examined by</p>
+                <p className="font-semibold">{assessmentForm.examinedBy || 'Not yet recorded'}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="record" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 gap-2 md:grid-cols-4">
+          <TabsTrigger value="record">Student Record</TabsTrigger>
+          <TabsTrigger value="assessment">Assessment</TabsTrigger>
           <TabsTrigger value="labs">Lab Results</TabsTrigger>
-          <TabsTrigger value="actions">Actions</TabsTrigger>
+          <TabsTrigger value="decision">Clinic Notes</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="personal">
+        <TabsContent value="record" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
+              <CardTitle>Editable Student Information</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Student photo */}
-              <div className="flex gap-6 items-start">
-                <div className="flex-shrink-0">
-                  {submission.photoUrl || staffPhotoFile ? (
+            <CardContent className="space-y-6">
+              <div className="flex flex-col gap-6 lg:flex-row">
+                <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-xl border bg-muted/30 p-5">
+                  {submission.photoUrl ? (
                     <img
-                      src={staffPhotoFile ? URL.createObjectURL(staffPhotoFile) : submission.photoUrl}
+                      src={submission.photoUrl}
                       alt="Student"
-                      className="w-24 h-24 rounded-xl object-cover border"
+                      className="h-28 w-28 rounded-2xl object-cover"
                     />
                   ) : (
-                    <div className="w-24 h-24 rounded-xl bg-muted flex items-center justify-center text-2xl font-bold text-muted-foreground border">
-                      {submission.firstName?.[0]}{submission.lastName?.[0]}
+                    <div className="flex h-28 w-28 items-center justify-center rounded-2xl bg-muted text-3xl font-semibold text-muted-foreground">
+                      {recordForm.firstName?.[0]}
+                      {recordForm.lastName?.[0]}
                     </div>
                   )}
-                  <div className="mt-2">
-                    <Label htmlFor="staffPhoto" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1 hover:text-foreground">
-                      <Camera className="w-3 h-3" /> {staffPhotoFile || submission.photoUrl ? 'Replace' : 'Add'} Photo <span className="text-muted-foreground">(optional)</span>
-                    </Label>
+                  <div className="text-center">
+                    <p className="font-semibold">
+                      {recordForm.firstName} {recordForm.lastName}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{recordForm.studentId}</p>
+                  </div>
+                </div>
+
+                <div className="grid flex-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div>
+                    <Label htmlFor="studentId">Student ID</Label>
+                    <Input id="studentId" value={recordForm.studentId} readOnly className="mt-2 bg-muted/40" />
+                  </div>
+                  <div>
+                    <Label htmlFor="firstName">First Name</Label>
                     <Input
-                      id="staffPhoto"
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      aria-label="Upload or replace student review photo"
-                      onChange={(e) => setStaffPhotoFile(e.target.files?.[0] || null)}
+                      id="firstName"
+                      value={recordForm.firstName}
+                      onChange={(event) => updateRecordField('firstName', event.target.value)}
+                      className="mt-2"
                     />
                   </div>
-                </div>
-                <div className="grid md:grid-cols-2 gap-4 text-sm flex-1">
                   <div>
-                    <p className="text-muted-foreground">Full Name</p>
-                    <p className="font-medium">{submission.firstName} {submission.middleInitial} {submission.lastName}</p>
+                    <Label htmlFor="lastName">Last Name</Label>
+                    <Input
+                      id="lastName"
+                      value={recordForm.lastName}
+                      onChange={(event) => updateRecordField('lastName', event.target.value)}
+                      className="mt-2"
+                    />
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Student ID</p>
-                    <p className="font-medium">{submission.studentId}</p>
+                    <Label htmlFor="middleInitial">Middle Initial</Label>
+                    <Input
+                      id="middleInitial"
+                      value={recordForm.middleInitial}
+                      onChange={(event) => updateRecordField('middleInitial', event.target.value)}
+                      className="mt-2"
+                    />
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Department</p>
-                    <p className="font-medium">{submission.department || submission.course}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Year Level</p>
-                    <p className="font-medium">Year {submission.year}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Age</p>
-                    <p className="font-medium">{submission.age}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Sex</p>
-                    <p className="font-medium capitalize">{submission.sex}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Birthday</p>
-                    <p className="font-medium">{submission.birthday}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Civil Status</p>
-                    <p className="font-medium">{submission.civilStatus || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Contact Number</p>
-                    <p className="font-medium">{submission.contactNumber || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Address</p>
-                    <p className="font-medium">{submission.address || 'N/A'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t pt-4 mt-4">
-                <h4 className="font-semibold mb-3">Emergency Contact</h4>
-                <div className="grid md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Name</p>
-                    <p className="font-medium">{submission.emergencyContact?.name || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Relationship</p>
-                    <p className="font-medium">{submission.emergencyContact?.relationship || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Phone</p>
-                    <p className="font-medium">{submission.emergencyContact?.phone || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Address</p>
-                    <p className="font-medium">{submission.emergencyContact?.address || 'N/A'}</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="medical">
-          <Card>
-            <CardHeader>
-              <CardTitle>Medical History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-semibold mb-3">Reported Conditions</h4>
-                  {Object.entries(submission.medicalHistory || {}).filter(([_, v]) => v).length > 0 ? (
-                    <ul className="list-disc list-inside space-y-2">
-                      {Object.entries(submission.medicalHistory || {})
-                        .filter(([_, checked]) => checked)
-                        .map(([key, _]) => (
-                          <li key={key} className="capitalize">
-                            {key.replace(/([A-Z])/g, ' $1').trim()}
-                          </li>
+                    <Label htmlFor="department">Department</Label>
+                    <Select value={recordForm.department || 'unassigned'} onValueChange={(value) => updateRecordField('department', value === 'unassigned' ? '' : value)}>
+                      <SelectTrigger id="department" className="mt-2">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Not set</SelectItem>
+                        {DEPARTMENTS.map((department) => (
+                          <SelectItem key={department} value={department}>
+                            {department}
+                          </SelectItem>
                         ))}
-                    </ul>
-                  ) : (
-                    <p className="text-muted-foreground">No medical conditions reported</p>
-                  )}
-                </div>
-
-                {submission.allergyDetails && (
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div>
-                    <h4 className="font-semibold mb-2">Allergy Details</h4>
-                    <p className="text-sm bg-muted p-3 rounded">{submission.allergyDetails}</p>
+                    <Label htmlFor="course">Course</Label>
+                    <Input
+                      id="course"
+                      value={recordForm.course}
+                      onChange={(event) => updateRecordField('course', event.target.value)}
+                      className="mt-2"
+                    />
                   </div>
-                )}
-
-                <div>
-                  <h4 className="font-semibold mb-2">Operations</h4>
-                  <p className="text-sm">
-                    <span className="text-muted-foreground">Had operation: </span>
-                    <span className="font-medium">{submission.hadOperation === 'yes' ? 'Yes' : 'No'}</span>
-                  </p>
-                  {submission.operationDetails && (
-                    <p className="text-sm bg-muted p-3 rounded mt-2">{submission.operationDetails}</p>
-                  )}
+                  <div>
+                    <Label htmlFor="year">Year Level</Label>
+                    <Select value={recordForm.year || 'unassigned'} onValueChange={(value) => updateRecordField('year', value === 'unassigned' ? '' : value)}>
+                      <SelectTrigger id="year" className="mt-2">
+                        <SelectValue placeholder="Select year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Not set</SelectItem>
+                        {YEAR_OPTIONS.map((year) => (
+                          <SelectItem key={year} value={year}>
+                            Year {year}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="age">Age</Label>
+                    <Input
+                      id="age"
+                      value={recordForm.age}
+                      onChange={(event) => updateRecordField('age', event.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="sex">Sex</Label>
+                    <Input
+                      id="sex"
+                      value={recordForm.sex}
+                      onChange={(event) => updateRecordField('sex', event.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="birthday">Birthday</Label>
+                    <Input
+                      id="birthday"
+                      type="date"
+                      value={recordForm.birthday}
+                      onChange={(event) => updateRecordField('birthday', event.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="civilStatus">Civil Status</Label>
+                    <Input
+                      id="civilStatus"
+                      value={recordForm.civilStatus}
+                      onChange={(event) => updateRecordField('civilStatus', event.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="contactNumber">Contact Number</Label>
+                    <Input
+                      id="contactNumber"
+                      value={recordForm.contactNumber}
+                      onChange={(event) => updateRecordField('contactNumber', event.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div className="md:col-span-2 xl:col-span-3">
+                    <Label htmlFor="address">Address</Label>
+                    <Textarea
+                      id="address"
+                      value={recordForm.address}
+                      onChange={(event) => updateRecordField('address', event.target.value)}
+                      className="mt-2"
+                      rows={3}
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="measurements">
-          <Card>
-            <CardHeader>
-              <CardTitle>Physical Measurements</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div>
-                  <h4 className="font-semibold mb-3">Student Reported</h4>
-                  <div className="grid md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Blood Pressure</p>
-                      <p className="font-medium">{submission.bloodPressure}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Weight</p>
-                      <p className="font-medium">{submission.weight} kg</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Height</p>
-                      <p className="font-medium">{submission.height} cm</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">BMI</p>
-                      <p className="font-medium">{submission.bmi}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold mb-4">Staff Verified Measurements</h4>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="staffBP">Blood Pressure</Label>
-                      <Input
-                        id="staffBP"
-                        value={measurements.bloodPressure}
-                        onChange={(e) => updateMeasurement('bloodPressure', e.target.value)}
-                        placeholder="e.g., 120/80"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="cardiacRate">Cardiac Rate (bpm)</Label>
-                      <Input
-                        id="cardiacRate"
-                        type="number"
-                        value={measurements.cardiacRate}
-                        onChange={(e) => updateMeasurement('cardiacRate', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="respiratoryRate">Respiratory Rate (per min)</Label>
-                      <Input
-                        id="respiratoryRate"
-                        type="number"
-                        value={measurements.respiratoryRate}
-                        onChange={(e) => updateMeasurement('respiratoryRate', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="temperature">Temperature (°C)</Label>
-                      <Input
-                        id="temperature"
-                        type="number"
-                        step="0.1"
-                        value={measurements.temperature}
-                        onChange={(e) => updateMeasurement('temperature', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="staffWeight">Weight (kg)</Label>
-                      <Input
-                        id="staffWeight"
-                        type="number"
-                        step="0.1"
-                        value={measurements.weight}
-                        onChange={(e) => updateMeasurement('weight', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="staffHeight">Height (cm)</Label>
-                      <Input
-                        id="staffHeight"
-                        type="number"
-                        step="0.1"
-                        value={measurements.height}
-                        onChange={(e) => updateMeasurement('height', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="staffBMI">BMI</Label>
-                      <Input
-                        id="staffBMI"
-                        value={measurements.bmi}
-                        onChange={(e) => updateMeasurement('bmi', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <Button onClick={handleSaveMeasurements} className="mt-4">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Measurements
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="labs">
-          <div className="space-y-4">
-            {/* Chest X-Ray */}
+          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
             <Card>
               <CardHeader>
-                <CardTitle>Chest X-Ray</CardTitle>
+                <CardTitle>Medical History Verification</CardTitle>
               </CardHeader>
-              <CardContent>
-                <SubmittedFilePreview title="Chest X-Ray" fileUrl={submission.xrayFileUrl} alt="Chest X-Ray" />
-                <div className="space-y-4">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="xrayDate">Date</Label>
-                      <Input
-                        id="xrayDate"
-                        type="date"
-                        value={measurements.xrayDate}
-                        onChange={(e) => updateMeasurement('xrayDate', e.target.value)}
+              <CardContent className="space-y-6">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {MEDICAL_HISTORY_FIELDS.map((item) => (
+                    <label
+                      key={item.key}
+                      className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm"
+                    >
+                      <Checkbox
+                        checked={Boolean(recordForm.medicalHistory[item.key])}
+                        onCheckedChange={(checked) => toggleMedicalHistory(item.key, checked === true)}
                       />
-                    </div>
-                    <div>
-                      <Label htmlFor="xrayResult">Result</Label>
-                      <select
-                        id="xrayResult"
-                        value={measurements.xrayResult}
-                        onChange={(e) => updateMeasurement('xrayResult', e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md"
-                      >
-                        <option value="normal">Normal</option>
-                        <option value="abnormal">Abnormal</option>
-                      </select>
-                    </div>
+                      <span>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label htmlFor="allergyDetails">Allergy Details</Label>
+                    <Textarea
+                      id="allergyDetails"
+                      value={recordForm.allergyDetails}
+                      onChange={(event) => updateRecordField('allergyDetails', event.target.value)}
+                      className="mt-2"
+                      rows={3}
+                      placeholder="Specify allergy type or trigger"
+                      disabled={!recordForm.medicalHistory.allergy}
+                    />
                   </div>
                   <div>
-                    <Label htmlFor="xrayFindings">Findings</Label>
+                    <Label>Operation History</Label>
+                    <RadioGroup
+                      value={recordForm.hadOperation}
+                      onValueChange={(value) => updateRecordField('hadOperation', value as 'yes' | 'no')}
+                      className="mt-3 grid grid-cols-2 gap-3"
+                    >
+                      <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
+                        <RadioGroupItem value="yes" id="operationYes" />
+                        <span>Had operation</span>
+                      </label>
+                      <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
+                        <RadioGroupItem value="no" id="operationNo" />
+                        <span>No operation</span>
+                      </label>
+                    </RadioGroup>
                     <Textarea
-                      id="xrayFindings"
-                      value={measurements.xrayFindings}
-                      onChange={(e) => updateMeasurement('xrayFindings', e.target.value)}
-                      placeholder="Enter X-Ray findings..."
+                      value={recordForm.operationDetails}
+                      onChange={(event) => updateRecordField('operationDetails', event.target.value)}
+                      className="mt-3"
+                      rows={3}
+                      placeholder="Document operation details when applicable"
+                      disabled={recordForm.hadOperation !== 'yes'}
                     />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* CBC */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Complete Blood Count (CBC)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SubmittedFilePreview title="CBC" fileUrl={submission.cbcFileUrl} alt="CBC" />
-                <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Emergency Contact</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4">
                   <div>
-                    <Label htmlFor="hemoglobin">Hemoglobin</Label>
-                    <Input id="hemoglobin" value={measurements.hemoglobin} onChange={(e) => updateMeasurement('hemoglobin', e.target.value)} placeholder="e.g., 14.5 g/dL" />
+                    <Label htmlFor="emergencyName">Name</Label>
+                    <Input
+                      id="emergencyName"
+                      value={recordForm.emergencyContact.name}
+                      onChange={(event) => updateEmergencyContact('name', event.target.value)}
+                      className="mt-2"
+                    />
                   </div>
                   <div>
-                    <Label htmlFor="hematocrit">Hematocrit</Label>
-                    <Input id="hematocrit" value={measurements.hematocrit} onChange={(e) => updateMeasurement('hematocrit', e.target.value)} placeholder="e.g., 42%" />
+                    <Label htmlFor="emergencyRelationship">Relationship</Label>
+                    <Input
+                      id="emergencyRelationship"
+                      value={recordForm.emergencyContact.relationship}
+                      onChange={(event) => updateEmergencyContact('relationship', event.target.value)}
+                      className="mt-2"
+                    />
                   </div>
                   <div>
-                    <Label htmlFor="wbc">White Blood Cell Count</Label>
-                    <Input id="wbc" value={measurements.wbc} onChange={(e) => updateMeasurement('wbc', e.target.value)} placeholder="e.g., 7000/μL" />
+                    <Label htmlFor="emergencyPhone">Phone Number</Label>
+                    <Input
+                      id="emergencyPhone"
+                      value={recordForm.emergencyContact.phone}
+                      onChange={(event) => updateEmergencyContact('phone', event.target.value)}
+                      className="mt-2"
+                    />
                   </div>
                   <div>
-                    <Label htmlFor="plateletCount">Platelet Count</Label>
-                    <Input id="plateletCount" value={measurements.plateletCount} onChange={(e) => updateMeasurement('plateletCount', e.target.value)} placeholder="e.g., 250,000/μL" />
+                    <Label htmlFor="emergencyAddress">Address</Label>
+                    <Textarea
+                      id="emergencyAddress"
+                      value={recordForm.emergencyContact.address}
+                      onChange={(event) => updateEmergencyContact('address', event.target.value)}
+                      className="mt-2"
+                      rows={3}
+                    />
                   </div>
-                  <div>
-                    <Label htmlFor="bloodType">Blood Type</Label>
-                    <Input id="bloodType" value={measurements.bloodType} onChange={(e) => updateMeasurement('bloodType', e.target.value)} placeholder="e.g., O+" />
-                  </div>
-                  <div>
-                    <Label htmlFor="glucose">Glucose</Label>
-                    <Input id="glucose" value={measurements.glucose} onChange={(e) => updateMeasurement('glucose', e.target.value)} placeholder="e.g., 90 mg/dL" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Urinalysis */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Urinalysis</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SubmittedFilePreview title="Urinalysis" fileUrl={submission.urinalysisFileUrl} alt="Urinalysis" />
-                <div className="grid md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Student-Submitted Measurements</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <Label htmlFor="urinalysisGlucose">Glucose</Label>
-                    <Input id="urinalysisGlucose" value={measurements.urinalysisGlucose} onChange={(e) => updateMeasurement('urinalysisGlucose', e.target.value)} placeholder="e.g., Negative" />
+                    <Label htmlFor="submittedBp">Blood Pressure</Label>
+                    <Input
+                      id="submittedBp"
+                      value={recordForm.bloodPressure}
+                      onChange={(event) => updateRecordField('bloodPressure', event.target.value)}
+                      className="mt-2"
+                    />
                   </div>
                   <div>
-                    <Label htmlFor="urinalysisProtein">Protein</Label>
-                    <Input id="urinalysisProtein" value={measurements.urinalysisProtein} onChange={(e) => updateMeasurement('urinalysisProtein', e.target.value)} placeholder="e.g., Negative" />
+                    <Label htmlFor="submittedWeight">Weight (kg)</Label>
+                    <Input
+                      id="submittedWeight"
+                      value={recordForm.weight}
+                      onChange={(event) => updateRecordField('weight', event.target.value)}
+                      className="mt-2"
+                    />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Button onClick={handleSaveMeasurements}>
-              <Save className="w-4 h-4 mr-2" />
-              Save Laboratory Results
-            </Button>
+                  <div>
+                    <Label htmlFor="submittedHeight">Height (cm)</Label>
+                    <Input
+                      id="submittedHeight"
+                      value={recordForm.height}
+                      onChange={(event) => updateRecordField('height', event.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="submittedBmi">BMI</Label>
+                    <Input id="submittedBmi" value={recordForm.bmi} readOnly className="mt-2 bg-muted/40" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="actions">
+        <TabsContent value="assessment" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Review Actions</CardTitle>
+              <CardTitle>Clinic Measurements and Verification</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+                Compare the student-submitted values with the verified clinic examination values below before saving the review.
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <Label htmlFor="clinicBp">Verified Blood Pressure</Label>
+                  <Input
+                    id="clinicBp"
+                    value={assessmentForm.bloodPressure}
+                    onChange={(event) => updateAssessmentField('bloodPressure', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cardiacRate">Cardiac Rate (bpm)</Label>
+                  <Input
+                    id="cardiacRate"
+                    value={assessmentForm.cardiacRate}
+                    onChange={(event) => updateAssessmentField('cardiacRate', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="respiratoryRate">Respiratory Rate</Label>
+                  <Input
+                    id="respiratoryRate"
+                    value={assessmentForm.respiratoryRate}
+                    onChange={(event) => updateAssessmentField('respiratoryRate', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="temperature">Temperature (C)</Label>
+                  <Input
+                    id="temperature"
+                    value={assessmentForm.temperature}
+                    onChange={(event) => updateAssessmentField('temperature', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="clinicWeight">Weight (kg)</Label>
+                  <Input
+                    id="clinicWeight"
+                    value={assessmentForm.weight}
+                    onChange={(event) => updateAssessmentField('weight', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="clinicHeight">Height (cm)</Label>
+                  <Input
+                    id="clinicHeight"
+                    value={assessmentForm.height}
+                    onChange={(event) => updateAssessmentField('height', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="clinicBmi">BMI</Label>
+                  <Input id="clinicBmi" value={assessmentForm.bmi} readOnly className="mt-2 bg-muted/40" />
+                </div>
+                <div>
+                  <Label htmlFor="visualAcuity">Visual Acuity</Label>
+                  <Input
+                    id="visualAcuity"
+                    value={assessmentForm.visualAcuity}
+                    onChange={(event) => updateAssessmentField('visualAcuity', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Physical Examination Results</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label htmlFor="skin">Skin</Label>
+                <Textarea
+                  id="skin"
+                  value={assessmentForm.skin}
+                  onChange={(event) => updateAssessmentField('skin', event.target.value)}
+                  className="mt-2"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <Label htmlFor="heent">HEENT</Label>
+                <Textarea
+                  id="heent"
+                  value={assessmentForm.heent}
+                  onChange={(event) => updateAssessmentField('heent', event.target.value)}
+                  className="mt-2"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <Label htmlFor="chestLungs">Chest / Lungs</Label>
+                <Textarea
+                  id="chestLungs"
+                  value={assessmentForm.chestLungs}
+                  onChange={(event) => updateAssessmentField('chestLungs', event.target.value)}
+                  className="mt-2"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <Label htmlFor="heart">Heart</Label>
+                <Textarea
+                  id="heart"
+                  value={assessmentForm.heart}
+                  onChange={(event) => updateAssessmentField('heart', event.target.value)}
+                  className="mt-2"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <Label htmlFor="abdomen">Abdomen</Label>
+                <Textarea
+                  id="abdomen"
+                  value={assessmentForm.abdomen}
+                  onChange={(event) => updateAssessmentField('abdomen', event.target.value)}
+                  className="mt-2"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <Label htmlFor="extremities">Extremities</Label>
+                <Textarea
+                  id="extremities"
+                  value={assessmentForm.extremities}
+                  onChange={(event) => updateAssessmentField('extremities', event.target.value)}
+                  className="mt-2"
+                  rows={3}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="otherFindings">Other Findings / Assessment Notes</Label>
+                <Textarea
+                  id="otherFindings"
+                  value={assessmentForm.others}
+                  onChange={(event) => updateAssessmentField('others', event.target.value)}
+                  className="mt-2"
+                  rows={4}
+                  placeholder="Document additional observations, recommendations, or restrictions."
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="examinedBy">Examined By</Label>
+                <Input
+                  id="examinedBy"
+                  value={assessmentForm.examinedBy}
+                  onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
+                  className="mt-2"
+                  placeholder="Nurse or doctor name"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="labs" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Chest X-Ray Review</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <SubmittedFilePreview title="Chest X-Ray" fileUrl={submission.xrayFileUrl} alt="Chest X-Ray" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="xrayDate">Date</Label>
+                  <Input
+                    id="xrayDate"
+                    type="date"
+                    value={assessmentForm.xrayDate}
+                    onChange={(event) => updateAssessmentField('xrayDate', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="xrayResult">Result</Label>
+                  <Select
+                    value={assessmentForm.xrayResult}
+                    onValueChange={(value) => updateAssessmentField('xrayResult', value as 'normal' | 'abnormal')}
+                  >
+                    <SelectTrigger id="xrayResult" className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="abnormal">Abnormal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="xrayFindings">Findings</Label>
+                  <Textarea
+                    id="xrayFindings"
+                    value={assessmentForm.xrayFindings}
+                    onChange={(event) => updateAssessmentField('xrayFindings', event.target.value)}
+                    className="mt-2"
+                    rows={4}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Complete Blood Count (CBC)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <SubmittedFilePreview title="CBC" fileUrl={submission.cbcFileUrl} alt="CBC" />
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div>
+                  <Label htmlFor="cbcDate">Date</Label>
+                  <Input
+                    id="cbcDate"
+                    type="date"
+                    value={assessmentForm.cbcDate}
+                    onChange={(event) => updateAssessmentField('cbcDate', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="hemoglobin">Hemoglobin</Label>
+                  <Input
+                    id="hemoglobin"
+                    value={assessmentForm.hemoglobin}
+                    onChange={(event) => updateAssessmentField('hemoglobin', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="hematocrit">Hematocrit</Label>
+                  <Input
+                    id="hematocrit"
+                    value={assessmentForm.hematocrit}
+                    onChange={(event) => updateAssessmentField('hematocrit', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="wbc">White Blood Cell Count</Label>
+                  <Input
+                    id="wbc"
+                    value={assessmentForm.wbc}
+                    onChange={(event) => updateAssessmentField('wbc', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="plateletCount">Platelet Count</Label>
+                  <Input
+                    id="plateletCount"
+                    value={assessmentForm.plateletCount}
+                    onChange={(event) => updateAssessmentField('plateletCount', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="bloodType">Blood Type</Label>
+                  <Input
+                    id="bloodType"
+                    value={assessmentForm.bloodType}
+                    onChange={(event) => updateAssessmentField('bloodType', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="glucose">Glucose</Label>
+                  <Input
+                    id="glucose"
+                    value={assessmentForm.glucose}
+                    onChange={(event) => updateAssessmentField('glucose', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="protein">Protein</Label>
+                  <Input
+                    id="protein"
+                    value={assessmentForm.protein}
+                    onChange={(event) => updateAssessmentField('protein', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Urinalysis Review</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <SubmittedFilePreview title="Urinalysis" fileUrl={submission.urinalysisFileUrl} alt="Urinalysis" />
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="urinalysisDate">Date</Label>
+                  <Input
+                    id="urinalysisDate"
+                    type="date"
+                    value={assessmentForm.urinalysisDate}
+                    onChange={(event) => updateAssessmentField('urinalysisDate', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="urinalysisGlucose">Glucose</Label>
+                  <Input
+                    id="urinalysisGlucose"
+                    value={assessmentForm.urinalysisGlucose}
+                    onChange={(event) => updateAssessmentField('urinalysisGlucose', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="urinalysisProtein">Protein</Label>
+                  <Input
+                    id="urinalysisProtein"
+                    value={assessmentForm.urinalysisProtein}
+                    onChange={(event) => updateAssessmentField('urinalysisProtein', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="decision" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Clinic Notes and Medical Assessment</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div>
-                <Label htmlFor="staffNotes">Staff Notes / Feedback</Label>
+                <Label htmlFor="staffNotes">Clinic Notes</Label>
                 <Textarea
                   id="staffNotes"
                   value={staffNotes}
-                  onChange={(e) => setStaffNotes(e.target.value)}
-                  placeholder="Add notes or feedback for the student..."
-                  rows={6}
+                  onChange={(event) => setStaffNotes(event.target.value)}
                   className="mt-2"
+                  rows={6}
+                  placeholder="Add review notes, feedback to the student, follow-up instructions, or clinic observations."
                 />
               </div>
 
-              <div className="border-t pt-4">
-                <h4 className="font-semibold mb-4">Update Submission Status</h4>
-                <div className="flex gap-4">
-                  <Button
-                    onClick={() => handleStatusUpdate('approved')}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Approve Medical Clearance
-                  </Button>
-                  <Button
-                    onClick={() => handleStatusUpdate('returned')}
-                    variant="destructive"
-                  >
-                    <XCircle className="w-4 h-4 mr-2" />
-                    Return for Correction
-                  </Button>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div>
+                  <Label htmlFor="reviewStatus">Medical Clearance Status</Label>
+                  <Select value={reviewStatus} onValueChange={(value) => setReviewStatus(value as ReviewStatus)}>
+                    <SelectTrigger id="reviewStatus" className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending Review</SelectItem>
+                      <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="returned">Returned for Correction</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {hasUnsavedStatusChange ? (
+                    <p className="mt-2 text-xs text-amber-600">This status change will be applied after you save.</p>
+                  ) : null}
                 </div>
-              </div>
 
-              <div className="bg-muted p-4 rounded-lg text-sm">
-                <p className="font-medium mb-2">Submission Information</p>
-                <p className="text-muted-foreground">
-                  Submitted on: {new Date(submission.submittedAt).toLocaleDateString()} at {new Date(submission.submittedAt).toLocaleTimeString()}
-                </p>
-                {submission.updatedAt && (
-                  <p className="text-muted-foreground">
-                    Last updated: {new Date(submission.updatedAt).toLocaleDateString()} at {new Date(submission.updatedAt).toLocaleTimeString()}
-                  </p>
-                )}
+                <div>
+                  <Label htmlFor="clearancePurpose">Purpose</Label>
+                  <Select
+                    value={clearanceForm.purpose}
+                    onValueChange={(value) => updateClearanceField('purpose', value as ClearanceForm['purpose'])}
+                  >
+                    <SelectTrigger id="clearancePurpose" className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="enrolment">Enrolment</SelectItem>
+                      <SelectItem value="ojt">OJT</SelectItem>
+                      <SelectItem value="rle">RLE</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="controlNo">Control Number</Label>
+                  <Input
+                    id="controlNo"
+                    value={clearanceForm.controlNo}
+                    onChange={(event) => updateClearanceField('controlNo', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="issuedDate">Issued Date</Label>
+                  <Input
+                    id="issuedDate"
+                    type="date"
+                    value={clearanceForm.issuedDate}
+                    onChange={(event) => updateClearanceField('issuedDate', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <Label>General Findings</Label>
+                  <RadioGroup
+                    value={clearanceForm.findingsNormal ? 'normal' : 'with-findings'}
+                    onValueChange={(value) => updateClearanceField('findingsNormal', value === 'normal')}
+                    className="mt-3 grid gap-3 sm:grid-cols-2"
+                  >
+                    <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
+                      <RadioGroupItem value="normal" id="findingsNormal" />
+                      <span>Normal findings</span>
+                    </label>
+                    <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
+                      <RadioGroupItem value="with-findings" id="findingsAbnormal" />
+                      <span>With findings / restrictions</span>
+                    </label>
+                  </RadioGroup>
+                </div>
+
+                <div className="md:col-span-2 xl:col-span-3">
+                  <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
+                  <Textarea
+                    id="diagnosis"
+                    value={clearanceForm.diagnosis}
+                    onChange={(event) => updateClearanceField('diagnosis', event.target.value)}
+                    className="mt-2"
+                    rows={4}
+                  />
+                </div>
+
+                <div className="md:col-span-2 xl:col-span-3">
+                  <Label htmlFor="remarks">Clearance Remarks</Label>
+                  <Textarea
+                    id="remarks"
+                    value={clearanceForm.remarks}
+                    onChange={(event) => updateClearanceField('remarks', event.target.value)}
+                    className="mt-2"
+                    rows={4}
+                    placeholder="State whether the student is fit, fit with recommendations, or needs follow-up."
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Card className="border-primary/20">
+        <CardContent className="flex flex-col gap-4 pt-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <p className="font-semibold text-foreground">Finalize the clinic staff review</p>
+            <p className="text-sm text-muted-foreground">
+              Save draft edits at any time, then keep the case pending, mark the physical exam complete, approve, or return it.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
+            <Button variant="outline" onClick={() => void persistReview()} disabled={saving}>
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? 'Saving...' : 'Save Review'}
+            </Button>
+            <Button variant="outline" onClick={() => void persistReview('pending')} disabled={saving}>
+              <FlaskConical className="mr-2 h-4 w-4" />
+              Keep Pending
+            </Button>
+            <Button variant="outline" onClick={() => void persistReview('physical_exam_done')} disabled={saving}>
+              <ClipboardCheck className="mr-2 h-4 w-4" />
+              Physical Exam Done
+            </Button>
+            <Button variant="destructive" onClick={() => void persistReview('returned')} disabled={saving}>
+              Return for Correction
+            </Button>
+            <Button
+              onClick={() => void persistReview('approved')}
+              disabled={saving}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              Approve Clearance
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

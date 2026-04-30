@@ -15,6 +15,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { getStudentProfilePhoto } from '../../lib/api';
 
 const navItems = [
   { path: '/student', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
@@ -63,6 +64,22 @@ export default function StudentLayout() {
     setMenuOpen(false);
     setProfileOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    let active = true;
+    const loadProfilePhoto = async () => {
+      try {
+        const { photoUrl } = await getStudentProfilePhoto(me?.student?.student_id || me?.profile.student_id || '');
+        if (active) setProfilePic(photoUrl || null);
+      } catch {
+        if (active) setProfilePic(null);
+      }
+    };
+    loadProfilePhoto();
+    return () => {
+      active = false;
+    };
+  }, [me?.student?.student_id, me?.profile.student_id]);
 
   const goTo = (path: string) => {
     navigate(path);

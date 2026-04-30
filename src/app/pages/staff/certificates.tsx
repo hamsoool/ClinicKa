@@ -12,7 +12,7 @@ import { Download, Search, FileText, X, ClipboardList, Award } from 'lucide-reac
 import { toast } from 'sonner';
 import { getSubmissions } from '../../lib/api';
 
-const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAS', 'CED'];
+const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = {
   '1': '1st Year',
   '2': '2nd Year',
@@ -254,7 +254,7 @@ export default function StaffCertificates() {
                       <div>
                         <CardTitle>Medical Record Form</CardTitle>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {selectedStudent.lastName}, {selectedStudent.firstName} — {selectedStudent.studentId}
+                          {selectedStudent.lastName}, {selectedStudent.firstName}  E{selectedStudent.studentId}
                         </p>
                       </div>
                       <Button onClick={downloadRecordPDF} className="bg-green-600 hover:bg-green-700">
@@ -296,7 +296,7 @@ export default function StaffCertificates() {
                       <div>
                         <CardTitle>Medical Clearance Certificate</CardTitle>
                         <p className="text-sm text-muted-foreground mt-1">
-                          3 copies (Student, Coordinator, Registrar) — A4 bond paper
+                          3 copies (Student, Coordinator, Registrar)  EA4 bond paper
                         </p>
                       </div>
                       <Button onClick={downloadClearancePDF} className="bg-green-600 hover:bg-green-700">

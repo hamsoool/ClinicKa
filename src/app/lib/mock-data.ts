@@ -90,7 +90,7 @@ export type MockSubmission = {
   course: string;
   department?: string;
   year: string;
-  status: 'pending' | 'approved' | 'returned';
+  status: 'pending' | 'physical_exam_done' | 'approved' | 'returned';
   submittedAt: string;
   updatedAt?: string;
   staffNotes?: string;
@@ -212,7 +212,7 @@ export const mockStudents: MockStudent[] = [
     first_name: 'Bianca',
     last_name: 'Flores',
     middle_initial: 'S',
-    department: 'CAS',
+    department: 'CAHS',
     course: 'BS Psychology',
     year_level: 2,
     age: 20,
