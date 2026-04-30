@@ -48,6 +48,8 @@ export type LabResults = {
   wbc?: string;
   plateletCount?: string;
   bloodType?: string;
+  glucose?: string;
+  protein?: string;
   urinalysisDate?: string;
   urinalysisGlucose?: string;
   urinalysisProtein?: string;

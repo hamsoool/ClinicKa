@@ -15,7 +15,7 @@ export default defineConfig({
         name: "Gordon College Clinic",
         short_name: "GCC Clinic",
         description: "Gordon College Clinic health records and patient management",
-        theme_color: "#16a34a",
+        theme_color: "#006d3c",
         background_color: "#ffffff",
         display: "standalone",
         start_url: "/",
@@ -36,6 +36,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
@@ -55,6 +56,32 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom/client", "react-router", "lucide-react"],
+  },
+  build: {
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, "/");
+          if (!normalizedId.includes("/node_modules/")) return;
+          if (
+            normalizedId.includes("/node_modules/react/") ||
+            normalizedId.includes("/node_modules/react-dom/") ||
+            normalizedId.includes("/node_modules/react-router/") ||
+            normalizedId.includes("/node_modules/scheduler/")
+          ) {
+            return "vendor-react";
+          }
+          if (normalizedId.includes("/node_modules/@radix-ui/")) return "vendor-radix";
+          if (normalizedId.includes("/node_modules/lucide-react/")) return "vendor-icons";
+          if (normalizedId.includes("/node_modules/recharts/")) return "vendor-charts";
+          if (normalizedId.includes("/node_modules/motion/")) return "vendor-motion";
+        },
+      },
     },
   },
   assetsInclude: ["**/*.svg", "**/*.csv"],

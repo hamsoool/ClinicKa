@@ -149,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const authType = params.get('type');
 
     if (!accessToken) return;
+    const redirectAccessToken = accessToken;
 
     async function processAuthRedirect() {
       if (authType === 'signup') {
@@ -161,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const authUser = await getUserByToken(accessToken);
+        const authUser = await getUserByToken(redirectAccessToken);
         const email = authUser.email || params.get('email') || undefined;
 
         if (!isGCDomain(email)) {
@@ -177,20 +178,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const nextSession: AuthSession = {
-          access_token: accessToken,
+          access_token: redirectAccessToken,
           refresh_token: params.get('refresh_token') || undefined,
           token_type: params.get('token_type') || undefined,
           expires_in: params.get('expires_in') ? Number(params.get('expires_in')) : undefined,
           user: {
             id: authUser.id || params.get('user_id') || 'verified-user',
-            email,
+            email: email || undefined,
           },
         };
 
         const hasPasswordIdentity = (authUser.identities || []).some(
           (identity) => identity.provider === 'email',
         );
-        const hasServerPassword = await hasServerPasswordSetupCompleted(accessToken);
+        const hasServerPassword = await hasServerPasswordSetupCompleted(redirectAccessToken);
         const hasExistingPassword =
           hasPasswordIdentity || hasServerPassword || hasPasswordSetupMarker(email);
 
@@ -198,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(nextSession);
         setRequiresPasswordSetup(!hasExistingPassword);
         try {
-          const resolvedMe = await getMe(accessToken);
+          const resolvedMe = await getMe(redirectAccessToken);
           setMe(resolvedMe);
           setRole(hasExistingPassword ? resolvedMe.profile.role : null);
         } catch {

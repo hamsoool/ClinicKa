@@ -88,7 +88,7 @@ function buildSingleImagePdf(jpegBytes: Uint8Array, width: number, height: numbe
   xrefHeader.push(`trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`);
   pushChunk(textEncoder.encode(xrefHeader.join('')));
 
-  return new Blob(chunks, { type: 'application/pdf' });
+  return new Blob(chunks as unknown as BlobPart[], { type: 'application/pdf' });
 }
 
 export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, fileUrl, alt }: Props) {

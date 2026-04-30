@@ -20,6 +20,18 @@ const STATUS_LABELS: Record<string, string> = {
 };
 const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', issued: 'Issued Only', not_issued: 'Not Issued' };
 
+type ReportsSummary = {
+  total: number;
+  approved: number;
+  pending: number;
+  firstYears: number;
+  firstYearUnderReview: number;
+  firstYearNotUnderReview: number;
+  withCertificate: number;
+  approvalRate: number;
+  byCourse: Record<string, number>;
+};
+
 function buildSimplePdf(
   summaryRows: Array<{ label: string; value: string }>,
   studentRows: Array<{ fullName: string; studentId: string; course: string; year: string; status: string; submitted: string; certificate: string }>,
@@ -241,7 +253,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     if (!toDate) setToDate(dateRange.maxDate);
   }, [submissions, fromDate, toDate, dateRange.minDate, dateRange.maxDate]);
 
-  const summary = useMemo(() => {
+  const summary = useMemo<ReportsSummary>(() => {
     const total = dedupedFilteredSubmissions.length;
     const approved = dedupedFilteredSubmissions.filter((s) => s.status === 'approved').length;
     const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending').length;
