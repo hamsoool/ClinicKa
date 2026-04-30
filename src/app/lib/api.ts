@@ -155,6 +155,31 @@ export type AuthMe = {
   } | null;
 };
 
+export type AdminUserAccount = {
+  userId: string;
+  id: string;
+  name: string;
+  email?: string;
+  role: string;
+  roleKey: UserRole;
+  status: string;
+  lastActive?: string;
+  canArchive?: boolean;
+};
+
+export type ArchivedUserAccount = {
+  archiveId: string;
+  userId: string;
+  id: string;
+  name: string;
+  email?: string;
+  role: string;
+  roleKey: UserRole;
+  status: 'Archived';
+  archivedAt: string;
+  archivedReason?: string;
+};
+
 type RequestOptions = {
   method?: string;
   token?: string | null;
@@ -1114,58 +1139,67 @@ export async function getMe(token?: string | null) {
         contact_number: previewStudent?.contact_number || '09123456789',
         address: previewStudent?.address || 'Olongapo City',
       },
-      staff: null,
+        staff: null,
+        } satisfies AuthMe;
+  }
+
+  try {
+    return await apiRequest<AuthMe>('/functions/v1/server/me', { token });
+  } catch {
+    const user = await getCurrentAuthUser(token);
+    const profileRows = await restRequest<any[]>(
+      'profiles',
+      `id=eq.${user.id}&select=*`,
+      {
+        token,
+        headers: { Prefer: 'count=exact' },
+      },
+    );
+    const profile = profileRows[0];
+    const resolvedProfile =
+      profile ||
+      (
+        await restRequest<any[]>(
+          'profiles',
+          'select=*',
+          {
+            method: 'POST',
+            token,
+            headers: {
+              'Content-Type': 'application/json',
+              Prefer: 'return=representation',
+            },
+            body: JSON.stringify({
+              id: user.id,
+              role: resolveRoleFromEmail(user.email),
+              email: normalizeEmail(user.email) || null,
+              student_id: deriveStudentIdFromEmail(user.email),
+            }),
+          },
+        )
+      )[0];
+
+    if (!resolvedProfile) {
+      throw new Error('Profile not found for authenticated user.');
+    }
+
+    const [studentRows, staffRows] = await Promise.all([
+      resolvedProfile.student_id
+        ? restRequest<any[]>(
+            'students',
+            `student_id=eq.${encodeURIComponent(resolvedProfile.student_id)}&select=*`,
+            { token },
+          )
+        : Promise.resolve([]),
+      restRequest<any[]>('staff_users', `profile_id=eq.${user.id}&select=*`, { token }),
+    ]);
+
+    return {
+      profile: resolvedProfile,
+      student: studentRows[0] || null,
+      staff: staffRows[0] || null,
     } satisfies AuthMe;
   }
-  const user = await getCurrentAuthUser(token);
-  const profileRows = await restRequest<any[]>(
-    'profiles',
-    `id=eq.${user.id}&select=*`,
-    {
-      token,
-      headers: { Prefer: 'count=exact' },
-    },
-  );
-  const profile = profileRows[0];
-  const resolvedProfile =
-    profile ||
-    (
-      await restRequest<any[]>(
-        'profiles',
-        'select=*',
-        {
-          method: 'POST',
-          token,
-          headers: {
-            'Content-Type': 'application/json',
-            Prefer: 'return=representation',
-          },
-          body: JSON.stringify({
-            id: user.id,
-            role: resolveRoleFromEmail(user.email),
-            email: normalizeEmail(user.email) || null,
-            student_id: deriveStudentIdFromEmail(user.email),
-          }),
-        },
-      )
-    )[0];
-
-  if (!resolvedProfile) {
-    throw new Error('Profile not found for authenticated user.');
-  }
-
-  const [studentRows, staffRows] = await Promise.all([
-    resolvedProfile.student_id
-      ? restRequest<any[]>('students', `student_id=eq.${encodeURIComponent(resolvedProfile.student_id)}&select=*`, { token })
-      : Promise.resolve([]),
-    restRequest<any[]>('staff_users', `profile_id=eq.${user.id}&select=*`, { token }),
-  ]);
-
-  return {
-    profile: resolvedProfile,
-    student: studentRows[0] || null,
-    staff: staffRows[0] || null,
-  } satisfies AuthMe;
 }
 
 export async function submitMedicalRecord(data: any) {
@@ -2099,16 +2133,9 @@ export async function getStaffUsers() {
     return { staff: demoStaffUsers };
   }
 
-  const staff = await restRequest<any[]>('staff_users', 'select=*&order=last_name.asc');
-  return {
-    staff: (staff || []).map((member) => ({
-      id: member.id,
-      name: `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.name || 'Unnamed Staff',
-      role: member.position || 'Clinic Staff',
-      status: member.is_active === false ? 'Inactive' : 'Active',
-      email: member.email || '',
-    })),
-  };
+  return apiRequest<{ staff: Array<{ id: string; userId?: string; name: string; role: string; status: string; email: string }> }>(
+    '/functions/v1/server/staff-users',
+  );
 }
 
 type AdminCreateAccountInput = {
@@ -2161,42 +2188,52 @@ export async function createAdminStaff(input: AdminCreateStaffInput) {
 
 export async function getUserAccounts() {
   if (DEMO_MODE) {
-    return { users: demoUserAccounts };
+    return {
+      users: demoUserAccounts.map((user) => ({
+        userId: user.id,
+        id: user.id,
+        name: user.name,
+        email: '',
+        role: user.role,
+        roleKey: user.role === 'Administrator' ? 'admin' : user.role === 'Clinic Staff' ? 'staff' : 'student',
+        status: user.status,
+        lastActive: user.lastActive,
+        canArchive: user.role !== 'Administrator',
+      })) satisfies AdminUserAccount[],
+    };
   }
 
-  const [profiles, staffUsers] = await Promise.all([
-    restRequest<any[]>('profiles', 'select=*&order=created_at.desc'),
-    restRequest<any[]>('staff_users', 'select=*'),
-  ]);
+  return apiRequest<{ users: AdminUserAccount[] }>('/functions/v1/server/user-accounts');
+}
 
-  const staffByProfileId = (staffUsers || []).reduce((acc, staff) => {
-    if (staff.profile_id) {
-      acc[staff.profile_id] = staff;
-    }
-    return acc;
-  }, {} as Record<string, any>);
+export async function getArchivedUserAccounts() {
+  if (DEMO_MODE) {
+    return { users: [] as ArchivedUserAccount[] };
+  }
 
-  return {
-    users: (profiles || []).map((profile) => {
-      const linkedStaff = staffByProfileId[profile.id];
-      const name =
-        [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim() ||
-        [linkedStaff?.first_name, linkedStaff?.last_name].filter(Boolean).join(' ').trim() ||
-        profile.email ||
-        'Unnamed User';
+  return apiRequest<{ users: ArchivedUserAccount[] }>('/functions/v1/server/archived-accounts');
+}
 
-      return {
-        id: profile.student_id || linkedStaff?.id || profile.id,
-        name,
-        role:
-          profile.role === 'admin'
-            ? 'Administrator'
-            : profile.role === 'staff'
-              ? 'Clinic Staff'
-              : 'Student',
-        status: linkedStaff?.is_active === false ? 'Inactive' : 'Active',
-        lastActive: profile.updated_at || profile.created_at,
-      };
-    }),
-  };
+export async function archiveUserAccount(input: { userId: string; reason?: string }) {
+  if (DEMO_MODE) {
+    return { success: true as const };
+  }
+
+  return apiRequest<{ success: boolean }>('/functions/v1/server/admin/archive-account', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteArchivedUserAccount(archiveId: string) {
+  if (DEMO_MODE) {
+    return { success: true as const };
+  }
+
+  return apiRequest<{ success: boolean }>(`/functions/v1/server/admin/archive-account/${encodeURIComponent(archiveId)}`, {
+    method: 'DELETE',
+  });
 }

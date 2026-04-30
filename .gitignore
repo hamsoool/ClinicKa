@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+scripts/*.local.mjs
 *.crdownload
 design-import/
 "GC General Privacy Notice_files"/

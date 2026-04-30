@@ -80,6 +80,7 @@ export default function StudentLayout() {
       portalLabel="Student Portal"
       brandSubtitle="Clinic Portal"
       brandIcon={FileCheck2}
+      brandImageSrc="/gchsu.png"
       displayName={displayName}
       profileSubtitle={profileSubtitle}
       email={email}
@@ -88,7 +89,6 @@ export default function StudentLayout() {
       initialProfileImageUrl={profilePic}
       profileUploadId="student-profile-upload"
       profileUploadLabel="Upload student profile picture"
-      showBrandAvatar
       topActions={topActions}
     />
   );

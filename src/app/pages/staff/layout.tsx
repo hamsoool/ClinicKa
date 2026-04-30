@@ -51,6 +51,7 @@ export default function StaffLayout() {
       portalLabel="Clinic Operations Portal"
       brandSubtitle="Clinic Operations"
       brandIcon={Stethoscope}
+      brandImageSrc="/gchsu.png"
       displayName={displayName}
       profileSubtitle={position}
       email={email}

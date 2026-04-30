@@ -14,6 +14,12 @@ function normalizeEmail(email?: string | null) {
   return (email || '').trim().toLowerCase();
 }
 
+function isArchivedAccountError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('archived') || message.includes('administrator for assistance');
+}
+
 function getPasswordSetupMarkers() {
   if (typeof window === 'undefined') return new Set<string>();
 
@@ -124,8 +130,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!requiresPasswordSetup) {
           setRole(resolvedMe.profile.role);
         }
-      } catch {
+      } catch (error) {
         if (cancelled) return;
+        if (isArchivedAccountError(error)) {
+          clearStoredSession();
+          setSession(null);
+          setMe(null);
+          setRole(null);
+          setRequiresPasswordSetup(false);
+          return;
+        }
         const fallbackRole = resolveRoleFromEmail(session.user?.email);
         setMe(buildMeFromSession(fallbackRole, session));
         if (!requiresPasswordSetup) {
@@ -202,7 +216,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const resolvedMe = await getMe(redirectAccessToken);
           setMe(resolvedMe);
           setRole(hasExistingPassword ? resolvedMe.profile.role : null);
-        } catch {
+        } catch (error) {
+          if (isArchivedAccountError(error)) {
+            clearStoredSession();
+            setSession(null);
+            setMe(null);
+            setRole(null);
+            setRequiresPasswordSetup(false);
+            const url = new URL(window.location.href);
+            url.hash = '';
+            url.searchParams.set('mode', 'signin');
+            url.searchParams.set('google_error', 'archived_account');
+            window.history.replaceState({}, document.title, url.pathname + url.search);
+            return;
+          }
           const fallbackRole = resolveRoleFromEmail(email);
           setMe(buildMeFromSession(fallbackRole, nextSession));
           setRole(hasExistingPassword ? fallbackRole : null);
@@ -246,7 +273,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setMe(resolvedMe);
           setRole(resolvedMe.profile.role);
           return resolvedMe;
-        } catch {
+        } catch (error) {
+          if (isArchivedAccountError(error)) {
+            clearStoredSession();
+            setSession(null);
+            setMe(null);
+            setRole(null);
+            throw error;
+          }
           const fallbackRole = resolveRoleFromEmail(email);
           const fallbackMe = buildMeFromSession(fallbackRole, nextSession);
           setMe(fallbackMe);
@@ -326,7 +360,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setMe(refreshedMe);
         setRole(refreshedMe.profile.role);
         return refreshedMe;
-      } catch {
+      } catch (error) {
+        if (isArchivedAccountError(error)) {
+          clearStoredSession();
+          setSession(null);
+          setMe(null);
+          setRole(null);
+          setRequiresPasswordSetup(false);
+          return null;
+        }
         const fallbackRole = resolveRoleFromEmail(session.user?.email);
         const fallbackMe = buildMeFromSession(fallbackRole, session);
         setMe(fallbackMe);

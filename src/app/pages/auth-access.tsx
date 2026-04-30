@@ -20,7 +20,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../components/ui/dialog';
-import { ScrollArea } from '../components/ui/scroll-area';
 import { signInWithGoogle } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
@@ -28,6 +27,7 @@ const GC_DOMAIN = 'gordoncollege.edu.ph';
 const POLICY_UPDATED_AT = 'April 29, 2026';
 const AUTH_LOGO_SRC = '/logo.png';
 const DASHBOARD_PREVIEW_SRC = new URL('../../../exports/figma/02-student-dashboard.png', import.meta.url).href;
+const CONTACT_EMAIL = 'digitalduo.clinicka@gmail.com';
 
 type LegalSection = {
   title: string;
@@ -141,7 +141,7 @@ const privacySections: LegalSection[] = [
     body:
       'For privacy-related concerns, requests, or questions, you may contact Gordon College through its Data Privacy Office.',
     bullets: [
-      'Email: dpo@gordoncollege.edu.ph',
+      `Email: ${CONTACT_EMAIL}`,
       'Phone: (047) 222-4080',
       'Address: Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City 2200',
     ],
@@ -169,61 +169,131 @@ function LegalDialog({ label, eyebrow, title, description, meta, sections, foote
           {label}
         </button>
       </DialogTrigger>
-      <DialogContent className="h-[100dvh] max-h-[100dvh] max-w-none overflow-hidden rounded-none border-0 bg-white p-0 shadow-none sm:h-[92vh] sm:max-h-[92vh] sm:max-w-[94vw] sm:rounded-[1.75rem] sm:border sm:border-emerald-950/10 sm:shadow-[0_28px_90px_rgba(15,23,42,0.18)] xl:max-w-5xl">
-        <div className="border-b border-emerald-950/10 bg-[linear-gradient(135deg,rgba(247,252,248,1)_0%,rgba(237,247,240,1)_55%,rgba(227,242,233,1)_100%)]">
-          <DialogHeader className="px-5 py-5 sm:px-6 sm:py-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#065f46]/75">{eyebrow}</p>
-            <DialogTitle className="text-2xl tracking-tight text-[#0b1c30] sm:text-3xl">{title}</DialogTitle>
-            <DialogDescription className="max-w-2xl text-sm leading-7 text-[#3f4944]">
-              {description}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 px-5 pb-5 sm:px-6 sm:pb-6 lg:grid-cols-3">
-            {meta.map((item) => (
-              <div
-                key={item}
-                className="rounded-2xl border border-white/70 bg-white/75 px-4 py-3 text-sm font-medium text-[#0b1c30] shadow-[0_10px_24px_rgba(15,23,42,0.05)] backdrop-blur"
-              >
-                {item}
-              </div>
-            ))}
-          </div>
+      <DialogContent className="h-[100dvh] max-h-[100dvh] max-w-none overflow-hidden rounded-none border-0 bg-[linear-gradient(180deg,#f8fbf8_0%,#f5f9ff_100%)] p-0 shadow-none sm:h-[92vh] sm:max-h-[92vh] sm:max-w-[95vw] sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-[0_30px_90px_rgba(11,28,48,0.18)] xl:max-w-6xl">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+          <div className="absolute left-[-8rem] top-[-7rem] h-64 w-64 rounded-full bg-[#d9f3e4]/70 blur-3xl" />
+          <div className="absolute right-[-7rem] top-12 h-72 w-72 rounded-full bg-[#d9e8ff]/75 blur-3xl" />
         </div>
-        <ScrollArea className="h-[calc(100dvh-12.5rem)] sm:h-[calc(92vh-13rem)]">
-          <div className="space-y-5 px-5 py-5 sm:space-y-6 sm:px-6 sm:py-6">
-            {sections.map((section, index) => (
-              <section
-                key={section.title}
-                className="rounded-2xl border border-[#bec9c2]/45 bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-[#065f46]">
-                    {String(index + 1).padStart(2, '0')}
+
+        <div className="relative flex h-full flex-col">
+          <div className="border-b border-emerald-950/10 bg-[linear-gradient(135deg,#f8fcf9_0%,#eef7f1_52%,#edf4ff_100%)]">
+            <DialogHeader className="px-5 py-6 sm:px-8 sm:py-8">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/75 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.26em] text-[#065f46] shadow-[0_10px_30px_rgba(11,28,48,0.05)]">
+                <Sparkles className="h-3.5 w-3.5" />
+                {eyebrow}
+              </div>
+              <div className="mt-5 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="max-w-3xl">
+                  <DialogTitle className="text-3xl font-semibold tracking-[-0.05em] text-[#0b1c30] sm:text-[2.6rem]">
+                    {title}
+                  </DialogTitle>
+                  <DialogDescription className="mt-4 max-w-2xl text-base leading-8 text-[#425468]">
+                    {description}
+                  </DialogDescription>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3 lg:w-[27rem] lg:grid-cols-1">
+                  {meta.map((item) => (
+                    <div
+                      key={item}
+                      className="rounded-[1.35rem] border border-[#e6eeea] bg-white px-4 py-3 text-sm font-medium leading-6 text-[#0b1c30] shadow-[0_12px_26px_rgba(11,28,48,0.05)]"
+                    >
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid gap-6 px-5 py-5 sm:px-8 sm:py-8 lg:grid-cols-[18rem,minmax(0,1fr)]">
+              <aside className="lg:sticky lg:top-4 lg:self-start">
+                <div className="rounded-[1.6rem] border border-[#e6eeea] bg-white p-5 shadow-[0_20px_50px_rgba(11,28,48,0.06)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#60717e]">In this document</p>
+                  <div className="mt-4 space-y-2">
+                    {sections.map((section, index) => (
+                      <div
+                        key={section.title}
+                        className="flex items-start gap-3 rounded-2xl border border-[#e2ebe7] bg-[#fbfdfb] px-3 py-3"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#d9f3e4] text-xs font-semibold text-[#065f46]">
+                          {String(index + 1).padStart(2, '0')}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#0b1c30]">{section.title}</p>
+                          <p className="mt-1 text-xs leading-5 text-[#60717e]">{section.body}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-[#0b1c30]">{section.title}</h3>
-                    <p className="mt-2 text-sm leading-7 text-[#3f4944]">{section.body}</p>
-                    {section.bullets?.length ? (
-                      <ul className="mt-4 space-y-2 text-sm leading-6 text-[#3f4944]">
-                        {section.bullets.map((bullet) => (
-                          <li key={bullet} className="flex gap-3">
-                            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#065f46]/75" />
-                            <span>{bullet}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
+
+                  <div className="mt-5 rounded-[1.35rem] border border-[#d5e7de] bg-[linear-gradient(135deg,#edf9f2_0%,#f7fcff_100%)] p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#065f46] shadow-[0_10px_24px_rgba(11,28,48,0.08)]">
+                        <Mail className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[#0b1c30]">Need help?</p>
+                        <p className="mt-1 text-sm leading-6 text-[#425468]">
+                          Contact the support team at <span className="font-semibold text-[#065f46]">{CONTACT_EMAIL}</span>.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </section>
-            ))}
-            {footer ? (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm leading-6 text-emerald-900">
-                {footer}
+              </aside>
+
+              <div className="space-y-5">
+                {sections.map((section, index) => (
+                  <section
+                    key={section.title}
+                    className="group relative z-10 overflow-hidden rounded-[1.7rem] border border-[#e6eeea] bg-white shadow-[0_22px_60px_rgba(11,28,48,0.06)] transition-transform duration-300 hover:-translate-y-0.5"
+                  >
+                    <div className="h-1.5 bg-[linear-gradient(90deg,rgba(6,95,70,0.95)_0%,rgba(74,163,138,0.75)_45%,rgba(145,219,193,0.45)_100%)]" />
+                    <div className="p-5 sm:p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#d9f3e4] text-sm font-semibold text-[#065f46] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                          {String(index + 1).padStart(2, '0')}
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-xl font-semibold tracking-[-0.03em] text-[#0b1c30]">{section.title}</h3>
+                          <p className="mt-3 text-sm leading-7 text-[#425468]">{section.body}</p>
+                          {section.bullets?.length ? (
+                            <ul className="mt-5 space-y-3">
+                              {section.bullets.map((bullet) => (
+                                <li
+                                  key={bullet}
+                                  className="flex items-start gap-3 rounded-2xl border border-[#e4ece8] bg-[#fcfefd] px-4 py-3 text-sm leading-6 text-[#3f4944]"
+                                >
+                                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#4aa38a]" />
+                                  <span>{bullet}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                ))}
+
+                {footer ? (
+                  <div className="rounded-[1.7rem] border border-[#bbe4d0] bg-[linear-gradient(135deg,#ecfaf2_0%,#f7fcff_100%)] p-5 shadow-[0_20px_45px_rgba(11,28,48,0.05)] sm:p-6">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#065f46] shadow-[0_10px_24px_rgba(11,28,48,0.08)]">
+                        <ShieldCheck className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#065f46]">Key acknowledgement</p>
+                        <p className="mt-2 text-sm leading-7 text-emerald-950/85">{footer}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            </div>
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -252,6 +322,7 @@ export default function AuthAccessPage() {
     verifiedFromEmail ? 'Email verified. You can now sign in with your account.' : null,
   );
   const [logoVisible, setLogoVisible] = useState(true);
+  const [panelDirection, setPanelDirection] = useState<'left' | 'right'>('right');
 
   const [signInForm, setSignInForm] = useState({
     email: '',
@@ -388,6 +459,19 @@ export default function AuthAccessPage() {
     'h-12 w-full rounded-2xl border border-[#c8d6d1] bg-white/92 px-4 text-sm text-[#0b1c30] outline-none transition focus:border-[#065f46] focus:ring-4 focus:ring-[#065f46]/10';
   const iconInputClassName =
     'h-12 w-full rounded-2xl border border-[#c8d6d1] bg-white/92 pl-11 pr-4 text-sm text-[#0b1c30] outline-none transition focus:border-[#065f46] focus:ring-4 focus:ring-[#065f46]/10';
+  const authPanelBodyClassName =
+    `animate-in fade-in-0 duration-300 motion-reduce:animate-none ${
+      panelDirection === 'right' ? 'slide-in-from-right-6' : 'slide-in-from-left-6'
+    }`;
+
+  function switchMode(nextMode: 'signin' | 'signup') {
+    if (nextMode === mode) return;
+
+    setPanelDirection(nextMode === 'signup' ? 'right' : 'left');
+    setMode(nextMode);
+    setError(null);
+    setSuccessMessage(null);
+  }
 
   if (requiresPasswordSetup) {
     return (
@@ -403,7 +487,7 @@ export default function AuthAccessPage() {
                 Complete your account setup
               </div>
               <h1 className="max-w-xl text-5xl font-bold tracking-[-0.04em] text-[#0b1c30]">
-                Finish securing your ClinicKa access.
+                Finish securing your ClinicKa! access.
               </h1>
               <p className="max-w-xl text-lg leading-8 text-[#425468]">
                 You signed in with Google successfully. Set a password so your Gordon College account can also use manual sign-in whenever needed.
@@ -511,7 +595,7 @@ export default function AuthAccessPage() {
             {logoVisible ? (
               <img
                 src={AUTH_LOGO_SRC}
-                alt="ClinicKa logo"
+                alt="ClinicKa! logo"
                 className="h-11 w-11 rounded-full object-cover"
                 onError={() => setLogoVisible(false)}
               />
@@ -521,7 +605,7 @@ export default function AuthAccessPage() {
               </div>
             )}
             <div>
-              <p className="text-lg font-bold tracking-[-0.03em] text-[#0b1c30]">ClinicKa</p>
+              <p className="text-lg font-bold tracking-[-0.03em] text-[#0b1c30]">ClinicKa!</p>
               <p className="text-xs uppercase tracking-[0.18em] text-[#60717e]">Gordon College Health Services</p>
             </div>
           </Link>
@@ -568,13 +652,13 @@ export default function AuthAccessPage() {
             <div className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/76 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.1)] backdrop-blur">
               <img
                 src={DASHBOARD_PREVIEW_SRC}
-                alt="ClinicKa student dashboard preview"
+                alt="ClinicKa! student dashboard preview"
                 className="h-full w-full rounded-[1.4rem] border border-[#d7e4ec] object-cover object-left-top"
               />
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/80 bg-white/84 p-5 shadow-[0_30px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:p-8">
+          <div className="rounded-[2rem] border border-white/80 bg-white/84 p-5 shadow-[0_30px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:min-h-[46.5rem] sm:p-8">
             <div className="flex flex-col gap-4 border-b border-[#dfebea] pb-6 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Secure account access</p>
@@ -591,23 +675,15 @@ export default function AuthAccessPage() {
               <div className="inline-flex rounded-full border border-[#d7e4e0] bg-[#f5f8ff] p-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    setMode('signin');
-                    setError(null);
-                    setSuccessMessage(null);
-                  }}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${mode === 'signin' ? 'bg-[#004532] text-white shadow-[0_10px_30px_rgba(0,69,50,0.24)]' : 'text-[#4a5b68]'}`}
+                  onClick={() => switchMode('signin')}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${mode === 'signin' ? 'bg-[#004532] text-white shadow-[0_10px_30px_rgba(0,69,50,0.24)]' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
                 >
                   Sign in
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setMode('signup');
-                    setError(null);
-                    setSuccessMessage(null);
-                  }}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${mode === 'signup' ? 'bg-[#004532] text-white shadow-[0_10px_30px_rgba(0,69,50,0.24)]' : 'text-[#4a5b68]'}`}
+                  onClick={() => switchMode('signup')}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${mode === 'signup' ? 'bg-[#004532] text-white shadow-[0_10px_30px_rgba(0,69,50,0.24)]' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
                 >
                   Sign up
                 </button>
@@ -615,7 +691,7 @@ export default function AuthAccessPage() {
             </div>
 
             {mode === 'signin' ? (
-              <div className="space-y-6 pt-6">
+              <div key="signin" className={`${authPanelBodyClassName} flex min-h-[35.5rem] flex-col space-y-6 pt-6`}>
                 <form className="space-y-5" onSubmit={handleSignIn}>
                   <div>
                     <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
@@ -730,18 +806,14 @@ export default function AuthAccessPage() {
                   <button
                     type="button"
                     className="font-semibold text-[#065f46]"
-                    onClick={() => {
-                      setMode('signup');
-                      setError(null);
-                      setSuccessMessage(null);
-                    }}
+                    onClick={() => switchMode('signup')}
                   >
                     Create one here
                   </button>
                 </p>
               </div>
             ) : (
-              <div className="space-y-6 pt-6">
+              <div key="signup" className={`${authPanelBodyClassName} flex min-h-[35.5rem] flex-col space-y-6 pt-6`}>
                 <form className="space-y-5" onSubmit={handleSignUp}>
                   <div>
                     <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
@@ -825,7 +897,7 @@ export default function AuthAccessPage() {
                       meta={[
                         'Data controller: Gordon College',
                         `Last updated ${POLICY_UPDATED_AT}`,
-                        'Contact: dpo@gordoncollege.edu.ph',
+                        `Contact: ${CONTACT_EMAIL}`,
                       ]}
                       sections={privacySections}
                       footer="This policy presentation is aligned with the Gordon College General Privacy Notice and is intended to help users understand how personal data is handled inside the clinic portal."
@@ -885,11 +957,7 @@ export default function AuthAccessPage() {
                   <button
                     type="button"
                     className="font-semibold text-[#065f46]"
-                    onClick={() => {
-                      setMode('signin');
-                      setError(null);
-                      setSuccessMessage(null);
-                    }}
+                    onClick={() => switchMode('signin')}
                   >
                     Sign in instead
                   </button>

@@ -24,6 +24,7 @@ type PortalShellProps = {
   brandTitle?: string;
   brandSubtitle: string;
   brandIcon: LucideIcon;
+  brandImageSrc?: string;
   displayName: string;
   profileSubtitle: string;
   email?: string;
@@ -32,7 +33,6 @@ type PortalShellProps = {
   initialProfileImageUrl?: string | null;
   profileUploadId: string;
   profileUploadLabel: string;
-  showBrandAvatar?: boolean;
   topActions?: readonly PortalTopAction[];
 };
 
@@ -73,6 +73,7 @@ export default function PortalShell({
   brandTitle = 'Gordon College',
   brandSubtitle,
   brandIcon: BrandIcon,
+  brandImageSrc,
   displayName,
   profileSubtitle,
   email,
@@ -81,7 +82,6 @@ export default function PortalShell({
   initialProfileImageUrl,
   profileUploadId,
   profileUploadLabel,
-  showBrandAvatar = false,
   topActions = [],
 }: PortalShellProps) {
   const navigate = useNavigate();
@@ -90,6 +90,7 @@ export default function PortalShell({
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profilePic, setProfilePic] = useState<string | null>(initialProfileImageUrl || null);
+  const [brandImageFailed, setBrandImageFailed] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -105,6 +106,10 @@ export default function PortalShell({
       setProfilePic(initialProfileImageUrl || null);
     }
   }, [initialProfileImageUrl]);
+
+  useEffect(() => {
+    setBrandImageFailed(false);
+  }, [brandImageSrc]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -198,10 +203,13 @@ export default function PortalShell({
             <div className="rounded-lg border border-white/10 bg-white/5 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)] backdrop-blur">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-emerald-300/30 bg-emerald-50 text-primary">
-                  {showBrandAvatar && profilePic ? (
-                    <img src={profilePic} alt="" className="h-full w-full object-cover" />
-                  ) : showBrandAvatar ? (
-                    <span className="text-sm font-bold">{initials}</span>
+                  {brandImageSrc && !brandImageFailed ? (
+                    <img
+                      src={brandImageSrc}
+                      alt={`${brandTitle} logo`}
+                      className="h-full w-full object-cover"
+                      onError={() => setBrandImageFailed(true)}
+                    />
                   ) : (
                     <BrandIcon className="h-5 w-5" />
                   )}
@@ -281,14 +289,15 @@ export default function PortalShell({
         />
       ) : null}
 
-      <header className="fixed left-0 right-0 top-0 z-30 h-16 border-b border-outline-variant/40 bg-white/90 backdrop-blur md:left-72">
-        <div className="flex h-full items-center justify-between gap-3 px-4 pl-16 md:px-8 md:pl-8">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
-              Clinic Management System
+      <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/40 bg-white/90 backdrop-blur md:left-72 md:h-16">
+        <div className="flex h-full items-center justify-between gap-2 px-3 pl-16 md:gap-3 md:px-8 md:pl-8">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
+              <span className="sm:hidden">{brandSubtitle}</span>
+              <span className="hidden sm:inline">Clinic Management System</span>
             </p>
             <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-sm font-semibold text-on-surface">{currentPage}</p>
+              <p className="truncate text-sm font-semibold leading-tight text-on-surface sm:text-[15px]">{currentPage}</p>
               {roleBadge ? (
                 <span className="hidden rounded-full bg-primary-container/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-on-primary-container sm:inline-flex">
                   {roleBadge}
@@ -297,14 +306,14 @@ export default function PortalShell({
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
             {topActions.map((action) => {
               const Icon = action.icon;
               return (
                 <button
                   key={action.label}
                   type="button"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface sm:h-10 sm:w-10"
                   onClick={() => {
                     if (action.path) navigate(action.path);
                     action.onClick?.();
@@ -312,7 +321,7 @@ export default function PortalShell({
                   aria-label={action.label}
                   title={action.label}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
                 </button>
               );
             })}
@@ -321,7 +330,7 @@ export default function PortalShell({
               <button
                 type="button"
                 onClick={() => setProfileOpen((prev) => !prev)}
-                className="ml-1 flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-outline-variant/70 bg-surface-container-lowest shadow-sm"
+                className="ml-0.5 flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-outline-variant/70 bg-surface-container-lowest shadow-sm sm:ml-1 sm:h-10 sm:w-10"
                 aria-haspopup="dialog"
                 aria-expanded={profileOpen}
                 aria-label="Open profile menu"
@@ -388,7 +397,13 @@ export default function PortalShell({
         className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/40 bg-surface-container-lowest/95 backdrop-blur md:hidden"
         aria-label="Mobile navigation"
       >
-        <div className="flex gap-1 overflow-x-auto px-2 py-2 pb-[env(safe-area-inset-bottom)]">
+        <div
+          className="grid gap-1 px-1.5 py-2"
+          style={{
+            gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))`,
+            paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)',
+          }}
+        >
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = isRouteActive(location.pathname, item.path);
@@ -400,12 +415,12 @@ export default function PortalShell({
                 onClick={() => goTo(item.path)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex min-h-14 min-w-[4.35rem] flex-1 flex-col items-center justify-center gap-1 rounded-md px-2 py-2 text-xs transition-colors',
+                  'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] leading-tight transition-colors sm:text-xs',
                   active ? 'bg-primary-container/25 text-primary' : 'text-on-surface-variant hover:bg-surface-container-low',
                 )}
               >
                 <Icon className="h-5 w-5 shrink-0" />
-                <span className="max-w-full truncate">{item.mobileLabel}</span>
+                <span className="w-full truncate text-center">{item.mobileLabel}</span>
               </button>
             );
           })}
