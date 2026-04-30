@@ -1437,6 +1437,332 @@ export async function getSubmission(id: string) {
   return { submission };
 }
 
+export async function saveSubmissionReview(id: string, review: any) {
+  const personalInfo = review.personalInfo || {};
+  const emergencyContact = review.emergencyContact || {};
+  const medicalHistory = review.medicalHistory || {};
+  const studentMeasurements = review.studentMeasurements || {};
+  const staffMeasurements = review.staffMeasurements || {};
+  const labResults = review.labResults || {};
+  const clearanceInfo = review.clearanceInfo || {};
+  const nextStatus = review.status;
+  const now = new Date().toISOString();
+
+  if (DEMO_MODE) {
+    const records = getDemoSubmissions();
+    const nextRecords = records.map((record) =>
+      record.id === id
+        ? {
+            ...record,
+            firstName: personalInfo.firstName || record.firstName,
+            lastName: personalInfo.lastName || record.lastName,
+            middleInitial: personalInfo.middleInitial || '',
+            department: personalInfo.department || '',
+            course: personalInfo.course || '',
+            year: String(personalInfo.year || record.year || ''),
+            age: personalInfo.age || '',
+            sex: personalInfo.sex || '',
+            birthday: personalInfo.birthday || '',
+            civilStatus: personalInfo.civilStatus || '',
+            contactNumber: personalInfo.contactNumber || '',
+            address: personalInfo.address || '',
+            allergyDetails: review.allergyDetails || '',
+            hadOperation: review.hadOperation || 'no',
+            operationDetails: review.operationDetails || '',
+            bloodPressure: studentMeasurements.bloodPressure || '',
+            weight: studentMeasurements.weight || '',
+            height: studentMeasurements.height || '',
+            bmi: studentMeasurements.bmi || '',
+            emergencyContact: {
+              name: emergencyContact.name || '',
+              relationship: emergencyContact.relationship || '',
+              phone: emergencyContact.phone || '',
+              address: emergencyContact.address || '',
+            },
+            medicalHistory,
+            staffMeasurements: {
+              bloodPressure: staffMeasurements.bloodPressure || '',
+              cardiacRate: staffMeasurements.cardiacRate || '',
+              respiratoryRate: staffMeasurements.respiratoryRate || '',
+              temperature: staffMeasurements.temperature || '',
+              weight: staffMeasurements.weight || '',
+              height: staffMeasurements.height || '',
+              bmi: staffMeasurements.bmi || '',
+              visualAcuity: staffMeasurements.visualAcuity || '',
+              skin: staffMeasurements.skin || '',
+              heent: staffMeasurements.heent || '',
+              chestLungs: staffMeasurements.chestLungs || '',
+              heart: staffMeasurements.heart || '',
+              abdomen: staffMeasurements.abdomen || '',
+              extremities: staffMeasurements.extremities || '',
+              others: staffMeasurements.others || '',
+              examinedBy: staffMeasurements.examinedBy || '',
+            },
+            labResults: {
+              xrayDate: labResults.xrayDate || '',
+              xrayResult: labResults.xrayResult || 'normal',
+              xrayFindings: labResults.xrayFindings || '',
+              cbcDate: labResults.cbcDate || '',
+              hemoglobin: labResults.hemoglobin || '',
+              hematocrit: labResults.hematocrit || '',
+              wbc: labResults.wbc || '',
+              plateletCount: labResults.plateletCount || '',
+              bloodType: labResults.bloodType || '',
+              glucose: labResults.glucose || '',
+              protein: labResults.protein || '',
+              urinalysisDate: labResults.urinalysisDate || '',
+              urinalysisGlucose: labResults.urinalysisGlucose || '',
+              urinalysisProtein: labResults.urinalysisProtein || '',
+              others: labResults.others || '',
+            },
+            clearanceInfo: {
+              findingsNormal: typeof clearanceInfo.findingsNormal === 'boolean' ? clearanceInfo.findingsNormal : true,
+              diagnosis: clearanceInfo.diagnosis || '',
+              remarks: clearanceInfo.remarks || '',
+              purpose: clearanceInfo.purpose || 'enrolment',
+              controlNo: clearanceInfo.controlNo || '',
+              issuedDate: clearanceInfo.issuedDate || '',
+            },
+            staffNotes: review.staffNotes ?? record.staffNotes,
+            status: (nextStatus || record.status) as MockSubmission['status'],
+            updatedAt: now,
+          }
+        : record,
+    );
+    setDemoSubmissions(nextRecords);
+    return { success: true as const };
+  }
+
+  const me = await getMe();
+  const reviewedBy = me.staff?.id || null;
+
+  await Promise.all([
+    restRequest(
+      'submissions',
+      `id=eq.${id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          first_name: personalInfo.firstName || null,
+          last_name: personalInfo.lastName || null,
+          middle_initial: personalInfo.middleInitial || null,
+          department: personalInfo.department || null,
+          course: personalInfo.course || null,
+          year_level: personalInfo.year || null,
+          age: personalInfo.age ? Number(personalInfo.age) : null,
+          sex: personalInfo.sex || null,
+          birthday: personalInfo.birthday || null,
+          civil_status: personalInfo.civilStatus || null,
+          contact_number: personalInfo.contactNumber || null,
+          address: personalInfo.address || null,
+          allergy_details: review.allergyDetails || null,
+          had_operation: review.hadOperation || null,
+          operation_details: review.operationDetails || null,
+          blood_pressure: studentMeasurements.bloodPressure || null,
+          weight: studentMeasurements.weight || null,
+          height: studentMeasurements.height || null,
+          bmi: studentMeasurements.bmi || null,
+          staff_notes: review.staffNotes || null,
+          status: nextStatus || undefined,
+          reviewed_by: reviewedBy,
+          updated_at: now,
+        }),
+      },
+    ),
+    personalInfo.studentId
+      ? restRequest(
+          'students',
+          `student_id=eq.${encodeURIComponent(personalInfo.studentId)}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              first_name: personalInfo.firstName || null,
+              last_name: personalInfo.lastName || null,
+              middle_initial: personalInfo.middleInitial || null,
+              department: personalInfo.department || null,
+              course: personalInfo.course || null,
+              year_level: personalInfo.year ? Number(personalInfo.year) : null,
+              age: personalInfo.age ? Number(personalInfo.age) : null,
+              sex: personalInfo.sex || null,
+              birthday: personalInfo.birthday || null,
+              civil_status: personalInfo.civilStatus || null,
+              contact_number: personalInfo.contactNumber || null,
+              address: personalInfo.address || null,
+            }),
+          },
+        )
+      : Promise.resolve({}),
+    restRequest(
+      'emergency_contacts',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          name: emergencyContact.name || null,
+          relationship: emergencyContact.relationship || null,
+          phone: emergencyContact.phone || null,
+          address: emergencyContact.address || null,
+        }),
+      },
+    ),
+    restRequest(
+      'medical_history',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          allergy: Boolean(medicalHistory.allergy),
+          asthma: Boolean(medicalHistory.asthma),
+          chicken_pox: Boolean(medicalHistory.chickenPox),
+          diabetes: Boolean(medicalHistory.diabetes),
+          dysmenorrhea: Boolean(medicalHistory.dysmenorrhea),
+          epilepsy_seizure: Boolean(medicalHistory.epilepsySeizure),
+          heart_disorder: Boolean(medicalHistory.heartDisorder),
+          hepatitis: Boolean(medicalHistory.hepatitis),
+          hypertension: Boolean(medicalHistory.hypertension),
+          measles: Boolean(medicalHistory.measles),
+          mumps: Boolean(medicalHistory.mumps),
+          anxiety_disorder: Boolean(medicalHistory.anxietyDisorder),
+          panic_attack: Boolean(medicalHistory.panicAttack),
+          pneumonia: Boolean(medicalHistory.pneumonia),
+          ptb_primary_complex: Boolean(medicalHistory.ptbPrimaryComplex),
+          typhoid_fever: Boolean(medicalHistory.typhoidFever),
+          covid19: Boolean(medicalHistory.covid19),
+          uti: Boolean(medicalHistory.uti),
+        }),
+      },
+    ),
+    restRequest(
+      'staff_measurements',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          blood_pressure: staffMeasurements.bloodPressure || null,
+          cardiac_rate: staffMeasurements.cardiacRate || null,
+          respiratory_rate: staffMeasurements.respiratoryRate || null,
+          temperature: staffMeasurements.temperature || null,
+          weight: staffMeasurements.weight || null,
+          height: staffMeasurements.height || null,
+          bmi: staffMeasurements.bmi || null,
+          visual_acuity: staffMeasurements.visualAcuity || null,
+          skin: staffMeasurements.skin || null,
+          heent: staffMeasurements.heent || null,
+          chest_lungs: staffMeasurements.chestLungs || null,
+          heart: staffMeasurements.heart || null,
+          abdomen: staffMeasurements.abdomen || null,
+          extremities: staffMeasurements.extremities || null,
+          others: staffMeasurements.others || null,
+          examined_by: staffMeasurements.examinedBy || null,
+          updated_by: reviewedBy,
+          updated_at: now,
+        }),
+      },
+    ),
+    restRequest(
+      'lab_chest_xray',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          xray_date: labResults.xrayDate || null,
+          xray_result: labResults.xrayResult || null,
+          xray_findings: labResults.xrayFindings || null,
+        }),
+      },
+    ),
+    restRequest(
+      'lab_cbc',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          cbc_date: labResults.cbcDate || null,
+          hemoglobin: labResults.hemoglobin || null,
+          hematocrit: labResults.hematocrit || null,
+          wbc: labResults.wbc || null,
+          platelet_count: labResults.plateletCount || null,
+          blood_type: labResults.bloodType || null,
+          glucose: labResults.glucose || null,
+          protein: labResults.protein || null,
+        }),
+      },
+    ),
+    restRequest(
+      'lab_urinalysis',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          urinalysis_date: labResults.urinalysisDate || null,
+          glucose: labResults.urinalysisGlucose || null,
+          protein: labResults.urinalysisProtein || null,
+        }),
+      },
+    ),
+    restRequest(
+      'certificates',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: id,
+          findings_normal: typeof clearanceInfo.findingsNormal === 'boolean' ? clearanceInfo.findingsNormal : null,
+          diagnosis: clearanceInfo.diagnosis || null,
+          remarks: clearanceInfo.remarks || null,
+          purpose: clearanceInfo.purpose || null,
+          control_no: clearanceInfo.controlNo || null,
+          issued_date: clearanceInfo.issuedDate || null,
+          issued_at: clearanceInfo.issuedDate || null,
+          updated_at: now,
+        }),
+      },
+    ),
+  ]);
+
+  return { success: true as const };
+}
+
 export async function updateSubmissionStatus(id: string, status: string, staffNotes?: string) {
   if (DEMO_MODE) {
     const records = getDemoSubmissions();
