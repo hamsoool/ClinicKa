@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Welcome to React Router!
 
 A modern, production-ready template for building full-stack React applications using React Router.
@@ -86,7 +85,6 @@ This template comes with [Tailwind CSS](https://tailwindcss.com/) already config
 ---
 
 Built with ❤️ using React Router.
-=======
 
   # Build full stack app
 
@@ -104,4 +102,3 @@ Accounts:
 clinic.staff@gordoncollege.edu.ph / Clinic123!
 clinic.admin@gordoncollege.edu.ph / Clinic123!
   
->>>>>>> 22e899a44fee0b4c6f72f1cc2f504b17ad2d7ce1
