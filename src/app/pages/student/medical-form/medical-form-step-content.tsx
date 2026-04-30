@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Camera, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
@@ -17,7 +17,7 @@ type Props = {
   onEmergencyContactChange: (field: 'name' | 'relationship' | 'phone' | 'address', value: string) => void;
   onMedicalConditionChange: (condition: MedicalConditionKey, checked: boolean) => void;
   onMeasurementChange: (field: 'bloodPressure' | 'weight' | 'height' | 'bmi', value: string) => void;
-  onFileChange: (field: 'photoFile' | 'signatureFile' | 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => void;
+  onFileChange: (field: 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => void;
   getBmiCategory: (bmi: string) => BmiCategory;
 };
 
@@ -257,54 +257,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </div>
             </div>
           </div>
-          <div className="mt-6 border-t pt-4">
-            <h4 className="mb-4 font-semibold">Data Privacy Waiver</h4>
-            <div className="flex items-start space-x-2">
-              <Checkbox id="privacy" checked={formData.dataPrivacyConsent} onCheckedChange={(checked) => onFieldChange('dataPrivacyConsent', checked === true)} />
-              <Label htmlFor="privacy" className="text-sm font-normal">
-                *Data Privacy Waiver: I am willing to disclose my personal information with the GC clinic. I have the right to access my personal data
-                in a timely manner (5 days request). The clinic respects patient's privacy and is accountable to protect my personal information. *
-              </Label>
-            </div>
-            <div className="mt-6 rounded-xl border bg-primary/5 p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Camera className="h-5 w-5 text-primary" />
-                <Label htmlFor="photo" className="text-base font-semibold">
-                  1x1 Student Photo *
-                </Label>
-              </div>
-              <p className="mb-3 text-xs text-muted-foreground">Upload a clear, recent 1x1 photo (JPEG or PNG, max 5 MB). This is required to proceed.</p>
-              <Input
-                id="photo"
-                type="file"
-                accept="image/jpeg,image/png,image/jpg"
-                aria-label="Upload student photo"
-                onChange={(event) => onFileChange('photoFile', event.target.files?.[0] || null)}
-                className="cursor-pointer"
-              />
-              {formData.photoFile && (
-                <div className="mt-3 flex items-center gap-3">
-                  <img src={URL.createObjectURL(formData.photoFile)} alt="Preview" className="h-16 w-16 rounded-lg border object-cover" />
-                  <div className="flex items-center text-sm text-green-600">
-                    <Check className="mr-2 h-4 w-4" />
-                    {formData.photoFile.name}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="mt-4">
-              <Label htmlFor="signature">Signature of Student (Upload)</Label>
-              <Input
-                id="signature"
-                type="file"
-                accept="image/*"
-                aria-label="Upload student signature"
-                onChange={(event) => onFileChange('signatureFile', event.target.files?.[0] || null)}
-                className="cursor-pointer"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">Upload your signature image (PNG, JPG)</p>
-            </div>
-          </div>
         </div>
       );
     case 4:
@@ -438,32 +390,27 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <CardTitle className="text-lg">Personal Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <div className="mb-4 flex items-start gap-4">
-                {formData.photoFile && (
-                  <img src={URL.createObjectURL(formData.photoFile)} alt="Student photo" className="h-20 w-20 rounded-xl border object-cover" />
-                )}
-                <div className="grid flex-1 grid-cols-2 gap-2">
-                  <p className="text-muted-foreground">Name:</p>
-                  <p className="font-medium">
-                    {formData.lastName}, {formData.firstName} {formData.middleInitial}
-                  </p>
-                  <p className="text-muted-foreground">Student ID:</p>
-                  <p className="font-medium">{formData.studentId}</p>
-                  <p className="text-muted-foreground">Course/Dept:</p>
-                  <p className="font-medium">
-                    {formData.course} ({formData.department})
-                  </p>
-                  <p className="text-muted-foreground">Year Level:</p>
-                  <p className="font-medium">{YEAR_LEVELS.find((year) => year.value === formData.yearLevel)?.label}</p>
-                  <p className="text-muted-foreground">Birthday:</p>
-                  <p className="font-medium">{formData.birthday}</p>
-                  <p className="text-muted-foreground">Age / Sex:</p>
-                  <p className="font-medium">
-                    {formData.age} / {formData.sex === 'female' ? 'F' : 'M'}
-                  </p>
-                  <p className="text-muted-foreground">Civil Status:</p>
-                  <p className="font-medium">{formData.civilStatus}</p>
-                </div>
+              <div className="grid flex-1 grid-cols-2 gap-2">
+                <p className="text-muted-foreground">Name:</p>
+                <p className="font-medium">
+                  {formData.lastName}, {formData.firstName} {formData.middleInitial}
+                </p>
+                <p className="text-muted-foreground">Student ID:</p>
+                <p className="font-medium">{formData.studentId}</p>
+                <p className="text-muted-foreground">Course/Dept:</p>
+                <p className="font-medium">
+                  {formData.course} ({formData.department})
+                </p>
+                <p className="text-muted-foreground">Year Level:</p>
+                <p className="font-medium">{YEAR_LEVELS.find((year) => year.value === formData.yearLevel)?.label}</p>
+                <p className="text-muted-foreground">Birthday:</p>
+                <p className="font-medium">{formData.birthday}</p>
+                <p className="text-muted-foreground">Age / Sex:</p>
+                <p className="font-medium">
+                  {formData.age} / {formData.sex === 'female' ? 'F' : 'M'}
+                </p>
+                <p className="text-muted-foreground">Civil Status:</p>
+                <p className="font-medium">{formData.civilStatus}</p>
               </div>
             </CardContent>
           </Card>
@@ -519,12 +466,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 <Check className="h-4 w-4 text-green-600" />
                 <span>Urinalysis: {formData.urinalysisFile?.name}</span>
               </div>
-              {formData.signatureFile && (
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-600" />
-                  <span>Signature: {formData.signatureFile.name}</span>
-                </div>
-              )}
             </CardContent>
           </Card>
           <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">

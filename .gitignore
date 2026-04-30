@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 scripts/*.local.mjs
+scripts/create-admin-account.local.mjs
+scripts/export-screens.mjs
 *.crdownload
 design-import/
 "GC General Privacy Notice_files"/

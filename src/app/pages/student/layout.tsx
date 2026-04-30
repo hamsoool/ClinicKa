@@ -69,8 +69,19 @@ export default function StudentLayout() {
 
     void loadProfilePhoto();
 
+    const handleProfileAssetUpdate = () => {
+      void loadProfilePhoto();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('gc-profile-assets-updated', handleProfileAssetUpdate as EventListener);
+    }
+
     return () => {
       active = false;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('gc-profile-assets-updated', handleProfileAssetUpdate as EventListener);
+      }
     };
   }, [me?.student?.student_id, me?.profile.student_id]);
 

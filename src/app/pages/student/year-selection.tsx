@@ -56,7 +56,7 @@ export default function StudentYearSelection() {
               key={year.level}
               type="button"
               disabled={isLocked}
-              onClick={() => !isLocked && navigate(`/student/medical-form/${year.level}`)}
+              onClick={() => !isLocked && navigate(`/student/privacy-waiver/${year.level}`)}
               className={`group relative flex min-h-[240px] flex-col items-center justify-center overflow-hidden rounded-[1.25rem] p-10 text-center transition-all duration-300 ${
                 isLocked
                   ? 'cursor-not-allowed bg-surface-container-high text-on-surface-variant/60'

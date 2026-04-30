@@ -15,11 +15,12 @@ import type {
 type UseStudentMedicalFormArgs = {
   year?: string;
   me?: AuthMe | null;
+  privacyAccepted?: boolean;
 };
 
 const TOTAL_STEPS = 6;
 
-function buildInitialFormData(year: string | undefined, me?: AuthMe | null): MedicalFormData {
+function buildInitialFormData(year: string | undefined, me?: AuthMe | null, privacyAccepted = false): MedicalFormData {
   const student = me?.student;
   return {
     studentId: student?.student_id || me?.profile.student_id || '',
@@ -45,9 +46,7 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null): Med
       phone: '',
       address: '',
     },
-    dataPrivacyConsent: true,
-    signatureFile: null,
-    photoFile: null,
+    dataPrivacyConsent: privacyAccepted,
     bloodPressure: '',
     weight: '',
     height: '',
@@ -70,19 +69,19 @@ function calculateBmi(weight: string, height: string): string {
   return '';
 }
 
-export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
+export function useStudentMedicalForm({ year, me, privacyAccepted = false }: UseStudentMedicalFormArgs) {
   const student = me?.student;
   const [step, setStep] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me));
+  const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, privacyAccepted));
 
   useEffect(() => {
     setSubmitted(false);
     setStep(1);
     setUploading(false);
-    setFormData(buildInitialFormData(year, me));
-  }, [year, me?.profile.id]);
+    setFormData(buildInitialFormData(year, me, privacyAccepted));
+  }, [year, me?.profile.id, privacyAccepted]);
 
   useEffect(() => {
     setFormData((prev) => ({
@@ -99,6 +98,7 @@ export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
       civilStatus: student?.civil_status || prev.civilStatus,
       contactNumber: student?.contact_number || prev.contactNumber,
       address: student?.address || prev.address,
+      dataPrivacyConsent: privacyAccepted || prev.dataPrivacyConsent,
       yearLevel: year || prev.yearLevel,
       year: year || prev.year,
     }));
@@ -120,6 +120,7 @@ export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
     student?.middle_initial,
     student?.sex,
     student?.student_id,
+    privacyAccepted,
     year,
   ]);
 
@@ -165,7 +166,7 @@ export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
     });
   }, []);
 
-  const handleFileChange = useCallback((field: 'photoFile' | 'signatureFile' | 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => {
+  const handleFileChange = useCallback((field: 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => {
     if (file && file.size > 10 * 1024 * 1024) {
       toast.error('File size must be less than 10MB');
       return;
@@ -200,9 +201,7 @@ export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
         return (
           formData.hadOperation &&
           formData.emergencyContact.name &&
-          formData.emergencyContact.phone &&
-          formData.dataPrivacyConsent &&
-          formData.photoFile
+          formData.emergencyContact.phone
         );
       case 4:
         return formData.bloodPressure && formData.weight && formData.height;
@@ -230,7 +229,6 @@ export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
           formData.emergencyContact.name &&
           formData.emergencyContact.phone &&
           formData.dataPrivacyConsent &&
-          formData.photoFile &&
           formData.bloodPressure &&
           formData.weight &&
           formData.height &&
@@ -310,8 +308,6 @@ export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
       const { recordId } = await submitMedicalRecord(payload);
 
       const uploads = [
-        formData.photoFile ? uploadFile(formData.photoFile, recordId, 'photo') : null,
-        formData.signatureFile ? uploadFile(formData.signatureFile, recordId, 'signature') : null,
         formData.xrayFile ? uploadFile(formData.xrayFile, recordId, 'xray') : null,
         formData.cbcFile ? uploadFile(formData.cbcFile, recordId, 'cbc') : null,
         formData.urinalysisFile ? uploadFile(formData.urinalysisFile, recordId, 'urinalysis') : null,

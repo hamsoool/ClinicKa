@@ -585,6 +585,78 @@ app.get("/me", async (c) => {
   });
 });
 
+app.put("/student-profile", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const data = await c.req.json();
+    const studentId = requester.profile.student_id || requester.student?.student_id || data.studentId;
+
+    if (!studentId) {
+      return badRequest('Student ID is required');
+    }
+
+    const firstName = String(data.firstName || '').trim() || null;
+    const lastName = String(data.lastName || '').trim() || null;
+    const department = String(data.department || '').trim() || null;
+    const course = String(data.course || '').trim() || null;
+    const birthday = String(data.birthday || '').trim() || null;
+    const contactNumber = String(data.contactNumber || '').trim() || null;
+    const address = String(data.address || '').trim() || null;
+
+    const { data: updatedProfile, error: profileError } = await supabase
+      .from('profiles')
+      .update({
+        first_name: firstName,
+        last_name: lastName,
+        department,
+        course,
+        student_id: studentId,
+      })
+      .eq('id', requester.profile.id)
+      .select('*')
+      .single();
+
+    if (profileError || !updatedProfile) {
+      throw new Error(profileError?.message || 'Failed to update profile');
+    }
+
+    const { data: updatedStudent, error: studentError } = await supabase
+      .from('students')
+      .upsert({
+        student_id: studentId,
+        profile_id: requester.profile.id,
+        first_name: firstName,
+        last_name: lastName,
+        department,
+        course,
+        birthday,
+        contact_number: contactNumber,
+        address,
+      }, {
+        onConflict: 'student_id',
+      })
+      .select('*')
+      .single();
+
+    if (studentError || !updatedStudent) {
+      throw new Error(studentError?.message || 'Failed to update student record');
+    }
+
+    return c.json({
+      success: true,
+      profile: updatedProfile,
+      student: updatedStudent,
+    });
+  } catch (error) {
+    console.log('Error updating student profile:', error);
+    return c.json({ error: 'Failed to update student profile', details: String(error) }, 500);
+  }
+});
+
 app.post("/submit-record", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);

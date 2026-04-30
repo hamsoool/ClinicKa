@@ -1,6 +1,6 @@
-﻿import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Upload } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -13,8 +13,15 @@ import { useStudentMedicalForm } from './medical-form/use-student-medical-form';
 export default function StudentMedicalForm() {
   const navigate = useNavigate();
   const { year } = useParams();
+  const [searchParams] = useSearchParams();
   const { me } = useAuth();
   const previewRef = useRef<HTMLDivElement>(null);
+  const privacyAccepted = searchParams.get('privacy') === 'accepted';
+
+  useEffect(() => {
+    if (!year || privacyAccepted) return;
+    navigate(`/student/privacy-waiver/${year}`, { replace: true });
+  }, [navigate, privacyAccepted, year]);
 
   const {
     step,
@@ -32,7 +39,7 @@ export default function StudentMedicalForm() {
     handleFileChange,
     getBmiCategory,
     submit,
-  } = useStudentMedicalForm({ year, me });
+  } = useStudentMedicalForm({ year, me, privacyAccepted });
 
   const downloadPdf = useCallback(() => {
     if (!previewRef.current) return;
