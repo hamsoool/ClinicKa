@@ -86,6 +86,18 @@ npm run build
 
 Creates a production build in `dist/`.
 
+```bash
+npm run typecheck
+```
+
+Runs the TypeScript compiler without emitting files.
+
+```bash
+npm run check
+```
+
+Runs the same validation used by pull requests targeting `master`: TypeScript type checking followed by a production build.
+
 ## Supabase Notes
 
 - Edge function entry point: `supabase/functions/server/index.ts`

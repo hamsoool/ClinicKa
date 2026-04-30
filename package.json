@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "check": "npm run typecheck && npm run build",
+    "typecheck": "tsc --noEmit",
     "dev": "vite"
   },
   "dependencies": {
