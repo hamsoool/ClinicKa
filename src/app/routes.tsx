@@ -30,7 +30,26 @@ const AdminReports = lazy(() => import('./pages/admin/reports'));
 
 function withSuspense(Component: ComponentType) {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center p-6" aria-busy="true" aria-live="polite">
+          <div className="w-full max-w-sm rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
+            <span className="sr-only">Loading page</span>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 animate-pulse rounded-full bg-surface-container-high" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-3 w-2/3 animate-pulse rounded-full bg-surface-container-high" />
+                <div className="h-3 w-1/2 animate-pulse rounded-full bg-surface-container" />
+              </div>
+            </div>
+            <div className="mt-5 grid gap-2">
+              <div className="h-3 animate-pulse rounded-full bg-surface-container" />
+              <div className="h-3 w-5/6 animate-pulse rounded-full bg-surface-container" />
+            </div>
+          </div>
+        </div>
+      }
+    >
       <Component />
     </Suspense>
   );

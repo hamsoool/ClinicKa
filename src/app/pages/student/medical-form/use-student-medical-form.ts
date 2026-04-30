@@ -78,6 +78,13 @@ export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
   const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me));
 
   useEffect(() => {
+    setSubmitted(false);
+    setStep(1);
+    setUploading(false);
+    setFormData(buildInitialFormData(year, me));
+  }, [year, me?.profile.id]);
+
+  useEffect(() => {
     setFormData((prev) => ({
       ...prev,
       studentId: student?.student_id || me?.profile.student_id || prev.studentId,
@@ -208,6 +215,32 @@ export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
     }
   }, [formData, step]);
 
+  const canSubmit = useMemo(
+    () =>
+      Boolean(
+        formData.firstName &&
+          formData.lastName &&
+          formData.studentId &&
+          formData.department &&
+          formData.yearLevel &&
+          formData.age &&
+          formData.sex &&
+          formData.birthday &&
+          formData.hadOperation &&
+          formData.emergencyContact.name &&
+          formData.emergencyContact.phone &&
+          formData.dataPrivacyConsent &&
+          formData.photoFile &&
+          formData.bloodPressure &&
+          formData.weight &&
+          formData.height &&
+          formData.xrayFile &&
+          formData.cbcFile &&
+          formData.urinalysisFile,
+      ),
+    [formData],
+  );
+
   const previewRecord = useMemo<MockSubmission>(
     () => ({
       id: 'preview',
@@ -303,6 +336,7 @@ export function useStudentMedicalForm({ year, me }: UseStudentMedicalFormArgs) {
     uploading,
     submitted,
     canProceed,
+    canSubmit,
     previewRecord,
     updateField,
     updateEmergencyContact,

@@ -1,6 +1,6 @@
 import type { MedicalHistoryState } from './types';
 
-export const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAS', 'CED'] as const;
+export const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'] as const;
 
 export const YEAR_LEVELS = [
   { value: '1', label: '1st Year' },

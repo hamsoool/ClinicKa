@@ -1,9 +1,16 @@
 {
   "include": [
-    "**/*",
-    "**/.server/**/*",
-    "**/.client/**/*",
-    ".react-router/types/**/*"
+    "src/**/*",
+    "supabase/functions/**/*",
+    "utils/**/*",
+    "vite.config.ts"
+  ],
+  "exclude": [
+    "app",
+    "dist",
+    "exports",
+    "node_modules",
+    "react-router.config.ts"
   ],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
@@ -14,7 +21,7 @@
     "jsx": "react-jsx",
     "rootDirs": [".", "./.react-router/types"],
     "paths": {
-      "~/*": ["./app/*"]
+      "~/*": ["./src/*"]
     },
     "esModuleInterop": true,
     "verbatimModuleSyntax": true,

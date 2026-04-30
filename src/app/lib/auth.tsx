@@ -1,12 +1,47 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { clearStoredSession, getMe, getStoredSession, getUserByToken, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
+import { clearStoredSession, getMe, getStoredSession, getUserByToken, hasServerPasswordSetupCompleted, markServerPasswordSetupCompleted, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
+const PASSWORD_SETUP_MARKER_KEY = 'gc_password_setup_accounts';
 
 function isGCDomain(email?: string | null) {
   return !!email?.toLowerCase().endsWith(`@${GC_DOMAIN}`);
+}
+
+function normalizeEmail(email?: string | null) {
+  return (email || '').trim().toLowerCase();
+}
+
+function getPasswordSetupMarkers() {
+  if (typeof window === 'undefined') return new Set<string>();
+
+  const raw = window.localStorage.getItem(PASSWORD_SETUP_MARKER_KEY);
+  if (!raw) return new Set<string>();
+
+  try {
+    const parsed = JSON.parse(raw) as string[];
+    return new Set((parsed || []).map((entry) => normalizeEmail(entry)).filter(Boolean));
+  } catch {
+    window.localStorage.removeItem(PASSWORD_SETUP_MARKER_KEY);
+    return new Set<string>();
+  }
+}
+
+function hasPasswordSetupMarker(email?: string | null) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+  return getPasswordSetupMarkers().has(normalized);
+}
+
+function markPasswordSetupComplete(email?: string | null) {
+  const normalized = normalizeEmail(email);
+  if (!normalized || typeof window === 'undefined') return;
+
+  const markers = getPasswordSetupMarkers();
+  markers.add(normalized);
+  window.localStorage.setItem(PASSWORD_SETUP_MARKER_KEY, JSON.stringify([...markers]));
 }
 
 type AuthContextValue = {
@@ -114,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const authType = params.get('type');
 
     if (!accessToken) return;
+    const redirectAccessToken = accessToken;
 
     async function processAuthRedirect() {
       if (authType === 'signup') {
@@ -126,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const authUser = await getUserByToken(accessToken);
+        const authUser = await getUserByToken(redirectAccessToken);
         const email = authUser.email || params.get('email') || undefined;
 
         if (!isGCDomain(email)) {
@@ -142,35 +178,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const nextSession: AuthSession = {
-          access_token: accessToken,
+          access_token: redirectAccessToken,
           refresh_token: params.get('refresh_token') || undefined,
           token_type: params.get('token_type') || undefined,
           expires_in: params.get('expires_in') ? Number(params.get('expires_in')) : undefined,
           user: {
             id: authUser.id || params.get('user_id') || 'verified-user',
-            email,
+            email: email || undefined,
           },
         };
 
         const hasPasswordIdentity = (authUser.identities || []).some(
           (identity) => identity.provider === 'email',
         );
+        const hasServerPassword = await hasServerPasswordSetupCompleted(redirectAccessToken);
+        const hasExistingPassword =
+          hasPasswordIdentity || hasServerPassword || hasPasswordSetupMarker(email);
 
         setStoredSession(nextSession);
         setSession(nextSession);
-        setRequiresPasswordSetup(!hasPasswordIdentity);
+        setRequiresPasswordSetup(!hasExistingPassword);
         try {
-          const resolvedMe = await getMe(accessToken);
+          const resolvedMe = await getMe(redirectAccessToken);
           setMe(resolvedMe);
-          setRole(hasPasswordIdentity ? resolvedMe.profile.role : null);
+          setRole(hasExistingPassword ? resolvedMe.profile.role : null);
         } catch {
           const fallbackRole = resolveRoleFromEmail(email);
           setMe(buildMeFromSession(fallbackRole, nextSession));
-          setRole(hasPasswordIdentity ? fallbackRole : null);
+          setRole(hasExistingPassword ? fallbackRole : null);
         }
         const url = new URL(window.location.href);
         url.hash = '';
-        if (!hasPasswordIdentity) {
+        if (!hasExistingPassword) {
           url.searchParams.set('mode', 'signin');
           url.searchParams.set('password_setup', '1');
         }
@@ -301,6 +340,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('No active session found. Please sign in with Google again.');
       }
       await updateUserPassword(newPassword, session.access_token);
+      await markServerPasswordSetupCompleted(session.access_token);
+      markPasswordSetupComplete(session.user?.email || me?.profile?.email || null);
       const resolvedMe = await getMe(session.access_token);
       setMe(resolvedMe);
       setRole(resolvedMe.profile.role);
