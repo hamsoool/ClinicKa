@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
@@ -19,34 +20,31 @@ const YEAR_LABELS: Record<string, string> = {
 
 export default function StaffSubmissions() {
   const navigate = useNavigate();
-  const [submissions, setSubmissions] = useState<any[]>([]);
   const [filteredSubmissions, setFilteredSubmissions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
 
+  const { data: queryData, isLoading: loading, isError } = useQuery({
+    queryKey: ['staffSubmissions'],
+    queryFn: async () => {
+      const data = await getSubmissions();
+      return data.submissions || [];
+    }
+  });
+
+  const submissions = queryData || [];
+
   useEffect(() => {
-    loadSubmissions();
-  }, []);
+    if (isError) {
+      toast.error('Failed to load submissions');
+    }
+  }, [isError]);
 
   useEffect(() => {
     filterSubmissions();
   }, [searchQuery, statusFilter, departmentFilter, yearFilter, submissions]);
-
-  const loadSubmissions = async () => {
-    setLoading(true);
-    try {
-      const data = await getSubmissions();
-      setSubmissions(data.submissions || []);
-    } catch (error) {
-      console.error('Error loading submissions:', error);
-      toast.error('Failed to load submissions');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filterSubmissions = () => {
     let filtered = submissions;
