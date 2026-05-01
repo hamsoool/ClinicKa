@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -83,8 +84,6 @@ function matchesSearch(
 }
 
 export default function AdminUserAccounts() {
-  const [userAccounts, setUserAccounts] = useState<AdminUserAccount[]>([]);
-  const [archivedAccounts, setArchivedAccounts] = useState<ArchivedUserAccount[]>([]);
   const [tab, setTab] = useState('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [openCreate, setOpenCreate] = useState(false);
@@ -104,23 +103,29 @@ export default function AdminUserAccounts() {
     course: '',
   });
 
+  const { data: activeData, refetch: refetchActive, isError: isErrorActive } = useQuery({
+    queryKey: ['adminUserAccounts'],
+    queryFn: getUserAccounts
+  });
+
+  const { data: archivedData, refetch: refetchArchived, isError: isErrorArchived } = useQuery({
+    queryKey: ['adminArchivedAccounts'],
+    queryFn: getArchivedUserAccounts
+  });
+
+  const userAccounts = activeData?.users || [];
+  const archivedAccounts = archivedData?.users || [];
+
   const loadUsers = async () => {
-    try {
-      const [activeData, archivedData] = await Promise.all([
-        getUserAccounts(),
-        getArchivedUserAccounts(),
-      ]);
-      setUserAccounts(activeData.users || []);
-      setArchivedAccounts(archivedData.users || []);
-    } catch (error) {
-      console.error('Error loading user accounts:', error);
-      toast.error('Failed to load user accounts');
-    }
+    await Promise.all([refetchActive(), refetchArchived()]);
   };
 
   useEffect(() => {
-    void loadUsers();
-  }, []);
+    if (isErrorActive || isErrorArchived) {
+      toast.error('Failed to load user accounts');
+    }
+  }, [isErrorActive, isErrorArchived]);
+  
 
   const filteredActiveUsers = useMemo(
     () => userAccounts.filter((user) => matchesSearch(user, searchQuery)),

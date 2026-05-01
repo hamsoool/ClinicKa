@@ -1,13 +1,63 @@
-import { useState } from 'react';
-import { ArrowRight, MailCheck, ShieldCheck, Sparkles, Stethoscope } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRight, MailCheck, ShieldCheck, Sparkles, Stethoscope, RefreshCw } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
+import { resendVerificationEmail } from '../lib/api';
+import { toast } from 'sonner';
 
 const AUTH_LOGO_SRC = '/logo.png';
+const COOLDOWN_SECONDS = 300;
 
 export default function CheckEmailPage() {
   const params = new URLSearchParams(useLocation().search);
   const email = params.get('email');
   const [logoVisible, setLogoVisible] = useState(true);
+  const [cooldown, setCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
+
+  useEffect(() => {
+    if (!email) return;
+    const storageKey = `lastVerificationEmailSent_${email}`;
+    const lastSent = localStorage.getItem(storageKey);
+    if (lastSent) {
+      const elapsed = Math.floor((Date.now() - parseInt(lastSent, 10)) / 1000);
+      if (elapsed < COOLDOWN_SECONDS) {
+        setCooldown(COOLDOWN_SECONDS - elapsed);
+      }
+    } else {
+      localStorage.setItem(storageKey, Date.now().toString());
+      setCooldown(COOLDOWN_SECONDS);
+    }
+  }, [email]);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const interval = setInterval(() => {
+      setCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldown]);
+
+  const handleResend = async () => {
+    if (!email || cooldown > 0 || resending) return;
+    setResending(true);
+    try {
+      await resendVerificationEmail(email);
+      toast.success('Verification email sent again!');
+      const storageKey = `lastVerificationEmailSent_${email}`;
+      localStorage.setItem(storageKey, Date.now().toString());
+      setCooldown(COOLDOWN_SECONDS);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to resend email');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const formatCooldown = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div
@@ -107,10 +157,27 @@ export default function CheckEmailPage() {
                 </p>
               </div>
               <div className="rounded-2xl border border-[#e7edf3] bg-[#f8fbff] px-4 py-4 text-sm leading-7 text-[#425468]">
-                If the email does not arrive after a few minutes, go back to sign up and double-check the address you
-                entered.
+                If the email does not arrive after a few minutes, you can request a new verification link below.
               </div>
             </div>
+
+            {email && (
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={cooldown > 0 || resending}
+                  className="inline-flex w-full h-12 items-center justify-center gap-2 rounded-xl border-2 border-[#e7edf3] bg-white px-5 text-sm font-semibold text-[#0b1c30] transition hover:bg-[#f8fbff] hover:border-[#cad8d5] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw className={`h-4 w-4 ${resending ? 'animate-spin' : ''}`} />
+                  {resending
+                    ? 'Sending...'
+                    : cooldown > 0
+                      ? `Resend available in ${formatCooldown(cooldown)}`
+                      : 'Resend Verification Email'}
+                </button>
+              </div>
+            )}
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link

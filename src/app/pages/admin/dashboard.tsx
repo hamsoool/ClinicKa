@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import {
   Activity,
@@ -119,12 +120,6 @@ function getStatusStyles(status: SubmissionSummary['status']) {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
-  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
-  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
-  const [userAccounts, setUserAccounts] = useState<UserAccount[]>([]);
-  const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const displayName =
     [me?.profile.first_name || '', me?.profile.last_name || '']
       .filter(Boolean)
@@ -133,30 +128,31 @@ export default function AdminDashboard() {
     formatEmailName(me?.profile.email) ||
     'System Administrator';
 
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const [analyticsData, staffData, userData, submissionData] = await Promise.all([
-          getAnalytics(),
-          getStaffUsers(),
-          getUserAccounts(),
-          getSubmissions(),
-        ]);
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ['adminAnalytics'],
+    queryFn: getAnalytics as () => Promise<AnalyticsSummary>
+  });
 
-        setAnalytics(analyticsData as AnalyticsSummary);
-        setStaffUsers((staffData.staff || []) as StaffUser[]);
-        setUserAccounts((userData.users || []) as UserAccount[]);
-        setSubmissions((submissionData.submissions || []) as SubmissionSummary[]);
-      } catch (error) {
-        console.error('Error loading admin dashboard:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const { data: staffData, isLoading: staffLoading } = useQuery({
+    queryKey: ['staffUsers'],
+    queryFn: getStaffUsers
+  });
 
-    void loadData();
-  }, []);
+  const { data: userData, isLoading: userLoading } = useQuery({
+    queryKey: ['adminUserAccounts'],
+    queryFn: getUserAccounts
+  });
+
+  const { data: submissionData, isLoading: submissionLoading } = useQuery({
+    queryKey: ['adminSubmissions'],
+    queryFn: getSubmissions
+  });
+
+  const staffUsers = (staffData?.staff || []) as StaffUser[];
+  const userAccounts = (userData?.users || []) as UserAccount[];
+  const submissions = (submissionData?.submissions || []) as SubmissionSummary[];
+
+  const loading = analyticsLoading || staffLoading || userLoading || submissionLoading;
 
   if (loading) {
     return <PortalPageSkeleton variant="dashboard" />;

@@ -1119,6 +1119,52 @@ export async function signUpWithPassword(fullName: string, email: string, passwo
   };
 }
 
+export async function resendVerificationEmail(email: string) {
+  if (!supabaseUrl || !publicAnonKey) {
+    throw new Error('Missing Supabase config.');
+  }
+
+  const emailRedirectTo =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/auth?mode=signin&verified=1`
+      : undefined;
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/resend`, {
+    method: 'POST',
+    headers: {
+      apikey: publicAnonKey,
+      Authorization: `Bearer ${publicAnonKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo,
+      },
+    }),
+  });
+
+  const rawBody = await response.text();
+  let payload: Record<string, any> = {};
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const message =
+      payload.msg ||
+      payload.error_description ||
+      payload.error ||
+      `Failed to resend verification email (${response.status})`;
+    throw new Error(message);
+  }
+
+  return { success: true as const };
+}
+
 export async function signOut() {
   if (!supabaseUrl || !publicAnonKey) {
     clearStoredSession();

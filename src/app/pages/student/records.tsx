@@ -3,7 +3,8 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import type { MockSubmission } from '../../lib/mock-data';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { FileText, Eye, X, ArrowLeft, AlertCircle } from 'lucide-react';
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import { getStudentRecords } from '../../lib/api';
@@ -11,24 +12,19 @@ import { toast } from 'sonner';
 
 export default function StudentRecords() {
   const [selectedRecord, setSelectedRecord] = useState<MockSubmission | null>(null);
-  const [records, setRecords] = useState<MockSubmission[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading: loading, isError } = useQuery({
+    queryKey: ['studentRecords'],
+    queryFn: async () => {
+      const response = await getStudentRecords();
+      return response.records || [];
+    }
+  });
 
-  useEffect(() => {
-    const loadRecords = async () => {
-      try {
-        const data = await getStudentRecords();
-        setRecords(data.records || []);
-      } catch (error) {
-        console.error('Error loading student records:', error);
-        toast.error('Failed to load records');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const records = data || [];
 
-    loadRecords();
-  }, []);
+  if (isError) {
+    toast.error('Failed to load records');
+  }
 
   if (loading) {
     return <PortalPageSkeleton variant="table" />;

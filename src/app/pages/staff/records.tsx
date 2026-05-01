@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
@@ -17,35 +18,30 @@ const YEAR_LABELS: Record<string, string> = {
 };
 
 export default function StaffRecords() {
-  const [records, setRecords] = useState<any[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
 
+  const { data: queryData, isLoading: loading, isError } = useQuery({
+    queryKey: ['staffRecords'],
+    queryFn: async () => {
+      const data = await getSubmissions();
+      return (data.submissions || []).filter((r: any) => r.status === 'approved');
+    }
+  });
+
+  const records = queryData || [];
+
   useEffect(() => {
-    loadRecords();
-  }, []);
+    if (isError) {
+      toast.error('Failed to load records');
+    }
+  }, [isError]);
 
   useEffect(() => {
     filterRecords();
   }, [searchQuery, departmentFilter, yearFilter, records]);
-
-  const loadRecords = async () => {
-    setLoading(true);
-    try {
-      const data = await getSubmissions();
-      // Only show approved records
-      const approvedRecords = (data.submissions || []).filter((r: any) => r.status === 'approved');
-      setRecords(approvedRecords);
-    } catch (error) {
-      console.error('Error loading records:', error);
-      toast.error('Failed to load records');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filterRecords = () => {
     let filtered = records;

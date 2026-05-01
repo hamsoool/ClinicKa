@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { AlertCircle, CheckCircle2, Clock3, FileText, Plus } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
@@ -28,40 +29,28 @@ export default function StudentDashboard() {
     .trim() || 'Student';
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const course = me?.student?.course || me?.profile.course || '';
-  const [records, setRecords] = useState<StudentRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const isInitialMountRef = useRef(true);
+  const { data, isLoading: loading, isError, error } = useQuery({
+    queryKey: ['studentRecords', studentId],
+    queryFn: async () => {
+      if (!studentId) return [];
+      const response = await getStudentRecords();
+      return (response.records || []) as StudentRecord[];
+    },
+    enabled: !!studentId,
+  });
+
+  const records = data || [];
 
   useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-    }
-    if (!studentId) {
-      setLoading(false);
-      return;
-    }
-
-    void loadRecords();
-  }, [studentId]);
-
-  const loadRecords = async () => {
-    setLoading(true);
-    try {
-      const data = await getStudentRecords();
-      setRecords((data.records || []) as StudentRecord[]);
-    } catch (error) {
-      console.error('Error loading records:', error);
-      const message =
-        error instanceof Error ? error.message : 'Failed to load records';
+    if (isError && error) {
+      const message = error instanceof Error ? error.message : 'Failed to load records';
       if (message.toLowerCase().includes('profile not found')) {
         toast.error('Your account is not fully set up yet. Please sign out and sign in again.');
-        return;
+      } else {
+        toast.error(message);
       }
-      toast.error(message);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [isError, error]);
 
   const getStatusBadge = (status?: string) => {
     switch (status) {

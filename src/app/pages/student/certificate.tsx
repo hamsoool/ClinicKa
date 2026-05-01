@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -10,33 +11,26 @@ import { toast } from 'sonner';
 import { getStudentRecords } from '../../lib/api';
 
 export default function StudentCertificate() {
-  const [record, setRecord] = useState<MockSubmission | null>(null);
-  const [loading, setLoading] = useState(true);
   const clearanceRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadStudentRecord();
-  }, []);
+  const { data: record, isLoading: loading, isError } = useQuery({
+    queryKey: ['studentRecords'],
+    queryFn: async () => {
+      const data = await getStudentRecords();
+      const records = data.records || [];
+      const approvedCertificate =
+        records.find((entry) => entry.status === 'approved' && entry.clearanceInfo?.controlNo) ||
+        records.find((entry) => entry.status === 'approved') ||
+        null;
+      return approvedCertificate || records[0] || null;
+    }
+  });
 
-  const loadStudentRecord = () => {
-    setLoading(true);
-    getStudentRecords()
-      .then((data) => {
-        const records = data.records || [];
-        const approvedCertificate =
-          records.find((entry) => entry.status === 'approved' && entry.clearanceInfo?.controlNo) ||
-          records.find((entry) => entry.status === 'approved') ||
-          null;
-        setRecord(approvedCertificate || records[0] || null);
-      })
-      .catch((error) => {
-        console.error('Error loading record:', error);
-        toast.error('Failed to load certificate');
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  };
+  useEffect(() => {
+    if (isError) {
+      toast.error('Failed to load certificate');
+    }
+  }, [isError]);
 
   const downloadClearancePDF = () => {
     if (!clearanceRef.current || !record) return;
