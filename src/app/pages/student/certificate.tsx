@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Download, FileText, ShieldCheck, Clock, AlertCircle } from 'lucide-react';
+import { PortalPageSkeleton } from '../../components/project-skeletons';
 import type { MockSubmission } from '../../lib/mock-data';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { toast } from 'sonner';
@@ -62,14 +63,7 @@ export default function StudentCertificate() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading certificate...</p>
-        </div>
-      </div>
-    );
+    return <PortalPageSkeleton variant="certificate" />;
   }
 
   if (!record) {

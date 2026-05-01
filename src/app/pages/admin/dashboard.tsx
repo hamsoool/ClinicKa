@@ -12,6 +12,7 @@ import {
   UserCog,
   Users,
 } from 'lucide-react';
+import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { getAnalytics, getStaffUsers, getSubmissions, getUserAccounts } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -158,11 +159,7 @@ export default function AdminDashboard() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-sm text-on-surface-variant">Loading admin dashboard...</div>
-      </div>
-    );
+    return <PortalPageSkeleton variant="dashboard" />;
   }
 
   const activeStaffCount = staffUsers.filter((staff) => staff.status === 'Active').length;

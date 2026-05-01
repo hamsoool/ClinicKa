@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { PortalPageSkeleton } from '../../components/project-skeletons';
 import type { MockSubmission } from '../../lib/mock-data';
 import { useEffect, useState } from 'react';
 import { FileText, Eye, X, ArrowLeft, AlertCircle } from 'lucide-react';
@@ -29,6 +30,10 @@ export default function StudentRecords() {
     loadRecords();
   }, []);
 
+  if (loading) {
+    return <PortalPageSkeleton variant="table" />;
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -54,9 +59,7 @@ export default function StudentRecords() {
         <CardTitle>Medical Record History</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="text-center py-12 text-muted-foreground">Loading records...</div>
-          ) : records.length === 0 ? (
+          {records.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground bg-muted/20 rounded-lg border-2 border-dashed">
               <FileText className="w-12 h-12 mx-auto mb-4 opacity-20" />
               <p className="text-lg font-medium">No records found</p>

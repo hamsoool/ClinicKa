@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ComponentType } from 'react';
 import { createBrowserRouter } from 'react-router';
+import { PortalPageSkeleton, PortalShellSkeleton, PublicPageSkeleton } from './components/project-skeletons';
 import { RedirectIfAuthenticated, RequireAuth } from './lib/auth';
 
 const RoleSelection = lazy(() => import('./pages/role-selection'));
@@ -29,28 +30,37 @@ const AdminStaffManagement = lazy(() => import('./pages/admin/staff-management')
 const AdminUserAccounts = lazy(() => import('./pages/admin/user-accounts'));
 const AdminReports = lazy(() => import('./pages/admin/reports'));
 
-function withSuspense(Component: ComponentType) {
+type RouteSkeletonVariant =
+  | 'marketing'
+  | 'auth'
+  | 'portal-shell'
+  | 'portal-page'
+  | 'portal-table'
+  | 'portal-certificate';
+
+function renderSkeleton(variant: RouteSkeletonVariant) {
+  if (variant === 'marketing' || variant === 'auth') {
+    return <PublicPageSkeleton variant={variant} />;
+  }
+
+  if (variant === 'portal-shell') {
+    return <PortalShellSkeleton />;
+  }
+
+  if (variant === 'portal-table') {
+    return <PortalPageSkeleton variant="table" />;
+  }
+
+  if (variant === 'portal-certificate') {
+    return <PortalPageSkeleton variant="certificate" />;
+  }
+
+  return <PortalPageSkeleton variant="dashboard" />;
+}
+
+function withSuspense(Component: ComponentType, variant: RouteSkeletonVariant = 'portal-page') {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[50vh] items-center justify-center p-6" aria-busy="true" aria-live="polite">
-          <div className="w-full max-w-sm rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-5 shadow-sm">
-            <span className="sr-only">Loading page...</span>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 animate-pulse rounded-full bg-surface-container-high" />
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="h-3 w-2/3 animate-pulse rounded-full bg-surface-container-high" />
-                <div className="h-3 w-1/2 animate-pulse rounded-full bg-surface-container" />
-              </div>
-            </div>
-            <div className="mt-5 grid gap-2">
-              <div className="h-3 animate-pulse rounded-full bg-surface-container" />
-              <div className="h-3 w-5/6 animate-pulse rounded-full bg-surface-container" />
-            </div>
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={renderSkeleton(variant)}>
       <Component />
     </Suspense>
   );
@@ -61,7 +71,7 @@ export const router = createBrowserRouter([
     path: "/",
     element: (
       <RedirectIfAuthenticated>
-        {withSuspense(RoleSelection)}
+        {withSuspense(RoleSelection, 'marketing')}
       </RedirectIfAuthenticated>
     ),
   },
@@ -69,7 +79,7 @@ export const router = createBrowserRouter([
     path: "/auth",
     element: (
       <RedirectIfAuthenticated>
-        {withSuspense(AuthAccessPage)}
+        {withSuspense(AuthAccessPage, 'auth')}
       </RedirectIfAuthenticated>
     ),
   },
@@ -77,7 +87,7 @@ export const router = createBrowserRouter([
     path: "/check-email",
     element: (
       <RedirectIfAuthenticated>
-        {withSuspense(CheckEmailPage)}
+        {withSuspense(CheckEmailPage, 'auth')}
       </RedirectIfAuthenticated>
     ),
   },
@@ -85,25 +95,25 @@ export const router = createBrowserRouter([
     path: "/student",
     element: (
       <RequireAuth allowedRoles={['student']}>
-        {withSuspense(StudentLayout)}
+        {withSuspense(StudentLayout, 'portal-shell')}
       </RequireAuth>
     ),
     children: [
       { index: true, element: withSuspense(StudentDashboard) },
-      { path: "records", element: withSuspense(StudentRecords) },
+      { path: "records", element: withSuspense(StudentRecords, 'portal-table') },
       { path: "year-selection", element: withSuspense(StudentYearSelection) },
       { path: "privacy-waiver/:year", element: withSuspense(StudentPrivacyWaiver) },
       { path: "medical-form/:year", element: withSuspense(StudentMedicalForm) },
       { path: "requirements", element: withSuspense(StudentRequirements) },
       { path: "profile", element: withSuspense(StudentProfile) },
-      { path: "certificate", element: withSuspense(StudentCertificate) },
+      { path: "certificate", element: withSuspense(StudentCertificate, 'portal-certificate') },
     ],
   },
   {
     path: "/staff",
     element: (
       <RequireAuth allowedRoles={['staff']}>
-        {withSuspense(StaffLayout)}
+        {withSuspense(StaffLayout, 'portal-shell')}
       </RequireAuth>
     ),
     children: [
@@ -120,7 +130,7 @@ export const router = createBrowserRouter([
     path: "/admin",
     element: (
       <RequireAuth allowedRoles={['admin']}>
-        {withSuspense(AdminLayout)}
+        {withSuspense(AdminLayout, 'portal-shell')}
       </RequireAuth>
     ),
     children: [

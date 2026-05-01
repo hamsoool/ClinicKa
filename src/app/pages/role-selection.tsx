@@ -1,89 +1,93 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import {
   ArrowRight,
   CheckCircle2,
-  FileCheck2,
-  FileHeart,
-  FolderKanban,
+  ClipboardList,
+  FileText,
+  FolderOpen,
   ShieldCheck,
   Stethoscope,
-  UsersRound,
+  Users,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router';
+import { useAuth } from '../lib/auth';
 
-const AUTH_LOGO_SRC = '/logo.png';
-const HERO_BACKDROP_SRC = '/backdrop.jpg';
+const LOGO_SRC = '/logo.png';
 const DASHBOARD_PREVIEW_SRC = new URL('../../../exports/figma/02-student-dashboard.png', import.meta.url).href;
-const MEDICAL_FORM_PREVIEW_SRC = new URL('../../../exports/figma/05-student-medical-form.png', import.meta.url).href;
+const FORM_PREVIEW_SRC = new URL('../../../exports/figma/05-student-medical-form.png', import.meta.url).href;
+const CAMPUS_PREVIEW_SRC = '/backdrop.jpg';
 
-const featureCards = [
+const navLinks = [
+  { label: 'Records', target: 'features' },
+  { label: 'Health Forms', target: 'workflow' },
+  { label: 'Clearance', target: 'clearance' },
+  { label: 'Resources', target: 'resources' },
+];
+
+const workflowHighlights = [
   {
-    title: 'User Management',
-    description:
-      'Secure, role-based access keeps student, staff, and administrator workflows separated while maintaining a shared source of truth.',
-    icon: UsersRound,
-    className: 'lg:col-span-2',
-    iconWrapClassName: 'bg-[#dfeafd] text-[#004532]',
-    panelClassName: 'bg-white/76',
+    title: 'Instant submissions',
+    description: 'Upload records and complete medical histories without chasing physical forms.',
   },
   {
-    title: 'Medical Clearance',
-    description:
-      'Track health compliance from submission to approval with a workflow that makes status updates and staff review easier to follow.',
-    icon: ShieldCheck,
-    className: '',
-    iconWrapClassName: 'bg-white/18 text-white',
-    panelClassName: 'bg-[#004532] text-white',
+    title: 'Real-time tracking',
+    description: 'See clearance status updates right from your portal dashboard.',
   },
   {
-    title: 'Health Forms',
-    description:
-      'Digital intake forms replace paper packets, helping students submit accurate records from any device with less friction.',
-    icon: FileHeart,
-    className: '',
-    iconWrapClassName: 'bg-[#d9f3e4] text-[#065f46]',
-    panelClassName: 'bg-white/76',
-  },
-  {
-    title: 'Record Management',
-    description:
-      'A centralized record system gives the clinic reliable access to submissions, health details, and supporting files when they matter.',
-    icon: FolderKanban,
-    className: 'lg:col-span-2',
-    iconWrapClassName: 'bg-[#dfeafd] text-[#004532]',
-    panelClassName: 'bg-[linear-gradient(135deg,rgba(255,255,255,0.78)_0%,rgba(239,244,255,0.94)_100%)]',
+    title: 'Direct clinic feedback',
+    description: 'Get secure messages from clinic staff if anything needs review.',
   },
 ];
 
 export default function RoleSelection() {
   const navigate = useNavigate();
-  const location = useLocation();
+  const { requiresPasswordSetup } = useAuth();
+  const [isScrolled, setIsScrolled] = useState(false);
   const [logoVisible, setLogoVisible] = useState(true);
 
-  function scrollToSection(id: string) {
-    const section = document.getElementById(id);
-    if (!section) return;
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 12);
+    };
 
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const navOffset = window.innerWidth >= 640 ? 104 : 92;
-    const top = section.getBoundingClientRect().top + window.scrollY - navOffset;
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
 
-    window.scrollTo({
-      top: Math.max(0, top),
-      behavior: prefersReducedMotion ? 'auto' : 'smooth',
-    });
-  }
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
-  function openAuth(mode: 'signin' | 'signup') {
-    navigate(`/auth?mode=${mode}`, { state: location.state });
-  }
+  useEffect(() => {
+    if (requiresPasswordSetup) {
+      navigate('/auth?mode=signin', { replace: true });
+    }
+  }, [requiresPasswordSetup, navigate]);
+
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   return (
     <div
-      className="min-h-screen bg-[#f8f9ff] text-[#0b1c30]"
+      className="relative min-h-screen bg-[linear-gradient(180deg,#f8f9ff_0%,#eff4ff_42%,#edf7f1_100%)] text-[#0b1c30]"
       style={{ fontFamily: '"Plus Jakarta Sans", "Segoe UI", sans-serif' }}
     >
-      <nav className="fixed inset-x-0 top-0 z-50 border-b border-[#d8e6ea] bg-white/88 backdrop-blur-xl">
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute left-[-8rem] top-20 h-80 w-80 rounded-full bg-[#d9e8ff] blur-3xl" />
+        <div className="absolute right-[-10rem] top-12 h-[28rem] w-[28rem] rounded-full bg-[#d4f0e2] blur-3xl" />
+      </div>
+
+      <nav
+        className={`fixed inset-x-0 top-0 z-50 border-b transition-all duration-300 ${
+          isScrolled
+            ? 'border-[#d8e6ea] bg-white/90 shadow-[0_4px_20px_-4px_rgba(6,95,70,0.08)] backdrop-blur-xl'
+            : 'border-transparent bg-transparent'
+        }`}
+      >
         <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-5 sm:px-8">
           <button
             type="button"
@@ -92,8 +96,8 @@ export default function RoleSelection() {
           >
             {logoVisible ? (
               <img
-                src={AUTH_LOGO_SRC}
-                alt="ClinicKa! logo"
+                src={LOGO_SRC}
+                alt="ClinicKa logo"
                 className="h-11 w-11 rounded-full object-cover"
                 onError={() => setLogoVisible(false)}
               />
@@ -109,49 +113,43 @@ export default function RoleSelection() {
           </button>
 
           <div className="hidden items-center gap-8 text-sm font-medium text-[#5b6670] md:flex">
-            <button type="button" onClick={() => scrollToSection('features')} className="transition hover:text-[#065f46]">
-              Records
-            </button>
-            <button type="button" onClick={() => scrollToSection('workflow')} className="transition hover:text-[#065f46]">
-              Health Forms
-            </button>
-            <button type="button" onClick={() => scrollToSection('security')} className="transition hover:text-[#065f46]">
-              Clearance
-            </button>
-            <button type="button" onClick={() => scrollToSection('access')} className="transition hover:text-[#065f46]">
-              Resources
-            </button>
+            {navLinks.map((link) => (
+              <button
+                key={link.label}
+                type="button"
+                onClick={() => scrollToSection(link.target)}
+                className="transition hover:text-[#065f46]"
+              >
+                {link.label}
+              </button>
+            ))}
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => openAuth('signin')}
-              className="inline-flex h-12 items-center justify-center rounded-full bg-[#004532] px-5 text-sm font-semibold text-white transition hover:bg-[#065f46]"
+            <Link
+              to="/auth?mode=signin"
+              className="inline-flex h-11 items-center justify-center rounded-full bg-[#004532] px-5 text-sm font-semibold text-white transition hover:bg-[#065f46]"
             >
               Sign In
-            </button>
+            </Link>
           </div>
         </div>
       </nav>
 
-      <main className="overflow-hidden pt-20">
+      <main>
         <section
           id="hero"
-          className="relative isolate min-h-[900px] scroll-mt-24 border-b border-[#e0e9f4] bg-[#f8f9ff] sm:scroll-mt-28"
+          className="relative overflow-hidden"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, rgba(111, 121, 115, 0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(111, 121, 115, 0.05) 1px, transparent 1px)',
+            backgroundSize: '32px 32px',
+          }}
         >
-          <div
-            className="absolute inset-0 opacity-60"
-            style={{
-              backgroundImage:
-                'linear-gradient(to right, rgba(111,121,115,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(111,121,115,0.06) 1px, transparent 1px)',
-              backgroundSize: '32px 32px',
-            }}
-          />
-          <div className="absolute right-[-16rem] top-[-16rem] h-[44rem] w-[44rem] rounded-full bg-[#cfeee0]/65 blur-3xl" />
-          <div className="absolute bottom-[-15rem] left-[-10rem] h-[32rem] w-[32rem] rounded-full bg-[#d9e8ff]/90 blur-3xl" />
+          <div className="absolute right-0 top-0 h-[34rem] w-[34rem] translate-x-1/4 -translate-y-1/4 rounded-full bg-[#cfeee0]/55 blur-3xl" />
+          <div className="absolute bottom-0 left-0 h-[28rem] w-[28rem] -translate-x-1/4 translate-y-1/4 rounded-full bg-[#d8e6ff]/55 blur-3xl" />
 
-          <div className="relative mx-auto grid w-full max-w-7xl gap-14 px-5 py-20 sm:px-8 lg:grid-cols-12 lg:items-center lg:py-24">
+          <div className="relative mx-auto grid w-full max-w-7xl gap-14 px-5 pb-20 pt-36 sm:px-8 lg:grid-cols-12 lg:items-center lg:pb-24 lg:pt-44">
             <div className="space-y-8 lg:col-span-6">
               <div className="inline-flex items-center gap-2 rounded-full border border-[#c9d9dd] bg-white/78 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_10px_35px_rgba(11,28,48,0.05)] backdrop-blur">
                 <span className="h-2 w-2 rounded-full bg-[#065f46]" />
@@ -163,18 +161,19 @@ export default function RoleSelection() {
                   Your Academic Health Journey, <span className="text-[#065f46]">Streamlined.</span>
                 </h1>
                 <p className="max-w-xl text-lg leading-8 text-[#4a5b68]">
-                  ClinicKa! brings Gordon College clinic services into a calmer, clearer digital workflow. Submit medical records, complete health forms, and track clearance progress without the paperwork pileup.
+                  ClinicKa! brings Gordon College clinic services into a calmer, clearer digital workflow. Submit medical
+                  records, complete health forms, and track clearance progress without the paperwork pileup.
                 </p>
               </div>
 
               <div className="flex flex-col gap-4 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => openAuth('signin')}
+                <Link
+                  to="/auth?mode=signin"
                   className="inline-flex h-14 items-center justify-center rounded-full bg-[#004532] px-8 text-sm font-semibold text-white transition hover:bg-[#065f46]"
                 >
                   Student Login
-                </button>
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
                 <button
                   type="button"
                   onClick={() => scrollToSection('workflow')}
@@ -188,24 +187,29 @@ export default function RoleSelection() {
                 <div className="rounded-[24px] border border-white/80 bg-white/74 p-5 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Submission flow</p>
                   <p className="mt-3 text-2xl font-bold tracking-[-0.04em] text-[#0b1c30]">Digital-first</p>
-                  <p className="mt-2 text-sm leading-6 text-[#4a5b68]">From intake to approval, every step stays visible.</p>
+                  <p className="mt-2 text-sm leading-6 text-[#4a5b68]">
+                    From intake to approval, every step stays visible.
+                  </p>
                 </div>
                 <div className="rounded-[24px] border border-white/80 bg-white/74 p-5 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Access model</p>
                   <p className="mt-3 text-2xl font-bold tracking-[-0.04em] text-[#0b1c30]">Role-based</p>
-                  <p className="mt-2 text-sm leading-6 text-[#4a5b68]">Students, clinic staff, and admins each get the right tools.</p>
+                  <p className="mt-2 text-sm leading-6 text-[#4a5b68]">
+                    Students, clinic staff, and admins get the right tools.
+                  </p>
                 </div>
                 <div className="rounded-[24px] border border-white/80 bg-white/74 p-5 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Privacy posture</p>
                   <p className="mt-3 text-2xl font-bold tracking-[-0.04em] text-[#0b1c30]">Protected</p>
-                  <p className="mt-2 text-sm leading-6 text-[#4a5b68]">Records stay within controlled clinic workflows.</p>
+                  <p className="mt-2 text-sm leading-6 text-[#4a5b68]">
+                    Records stay within controlled clinic workflows.
+                  </p>
                 </div>
               </div>
             </div>
 
             <div className="relative lg:col-span-6">
-              <div className="absolute inset-x-8 top-6 h-[78%] rounded-[2rem] bg-[linear-gradient(135deg,rgba(217,243,228,0.86)_0%,rgba(237,244,255,0.92)_100%)] blur-2xl" />
-              <div className="relative overflow-hidden rounded-[2rem] border border-white/80 bg-white/78 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.14)] backdrop-blur md:p-5">
+              <div className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/78 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.14)] backdrop-blur md:p-5">
                 <div className="mb-4 flex items-center justify-between rounded-[1.5rem] border border-[#d9e5e3] bg-white/86 px-4 py-3">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Student portal preview</p>
@@ -216,149 +220,140 @@ export default function RoleSelection() {
                     Live workflow
                   </div>
                 </div>
-
                 <div className="overflow-hidden rounded-[1.6rem] border border-[#d8e3ea] bg-[#eef4ff]">
                   <div className="relative h-[420px] overflow-hidden bg-[#eef4ff]">
                     <img
                       src={DASHBOARD_PREVIEW_SRC}
-                      alt="ClinicKa! student dashboard preview"
+                      alt="ClinicKa student dashboard preview"
                       className="h-full w-full object-cover object-left-top"
                     />
                     <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0)_22%,rgba(248,249,255,0.14)_100%)]" />
                   </div>
                 </div>
+              </div>
 
-                <div className="pointer-events-none absolute -bottom-7 left-4 max-w-[19rem] rounded-[1.5rem] border border-white/85 bg-white/88 p-4 shadow-[0_24px_60px_rgba(11,28,48,0.12)] backdrop-blur sm:-left-8 sm:max-w-[18rem]">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#d9f3e4] text-[#065f46]">
-                      <CheckCircle2 className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-[#0b1c30]">Clearance status</p>
-                      <p className="mt-1 text-sm leading-6 text-[#4a5b68]">Approved requirements and visible progress for the current school cycle.</p>
-                    </div>
+              <div className="pointer-events-none absolute -bottom-7 left-4 max-w-[19rem] rounded-[1.5rem] border border-white/85 bg-white/88 p-4 shadow-[0_24px_60px_rgba(11,28,48,0.12)] backdrop-blur sm:-left-8 sm:max-w-[18rem]">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#d9f3e4] text-[#065f46]">
+                    <CheckCircle2 className="h-6 w-6" />
                   </div>
-                </div>
-
-                <div className="pointer-events-none absolute -right-4 top-5 hidden w-40 overflow-hidden rounded-[1.4rem] border border-white/75 bg-white/70 p-2 shadow-[0_22px_60px_rgba(11,28,48,0.12)] backdrop-blur sm:block">
-                  <img
-                    src={HERO_BACKDROP_SRC}
-                    alt="Gordon College campus"
-                    className="h-28 w-full rounded-[1rem] object-cover"
-                  />
+                  <div>
+                    <p className="text-sm font-semibold text-[#0b1c30]">Clearance status</p>
+                    <p className="mt-1 text-xs text-[#4a5b68]">Approved requirements and visible progress.</p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section id="features" className="relative z-10 scroll-mt-24 bg-[#f8f9ff] py-24 sm:scroll-mt-28">
-          <div className="mx-auto w-full max-w-7xl px-5 sm:px-8">
-            <div className="mx-auto mb-16 max-w-2xl text-center">
-              <h2 className="text-4xl font-semibold tracking-[-0.04em] text-[#0b1c30]">Comprehensive Care Ecosystem</h2>
-              <p className="mt-4 text-lg leading-8 text-[#4a5b68]">
-                Four connected pillars that simplify clinic operations while making student wellness requirements easier to complete.
+        <section id="features" className="py-20">
+          <div className="mx-auto max-w-7xl px-5 sm:px-8">
+            <div className="mx-auto mb-12 max-w-2xl text-center">
+              <h2 className="text-4xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Comprehensive care ecosystem</h2>
+              <p className="mt-4 text-lg leading-7 text-[#4a5b68]">
+                Four pillars designed to simplify clinic operations and empower student wellness.
               </p>
             </div>
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {featureCards.map((card) => {
-                const Icon = card.icon;
-
-                return (
-                  <div
-                    key={card.title}
-                    className={`rounded-[1.75rem] border border-white/75 p-8 shadow-[0_22px_60px_rgba(11,28,48,0.06)] backdrop-blur ${card.className} ${card.panelClassName}`}
-                  >
-                    <div className={`mb-6 flex h-14 w-14 items-center justify-center rounded-full ${card.iconWrapClassName}`}>
-                      <Icon className="h-6 w-6" />
-                    </div>
-                    <h3 className={`text-2xl font-semibold tracking-[-0.03em] ${card.title === 'Medical Clearance' ? 'text-white' : 'text-[#0b1c30]'}`}>
-                      {card.title}
-                    </h3>
-                    <p className={`mt-4 max-w-xl text-sm leading-7 ${card.title === 'Medical Clearance' ? 'text-white/84' : 'text-[#4a5b68]'}`}>
-                      {card.description}
-                    </p>
-
-                    {card.title === 'Record Management' ? (
-                      <div className="mt-8 grid gap-3 rounded-[1.35rem] border border-[#d5e0f2] bg-white/72 p-4 sm:grid-cols-[1.3fr_1fr]">
-                        <div className="space-y-3">
-                          <div className="h-3 w-3/4 rounded-full bg-[#d3e4fe]" />
-                          <div className="h-3 w-1/2 rounded-full bg-[#d3e4fe]" />
-                          <div className="space-y-2 pt-2">
-                            <div className="flex items-center gap-3 rounded-2xl border border-[#e1e7f0] bg-white p-3">
-                              <div className="h-8 w-8 rounded-xl bg-[#d9f3e4]" />
-                              <div className="h-2 w-1/2 rounded-full bg-[#d3e4fe]" />
-                            </div>
-                            <div className="flex items-center gap-3 rounded-2xl border border-[#e1e7f0] bg-white p-3">
-                              <div className="h-8 w-8 rounded-xl bg-[#d9f3e4]" />
-                              <div className="h-2 w-2/3 rounded-full bg-[#d3e4fe]" />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="overflow-hidden rounded-[1.15rem] border border-[#d8e3ea] bg-[#eef4ff]">
-                          <img
-                            src={MEDICAL_FORM_PREVIEW_SRC}
-                            alt="Medical form preview"
-                            className="h-full w-full object-cover object-left-top"
-                          />
-                        </div>
-                      </div>
-                    ) : null}
+              <div className="rounded-[28px] border border-white/80 bg-white/78 p-8 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur lg:col-span-2">
+                <div className="flex items-start gap-5">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5ed] text-[#065f46]">
+                    <Users className="h-6 w-6" />
                   </div>
-                );
-              })}
+                  <div>
+                    <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">User management</h3>
+                    <p className="mt-3 text-sm leading-7 text-[#4a5b68]">
+                      Secure, role-based accounts ensure that students and clinic staff see only what they need.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex h-full flex-col justify-between rounded-[28px] bg-[#004532] p-8 text-white shadow-[0_18px_45px_rgba(11,28,48,0.12)]">
+                <div>
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
+                    <ShieldCheck className="h-6 w-6" />
+                  </div>
+                  <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em]">Medical clearance</h3>
+                  <p className="mt-3 text-sm leading-7 text-white/85">
+                    Automated workflows for reviewing and approving health requirements before enrollment.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-white/80 bg-white/78 p-8 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#d9f3e4] text-[#065f46]">
+                  <ClipboardList className="h-6 w-6" />
+                </div>
+                <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Health forms</h3>
+                <p className="mt-3 text-sm leading-7 text-[#4a5b68]">
+                  Digital intake forms replace paper packets and capture accurate medical histories online.
+                </p>
+              </div>
+
+              <div className="rounded-[28px] border border-white/80 bg-white/78 p-8 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur lg:col-span-2">
+                <div className="flex flex-col gap-8 md:flex-row">
+                  <div className="flex-1">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5ed] text-[#065f46]">
+                      <FolderOpen className="h-6 w-6" />
+                    </div>
+                    <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Record management</h3>
+                    <p className="mt-3 text-sm leading-7 text-[#4a5b68]">
+                      Centralized record storage for quick retrieval, updates, and long-term compliance.
+                    </p>
+                  </div>
+                  <div className="hidden flex-1 rounded-2xl border border-[#dde7e6] bg-white/70 p-4 md:block">
+                    <div className="h-4 w-2/3 rounded bg-[#e6edf5]" />
+                    <div className="mt-3 h-4 w-1/2 rounded bg-[#e6edf5]" />
+                    <div className="mt-6 space-y-3">
+                      <div className="flex items-center gap-3 rounded-xl border border-[#e0e8e7] bg-white px-3 py-2">
+                        <div className="h-7 w-7 rounded bg-[#d9f3e4]" />
+                        <div className="h-2 w-1/3 rounded bg-[#dfe7ee]" />
+                      </div>
+                      <div className="flex items-center gap-3 rounded-xl border border-[#e0e8e7] bg-white px-3 py-2">
+                        <div className="h-7 w-7 rounded bg-[#d9f3e4]" />
+                        <div className="h-2 w-1/2 rounded bg-[#dfe7ee]" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="workflow" className="scroll-mt-24 border-y border-[#e3ebf1] bg-white/55 py-24 sm:scroll-mt-28">
-          <div className="mx-auto grid w-full max-w-7xl gap-14 px-5 sm:px-8 lg:grid-cols-2 lg:items-center">
-            <div className="relative order-2 lg:order-1">
-              <div className="absolute inset-0 rounded-[2rem] bg-[linear-gradient(135deg,rgba(210,240,229,0.88)_0%,rgba(220,233,255,0.82)_100%)] blur-2xl" />
-              <div className="relative overflow-hidden rounded-[2rem] border border-white/80 bg-white/80 p-5 shadow-[0_28px_70px_rgba(11,28,48,0.08)] backdrop-blur">
-                <div className="overflow-hidden rounded-[1.6rem] border border-[#d8e3ea] bg-[#eef4ff]">
-                  <img
-                    src={MEDICAL_FORM_PREVIEW_SRC}
-                    alt="Student medical form workflow preview"
-                    className="h-full w-full object-cover object-left-top"
-                  />
-                </div>
+        <section id="workflow" className="border-t border-[#e2ebe7] bg-white/70 py-20">
+          <div className="mx-auto grid max-w-7xl items-center gap-16 px-5 sm:px-8 lg:grid-cols-2">
+            <div className="order-2 lg:order-1">
+              <div className="relative">
+                <div className="absolute inset-0 -translate-x-6 translate-y-6 rounded-full bg-[#cfeee0]/35 blur-3xl" />
+                <img
+                  src={FORM_PREVIEW_SRC}
+                  alt="Student medical form workflow preview"
+                  className="relative z-10 w-full rounded-2xl border border-white/80 shadow-[0_24px_60px_rgba(11,28,48,0.12)]"
+                />
               </div>
             </div>
 
             <div className="order-1 space-y-6 lg:order-2">
               <h2 className="text-4xl font-semibold tracking-[-0.04em] text-[#0b1c30]">
-                Goodbye Paperwork.
-                <br />
-                Hello Clarity.
+                Goodbye paperwork.<br />Hello clarity.
               </h2>
               <p className="max-w-xl text-lg leading-8 text-[#4a5b68]">
-                Health requirements should not feel like guesswork. ClinicKa! transforms the old paper-heavy routine into a guided digital process that is easier for students to finish and easier for clinic staff to review.
+                Health requirements should not feel like guesswork. ClinicKa! turns the paper-heavy routine into a guided
+                digital process that is easier to finish and easier to review.
               </p>
-
               <div className="space-y-6 pt-2">
-                {[
-                  {
-                    title: 'Instant submissions',
-                    body: 'Upload records and complete medical histories from your device instead of relying on physical handoffs.',
-                  },
-                  {
-                    title: 'Real-time tracking',
-                    body: 'See whether a record is pending, returned, or approved from the same portal you used to submit it.',
-                  },
-                  {
-                    title: 'Direct clinic follow-through',
-                    body: 'Staff can review records, request updates, and keep the workflow moving without fragmented communication.',
-                  },
-                ].map((item) => (
+                {workflowHighlights.map((item) => (
                   <div key={item.title} className="flex items-start gap-4">
-                    <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d9f3e4] text-[#065f46]">
+                    <div className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-[#d9f3e4] text-[#065f46]">
                       <ArrowRight className="h-4 w-4" />
                     </div>
                     <div>
-                      <h3 className="text-base font-semibold text-[#0b1c30]">{item.title}</h3>
-                      <p className="mt-1 text-sm leading-7 text-[#4a5b68]">{item.body}</p>
+                      <h4 className="text-base font-semibold text-[#0b1c30]">{item.title}</h4>
+                      <p className="mt-2 text-sm leading-7 text-[#4a5b68]">{item.description}</p>
                     </div>
                   </div>
                 ))}
@@ -367,86 +362,79 @@ export default function RoleSelection() {
           </div>
         </section>
 
-        <section id="access" className="relative scroll-mt-24 bg-[#f8f9ff] py-24 sm:scroll-mt-28">
-          <div className="absolute inset-x-0 top-0 h-56 bg-[linear-gradient(180deg,rgba(211,228,254,0.45)_0%,rgba(248,249,255,0)_100%)]" />
-          <div className="relative mx-auto grid w-full max-w-7xl gap-10 px-5 sm:px-8 xl:grid-cols-[0.95fr_1.05fr]">
-            <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/80 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_14px_36px_rgba(11,28,48,0.05)]">
-                <FileCheck2 className="h-4 w-4" />
-                Portal access
+        <section id="clearance" className="py-16">
+          <div className="mx-auto max-w-7xl px-5 sm:px-8">
+            <div className="flex flex-col items-start gap-6 rounded-[2rem] border border-[#dfe9e6] bg-white/80 p-8 shadow-[0_20px_60px_rgba(11,28,48,0.08)] md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-5">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5ed] text-[#065f46]">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Uncompromising security</h3>
+                  <p className="mt-2 max-w-2xl text-sm leading-7 text-[#4a5b68]">
+                    Student health records are sensitive. ClinicKa! uses controlled access, school-managed workflows,
+                    and privacy-aware handling to protect data with care.
+                  </p>
+                </div>
               </div>
-              <h2 className="max-w-lg text-4xl font-semibold tracking-[-0.04em] text-[#0b1c30]">
-                One entry point for every clinic workflow.
-              </h2>
-              <p className="max-w-xl text-lg leading-8 text-[#4a5b68]">
-                Sign in with your Gordon College account to submit records, review requirements, or manage clinic operations. Student, staff, and admin access all begin in the dedicated account page.
-              </p>
-
-              <div className="grid gap-4">
-                {[
-                  'Students can submit records, complete forms, and monitor clearance progress in one place.',
-                  'Clinic staff can review submissions, validate requirements, and keep records current.',
-                  'Administrators can oversee staff access, reporting, and system-wide account management.',
-                ].map((item) => (
-                  <div
-                    key={item}
-                    className="rounded-[1.6rem] border border-white/80 bg-white/78 p-5 shadow-[0_20px_50px_rgba(11,28,48,0.06)] backdrop-blur"
-                  >
-                    <p className="text-sm leading-7 text-[#4a5b68]">{item}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-white/80 bg-white/82 p-6 shadow-[0_30px_80px_rgba(11,28,48,0.1)] backdrop-blur sm:p-8">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Dedicated access page</p>
-              <h3 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30]">Login and sign-up now live separately.</h3>
-              <p className="mt-4 text-sm leading-7 text-[#4a5b68]">
-                We moved account access into its own route so the landing page stays focused on the product story while authentication gets its own cleaner flow.
-              </p>
-
-              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => openAuth('signin')}
-                  className="inline-flex h-12 items-center justify-center rounded-full bg-[#004532] px-6 text-sm font-semibold text-white transition hover:bg-[#065f46]"
-                >
-                  Go to sign in
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openAuth('signup')}
-                  className="inline-flex h-12 items-center justify-center rounded-full border border-[#cad8d5] bg-white px-6 text-sm font-semibold text-[#0b1c30] transition hover:bg-[#f7fbff]"
-                >
-                  Create account
-                </button>
-              </div>
+              <span className="inline-flex items-center rounded-full bg-[#d9f3e4] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#065f46]">
+                Privacy-first
+              </span>
             </div>
           </div>
         </section>
 
-        <section id="security" className="scroll-mt-24 bg-[#dbe8ff] py-16 sm:scroll-mt-28">
-          <div className="mx-auto w-full max-w-7xl px-5 sm:px-8">
-            <div className="flex flex-col gap-6 rounded-[1.75rem] border border-white/78 bg-white/88 p-6 shadow-[0_24px_60px_rgba(11,28,48,0.08)] backdrop-blur lg:flex-row lg:items-center lg:justify-between lg:p-8">
-              <div className="flex items-start gap-5">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#eef4ff] text-[#065f46]">
-                  <ShieldCheck className="h-7 w-7" />
-                </div>
-                <div>
-                  <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30]">Uncompromising security</h2>
-                  <p className="mt-3 max-w-3xl text-sm leading-7 text-[#4a5b68]">
-                    Student health records are sensitive. ClinicKa! uses controlled account access, school-managed workflows, and privacy-aware handling to support the Gordon College clinic team and protect student data with care.
-                  </p>
-                </div>
+        <section className="border-t border-[#e2ebe7] bg-white/60 py-20">
+          <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 sm:px-8 lg:grid-cols-2">
+            <div className="space-y-5">
+              <h2 className="text-4xl font-semibold tracking-[-0.04em] text-[#0b1c30]">Your records, always within reach.</h2>
+              <p className="text-lg leading-8 text-[#4a5b68]">
+                ClinicKa! keeps medical forms, submissions, and approvals in one place so students and clinic teams can
+                work with confidence.
+              </p>
+              <div className="flex flex-wrap gap-3 text-sm text-[#4a5b68]">
+                <span className="rounded-full bg-white/80 px-4 py-2 shadow-sm">Role-based access</span>
+                <span className="rounded-full bg-white/80 px-4 py-2 shadow-sm">Clear audit trails</span>
+                <span className="rounded-full bg-white/80 px-4 py-2 shadow-sm">Secure storage</span>
               </div>
-
-              <div className="inline-flex h-fit items-center rounded-full bg-[#d9f3e4] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#065f46]">
-                Privacy-first
+            </div>
+            <div className="relative">
+              <img
+                src={CAMPUS_PREVIEW_SRC}
+                alt="Gordon College campus"
+                className="w-full rounded-2xl border border-white/80 object-cover shadow-[0_24px_60px_rgba(11,28,48,0.12)]"
+              />
+              <div className="absolute -bottom-6 left-6 rounded-[1.5rem] border border-white/80 bg-white/90 px-4 py-3 text-sm text-[#4a5b68] shadow-[0_18px_40px_rgba(11,28,48,0.12)]">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-4 w-4 text-[#065f46]" />
+                  <span>Unified medical submission dashboard</span>
+                </div>
               </div>
             </div>
           </div>
         </section>
       </main>
+
+      <footer id="resources" className="border-t border-[#e2ebe7] bg-white/70 py-12">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-5 sm:px-8 md:grid-cols-2 md:items-center">
+          <div>
+            <div className="text-lg font-bold text-[#0b1c30]">ClinicKa!</div>
+            <p className="mt-2 text-sm text-[#4a5b68]">Gordon College Health Services</p>
+            <p className="mt-4 text-sm text-[#60717e]">Copyright 2026 ClinicKa. All rights reserved.</p>
+          </div>
+          <div className="flex flex-wrap gap-6 text-sm text-[#60717e] md:justify-end">
+            <Link className="transition hover:text-[#065f46]" to="/auth?mode=signup">
+              Privacy policy
+            </Link>
+            <Link className="transition hover:text-[#065f46]" to="/auth?mode=signup">
+              Terms of service
+            </Link>
+            <Link className="transition hover:text-[#065f46]" to="/auth?mode=signin">
+              Help desk
+            </Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

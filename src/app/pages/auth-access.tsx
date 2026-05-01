@@ -672,18 +672,26 @@ export default function AuthAccessPage() {
                 </p>
               </div>
 
-              <div className="inline-flex rounded-full border border-[#d7e4e0] bg-[#f5f8ff] p-1">
+              <div className="relative grid shrink-0 grid-cols-2 rounded-full border border-[#d7e4e0] bg-[#f5f8ff] p-1">
+                <div
+                  className="absolute bottom-1 left-1 top-1 rounded-full bg-[#004532] shadow-[0_10px_30px_rgba(0,69,50,0.24)] transition-transform duration-300 ease-out"
+                  style={{
+                    width: 'calc(50% - 4px)',
+                    transform: mode === 'signin' ? 'translateX(0)' : 'translateX(100%)',
+                  }}
+                  aria-hidden="true"
+                />
                 <button
                   type="button"
                   onClick={() => switchMode('signin')}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${mode === 'signin' ? 'bg-[#004532] text-white shadow-[0_10px_30px_rgba(0,69,50,0.24)]' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
+                  className={`relative z-10 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-300 ${mode === 'signin' ? 'text-white' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
                 >
                   Sign in
                 </button>
                 <button
                   type="button"
                   onClick={() => switchMode('signup')}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${mode === 'signup' ? 'bg-[#004532] text-white shadow-[0_10px_30px_rgba(0,69,50,0.24)]' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
+                  className={`relative z-10 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-300 ${mode === 'signup' ? 'text-white' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
                 >
                   Sign up
                 </button>

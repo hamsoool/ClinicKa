@@ -13,6 +13,7 @@ import {
   Stethoscope,
   Users,
 } from 'lucide-react';
+import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { getAnalytics, getSubmissions } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { MockSubmission } from '../../lib/mock-data';
@@ -120,11 +121,7 @@ export default function StaffDashboard() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-sm text-on-surface-variant">Loading clinic dashboard...</div>
-      </div>
-    );
+    return <PortalPageSkeleton variant="dashboard" />;
   }
 
   const sortedBySubmitted = [...submissions].sort(
