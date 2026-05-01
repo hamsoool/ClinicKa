@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertCircle, CheckCircle2, Clock3, FileText, Plus } from 'lucide-react';
+import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { toast } from 'sonner';
 import { getStudentRecords } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -28,16 +29,19 @@ export default function StudentDashboard() {
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const course = me?.student?.course || me?.profile.course || '';
   const [records, setRecords] = useState<StudentRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const isInitialMountRef = useRef(true);
 
   useEffect(() => {
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
     }
-    if (studentId) {
-      loadRecords();
+    if (!studentId) {
+      setLoading(false);
+      return;
     }
+
+    void loadRecords();
   }, [studentId]);
 
   const loadRecords = async () => {
@@ -111,6 +115,10 @@ export default function StudentDashboard() {
   });
   const approvedCount = sortedRecords.filter((record) => record.status === 'approved').length;
   const pendingCount = sortedRecords.filter((record) => record.status === 'pending').length;
+
+  if (loading && records.length === 0) {
+    return <PortalPageSkeleton variant="dashboard" />;
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -206,9 +214,7 @@ export default function StudentDashboard() {
             <h3 className="text-lg font-semibold text-on-surface">Submission Status</h3>
           </div>
 
-          {loading ? (
-            <div className="py-10 text-center text-sm text-on-surface-variant">Loading status...</div>
-          ) : records.length === 0 ? (
+          {records.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-container text-outline">
                 <AlertCircle className="h-7 w-7" />
@@ -273,9 +279,7 @@ export default function StudentDashboard() {
             </button>
           </div>
 
-          {loading ? (
-            <div className="py-10 text-center text-sm text-on-surface-variant">Loading records...</div>
-          ) : records.length === 0 ? (
+          {records.length === 0 ? (
             <div className="py-10 text-center text-sm text-on-surface-variant">No medical records found.</div>
           ) : (
             <div className="space-y-3">
