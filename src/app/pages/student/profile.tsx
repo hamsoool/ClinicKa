@@ -8,7 +8,6 @@ import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import {
-  IS_DEMO_MODE,
   getStudentProfileAssets,
   updateStudentProfile,
   uploadStudentProfileAsset,
@@ -215,9 +214,7 @@ export default function StudentProfile() {
       setPhotoFile(null);
       setSignatureFile(null);
 
-      if (!IS_DEMO_MODE) {
-        await refresh();
-      }
+      await refresh();
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('gc-profile-assets-updated'));
