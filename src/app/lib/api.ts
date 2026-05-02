@@ -373,7 +373,54 @@ function getAccessToken() {
   return getStoredSession()?.access_token || null;
 }
 
-async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+let _refreshPromise: Promise<AuthSession | null> | null = null;
+
+async function refreshSession(): Promise<AuthSession | null> {
+  // Deduplicate concurrent refresh attempts
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async () => {
+    try {
+      const current = getStoredSession();
+      if (!current?.refresh_token || !supabaseUrl || !publicAnonKey) return null;
+
+      const response = await fetch(
+        `${supabaseUrl}/auth/v1/token?grant_type=refresh_token`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: publicAnonKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refresh_token: current.refresh_token }),
+        },
+      );
+
+      if (!response.ok) return null;
+
+      const payload = await response.json();
+      if (!payload?.access_token) return null;
+
+      const refreshed: AuthSession = {
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token ?? current.refresh_token,
+        expires_in: payload.expires_in,
+        token_type: payload.token_type,
+        user: payload.user ?? current.user,
+      };
+      setStoredSession(refreshed);
+      return refreshed;
+    } catch {
+      return null;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
+}
+
+async function apiRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
   }
@@ -394,6 +441,14 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
   const rawBody = await response.text();
 
   if (!response.ok) {
+    // Auto-refresh on 401 and retry once
+    if (response.status === 401 && !_retried && !options.token) {
+      const refreshed = await refreshSession();
+      if (refreshed?.access_token) {
+        return apiRequest<T>(path, options, true);
+      }
+    }
+
     let message = `Request failed (${response.status})`;
 
     if (rawBody) {
@@ -429,7 +484,7 @@ async function restRequest<T>(
   return apiRequest<T>(path, options);
 }
 
-async function authRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function authRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
   }
@@ -451,6 +506,14 @@ async function authRequest<T>(path: string, options: RequestOptions = {}): Promi
   const payload = rawBody ? JSON.parse(rawBody) : {};
 
   if (!response.ok) {
+    // Auto-refresh on 401 and retry once
+    if (response.status === 401 && !_retried && !options.token) {
+      const refreshed = await refreshSession();
+      if (refreshed?.access_token) {
+        return authRequest<T>(path, options, true);
+      }
+    }
+
     throw new Error(payload.msg || payload.error_description || payload.error || `Request failed (${response.status})`);
   }
 
@@ -657,8 +720,10 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
   if (!path || !supabaseUrl || !publicAnonKey) return null;
 
   const trySign = async (targetPath: string) => {
+    // Use the bulk sign endpoint to avoid HTTP 400 Bad Request console spam
+    // when an object does not exist.
     const response = await fetch(
-      `${supabaseUrl}/storage/v1/object/sign/${targetBucket}/${targetPath}`,
+      `${supabaseUrl}/storage/v1/object/sign/${targetBucket}`,
       {
         method: 'POST',
         headers: {
@@ -666,14 +731,18 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
           Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
+        body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365, paths: [targetPath] }),
       },
     );
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) return null;
 
+    // Bulk sign returns an array of results
+    const result = Array.isArray(payload) ? payload[0] : payload;
+    if (!result || result.error) return null;
+
     const rawSigned =
-      payload?.signedURL || payload?.signedUrl || payload?.signed_url || null;
+      result.signedURL || result.signedUrl || result.signed_url || null;
     if (!rawSigned) return null;
     if (/^https?:\/\//i.test(rawSigned)) return rawSigned as string;
     return `${supabaseUrl}/storage/v1${rawSigned}`;
@@ -1956,7 +2025,6 @@ export async function saveSubmissionReview(id: string, review: any) {
               middle_initial: personalInfo.middleInitial || null,
               department: personalInfo.department || null,
               course: personalInfo.course || null,
-              year_level: personalInfo.year ? Number(personalInfo.year) : null,
               age: personalInfo.age ? Number(personalInfo.age) : null,
               sex: personalInfo.sex || null,
               birthday: personalInfo.birthday || null,
@@ -2121,9 +2189,7 @@ export async function saveSubmissionReview(id: string, review: any) {
           remarks: clearanceInfo.remarks || null,
           purpose: clearanceInfo.purpose || null,
           control_no: clearanceInfo.controlNo || null,
-          issued_date: clearanceInfo.issuedDate || null,
           issued_at: clearanceInfo.issuedDate || null,
-          updated_at: now,
         }),
       },
     ),

@@ -25,6 +25,7 @@ export default function StaffSubmissions() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   const { data: queryData, isLoading: loading, isError } = useQuery({
     queryKey: ['staffSubmissions'],
@@ -44,10 +45,10 @@ export default function StaffSubmissions() {
 
   useEffect(() => {
     filterSubmissions();
-  }, [searchQuery, statusFilter, departmentFilter, yearFilter, submissions]);
+  }, [searchQuery, statusFilter, departmentFilter, yearFilter, sortOrder, submissions]);
 
   const filterSubmissions = () => {
-    let filtered = submissions;
+    let filtered = [...submissions];
 
     if (searchQuery) {
       filtered = filtered.filter(sub =>
@@ -68,6 +69,12 @@ export default function StaffSubmissions() {
       filtered = filtered.filter(sub => String(sub.year) === yearFilter);
     }
 
+    filtered.sort((a, b) => {
+      const timeA = new Date(a.submittedAt).getTime();
+      const timeB = new Date(b.submittedAt).getTime();
+      return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+
     setFilteredSubmissions(filtered);
   };
 
@@ -76,11 +83,12 @@ export default function StaffSubmissions() {
     setStatusFilter('all');
     setDepartmentFilter('all');
     setYearFilter('all');
+    setSortOrder('desc');
   };
 
   const hasActiveFilters =
     searchQuery || statusFilter !== 'all' || 
-    departmentFilter !== 'all' || yearFilter !== 'all';
+    departmentFilter !== 'all' || yearFilter !== 'all' || sortOrder !== 'desc';
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -95,6 +103,15 @@ export default function StaffSubmissions() {
       default:
         return <Badge>{status}</Badge>;
     }
+  };
+
+  const getQueueNumber = (submission: any, allSubmissions: any[]) => {
+    if (!submission.submittedAt) return 0;
+    const submitDate = new Date(submission.submittedAt).toDateString();
+    const sameDaySubmissions = allSubmissions.filter(s => s.submittedAt && new Date(s.submittedAt).toDateString() === submitDate);
+    sameDaySubmissions.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+    const index = sameDaySubmissions.findIndex(s => s.id === submission.id);
+    return index + 1;
   };
 
   return (
@@ -118,7 +135,17 @@ export default function StaffSubmissions() {
           </div>
 
           {/* Filter row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <Select value={sortOrder} onValueChange={setSortOrder}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sort Order" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="desc">Newest First</SelectItem>
+                <SelectItem value="asc">Oldest First</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger>
                 <SelectValue placeholder="All Statuses" />
@@ -161,6 +188,9 @@ export default function StaffSubmissions() {
           {hasActiveFilters && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">Active filters:</span>
+              {sortOrder !== 'desc' && (
+                <Badge variant="outline" className="text-xs">Oldest First</Badge>
+              )}
               {statusFilter !== 'all' && (
                 <Badge variant="outline" className="text-xs">{statusFilter}</Badge>
               )}
@@ -213,17 +243,19 @@ export default function StaffSubmissions() {
                       </div>
                     )}
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex flex-wrap items-center gap-3 mb-2">
                         <h4 className="font-semibold">
                           {submission.firstName} {submission.lastName}
                         </h4>
+                        <Badge variant="outline" className="bg-secondary/50 text-secondary-foreground">
+                          Queue #{getQueueNumber(submission, submissions)}
+                        </Badge>
                         {getStatusBadge(submission.status)}
                       </div>
                       <div className="text-sm text-muted-foreground space-y-0.5">
                         <p>Student ID: {submission.studentId}</p>
                         <p>
                           {submission.department || submission.course}
-                          {submission.year ? ` • ${YEAR_LABELS[String(submission.year)] || `Year ${submission.year}`}` : ''}
                         </p>
                         <p>Submitted: {new Date(submission.submittedAt).toLocaleDateString()} at {new Date(submission.submittedAt).toLocaleTimeString()}</p>
                       </div>
