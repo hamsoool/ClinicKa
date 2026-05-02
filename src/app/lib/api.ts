@@ -313,7 +313,15 @@ async function refreshSession(): Promise<AuthSession | null> {
         },
       );
 
-      if (!response.ok) return null;
+      if (!response.ok) {
+        if (response.status >= 400 && response.status < 500) {
+          clearStoredSession();
+          if (typeof window !== 'undefined') {
+            window.location.href = '/auth?mode=signin';
+          }
+        }
+        return null;
+      }
 
       const payload = await response.json();
       if (!payload?.access_token) return null;
