@@ -23,12 +23,14 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui/table';
-import { Archive, Download, Printer, Search, Trash2, UserPlus, Users } from 'lucide-react';
+import { Archive, Download, Printer, Search, Trash2, UserPlus, Users, ArrowUpDown, RefreshCcw } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import {
   archiveUserAccount,
   createAdminAccount,
   deleteArchivedUserAccount,
+  restoreArchivedUserAccount,
   getArchivedUserAccounts,
   getUserAccounts,
   type AdminUserAccount,
@@ -89,9 +91,15 @@ export default function AdminUserAccounts() {
   const [openCreate, setOpenCreate] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<AdminUserAccount | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ArchivedUserAccount | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<ArchivedUserAccount | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [bulkArchiveOpen, setBulkArchiveOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkRestoreOpen, setBulkRestoreOpen] = useState(false);
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -136,6 +144,58 @@ export default function AdminUserAccounts() {
     () => archivedAccounts.filter((user) => matchesSearch(user, searchQuery)),
     [archivedAccounts, searchQuery],
   );
+
+  const sortedActiveUsers = useMemo(() => {
+    let sortableItems = [...filteredActiveUsers];
+    if (sortConfig !== null) {
+      sortableItems.sort((a: any, b: any) => {
+        let aVal = a[sortConfig.key] || '';
+        let bVal = b[sortConfig.key] || '';
+        
+        if (sortConfig.key === 'lastActive') {
+          aVal = aVal ? new Date(aVal as string).getTime() : 0;
+          bVal = bVal ? new Date(bVal as string).getTime() : 0;
+        }
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredActiveUsers, sortConfig]);
+
+  const sortedArchivedUsers = useMemo(() => {
+    let sortableItems = [...filteredArchivedUsers];
+    if (sortConfig !== null) {
+      sortableItems.sort((a: any, b: any) => {
+        let aVal = a[sortConfig.key] || '';
+        let bVal = b[sortConfig.key] || '';
+
+        if (sortConfig.key === 'archivedAt') {
+          aVal = aVal ? new Date(aVal as string).getTime() : 0;
+          bVal = bVal ? new Date(bVal as string).getTime() : 0;
+        }
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredArchivedUsers, sortConfig]);
+
+  const requestSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  useEffect(() => {
+    setSelectedUserIds(new Set());
+  }, [tab]);
 
   const submitCreate = async () => {
     if (!form.email || !form.password) {
@@ -211,6 +271,78 @@ export default function AdminUserAccounts() {
       await loadUsers();
     } catch (error: any) {
       toast.error(error?.message || 'Failed to permanently delete account');
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (!restoreTarget) return;
+
+    try {
+      setIsActionPending(true);
+      await restoreArchivedUserAccount(restoreTarget.archiveId);
+      toast.success(`${restoreTarget.name} was restored to active accounts`);
+      setRestoreTarget(null);
+      await loadUsers();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to restore account');
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const confirmBulkArchive = async () => {
+    try {
+      setIsActionPending(true);
+      const promises = Array.from(selectedUserIds).map(userId => 
+        archiveUserAccount({ userId, reason: archiveReason.trim() || undefined })
+      );
+      await Promise.all(promises);
+      toast.success(`${selectedUserIds.size} accounts were moved to archive`);
+      setBulkArchiveOpen(false);
+      setSelectedUserIds(new Set());
+      setArchiveReason('');
+      setTab('archive');
+      await loadUsers();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to archive some accounts');
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const confirmBulkDelete = async () => {
+    try {
+      setIsActionPending(true);
+      const promises = Array.from(selectedUserIds).map(archiveId => 
+        deleteArchivedUserAccount(archiveId)
+      );
+      await Promise.all(promises);
+      toast.success(`${selectedUserIds.size} accounts were permanently deleted`);
+      setBulkDeleteOpen(false);
+      setSelectedUserIds(new Set());
+      await loadUsers();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to permanently delete some accounts');
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const confirmBulkRestore = async () => {
+    try {
+      setIsActionPending(true);
+      const promises = Array.from(selectedUserIds).map(archiveId => 
+        restoreArchivedUserAccount(archiveId)
+      );
+      await Promise.all(promises);
+      toast.success(`${selectedUserIds.size} accounts were restored to active status`);
+      setBulkRestoreOpen(false);
+      setSelectedUserIds(new Set());
+      await loadUsers();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to restore some accounts');
     } finally {
       setIsActionPending(false);
     }
@@ -437,6 +569,107 @@ export default function AdminUserAccounts() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={bulkArchiveOpen} onOpenChange={(open) => {
+        if (!open) {
+          setBulkArchiveOpen(false);
+          setArchiveReason('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Archive Accounts</DialogTitle>
+            <DialogDescription>
+              Archive {selectedUserIds.size} selected account{selectedUserIds.size === 1 ? '' : 's'}? They will be removed from active lists.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              These accounts will be treated as inactive and moved to the archive tab.
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="bulk-archive-reason">Archive note (optional)</Label>
+              <Textarea
+                id="bulk-archive-reason"
+                placeholder="Add context for why these accounts are being archived"
+                value={archiveReason}
+                onChange={(e) => setArchiveReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setBulkArchiveOpen(false);
+              setArchiveReason('');
+            }} disabled={isActionPending}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmBulkArchive} disabled={isActionPending}>
+              {isActionPending ? 'Archiving...' : 'Archive Accounts'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Delete Accounts</DialogTitle>
+            <DialogDescription>
+              Permanently delete {selectedUserIds.size} selected account{selectedUserIds.size === 1 ? '' : 's'}?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            This action is irreversible. All linked data will be deleted from the system.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={isActionPending}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmBulkDelete} disabled={isActionPending}>
+              {isActionPending ? 'Deleting...' : 'Delete Permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!restoreTarget} onOpenChange={(open) => !open && setRestoreTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restore Archived Account</DialogTitle>
+            <DialogDescription>
+              {restoreTarget
+                ? `Restore ${restoreTarget.name} to active accounts?`
+                : 'Restore this archived account.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+            This will allow the user to log in again and their profile will appear in the active accounts list.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRestoreTarget(null)} disabled={isActionPending}>Cancel</Button>
+            <Button variant="default" onClick={confirmRestore} disabled={isActionPending}>
+              {isActionPending ? 'Restoring...' : 'Restore Account'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkRestoreOpen} onOpenChange={setBulkRestoreOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Restore Accounts</DialogTitle>
+            <DialogDescription>
+              Restore {selectedUserIds.size} selected account{selectedUserIds.size === 1 ? '' : 's'} to active status?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+            These accounts will be reactivated and moved back to the active accounts list.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkRestoreOpen(false)} disabled={isActionPending}>Cancel</Button>
+            <Button variant="default" onClick={confirmBulkRestore} disabled={isActionPending}>
+              {isActionPending ? 'Restoring...' : 'Restore Accounts'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Tabs value={tab} onValueChange={setTab}>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <TabsList className="w-full md:w-fit">
@@ -444,7 +677,55 @@ export default function AdminUserAccounts() {
             <TabsTrigger value="archive">Archive</TabsTrigger>
           </TabsList>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {selectedUserIds.size > 0 && (
+              <div className="flex shrink-0 items-center gap-2 rounded-md bg-primary/10 px-3 py-1.5 print:hidden">
+                <span className="text-sm font-medium text-primary">{selectedUserIds.size} selected</span>
+                {tab === 'active' ? (
+                  <Button variant="default" size="sm" onClick={() => setBulkArchiveOpen(true)} className="h-8">
+                    <Archive className="mr-2 h-4 w-4" /> Bulk Archive
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setBulkRestoreOpen(true)} className="h-8">
+                      <RefreshCcw className="mr-2 h-4 w-4" /> Bulk Restore
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)} className="h-8">
+                      <Trash2 className="mr-2 h-4 w-4" /> Bulk Delete
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 md:hidden">
+              <Select value={sortConfig?.key || ''} onValueChange={(val) => setSortConfig({ key: val, direction: sortConfig?.direction || 'asc' })}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Sort by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="id">User ID</SelectItem>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="role">Role</SelectItem>
+                  <SelectItem value="status">Status</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  {tab === 'archive' ? (
+                    <SelectItem value="archivedAt">Archived On</SelectItem>
+                  ) : (
+                    <SelectItem value="lastActive">Last Active</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                className="shrink-0 px-2.5"
+                disabled={!sortConfig}
+                onClick={() => setSortConfig(prev => prev ? { ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : null)}
+              >
+                <ArrowUpDown className="h-4 w-4" />
+              </Button>
+            </div>
+
             <div className="relative w-full min-w-0 sm:min-w-[18rem]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -478,42 +759,103 @@ export default function AdminUserAccounts() {
               </div>
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="hidden md:table-header-group">
                     <TableRow>
-                      <TableHead>User ID</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Last Active</TableHead>
+                      <TableHead className="w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedUserIds.size > 0 && selectedUserIds.size === sortedActiveUsers.filter(u => u.canArchive).length && sortedActiveUsers.filter(u => u.canArchive).length > 0}
+                          ref={input => {
+                            if (input) {
+                              const archiveable = sortedActiveUsers.filter(u => u.canArchive);
+                              input.indeterminate = selectedUserIds.size > 0 && selectedUserIds.size < archiveable.length;
+                            }
+                          }}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedUserIds(new Set(sortedActiveUsers.filter(u => u.canArchive).map(u => u.userId)));
+                            } else {
+                              setSelectedUserIds(new Set());
+                            }
+                          }}
+                          className="translate-y-[2px] rounded border-gray-300"
+                        />
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('id')}>
+                        <div className="flex items-center gap-1">User ID <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('name')}>
+                        <div className="flex items-center gap-1">Name <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('role')}>
+                        <div className="flex items-center gap-1">Role <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('status')}>
+                        <div className="flex items-center gap-1">Status <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('email')}>
+                        <div className="flex items-center gap-1">Email <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('lastActive')}>
+                        <div className="flex items-center gap-1">Last Active <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredActiveUsers.length === 0 ? (
+                    {sortedActiveUsers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                           No active accounts matched your search.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredActiveUsers.map((user) => (
-                        <TableRow key={user.userId}>
-                          <TableCell className="font-medium">{user.id}</TableCell>
-                          <TableCell>{user.name}</TableCell>
-                          <TableCell>
+                      sortedActiveUsers.map((user) => (
+                        <TableRow key={user.userId} className="flex flex-col md:table-row border-b md:border-b-0 pb-4 md:pb-0 mb-4 md:mb-0 relative">
+                          <TableCell className="absolute right-0 top-0 md:relative md:block md:table-cell">
+                            {user.canArchive && (
+                              <input
+                                type="checkbox"
+                                checked={selectedUserIds.has(user.userId)}
+                                onChange={(e) => {
+                                  const next = new Set(selectedUserIds);
+                                  if (e.target.checked) next.add(user.userId);
+                                  else next.delete(user.userId);
+                                  setSelectedUserIds(next);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">User ID:</span>
+                            <span className="font-medium">{user.id}</span>
+                          </TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Name:</span>
+                            {user.name}
+                          </TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Role:</span>
                             <Badge className={roleTone(user.role)}>{user.role}</Badge>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Status:</span>
                             <Badge className={statusTone(user.status)}>{user.status}</Badge>
                           </TableCell>
-                          <TableCell>{user.email || '-'}</TableCell>
-                          <TableCell>{formatDateTime(user.lastActive)}</TableCell>
-                          <TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Email:</span>
+                            {user.email || '-'}
+                          </TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Last Active:</span>
+                            {formatDateTime(user.lastActive)}
+                          </TableCell>
+                          <TableCell className="block md:table-cell pt-4 md:pt-2">
                             {user.canArchive ? (
                               <Button variant="outline" size="sm" onClick={() => setArchiveTarget(user)}>
-                                <Archive className="mr-2 h-4 w-4" />
-                                Archive
+                                <Archive className="h-4 w-4 md:mr-2" />
+                                <span className="hidden md:inline">Archive</span>
                               </Button>
                             ) : (
                               <Button variant="secondary" size="sm" disabled>
@@ -542,42 +884,104 @@ export default function AdminUserAccounts() {
               </div>
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="hidden md:table-header-group">
                     <TableRow>
-                      <TableHead>User ID</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Archived On</TableHead>
+                      <TableHead className="w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedUserIds.size > 0 && selectedUserIds.size === sortedArchivedUsers.length && sortedArchivedUsers.length > 0}
+                          ref={input => {
+                            if (input) {
+                              input.indeterminate = selectedUserIds.size > 0 && selectedUserIds.size < sortedArchivedUsers.length;
+                            }
+                          }}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedUserIds(new Set(sortedArchivedUsers.map(u => u.archiveId)));
+                            } else {
+                              setSelectedUserIds(new Set());
+                            }
+                          }}
+                          className="translate-y-[2px] rounded border-gray-300"
+                        />
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('id')}>
+                        <div className="flex items-center gap-1">User ID <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('name')}>
+                        <div className="flex items-center gap-1">Name <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('role')}>
+                        <div className="flex items-center gap-1">Role <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('status')}>
+                        <div className="flex items-center gap-1">Status <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('archivedAt')}>
+                        <div className="flex items-center gap-1">Archived On <ArrowUpDown className="h-3 w-3" /></div>
+                      </TableHead>
                       <TableHead>Note</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredArchivedUsers.length === 0 ? (
+                    {sortedArchivedUsers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                           No archived accounts matched your search.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredArchivedUsers.map((user) => (
-                        <TableRow key={user.archiveId}>
-                          <TableCell className="font-medium">{user.id}</TableCell>
-                          <TableCell>{user.name}</TableCell>
-                          <TableCell>
+                      sortedArchivedUsers.map((user) => (
+                        <TableRow key={user.archiveId} className="flex flex-col md:table-row border-b md:border-b-0 pb-4 md:pb-0 mb-4 md:mb-0 relative">
+                          <TableCell className="absolute right-0 top-0 md:relative md:block md:table-cell">
+                            <input
+                              type="checkbox"
+                              checked={selectedUserIds.has(user.archiveId)}
+                              onChange={(e) => {
+                                const next = new Set(selectedUserIds);
+                                if (e.target.checked) next.add(user.archiveId);
+                                else next.delete(user.archiveId);
+                                setSelectedUserIds(next);
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                          </TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">User ID:</span>
+                            <span className="font-medium">{user.id}</span>
+                          </TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Name:</span>
+                            {user.name}
+                          </TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Role:</span>
                             <Badge className={roleTone(user.role)}>{user.role}</Badge>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Status:</span>
                             <Badge className={statusTone(user.status)}>{user.status}</Badge>
                           </TableCell>
-                          <TableCell>{formatDateTime(user.archivedAt)}</TableCell>
-                          <TableCell className="max-w-60 truncate">{user.archivedReason || '-'}</TableCell>
-                          <TableCell>
-                            <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(user)}>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete Permanently
-                            </Button>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Archived On:</span>
+                            {formatDateTime(user.archivedAt)}
+                          </TableCell>
+                          <TableCell className="block md:table-cell">
+                            <span className="md:hidden font-bold inline-block w-28">Note:</span>
+                            <span className="max-w-60 truncate inline-block align-bottom">{user.archivedReason || '-'}</span>
+                          </TableCell>
+                          <TableCell className="block md:table-cell pt-4 md:pt-2">
+                            <div className="flex flex-col gap-2 md:flex-row">
+                              <Button variant="outline" size="sm" onClick={() => setRestoreTarget(user)}>
+                                <RefreshCcw className="h-4 w-4 md:mr-2" />
+                                <span className="hidden md:inline">Restore</span>
+                              </Button>
+                              <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(user)}>
+                                <Trash2 className="h-4 w-4 md:mr-2" />
+                                <span className="hidden md:inline">Delete Permanently</span>
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))

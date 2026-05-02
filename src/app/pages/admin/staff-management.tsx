@@ -194,37 +194,52 @@ export default function AdminStaffManagement() {
             </div>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Staff ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {staffList.map((staff) => (
-                <TableRow key={staff.id}>
-                  <TableCell className="font-medium">{staff.id}</TableCell>
-                  <TableCell>{staff.name}</TableCell>
-                  <TableCell>{staff.role}</TableCell>
-                  <TableCell>
-                    <Badge className={statusTone(staff.status)}>{staff.status}</Badge>
-                  </TableCell>
-                  <TableCell>{staff.email}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm">Edit</Button>
-                      <Button variant="ghost" size="sm">Deactivate</Button>
-                    </div>
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="hidden md:table-header-group">
+                <TableRow>
+                  <TableHead>Staff ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {staffList.map((staff) => (
+                  <TableRow key={staff.id} className="flex flex-col md:table-row border-b md:border-b-0 pb-4 md:pb-0 mb-4 md:mb-0">
+                    <TableCell className="block md:table-cell">
+                      <span className="md:hidden font-bold inline-block w-24">Staff ID:</span>
+                      <span className="font-medium">{staff.id}</span>
+                    </TableCell>
+                    <TableCell className="block md:table-cell">
+                      <span className="md:hidden font-bold inline-block w-24">Name:</span>
+                      {staff.name}
+                    </TableCell>
+                    <TableCell className="block md:table-cell">
+                      <span className="md:hidden font-bold inline-block w-24">Role:</span>
+                      {staff.role}
+                    </TableCell>
+                    <TableCell className="block md:table-cell">
+                      <span className="md:hidden font-bold inline-block w-24">Status:</span>
+                      <Badge className={statusTone(staff.status)}>{staff.status}</Badge>
+                    </TableCell>
+                    <TableCell className="block md:table-cell">
+                      <span className="md:hidden font-bold inline-block w-24">Email:</span>
+                      {staff.email}
+                    </TableCell>
+                    <TableCell className="block md:table-cell pt-4 md:pt-2">
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm">Edit</Button>
+                        <Button variant="ghost" size="sm">Deactivate</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

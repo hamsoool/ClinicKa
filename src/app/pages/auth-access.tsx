@@ -618,7 +618,7 @@ export default function AuthAccessPage() {
           </Link>
         </div>
 
-        <div className="grid flex-1 gap-10 py-10 lg:grid-cols-[1fr_0.96fr] lg:items-center">
+        <div className="flex flex-col-reverse gap-10 py-10 lg:grid lg:flex-none lg:grid-cols-[1fr_0.96fr] lg:items-center">
           <div className="space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/74 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_14px_36px_rgba(11,28,48,0.05)]">
               <CheckCircle2 className="h-4 w-4" />

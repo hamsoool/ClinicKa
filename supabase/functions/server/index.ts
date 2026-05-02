@@ -1283,6 +1283,51 @@ app.post("/admin/archive-account", async (c) => {
   }
 });
 
+app.post("/admin/restore-account/:archiveId", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  try {
+    const archiveState = await getArchivedAccountsTableState();
+    if (!archiveState.available) return archivedAccountsMigrationRequired();
+
+    const archiveId = c.req.param('archiveId');
+    if (!archiveId) return badRequest('archiveId is required');
+
+    const { data: archivedAccount, error: archiveLookupError } = await supabase
+      .from('archived_accounts')
+      .select('*')
+      .eq('id', archiveId)
+      .maybeSingle();
+
+    if (archiveLookupError) throw new Error(archiveLookupError.message);
+    if (!archivedAccount) return badRequest('Archived account not found.');
+
+    const userId = archivedAccount.user_id;
+
+    const { error: archiveDeleteError } = await supabase.from('archived_accounts').delete().eq('id', archiveId);
+    if (archiveDeleteError) throw new Error(archiveDeleteError.message);
+
+    if (archivedAccount.role === 'staff') {
+      const { error: staffUpdateError } = await supabase
+        .from('staff_users')
+        .update({ is_active: true })
+        .eq('profile_id', userId);
+
+      if (staffUpdateError) throw new Error(staffUpdateError.message);
+    }
+
+    await setArchivedAuthState(userId);
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error restoring account:', error);
+    return c.json({ error: 'Failed to restore account', details: String(error) }, 500);
+  }
+});
+
 app.delete("/admin/archive-account/:archiveId", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
