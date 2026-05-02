@@ -264,6 +264,16 @@ async function setArchivedAuthState(userId: string) {
   }
 }
 
+async function clearArchivedAuthState(userId: string) {
+  const { error } = await supabase.auth.admin.updateUserById(userId, {
+    ban_duration: 'none',
+  } as any);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 async function authenticate(c: any): Promise<Requester | null> {
   const authHeader = c.req.header('Authorization') || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -1319,7 +1329,7 @@ app.post("/admin/restore-account/:archiveId", async (c) => {
       if (staffUpdateError) throw new Error(staffUpdateError.message);
     }
 
-    await setArchivedAuthState(userId);
+    await clearArchivedAuthState(userId);
 
     return c.json({ success: true });
   } catch (error) {
