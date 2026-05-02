@@ -2313,3 +2313,9 @@ export async function deleteArchivedUserAccount(archiveId: string) {
     method: 'DELETE',
   });
 }
+
+export async function restoreArchivedUserAccount(archiveId: string) {
+    return apiRequest<{ success: boolean }>(`/functions/v1/server/admin/restore-account/${encodeURIComponent(archiveId)}`, {
+    method: 'POST',
+  });
+}

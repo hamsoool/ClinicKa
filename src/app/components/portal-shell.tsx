@@ -179,16 +179,7 @@ export default function PortalShell({
         Skip to main content
       </a>
 
-      <button
-        type="button"
-        className="fixed left-4 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary text-white shadow-lg md:hidden"
-        onClick={() => setMenuOpen((prev) => !prev)}
-        aria-controls="portal-sidebar"
-        aria-expanded={menuOpen}
-        aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-      >
-        {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-      </button>
+
 
       <aside
         id="portal-sidebar"
@@ -290,7 +281,7 @@ export default function PortalShell({
       ) : null}
 
       <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/40 bg-white/90 backdrop-blur md:left-72 md:h-16">
-        <div className="flex h-full items-center justify-between gap-2 px-3 pl-16 md:gap-3 md:px-8 md:pl-8">
+        <div className="flex h-full items-center justify-between gap-2 px-4 md:gap-3 md:px-8">
           <div className="min-w-0 flex-1">
             <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
               <span className="sm:hidden">{brandSubtitle}</span>
