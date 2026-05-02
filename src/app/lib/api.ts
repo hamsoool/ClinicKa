@@ -1,23 +1,11 @@
-import {
-  getMockAnalytics,
-  getMockStudentById,
-  getMockStudentRecords,
-  getMockSubmissionById,
-  mockSubmissions,
-  type MockSubmission,
-} from './mock-data';
 
 const supabaseUrl =
   import.meta.env.VITE_SUPABASE_URL;
 const publicAnonKey =
   import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
-export const IS_DEMO_MODE = DEMO_MODE;
-const DEMO_SUBMISSIONS_KEY = 'gc_demo_submissions';
-export const AUTH_STORAGE_KEY = 'gc_supabase_session';
 const GC_DOMAIN = 'gordoncollege.edu.ph';
-const previewStudent = getMockStudentById('202310417');
+export const AUTH_STORAGE_KEY = 'gc_supabase_session';
 const STORAGE_BUCKET = 'medical-files';
 const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
   photo: 'profile',
@@ -227,77 +215,6 @@ function deriveStudentIdFromEmail(email?: string | null) {
   return /^[0-9]{9}$/.test(localPart) ? localPart : null;
 }
 
-function cloneSubmission(record: MockSubmission): MockSubmission {
-  return JSON.parse(JSON.stringify(record)) as MockSubmission;
-}
-
-function getDefaultDemoSubmissions() {
-  return mockSubmissions.map(cloneSubmission);
-}
-
-function mergeSeedSubmissions(records: MockSubmission[]) {
-  const byId = new Map<string, MockSubmission>();
-
-  for (const record of getDefaultDemoSubmissions()) {
-    byId.set(record.id, record);
-  }
-
-  for (const record of records) {
-    byId.set(record.id, record);
-  }
-
-  return [...byId.values()].sort(
-    (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
-  );
-}
-
-function getDemoSubmissions(): MockSubmission[] {
-  if (typeof window === 'undefined') {
-    return getDefaultDemoSubmissions();
-  }
-
-  const raw = window.localStorage.getItem(DEMO_SUBMISSIONS_KEY);
-  if (!raw) {
-    const initial = mergeSeedSubmissions([]);
-    window.localStorage.setItem(DEMO_SUBMISSIONS_KEY, JSON.stringify(initial));
-    return initial;
-  }
-
-  try {
-    const merged = mergeSeedSubmissions(JSON.parse(raw) as MockSubmission[]);
-    window.localStorage.setItem(DEMO_SUBMISSIONS_KEY, JSON.stringify(merged));
-    return merged;
-  } catch {
-    const initial = mergeSeedSubmissions([]);
-    window.localStorage.setItem(DEMO_SUBMISSIONS_KEY, JSON.stringify(initial));
-    return initial;
-  }
-}
-
-function setDemoSubmissions(records: MockSubmission[]) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(DEMO_SUBMISSIONS_KEY, JSON.stringify(records));
-}
-
-function getStudentIdFallback() {
-  return previewStudent?.student_id || '202310417';
-}
-
-function buildAnalytics(records: MockSubmission[]) {
-  const uniqueStudents = new Set(records.map((sub) => sub.studentId)).size;
-  const totalSubmissions = records.length;
-  const pendingRecords = records.filter((sub) => sub.status === 'pending').length;
-  const approvedRecords = records.filter((sub) => sub.status === 'approved').length;
-  const returnedRecords = records.filter((sub) => sub.status === 'returned').length;
-
-  return {
-    totalStudents: uniqueStudents,
-    totalSubmissions,
-    pendingRecords,
-    approvedRecords,
-    returnedRecords,
-  };
-}
 
 const demoStaffUsers = [
   {
@@ -559,8 +476,6 @@ export async function updateUserPassword(newPassword: string, token?: string | n
 }
 
 export async function hasServerPasswordSetupCompleted(token?: string | null) {
-  if (DEMO_MODE) return false;
-
   try {
     const user = await getCurrentAuthUser(token);
     const rows = await restRequest<Array<{ password_setup_completed?: boolean | null }>>(
@@ -575,8 +490,6 @@ export async function hasServerPasswordSetupCompleted(token?: string | null) {
 }
 
 export async function markServerPasswordSetupCompleted(token?: string | null) {
-  if (DEMO_MODE) return;
-
   try {
     const user = await getCurrentAuthUser(token);
     await restRequest(
@@ -1258,38 +1171,7 @@ export async function signOut() {
 }
 
 export async function getMe(token?: string | null) {
-  if (DEMO_MODE) {
-    return {
-      profile: {
-        id: 'preview-student',
-        role: 'student' as UserRole,
-        email: previewStudent?.email || '202310417@gordoncollege.edu.ph',
-        student_id: previewStudent?.student_id || '202310417',
-        first_name: previewStudent?.first_name || 'Demo',
-        last_name: previewStudent?.last_name || 'Student',
-        department: previewStudent?.department || 'CCS',
-        course: previewStudent?.course || 'BS Computer Science',
-      },
-      student: {
-        student_id: previewStudent?.student_id || '202310417',
-        first_name: previewStudent?.first_name || 'Demo',
-        last_name: previewStudent?.last_name || 'Student',
-        middle_initial: previewStudent?.middle_initial || 'A',
-        department: previewStudent?.department || 'CCS',
-        course: previewStudent?.course || 'BS Computer Science',
-        year_level: previewStudent?.year_level || 3,
-        age: previewStudent?.age || 20,
-        sex: previewStudent?.sex || 'male',
-        birthday: previewStudent?.birthday || '2005-01-15',
-        civil_status: previewStudent?.civil_status || 'Single',
-        contact_number: previewStudent?.contact_number || '09123456789',
-        address: previewStudent?.address || 'Olongapo City',
-      },
-        staff: null,
-        } satisfies AuthMe;
-  }
-
-  try {
+    try {
     return await apiRequest<AuthMe>('/functions/v1/server/me', { token });
   } catch {
     const user = await getCurrentAuthUser(token);
@@ -1451,38 +1333,7 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     address: data.address || '',
   };
 
-  if (DEMO_MODE) {
-    return {
-      success: true as const,
-      profile: {
-        id: 'demo-user',
-        role: 'student' as const,
-        email: previewStudent?.student_id ? `${previewStudent.student_id}@${GC_DOMAIN}` : `student@${GC_DOMAIN}`,
-        student_id: payload.studentId || previewStudent?.student_id || '202310417',
-        first_name: payload.firstName || null,
-        last_name: payload.lastName || null,
-        department: payload.department || null,
-        course: payload.course || null,
-      },
-      student: {
-        student_id: payload.studentId || previewStudent?.student_id || '202310417',
-        first_name: payload.firstName || null,
-        last_name: payload.lastName || null,
-        middle_initial: previewStudent?.middle_initial || null,
-        department: payload.department || null,
-        course: payload.course || null,
-        year_level: previewStudent?.year_level || null,
-        age: previewStudent?.age || null,
-        sex: previewStudent?.sex || null,
-        birthday: payload.birthday || null,
-        civil_status: previewStudent?.civil_status || null,
-        contact_number: payload.contactNumber || null,
-        address: payload.address || null,
-      },
-    };
-  }
-
-  try {
+    try {
     return await apiRequest<{
       success: boolean;
       profile: AuthMe['profile'];
@@ -1562,44 +1413,7 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
 }
 
 export async function submitMedicalRecord(data: any) {
-  if (DEMO_MODE) {
-    const records = getDemoSubmissions();
-    const recordId = `demo-${Date.now()}`;
-    const now = new Date().toISOString();
-    const newRecord: MockSubmission = {
-      id: recordId,
-      studentId: data.studentId || getStudentIdFallback(),
-      firstName: data.firstName || 'Demo',
-      lastName: data.lastName || 'Student',
-      middleInitial: data.middleInitial || '',
-      course: data.course || 'BS Computer Science',
-      department: data.department || 'CCS',
-      year: String(data.yearLevel || '1'),
-      status: 'pending',
-      submittedAt: now,
-      updatedAt: now,
-      age: data.age ? String(data.age) : '',
-      sex: data.sex || '',
-      birthday: data.birthday || '',
-      civilStatus: data.civilStatus || '',
-      contactNumber: data.contactNumber || '',
-      address: data.address || '',
-      emergencyContact: data.emergencyContact,
-      medicalHistory: data.medicalHistory,
-      allergyDetails: data.allergyDetails || '',
-      hadOperation: data.hadOperation || 'no',
-      operationDetails: data.operationDetails || '',
-      bloodPressure: data.bloodPressure || '',
-      weight: data.weight || '',
-      height: data.height || '',
-      bmi: data.bmi || '',
-    };
-    records.unshift(newRecord);
-    setDemoSubmissions(records);
-    return { success: true as const, recordId };
-  }
-
-  const me = await getMe();
+    const me = await getMe();
   const studentId = me.profile.student_id || data.studentId;
   if (!studentId) {
     throw new Error('Student ID is required.');
@@ -1732,17 +1546,7 @@ export async function submitMedicalRecord(data: any) {
 }
 
 export async function getStudentRecords(studentId?: string) {
-  if (DEMO_MODE) {
-    const records = getDemoSubmissions();
-    const targetStudentId = studentId || getStudentIdFallback();
-    return {
-      records: records
-        .filter((record) => record.studentId === targetStudentId)
-        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()),
-    };
-  }
-
-  const me = await getMe();
+    const me = await getMe();
   const targetStudentId = studentId || me.profile.student_id;
   if (!targetStudentId) {
     return { records: [] };
@@ -1754,16 +1558,7 @@ export async function getStudentRecords(studentId?: string) {
 }
 
 export async function getStudentProfileAssets(studentId?: string, profileId?: string | null) {
-  if (DEMO_MODE) {
-    return {
-      photoUrl: null,
-      signatureUrl: null,
-      photoFileName: null,
-      signatureFileName: null,
-    } satisfies StudentProfileAssets;
-  }
-
-  const me = await getMe();
+    const me = await getMe();
   const resolvedStudentId = studentId || me.student?.student_id || me.profile.student_id || '';
   const resolvedProfileId = profileId || me.student?.profile_id || me.profile.id || '';
   const token = getAccessToken();
@@ -1799,11 +1594,7 @@ export async function getStudentProfilePhoto(studentId?: string) {
     return { photoUrl: assets.photoUrl };
   }
 
-  if (DEMO_MODE) {
-    return { photoUrl: null as string | null };
-  }
-
-  const me = await getMe();
+    const me = await getMe();
   const targetStudentId = studentId || me.profile.student_id;
   if (!targetStudentId) return { photoUrl: null as string | null };
 
@@ -1846,28 +1637,12 @@ export async function getStudentProfilePhoto(studentId?: string) {
 }
 
 export async function getSubmissions() {
-  if (DEMO_MODE) {
-    return {
-      submissions: getDemoSubmissions().sort(
-        (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
-      ),
-    };
-  }
-
-  const submissions = await getMappedSubmissions('order=submitted_at.desc');
+    const submissions = await getMappedSubmissions('order=submitted_at.desc');
   return { submissions };
 }
 
 export async function getSubmission(id: string) {
-  if (DEMO_MODE) {
-    const submission = getDemoSubmissions().find((record) => record.id === id) || getMockSubmissionById(id);
-    if (!submission) {
-      throw new Error('Record not found');
-    }
-    return { submission: cloneSubmission(submission) };
-  }
-
-  const submissions = await getMappedSubmissions(`id=eq.${id}&order=submitted_at.desc`);
+    const submissions = await getMappedSubmissions(`id=eq.${id}&order=submitted_at.desc`);
   const submission = submissions[0];
   if (!submission) {
     throw new Error('Record not found');
@@ -1886,92 +1661,7 @@ export async function saveSubmissionReview(id: string, review: any) {
   const nextStatus = review.status;
   const now = new Date().toISOString();
 
-  if (DEMO_MODE) {
-    const records = getDemoSubmissions();
-    const nextRecords = records.map((record) =>
-      record.id === id
-        ? {
-            ...record,
-            firstName: personalInfo.firstName || record.firstName,
-            lastName: personalInfo.lastName || record.lastName,
-            middleInitial: personalInfo.middleInitial || '',
-            department: personalInfo.department || '',
-            course: personalInfo.course || '',
-            year: String(personalInfo.year || record.year || ''),
-            age: personalInfo.age || '',
-            sex: personalInfo.sex || '',
-            birthday: personalInfo.birthday || '',
-            civilStatus: personalInfo.civilStatus || '',
-            contactNumber: personalInfo.contactNumber || '',
-            address: personalInfo.address || '',
-            allergyDetails: review.allergyDetails || '',
-            hadOperation: review.hadOperation || 'no',
-            operationDetails: review.operationDetails || '',
-            bloodPressure: studentMeasurements.bloodPressure || '',
-            weight: studentMeasurements.weight || '',
-            height: studentMeasurements.height || '',
-            bmi: studentMeasurements.bmi || '',
-            emergencyContact: {
-              name: emergencyContact.name || '',
-              relationship: emergencyContact.relationship || '',
-              phone: emergencyContact.phone || '',
-              address: emergencyContact.address || '',
-            },
-            medicalHistory,
-            staffMeasurements: {
-              bloodPressure: staffMeasurements.bloodPressure || '',
-              cardiacRate: staffMeasurements.cardiacRate || '',
-              respiratoryRate: staffMeasurements.respiratoryRate || '',
-              temperature: staffMeasurements.temperature || '',
-              weight: staffMeasurements.weight || '',
-              height: staffMeasurements.height || '',
-              bmi: staffMeasurements.bmi || '',
-              visualAcuity: staffMeasurements.visualAcuity || '',
-              skin: staffMeasurements.skin || '',
-              heent: staffMeasurements.heent || '',
-              chestLungs: staffMeasurements.chestLungs || '',
-              heart: staffMeasurements.heart || '',
-              abdomen: staffMeasurements.abdomen || '',
-              extremities: staffMeasurements.extremities || '',
-              others: staffMeasurements.others || '',
-              examinedBy: staffMeasurements.examinedBy || '',
-            },
-            labResults: {
-              xrayDate: labResults.xrayDate || '',
-              xrayResult: labResults.xrayResult || 'normal',
-              xrayFindings: labResults.xrayFindings || '',
-              cbcDate: labResults.cbcDate || '',
-              hemoglobin: labResults.hemoglobin || '',
-              hematocrit: labResults.hematocrit || '',
-              wbc: labResults.wbc || '',
-              plateletCount: labResults.plateletCount || '',
-              bloodType: labResults.bloodType || '',
-              glucose: labResults.glucose || '',
-              protein: labResults.protein || '',
-              urinalysisDate: labResults.urinalysisDate || '',
-              urinalysisGlucose: labResults.urinalysisGlucose || '',
-              urinalysisProtein: labResults.urinalysisProtein || '',
-              others: labResults.others || '',
-            },
-            clearanceInfo: {
-              findingsNormal: typeof clearanceInfo.findingsNormal === 'boolean' ? clearanceInfo.findingsNormal : true,
-              diagnosis: clearanceInfo.diagnosis || '',
-              remarks: clearanceInfo.remarks || '',
-              purpose: clearanceInfo.purpose || 'enrolment',
-              controlNo: clearanceInfo.controlNo || '',
-              issuedDate: clearanceInfo.issuedDate || '',
-            },
-            staffNotes: review.staffNotes ?? record.staffNotes,
-            status: (nextStatus || record.status) as MockSubmission['status'],
-            updatedAt: now,
-          }
-        : record,
-    );
-    setDemoSubmissions(nextRecords);
-    return { success: true as const };
-  }
-
-  const me = await getMe();
+    const me = await getMe();
   const reviewedBy = me.staff?.id || null;
 
   await Promise.all([
@@ -2199,23 +1889,7 @@ export async function saveSubmissionReview(id: string, review: any) {
 }
 
 export async function updateSubmissionStatus(id: string, status: string, staffNotes?: string) {
-  if (DEMO_MODE) {
-    const records = getDemoSubmissions();
-    const nextRecords = records.map((record) =>
-      record.id === id
-        ? {
-            ...record,
-            status: status as MockSubmission['status'],
-            staffNotes: staffNotes || record.staffNotes,
-            updatedAt: new Date().toISOString(),
-          }
-        : record,
-    );
-    setDemoSubmissions(nextRecords);
-    return { success: true as const };
-  }
-
-  const me = await getMe();
+    const me = await getMe();
   const reviewedBy = me.staff?.id || null;
   await restRequest(
     'submissions',
@@ -2237,54 +1911,7 @@ export async function updateSubmissionStatus(id: string, status: string, staffNo
 }
 
 export async function updateMeasurements(id: string, measurements: any) {
-  if (DEMO_MODE) {
-    const records = getDemoSubmissions();
-    const nextRecords = records.map((record) =>
-      record.id === id
-        ? {
-            ...record,
-            updatedAt: new Date().toISOString(),
-            staffMeasurements: {
-              bloodPressure: measurements.bloodPressure || '',
-              cardiacRate: measurements.cardiacRate || '',
-              respiratoryRate: measurements.respiratoryRate || '',
-              temperature: measurements.temperature || '',
-              weight: measurements.weight || '',
-              height: measurements.height || '',
-              bmi: measurements.bmi || '',
-              visualAcuity: measurements.visualAcuity || '',
-              skin: measurements.skin || '',
-              heent: measurements.heent || '',
-              chestLungs: measurements.chestLungs || '',
-              heart: measurements.heart || '',
-              abdomen: measurements.abdomen || '',
-              extremities: measurements.extremities || '',
-              others: measurements.others || '',
-              examinedBy: measurements.examinedBy || '',
-            },
-            labResults: {
-              xrayDate: measurements.xrayDate || '',
-              xrayResult: measurements.xrayResult || 'normal',
-              xrayFindings: measurements.xrayFindings || '',
-              cbcDate: measurements.cbcDate || '',
-              hemoglobin: measurements.hemoglobin || '',
-              hematocrit: measurements.hematocrit || '',
-              wbc: measurements.wbc || '',
-              plateletCount: measurements.plateletCount || '',
-              bloodType: measurements.bloodType || '',
-              urinalysisDate: measurements.urinalysisDate || '',
-              urinalysisGlucose: measurements.urinalysisGlucose || '',
-              urinalysisProtein: measurements.urinalysisProtein || '',
-              others: measurements.others || '',
-            },
-          }
-        : record,
-    );
-    setDemoSubmissions(nextRecords);
-    return { success: true as const };
-  }
-
-  const me = await getMe();
+    const me = await getMe();
   await Promise.all([
     restRequest(
       'staff_measurements',
@@ -2393,15 +2020,7 @@ export async function updateMeasurements(id: string, measurements: any) {
 }
 
 export async function uploadFile(file: File, recordId: string, fileType: string) {
-  if (DEMO_MODE) {
-    return {
-      success: true as const,
-      url: URL.createObjectURL(file),
-      fileName: `${recordId}/${fileType}_${file.name}`,
-    };
-  }
-
-  const storageBucket = STORAGE_BUCKET_BY_FILE_TYPE[fileType] || STORAGE_BUCKET;
+    const storageBucket = STORAGE_BUCKET_BY_FILE_TYPE[fileType] || STORAGE_BUCKET;
   const token = getAccessToken();
   if (!token || !supabaseUrl || !publicAnonKey) {
     throw new Error('You must be signed in to upload files.');
@@ -2507,15 +2126,7 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
 }
 
 export async function uploadStudentProfileAsset(file: File, studentId: string, fileType: 'photo' | 'signature') {
-  if (DEMO_MODE) {
-    return {
-      success: true as const,
-      url: URL.createObjectURL(file),
-      fileName: `profiles/${studentId}/${fileType}_${file.name}`,
-    };
-  }
-
-  const targetStudentId = String(studentId || '').trim();
+    const targetStudentId = String(studentId || '').trim();
   if (!targetStudentId) {
     throw new Error('Student ID is required to upload profile assets.');
   }
@@ -2615,11 +2226,7 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
 }
 
 export async function getAnalytics() {
-  if (DEMO_MODE) {
-    return buildAnalytics(getDemoSubmissions());
-  }
-
-  const [students, submissionStatuses] = await Promise.all([
+    const [students, submissionStatuses] = await Promise.all([
     restRequest<any[]>('students', 'select=student_id'),
     restRequest<any[]>('submissions', 'select=status'),
   ]);
@@ -2638,11 +2245,7 @@ export async function getAnalytics() {
 }
 
 export async function getStaffUsers() {
-  if (DEMO_MODE) {
-    return { staff: demoStaffUsers };
-  }
-
-  return apiRequest<{ staff: Array<{ id: string; userId?: string; name: string; role: string; status: string; email: string }> }>(
+    return apiRequest<{ staff: Array<{ id: string; userId?: string; name: string; role: string; status: string; email: string }> }>(
     '/functions/v1/server/staff-users',
   );
 }
@@ -2659,11 +2262,7 @@ type AdminCreateAccountInput = {
 };
 
 export async function createAdminAccount(input: AdminCreateAccountInput) {
-  if (DEMO_MODE) {
-    return { success: true as const };
-  }
-
-  return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-account', {
+    return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-account', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2682,11 +2281,7 @@ type AdminCreateStaffInput = {
 };
 
 export async function createAdminStaff(input: AdminCreateStaffInput) {
-  if (DEMO_MODE) {
-    return { success: true as const };
-  }
-
-  return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-staff', {
+    return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-staff', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2696,39 +2291,15 @@ export async function createAdminStaff(input: AdminCreateStaffInput) {
 }
 
 export async function getUserAccounts() {
-  if (DEMO_MODE) {
-    return {
-      users: demoUserAccounts.map((user) => ({
-        userId: user.id,
-        id: user.id,
-        name: user.name,
-        email: '',
-        role: user.role,
-        roleKey: user.role === 'Administrator' ? 'admin' : user.role === 'Clinic Staff' ? 'staff' : 'student',
-        status: user.status,
-        lastActive: user.lastActive,
-        canArchive: user.role !== 'Administrator',
-      })) satisfies AdminUserAccount[],
-    };
-  }
-
-  return apiRequest<{ users: AdminUserAccount[] }>('/functions/v1/server/user-accounts');
+    return apiRequest<{ users: AdminUserAccount[] }>('/functions/v1/server/user-accounts');
 }
 
 export async function getArchivedUserAccounts() {
-  if (DEMO_MODE) {
-    return { users: [] as ArchivedUserAccount[] };
-  }
-
-  return apiRequest<{ users: ArchivedUserAccount[] }>('/functions/v1/server/archived-accounts');
+    return apiRequest<{ users: ArchivedUserAccount[] }>('/functions/v1/server/archived-accounts');
 }
 
 export async function archiveUserAccount(input: { userId: string; reason?: string }) {
-  if (DEMO_MODE) {
-    return { success: true as const };
-  }
-
-  return apiRequest<{ success: boolean }>('/functions/v1/server/admin/archive-account', {
+    return apiRequest<{ success: boolean }>('/functions/v1/server/admin/archive-account', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2738,11 +2309,7 @@ export async function archiveUserAccount(input: { userId: string; reason?: strin
 }
 
 export async function deleteArchivedUserAccount(archiveId: string) {
-  if (DEMO_MODE) {
-    return { success: true as const };
-  }
-
-  return apiRequest<{ success: boolean }>(`/functions/v1/server/admin/archive-account/${encodeURIComponent(archiveId)}`, {
+    return apiRequest<{ success: boolean }>(`/functions/v1/server/admin/archive-account/${encodeURIComponent(archiveId)}`, {
     method: 'DELETE',
   });
 }
