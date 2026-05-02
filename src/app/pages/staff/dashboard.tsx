@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import {
   Activity,
   ArrowRight,
+  ArrowUpDown,
   Award,
   CheckCircle2,
   ClipboardCheck,
@@ -11,7 +12,6 @@ import {
   FolderOpen,
   ShieldCheck,
   Stethoscope,
-  Users,
 } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { getAnalytics, getSubmissions } from '../../lib/api';
@@ -26,12 +26,6 @@ type AnalyticsSummary = {
   returnedRecords: number;
 };
 
-const yearLabels: Record<string, string> = {
-  '1': '1st Year',
-  '2': '2nd Year',
-  '3': '3rd Year',
-  '4': '4th Year',
-};
 
 function formatEmailName(email?: string | null) {
   if (!email) return '';
@@ -103,6 +97,8 @@ export default function StaffDashboard() {
     'Clinic Nurse / Doctor';
   const position = me?.staff?.position || 'Clinic Nurse / Doctor';
 
+  const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>('desc');
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -124,9 +120,11 @@ export default function StaffDashboard() {
     return <PortalPageSkeleton variant="dashboard" />;
   }
 
-  const sortedBySubmitted = [...submissions].sort(
-    (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
-  );
+  const sortedBySubmitted = [...submissions].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
   const actionQueue = sortedBySubmitted.filter(
     (submission) => submission.status === 'pending' || submission.status === 'returned',
   );
@@ -137,55 +135,71 @@ export default function StaffDashboard() {
       const bTime = new Date(b.updatedAt || b.submittedAt).getTime();
       return bTime - aTime;
     });
-  const statusByYear = ['1', '2', '3', '4'].map((year) => {
-    const yearlySubmissions = submissions.filter((submission) => String(submission.year) === year);
+
+  const departments = Array.from(new Set(submissions.map((s) => s.department || 'Other'))).sort();
+  const statusByDepartment = departments.map((dept) => {
+    const deptSubmissions = submissions.filter((submission) => (submission.department || 'Other') === dept);
     return {
-      year,
-      label: yearLabels[year],
-      pending: yearlySubmissions.filter((submission) => submission.status === 'pending').length,
-      approved: yearlySubmissions.filter((submission) => submission.status === 'approved').length,
-      returned: yearlySubmissions.filter((submission) => submission.status === 'returned').length,
+      department: dept,
+      label: dept,
+      pending: deptSubmissions.filter((submission) => submission.status === 'pending').length,
+      approved: deptSubmissions.filter((submission) => submission.status === 'approved').length,
+      returned: deptSubmissions.filter((submission) => submission.status === 'returned').length,
     };
   });
-  const courseLoad = Object.entries(
-    submissions.reduce<Record<string, number>>((acc, submission) => {
-      const course = submission.course || 'Unassigned Course';
-      acc[course] = (acc[course] || 0) + 1;
-      return acc;
-    }, {}),
-  )
-    .map(([course, count]) => ({ course, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 4);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const submittedToday = submissions.filter((s) => {
+    const d = new Date(s.submittedAt);
+    return d >= today;
+  }).length;
+
+  const submittedYesterday = submissions.filter((s) => {
+    const d = new Date(s.submittedAt);
+    return d >= yesterday && d < today;
+  }).length;
+
+  const getQueueNumber = (submission: MockSubmission, allSubmissions: MockSubmission[]) => {
+    const submitDate = new Date(submission.submittedAt).toDateString();
+    const sameDaySubmissions = allSubmissions.filter(s => new Date(s.submittedAt).toDateString() === submitDate);
+    sameDaySubmissions.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+    const index = sameDaySubmissions.findIndex(s => s.id === submission.id);
+    return index + 1;
+  };
 
   const summaryCards = [
     {
-      label: 'Students Monitored',
-      value: analytics?.totalStudents || 0,
-      icon: Users,
+      label: 'Submitted Today',
+      value: submittedToday,
+      icon: Activity,
       tone: 'text-primary',
-      detail: 'Unique students with clinic records',
+      detail: 'Student submissions received today',
+    },
+    {
+      label: 'Submitted Yesterday',
+      value: submittedYesterday,
+      icon: Clock3,
+      tone: 'text-blue-600',
+      detail: 'Student submissions received yesterday',
     },
     {
       label: 'Awaiting Review',
       value: analytics?.pendingRecords || 0,
-      icon: Clock3,
+      icon: FileWarning,
       tone: 'text-amber-600',
-      detail: 'Submissions ready for nurse or doctor action',
+      detail: 'Total registered students awaiting review',
     },
     {
       label: 'Cleared Records',
       value: analytics?.approvedRecords || 0,
       icon: ShieldCheck,
       tone: 'text-emerald-700',
-      detail: 'Approved medical clearances released',
-    },
-    {
-      label: 'Returned Cases',
-      value: analytics?.returnedRecords || 0,
-      icon: FileWarning,
-      tone: 'text-rose-700',
-      detail: 'Records waiting for student revision',
+      detail: 'Total students successfully cleared',
     },
   ] as const;
 
@@ -283,12 +297,21 @@ export default function StaffDashboard() {
                 Start with the most recent records that still need clinic action.
               </p>
             </div>
-            <button
-              onClick={() => navigate('/staff/submissions')}
-              className="text-sm font-semibold text-primary transition-colors hover:text-primary/80"
-            >
-              Open Queue
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setQueueSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+                className="flex items-center gap-1.5 rounded-full border border-outline-variant/50 bg-surface-container-low px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+              >
+                <ArrowUpDown className="h-3 w-3" />
+                {queueSortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
+              </button>
+              <button
+                onClick={() => navigate('/staff/submissions')}
+                className="text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+              >
+                Open Queue
+              </button>
+            </div>
           </div>
 
           {actionQueue.length === 0 ? (
@@ -307,8 +330,9 @@ export default function StaffDashboard() {
                   onClick={() => navigate(`/staff/review/${submission.id}`)}
                   className="flex w-full items-start gap-4 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low"
                 >
-                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary">
-                    <ClipboardCheck className="h-5 w-5" />
+                  <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-surface-container text-primary">
+                    <span className="text-[9px] font-bold leading-none uppercase tracking-widest text-on-surface-variant">Queue</span>
+                    <span className="mt-1 text-lg font-black leading-none">#{getQueueNumber(submission, submissions)}</span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -322,7 +346,7 @@ export default function StaffDashboard() {
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-on-surface-variant">
-                      {submission.studentId} | {submission.course} | {yearLabels[String(submission.year)] || `Year ${submission.year}`}
+                      {submission.studentId} | {submission.course}
                     </p>
                     <p className="mt-2 text-sm text-on-surface-variant">
                       Submitted {formatDate(submission.submittedAt)}
@@ -337,14 +361,14 @@ export default function StaffDashboard() {
 
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <div className="mb-6">
-            <h2 className="text-lg font-semibold text-on-surface">Year-Level Status Overview</h2>
+            <h2 className="text-lg font-semibold text-on-surface">Department Status Overview</h2>
             <p className="mt-1 text-sm text-on-surface-variant">
               Track where approvals and follow-ups are concentrated.
             </p>
           </div>
           <div className="space-y-3">
-            {statusByYear.map((row) => (
-              <div key={row.year} className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4">
+            {statusByDepartment.map((row) => (
+              <div key={row.department} className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4">
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-sm font-semibold text-on-surface">{row.label}</p>
                   <div className="flex items-center gap-2 text-xs text-on-surface-variant">
@@ -383,120 +407,6 @@ export default function StaffDashboard() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-on-surface">Recent Clearances</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">
-                Recently approved submissions ready for records and certificate release.
-              </p>
-            </div>
-            <button
-              onClick={() => navigate('/staff/records')}
-              className="text-sm font-semibold text-primary transition-colors hover:text-primary/80"
-            >
-              View Records
-            </button>
-          </div>
-
-          {recentApprovals.length === 0 ? (
-            <div className="py-10 text-center text-sm text-on-surface-variant">
-              No approved records yet.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentApprovals.slice(0, 4).map((submission) => (
-                <div
-                  key={submission.id}
-                  className="flex items-center gap-4 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 transition-colors hover:bg-surface-container-low"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container text-primary">
-                    <ShieldCheck className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-on-surface">
-                      {submission.firstName} {submission.lastName}
-                    </p>
-                    <p className="text-xs text-on-surface-variant">
-                      Released {formatDate(submission.updatedAt || submission.submittedAt)}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-primary-container/25 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-on-primary-container">
-                    Approved
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-on-surface">Course Load Snapshot</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">
-                The busiest programs by clinic submission volume.
-              </p>
-            </div>
-            <button
-              onClick={() => navigate('/staff/reports')}
-              className="text-sm font-semibold text-primary transition-colors hover:text-primary/80"
-            >
-              Open Reports
-            </button>
-          </div>
-
-          {courseLoad.length === 0 ? (
-            <div className="py-10 text-center text-sm text-on-surface-variant">
-              No submission data available yet.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {courseLoad.map((course) => {
-                const total = submissions.length || 1;
-                const width = Math.max((course.count / total) * 100, 8);
-
-                return (
-                  <div key={course.course} className="space-y-2">
-                    <div className="flex items-center justify-between gap-4 text-sm">
-                      <p className="font-medium text-on-surface">{course.course}</p>
-                      <p className="text-on-surface-variant">{course.count}</p>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-surface-container">
-                      <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="mt-8 grid gap-3 sm:grid-cols-2">
-            <button
-              onClick={() => navigate('/staff/submissions')}
-              className="flex items-center justify-between rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-4 text-left transition-colors hover:bg-surface-container"
-            >
-              <div>
-                <p className="text-sm font-semibold text-on-surface">Open Review Queue</p>
-                <p className="mt-1 text-xs text-on-surface-variant">Process pending cases</p>
-              </div>
-              <Activity className="h-5 w-5 text-primary" />
-            </button>
-            <button
-              onClick={() => navigate('/staff/certificates')}
-              className="flex items-center justify-between rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-4 text-left transition-colors hover:bg-surface-container"
-            >
-              <div>
-                <p className="text-sm font-semibold text-on-surface">Release Certificates</p>
-                <p className="mt-1 text-xs text-on-surface-variant">Generate clearance copies</p>
-              </div>
-              <FolderOpen className="h-5 w-5 text-primary" />
-            </button>
           </div>
         </div>
       </div>

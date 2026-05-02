@@ -3,7 +3,7 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import type { MockSubmission } from '../../lib/mock-data';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FileText, Eye, X, ArrowLeft, AlertCircle } from 'lucide-react';
 import MedicalRecordPreview from '../../components/medical-record-preview';
@@ -22,9 +22,11 @@ export default function StudentRecords() {
 
   const records = data || [];
 
-  if (isError) {
-    toast.error('Failed to load records');
-  }
+  useEffect(() => {
+    if (isError) {
+      toast.error('Failed to load records');
+    }
+  }, [isError]);
 
   if (loading) {
     return <PortalPageSkeleton variant="table" />;
