@@ -2020,7 +2020,37 @@ export async function saveSubmissionReview(id: string, review: any) {
     ),
   ]);
 
+  // Trigger email notification if status is one of the target states
+  if (nextStatus === 'returned' || nextStatus === 'approved' || nextStatus === 'physical_exam_done') {
+    try {
+      await sendStatusEmailNotification(id, nextStatus, review.staffNotes || review.staff_notes || '');
+    } catch (error) {
+      console.warn('Failed to send email notification:', error);
+    }
+  }
+
   return { success: true as const };
+}
+
+async function sendStatusEmailNotification(submissionId: string, status: string, staffNotes: string) {
+  const response = await fetch('/api/send-email', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      submissionId,
+      status,
+      staffNotes,
+    }),
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to send email (${response.status})`);
+  }
+  
+  return response.json();
 }
 
 export async function updateSubmissionStatus(id: string, status: string, staffNotes?: string) {
@@ -2042,6 +2072,16 @@ export async function updateSubmissionStatus(id: string, status: string, staffNo
       }),
     },
   );
+
+  // Trigger email notification
+  if (status === 'returned' || status === 'approved' || status === 'physical_exam_done') {
+    try {
+      await sendStatusEmailNotification(id, status, staffNotes || '');
+    } catch (error) {
+      console.warn('Failed to send email notification:', error);
+    }
+  }
+
   return { success: true as const };
 }
 
