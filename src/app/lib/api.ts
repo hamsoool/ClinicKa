@@ -1553,6 +1553,133 @@ export async function submitMedicalRecord(data: any) {
   return { success: true as const, recordId };
 }
 
+export async function updateMedicalRecord(recordId: string, data: any) {
+  const me = await getMe();
+  const studentId = me.profile.student_id || data.studentId;
+  if (!studentId) {
+    throw new Error('Student ID is required.');
+  }
+
+  const studentPayload = {
+    student_id: studentId,
+    profile_id: me.profile.id,
+    first_name: data.firstName || null,
+    last_name: data.lastName || null,
+    middle_initial: data.middleInitial || null,
+    department: data.department || null,
+    course: data.course || null,
+    age: data.age ? Number(data.age) : null,
+    sex: data.sex || null,
+    birthday: data.birthday || null,
+    civil_status: data.civilStatus || null,
+    contact_number: data.contactNumber || null,
+    address: data.address || null,
+  };
+
+  await restRequest(
+    'students',
+    'on_conflict=student_id',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(studentPayload),
+    },
+  );
+
+  await restRequest(
+    'submissions',
+    `id=eq.${recordId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        year_level: String(data.yearLevel || ''),
+        first_name: data.firstName || null,
+        last_name: data.lastName || null,
+        middle_initial: data.middleInitial || null,
+        department: data.department || null,
+        course: data.course || null,
+        age: data.age ? Number(data.age) : null,
+        sex: data.sex || null,
+        birthday: data.birthday || null,
+        civil_status: data.civilStatus || null,
+        contact_number: data.contactNumber || null,
+        address: data.address || null,
+        allergy_details: data.allergyDetails || null,
+        had_operation: data.hadOperation || null,
+        operation_details: data.operationDetails || null,
+        blood_pressure: data.bloodPressure || null,
+        weight: data.weight || null,
+        height: data.height || null,
+        bmi: data.bmi || null,
+        data_privacy_consent: Boolean(data.dataPrivacyConsent),
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
+
+  await Promise.all([
+    restRequest(
+      'emergency_contacts',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: recordId,
+          name: data.emergencyContact?.name || null,
+          relationship: data.emergencyContact?.relationship || null,
+          phone: data.emergencyContact?.phone || null,
+          address: data.emergencyContact?.address || null,
+        }),
+      },
+    ),
+    restRequest(
+      'medical_history',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          submission_id: recordId,
+          allergy: Boolean(data.medicalHistory?.allergy),
+          asthma: Boolean(data.medicalHistory?.asthma),
+          chicken_pox: Boolean(data.medicalHistory?.chickenPox),
+          diabetes: Boolean(data.medicalHistory?.diabetes),
+          dysmenorrhea: Boolean(data.medicalHistory?.dysmenorrhea),
+          epilepsy_seizure: Boolean(data.medicalHistory?.epilepsySeizure),
+          heart_disorder: Boolean(data.medicalHistory?.heartDisorder),
+          hepatitis: Boolean(data.medicalHistory?.hepatitis),
+          hypertension: Boolean(data.medicalHistory?.hypertension),
+          measles: Boolean(data.medicalHistory?.measles),
+          mumps: Boolean(data.medicalHistory?.mumps),
+          anxiety_disorder: Boolean(data.medicalHistory?.anxietyDisorder),
+          panic_attack: Boolean(data.medicalHistory?.panicAttack),
+          pneumonia: Boolean(data.medicalHistory?.pneumonia),
+          ptb_primary_complex: Boolean(data.medicalHistory?.ptbPrimaryComplex),
+          typhoid_fever: Boolean(data.medicalHistory?.typhoidFever),
+          covid19: Boolean(data.medicalHistory?.covid19),
+          uti: Boolean(data.medicalHistory?.uti),
+        }),
+      },
+    ),
+  ]);
+
+  return { success: true as const, recordId };
+}
+
+
 export async function getStudentRecords(studentId?: string) {
     const me = await getMe();
   const targetStudentId = studentId || me.profile.student_id;
@@ -1701,7 +1828,7 @@ export async function saveSubmissionReview(id: string, review: any) {
           weight: studentMeasurements.weight || null,
           height: studentMeasurements.height || null,
           bmi: studentMeasurements.bmi || null,
-          staff_notes: review.staffNotes || null,
+          staff_notes: review.staffNotes || review.staff_notes || null,
           status: nextStatus || undefined,
           reviewed_by: reviewedBy,
           updated_at: now,

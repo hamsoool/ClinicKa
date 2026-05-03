@@ -319,7 +319,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
       return (
         <div className="space-y-4">
           <h3 className="mb-4 text-xl font-semibold">Laboratory Results Upload</h3>
-          <p className="mb-4 text-sm text-muted-foreground">Please upload your laboratory results (PDF, PNG, or JPG format)</p>
+          <p className="mb-4 text-sm text-muted-foreground">Please upload your laboratory results (PDF, PNG, or JPG format, max 2MB per file)</p>
           <div className="space-y-4">
             <Card>
               <CardContent className="pt-6">

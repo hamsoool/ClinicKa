@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
-import { AlertCircle, CheckCircle2, Clock3, FileText, Plus } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Clock3, FileText, Plus } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { toast } from 'sonner';
 import { getStudentRecords } from '../../lib/api';
@@ -13,6 +13,7 @@ type StudentRecord = {
   status?: string;
   submittedAt?: string;
   updatedAt?: string;
+  staffNotes?: string;
 };
 
 const yearLabels = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
@@ -156,6 +157,41 @@ export default function StudentDashboard() {
           </div>
         </div>
       </div>
+      
+      {latestRecord?.status === 'returned' && (
+        <div className="rounded-[1.75rem] border border-error/20 bg-error-container/20 p-6 shadow-sm backdrop-blur sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-error/10 text-error">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+            <div className="flex-1 space-y-4">
+              <div>
+                <h3 className="text-xl font-bold tracking-tight text-on-error-container">Action Required: Correction Needed</h3>
+                <p className="mt-1 text-on-error-container/80">
+                  Your medical record submission for <span className="font-semibold">{yearLabels[Number(latestRecord.year) - 1] || 'current year'}</span> has been returned by the clinic staff.
+                </p>
+              </div>
+              
+              {latestRecord.staffNotes && (
+                <div className="rounded-2xl border border-error/10 bg-white/50 p-5 shadow-inner backdrop-blur-sm">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-error mb-2">Note from Clinic Staff:</p>
+                  <p className="text-on-error-container italic leading-relaxed">"{latestRecord.staffNotes}"</p>
+                </div>
+              )}
+              
+              <div className="flex pt-2">
+                <button
+                  onClick={() => navigate('/student/year-selection')}
+                  className="inline-flex items-center gap-2 rounded-xl bg-error px-5 py-2.5 text-sm font-semibold text-on-error shadow-lg shadow-error/20 transition-all hover:bg-error/90 hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  Update and Resubmit
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
         <div className="border-b border-outline-variant/30 bg-surface-container-lowest px-6 py-4">
