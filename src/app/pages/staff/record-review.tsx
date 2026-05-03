@@ -10,6 +10,14 @@ import {
   ShieldCheck,
   Stethoscope,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -273,6 +281,8 @@ export default function StaffRecordReview() {
   const [clearanceForm, setClearanceForm] = useState<ClearanceForm>(() => createClearanceForm());
   const [staffNotes, setStaffNotes] = useState('');
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('pending');
+  const [showReturnDialog, setShowReturnDialog] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
 
   useEffect(() => {
     void loadSubmission();
@@ -370,12 +380,13 @@ export default function StaffRecordReview() {
     }));
   }
 
-  async function persistReview(nextStatus?: ReviewStatus) {
+  async function persistReview(nextStatus?: ReviewStatus, customNotes?: string) {
     if (!submissionId || !submission) return;
 
     setSaving(true);
     try {
       const statusToSave = nextStatus || reviewStatus;
+      const notesToSave = customNotes !== undefined ? customNotes : staffNotes;
 
       await saveSubmissionReview(submissionId, {
         personalInfo: {
@@ -421,6 +432,7 @@ export default function StaffRecordReview() {
           extremities: assessmentForm.extremities,
           others: assessmentForm.others,
           examinedBy: assessmentForm.examinedBy,
+          staff_notes: notesToSave,
         },
         labResults: {
           xrayDate: assessmentForm.xrayDate,
@@ -439,7 +451,7 @@ export default function StaffRecordReview() {
           urinalysisProtein: assessmentForm.urinalysisProtein,
         },
         clearanceInfo: clearanceForm,
-        staffNotes,
+        staffNotes: notesToSave,
         status: statusToSave,
       });
 
@@ -501,7 +513,7 @@ export default function StaffRecordReview() {
           urinalysisProtein: assessmentForm.urinalysisProtein,
         },
         clearanceInfo: clearanceForm,
-        staffNotes,
+        staffNotes: notesToSave,
         status: statusToSave,
         updatedAt: new Date().toISOString(),
       };
@@ -509,17 +521,11 @@ export default function StaffRecordReview() {
       setSubmission(updatedSubmission);
       setReviewStatus(statusToSave);
       toast.success(
-        nextStatus
-          ? `Medical clearance ${
-              nextStatus === 'approved'
-                ? 'approved'
-                : nextStatus === 'returned'
-                  ? 'returned for correction'
-                  : nextStatus === 'physical_exam_done'
-                    ? 'marked as physical exam done'
-                    : 'marked pending'
-            }`
-          : 'Review changes saved',
+        nextStatus === 'approved'
+          ? 'Medical clearance approved and issued.'
+          : nextStatus === 'returned'
+            ? `Record returned for correction with note: "${notesToSave.substring(0, 30)}${notesToSave.length > 30 ? '...' : ''}"`
+            : 'Review saved as draft.',
       );
     } catch (error) {
       console.error('Error saving review:', error);
@@ -1462,7 +1468,10 @@ export default function StaffRecordReview() {
               <ClipboardCheck className="mr-2 h-4 w-4" />
               Physical Exam Done
             </Button>
-            <Button variant="destructive" onClick={() => void persistReview('returned')} disabled={saving}>
+            <Button variant="destructive" onClick={() => {
+              setReturnReason(staffNotes);
+              setShowReturnDialog(true);
+            }} disabled={saving}>
               Return for Correction
             </Button>
             <Button
@@ -1476,6 +1485,42 @@ export default function StaffRecordReview() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={showReturnDialog} onOpenChange={setShowReturnDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Return for Correction</DialogTitle>
+            <DialogDescription>
+              Provide clear instructions or reasons for returning this medical record. The student will see this note on their dashboard.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="returnReason" className="mb-2 block">Correction Message</Label>
+            <Textarea
+              id="returnReason"
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+              placeholder="e.g. Please re-upload a clearer copy of your X-Ray result or complete the missing fields."
+              rows={4}
+              className="resize-none"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReturnDialog(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setStaffNotes(returnReason);
+                void persistReview('returned', returnReason);
+                setShowReturnDialog(false);
+              }}
+              disabled={!returnReason.trim() || saving}
+            >
+              {saving ? 'Returning...' : 'Confirm Return'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

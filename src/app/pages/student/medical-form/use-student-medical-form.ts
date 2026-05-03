@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { MockSubmission } from '../../../lib/mock-data';
-import { submitMedicalRecord, uploadFile } from '../../../lib/api';
+import { submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import { DEFAULT_MEDICAL_HISTORY } from './constants';
 import type {
   BmiCategory,
@@ -74,12 +74,13 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
   const [step, setStep] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, privacyAccepted));
-
   useEffect(() => {
     setSubmitted(false);
     setStep(1);
     setUploading(false);
+    setActiveSubmissionId(null);
     setFormData(buildInitialFormData(year, me, privacyAccepted));
   }, [year, me?.profile.id, privacyAccepted]);
 
@@ -167,8 +168,8 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
   }, []);
 
   const handleFileChange = useCallback((field: 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => {
-    if (file && file.size > 10 * 1024 * 1024) {
-      toast.error('File size must be less than 10MB');
+    if (file && file.size > 2 * 1024 * 1024) {
+      toast.error('File size must be less than 2MB');
       return;
     }
     setFormData((prev) => ({ ...prev, [field]: file }));
@@ -277,6 +278,17 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
   );
 
   const submit = useCallback(async () => {
+    if (uploading) return;
+
+    // Final file size check before submission
+    const files = [formData.xrayFile, formData.cbcFile, formData.urinalysisFile];
+    for (const file of files) {
+      if (file && file.size > 2 * 1024 * 1024) {
+        toast.error(`File "${file.name}" exceeds the 2MB limit. Please upload a smaller file.`);
+        return;
+      }
+    }
+
     setUploading(true);
     try {
       const payload = {
@@ -305,7 +317,18 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
         bmi: formData.bmi,
       };
 
-      const { recordId } = await submitMedicalRecord(payload);
+      let recordId = activeSubmissionId;
+      if (!recordId) {
+        const result = await submitMedicalRecord(payload);
+        recordId = result.recordId;
+        setActiveSubmissionId(recordId);
+      } else {
+        await updateMedicalRecord(recordId, payload);
+      }
+
+      if (!recordId) {
+        throw new Error('Failed to identify or create medical record.');
+      }
 
       const uploads = [
         formData.xrayFile ? uploadFile(formData.xrayFile, recordId, 'xray') : null,
@@ -316,13 +339,14 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
       await Promise.all(uploads);
       toast.success('Medical record submitted successfully!');
       setSubmitted(true);
+      setActiveSubmissionId(null);
     } catch (error) {
       console.error('Submission error:', error);
-      toast.error('Failed to submit medical record');
+      toast.error(error instanceof Error ? error.message : 'Failed to submit medical record');
     } finally {
       setUploading(false);
     }
-  }, [formData]);
+  }, [formData, uploading, activeSubmissionId]);
 
   return {
     step,
