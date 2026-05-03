@@ -6,7 +6,7 @@ import MedicalRecordPreview from '../../../components/medical-record-preview';
 import type { SubmissionPreviewRecord } from './types';
 
 type Props = {
-  previewRef: RefObject<HTMLDivElement | null>;
+  previewRef: RefObject<HTMLDivElement>;
   previewRecord: SubmissionPreviewRecord;
   onDownload: () => void;
   onBack: () => void;

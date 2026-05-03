@@ -6,11 +6,9 @@
     "vite.config.ts"
   ],
   "exclude": [
-    "app",
     "dist",
     "exports",
-    "node_modules",
-    "react-router.config.ts"
+    "node_modules"
   ],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
