@@ -17,11 +17,13 @@ export default function StudentMedicalForm() {
   const { me } = useAuth();
   const previewRef = useRef<HTMLDivElement>(null);
   const privacyAccepted = searchParams.get('privacy') === 'accepted';
+  const editSubmissionId = searchParams.get('edit');
 
   useEffect(() => {
     if (!year || privacyAccepted) return;
-    navigate(`/student/privacy-waiver/${year}`, { replace: true });
-  }, [navigate, privacyAccepted, year]);
+    const editQuery = editSubmissionId ? `?edit=${encodeURIComponent(editSubmissionId)}` : '';
+    navigate(`/student/privacy-waiver/${year}${editQuery}`, { replace: true });
+  }, [editSubmissionId, navigate, privacyAccepted, year]);
 
   const {
     step,
@@ -39,7 +41,7 @@ export default function StudentMedicalForm() {
     handleFileChange,
     getBmiCategory,
     submit,
-  } = useStudentMedicalForm({ year, me, privacyAccepted });
+  } = useStudentMedicalForm({ year, me, privacyAccepted, editSubmissionId });
 
   const downloadPdf = useCallback(() => {
     if (!previewRef.current) return;

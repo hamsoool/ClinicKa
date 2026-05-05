@@ -27,7 +27,7 @@ export const MedicalFormSubmittedView = memo(function MedicalFormSubmittedView({
             <p className="text-muted-foreground">Your medical record has been submitted and is pending review by the clinic staff.</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={onDownload} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={onDownload} className="bg-primary text-on-primary hover:bg-primary/90">
               <Download className="mr-2 h-4 w-4" />
               Download PDF
             </Button>

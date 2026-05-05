@@ -31,6 +31,50 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   onFileChange,
   getBmiCategory,
 }: Props) {
+  const getUploadedFileName = (url?: string) => {
+    if (!url) return 'Uploaded file';
+    try {
+      const cleaned = url.split('?')[0] || url;
+      const rawName = cleaned.split('/').pop() || 'Uploaded file';
+      return decodeURIComponent(rawName);
+    } catch {
+      return 'Uploaded file';
+    }
+  };
+
+  const getFileExtension = (url?: string) => {
+    if (!url) return '';
+    const cleaned = (url.split('?')[0] || '').toLowerCase();
+    return cleaned.split('.').pop() || '';
+  };
+
+  const renderExistingFilePreview = (url?: string) => {
+    if (!url) return null;
+    const ext = getFileExtension(url);
+
+    if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
+      return (
+        <img
+          src={url}
+          alt="Current uploaded file"
+          className="mt-2 max-h-48 w-full rounded-md border border-emerald-200 object-contain bg-white"
+        />
+      );
+    }
+
+    if (ext === 'pdf') {
+      return (
+        <iframe
+          src={url}
+          title="Current uploaded PDF"
+          className="mt-2 h-56 w-full rounded-md border border-emerald-200 bg-white"
+        />
+      );
+    }
+
+    return null;
+  };
+
   switch (step) {
     case 1:
       return (
@@ -319,7 +363,49 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
       return (
         <div className="space-y-4">
           <h3 className="mb-4 text-xl font-semibold">Laboratory Results Upload</h3>
-          <p className="mb-4 text-sm text-muted-foreground">Please upload your laboratory results (PDF, PNG, or JPG format, max 2MB per file)</p>
+          <div className="rounded-lg border bg-surface-container-low p-4">
+            <Label>Did you take your tests at James L. Gordon Hospital? *</Label>
+            <RadioGroup
+              value={formData.labTestLocation}
+              onValueChange={(value) => onFieldChange('labTestLocation', value as '' | 'jlgh' | 'other')}
+              className="mt-3 grid gap-3 sm:grid-cols-2"
+            >
+              <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
+                <RadioGroupItem value="jlgh" id="test-jlgh" />
+                <span>Yes, at James L. Gordon Hospital</span>
+              </label>
+              <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
+                <RadioGroupItem value="other" id="test-other" />
+                <span>No, from another clinic/lab</span>
+              </label>
+            </RadioGroup>
+          </div>
+
+          {formData.labTestLocation === 'jlgh' ? (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-emerald-700 font-medium">You can skip file upload for this step.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Since tests were done at James L. Gordon Hospital, clinic staff can verify records internally.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {formData.labTestLocation === 'other' ? (
+            <>
+          <div>
+            <Label htmlFor="otherClinicName">Clinic/Laboratory Name *</Label>
+            <Input
+              id="otherClinicName"
+              value={formData.otherClinicName}
+              onChange={(event) => onFieldChange('otherClinicName', event.target.value)}
+              placeholder="Enter clinic or laboratory name"
+              className="mt-2"
+            />
+          </div>
+
+          <p className="mb-1 text-sm text-muted-foreground">Upload your laboratory results (PDF, PNG, or JPG format, max 2MB per file)</p>
           <div className="space-y-4">
             <Card>
               <CardContent className="pt-6">
@@ -336,6 +422,23 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   <div className="mt-2 flex items-center text-sm text-green-600">
                     <Check className="mr-2 h-4 w-4" />
                     {formData.xrayFile.name}
+                  </div>
+                )}
+                {!formData.xrayFile && formData.existingXrayFileUrl && (
+                  <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                    <p className="font-medium">Current file: {getUploadedFileName(formData.existingXrayFileUrl)}</p>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Choose a new file above if you want to replace this upload.
+                    </p>
+                    <a
+                      href={formData.existingXrayFileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
+                    >
+                      View current file
+                    </a>
+                    {renderExistingFilePreview(formData.existingXrayFileUrl)}
                   </div>
                 )}
               </CardContent>
@@ -357,6 +460,23 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                     {formData.cbcFile.name}
                   </div>
                 )}
+                {!formData.cbcFile && formData.existingCbcFileUrl && (
+                  <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                    <p className="font-medium">Current file: {getUploadedFileName(formData.existingCbcFileUrl)}</p>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Choose a new file above if you want to replace this upload.
+                    </p>
+                    <a
+                      href={formData.existingCbcFileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
+                    >
+                      View current file
+                    </a>
+                    {renderExistingFilePreview(formData.existingCbcFileUrl)}
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -376,9 +496,28 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                     {formData.urinalysisFile.name}
                   </div>
                 )}
+                {!formData.urinalysisFile && formData.existingUrinalysisFileUrl && (
+                  <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                    <p className="font-medium">Current file: {getUploadedFileName(formData.existingUrinalysisFileUrl)}</p>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Choose a new file above if you want to replace this upload.
+                    </p>
+                    <a
+                      href={formData.existingUrinalysisFileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
+                    >
+                      View current file
+                    </a>
+                    {renderExistingFilePreview(formData.existingUrinalysisFileUrl)}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
+            </>
+          ) : null}
         </div>
       );
     case 6:
@@ -456,15 +595,26 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             <CardContent className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
-                <span>Chest X-Ray: {formData.xrayFile?.name}</span>
+                <span>
+                  Test Location:{' '}
+                  {formData.labTestLocation === 'jlgh'
+                    ? 'James L. Gordon Hospital'
+                    : formData.labTestLocation === 'other'
+                    ? formData.otherClinicName || 'Other clinic/lab'
+                    : 'Not specified'}
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
-                <span>CBC: {formData.cbcFile?.name}</span>
+                <span>Chest X-Ray: {formData.xrayFile?.name || (formData.existingXrayFileUrl ? 'Existing file on record' : 'Not provided')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
-                <span>Urinalysis: {formData.urinalysisFile?.name}</span>
+                <span>CBC: {formData.cbcFile?.name || (formData.existingCbcFileUrl ? 'Existing file on record' : 'Not provided')}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Check className="h-4 w-4 text-green-600" />
+                <span>Urinalysis: {formData.urinalysisFile?.name || (formData.existingUrinalysisFileUrl ? 'Existing file on record' : 'Not provided')}</span>
               </div>
             </CardContent>
           </Card>

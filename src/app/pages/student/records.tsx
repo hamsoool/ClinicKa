@@ -45,6 +45,8 @@ export default function StudentRecords() {
         return <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge>;
       case 'returned':
         return <Badge className="bg-red-100 text-red-800 border-red-200">Returned</Badge>;
+      case 'resubmitted':
+        return <Badge className="bg-orange-100 text-orange-800 border-orange-200">Resubmitted</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -89,6 +91,12 @@ export default function StudentRecords() {
                         {record.status === 'approved' && record.updatedAt && (
                           <p className="text-sm text-green-600 flex items-center font-medium">
                             <span className="mr-1">Approved:</span>
+                            {new Date(record.updatedAt).toLocaleDateString()}
+                          </p>
+                        )}
+                        {record.status === 'resubmitted' && record.updatedAt && (
+                          <p className="text-sm text-orange-600 flex items-center font-medium">
+                            <span className="mr-1">Resubmitted:</span>
                             {new Date(record.updatedAt).toLocaleDateString()}
                           </p>
                         )}

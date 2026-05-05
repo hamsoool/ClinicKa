@@ -100,6 +100,8 @@ export default function StaffSubmissions() {
         return <Badge variant="secondary" className="bg-green-100 text-green-800">Approved</Badge>;
       case 'returned':
         return <Badge variant="secondary" className="bg-red-100 text-red-800">Returned</Badge>;
+      case 'resubmitted':
+        return <Badge variant="secondary" className="bg-orange-100 text-orange-800">Resubmitted</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -156,6 +158,7 @@ export default function StaffSubmissions() {
                 <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="returned">Returned</SelectItem>
+                <SelectItem value="resubmitted">Resubmitted</SelectItem>
               </SelectContent>
             </Select>
 

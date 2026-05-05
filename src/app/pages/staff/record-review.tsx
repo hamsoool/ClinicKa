@@ -45,6 +45,8 @@ type SubmissionDetails = MockSubmission & {
   cbcFileUrl?: string;
   urinalysisFileUrl?: string;
   signatureUrl?: string;
+  labTestLocation?: 'jlgh' | 'other' | '';
+  otherClinicName?: string;
 };
 
 type ReviewStatus = MockSubmission['status'];
@@ -557,6 +559,15 @@ export default function StaffRecordReview() {
   const labUploadsCount = [submission.xrayFileUrl, submission.cbcFileUrl, submission.urinalysisFileUrl].filter(Boolean).length;
   const persistedStatus = submission.status;
   const hasUnsavedStatusChange = reviewStatus !== persistedStatus;
+  const isApprovedLocked = persistedStatus === 'approved';
+  const physicalExamStatus = persistedStatus === 'approved' || persistedStatus === 'physical_exam_done'
+    ? 'Completed'
+    : 'Pending';
+  const clearanceStatus = persistedStatus === 'approved'
+    ? 'Approved'
+    : persistedStatus === 'returned'
+      ? 'Returned'
+      : 'Pending';
 
   return (
     <div className="space-y-6">
@@ -598,6 +609,22 @@ export default function StaffRecordReview() {
                 ? 'Needs student correction'
                 : 'Still under clinical review'}
           </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge className={physicalExamStatus === 'Completed' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
+              Physical Exam: {physicalExamStatus}
+            </Badge>
+            <Badge className={clearanceStatus === 'Approved' ? 'bg-green-100 text-green-800 hover:bg-green-100' : clearanceStatus === 'Returned' ? 'bg-red-100 text-red-800 hover:bg-red-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
+              Clearance: {clearanceStatus}
+            </Badge>
+            <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
+              Lab Source:{' '}
+              {submission.labTestLocation === 'jlgh'
+                ? 'James L. Gordon Hospital'
+                : submission.labTestLocation === 'other'
+                ? submission.otherClinicName || 'External Clinic/Lab'
+                : 'Not specified'}
+            </Badge>
+          </div>
         </div>
       </div>
 
@@ -1346,7 +1373,7 @@ export default function StaffRecordReview() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <Label htmlFor="reviewStatus">Medical Clearance Status</Label>
-                  <Select value={reviewStatus} onValueChange={(value) => setReviewStatus(value as ReviewStatus)}>
+                  <Select value={reviewStatus} onValueChange={(value) => setReviewStatus(value as ReviewStatus)} disabled={isApprovedLocked}>
                     <SelectTrigger id="reviewStatus" className="mt-2">
                       <SelectValue />
                     </SelectTrigger>
@@ -1359,6 +1386,9 @@ export default function StaffRecordReview() {
                   </Select>
                   {hasUnsavedStatusChange ? (
                     <p className="mt-2 text-xs text-amber-600">This status change will be applied after you save.</p>
+                  ) : null}
+                  {isApprovedLocked ? (
+                    <p className="mt-2 text-xs text-green-700">This record is approved and status changes are locked.</p>
                   ) : null}
                 </div>
 
@@ -1451,10 +1481,13 @@ export default function StaffRecordReview() {
           <div className="space-y-1">
             <p className="font-semibold text-foreground">Finalize the clinic staff review</p>
             <p className="text-sm text-muted-foreground">
-              Save draft edits at any time, then keep the case pending, mark the physical exam complete, approve, or return it.
+              {isApprovedLocked
+                ? 'This submission is already approved. Actions are locked to prevent accidental changes.'
+                : 'Save draft edits at any time, then keep the case pending, mark the physical exam complete, approve, or return it.'}
             </p>
           </div>
 
+          {!isApprovedLocked ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button variant="outline" onClick={() => void persistReview()} disabled={saving}>
               <Save className="mr-2 h-4 w-4" />
@@ -1483,6 +1516,9 @@ export default function StaffRecordReview() {
               Approve Clearance
             </Button>
           </div>
+          ) : (
+            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved - Locked</Badge>
+          )}
         </CardContent>
       </Card>
 
