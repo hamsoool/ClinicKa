@@ -1,4 +1,4 @@
-import { Circle, CheckCircle2, FileText, FlaskConical, Info, Upload } from 'lucide-react';
+import { CheckCircle2, FileText, FlaskConical, Info } from 'lucide-react';
 
 const requirements = [
   {
@@ -22,10 +22,10 @@ const requirements = [
 ];
 
 const checklist = [
-  { label: 'Physical Examination Form', status: 'approved', detail: 'Approved on Oct 12, 2023' },
-  { label: 'Chest X-Ray', status: 'pending', detail: 'Pending Upload' },
-  { label: 'Complete Blood Count', status: 'pending', detail: 'Pending Upload' },
-  { label: 'Urinalysis', status: 'pending', detail: 'Pending Upload' },
+  { label: 'Physical Examination Form', status: 'approved' },
+  { label: 'Chest X-Ray', status: 'approved' },
+  { label: 'Complete Blood Count', status: 'approved' },
+  { label: 'Urinalysis', status: 'approved' },
 ];
 
 export default function StudentRequirements() {
@@ -43,9 +43,6 @@ export default function StudentRequirements() {
           <div className="rounded-[1.25rem] border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
             <div className="mb-6 flex items-center justify-between border-b border-outline-variant/30 pb-4">
               <h2 className="text-2xl font-semibold text-on-surface">Required Documents</h2>
-              <span className="rounded-full bg-surface-container px-3 py-1 text-xs font-semibold text-on-surface-variant">
-                {requirements.length} Missing
-              </span>
             </div>
 
             <div className="space-y-4">
@@ -78,10 +75,6 @@ export default function StudentRequirements() {
                         </div>
                       </div>
 
-                      <button className="inline-flex items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container">
-                        <Upload className="h-4 w-4" />
-                        Browse Files
-                      </button>
                     </div>
                   </div>
                 );
@@ -98,26 +91,10 @@ export default function StudentRequirements() {
 
             <div className="mt-5 space-y-4">
               {checklist.map((item) => (
-                <div
-                  key={item.label}
-                  className={`flex items-start gap-3 ${item.status === 'pending' ? 'opacity-60' : ''}`}
-                >
-                  {item.status === 'approved' ? (
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-primary" />
-                  ) : (
-                    <Circle className="mt-0.5 h-5 w-5 text-outline" />
-                  )}
+                <div key={item.label} className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 text-primary" />
                   <div>
                     <p className="text-sm font-semibold text-on-surface">{item.label}</p>
-                    <p
-                      className={`text-xs ${
-                        item.status === 'approved'
-                          ? 'text-on-surface-variant'
-                          : 'text-on-error-container'
-                      }`}
-                    >
-                      {item.detail}
-                    </p>
                   </div>
                 </div>
               ))}

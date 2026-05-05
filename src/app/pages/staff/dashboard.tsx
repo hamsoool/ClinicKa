@@ -14,6 +14,7 @@ import {
   Stethoscope,
 } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getAnalytics, getSubmissions } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { MockSubmission } from '../../lib/mock-data';
@@ -61,6 +62,8 @@ function getStatusLabel(status: MockSubmission['status']) {
       return 'Approved';
     case 'returned':
       return 'Returned';
+    case 'resubmitted':
+      return 'Resubmitted';
     default:
       return status;
   }
@@ -76,6 +79,8 @@ function getStatusStyles(status: MockSubmission['status']) {
       return 'bg-blue-100 text-blue-800';
     case 'returned':
       return 'bg-error-container/70 text-on-error-container';
+    case 'resubmitted':
+      return 'bg-orange-100 text-orange-800';
     default:
       return 'bg-surface-variant text-on-surface-variant';
   }
@@ -98,6 +103,7 @@ export default function StaffDashboard() {
   const position = me?.staff?.position || 'Clinic Nurse / Doctor';
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'returned' | 'resubmitted'>('all');
 
   useEffect(() => {
     const loadData = async () => {
@@ -126,8 +132,20 @@ export default function StaffDashboard() {
     return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
   });
   const actionQueue = sortedBySubmitted.filter(
-    (submission) => submission.status === 'pending' || submission.status === 'returned',
+    (submission) =>
+      submission.status === 'pending' || submission.status === 'returned' || submission.status === 'resubmitted',
   );
+  const pendingQueue = actionQueue.filter((submission) => submission.status === 'pending');
+  const returnedQueue = actionQueue.filter((submission) => submission.status === 'returned');
+  const resubmittedQueue = actionQueue.filter((submission) => submission.status === 'resubmitted');
+  const visibleQueue =
+    queueTab === 'pending'
+      ? pendingQueue
+      : queueTab === 'returned'
+      ? returnedQueue
+      : queueTab === 'resubmitted'
+      ? resubmittedQueue
+      : actionQueue;
   const recentApprovals = [...submissions]
     .filter((submission) => submission.status === 'approved')
     .sort((a, b) => {
@@ -145,6 +163,7 @@ export default function StaffDashboard() {
       pending: deptSubmissions.filter((submission) => submission.status === 'pending').length,
       approved: deptSubmissions.filter((submission) => submission.status === 'approved').length,
       returned: deptSubmissions.filter((submission) => submission.status === 'returned').length,
+      resubmitted: deptSubmissions.filter((submission) => submission.status === 'resubmitted').length,
     };
   });
 
@@ -313,18 +332,32 @@ export default function StaffDashboard() {
               </button>
             </div>
           </div>
+          <Tabs
+            value={queueTab}
+            onValueChange={(value) => setQueueTab(value as 'all' | 'pending' | 'returned' | 'resubmitted')}
+            className="mb-5"
+          >
+            <TabsList className="h-10 w-full max-w-xl">
+              <TabsTrigger value="all">All ({actionQueue.length})</TabsTrigger>
+              <TabsTrigger value="pending">Pending ({pendingQueue.length})</TabsTrigger>
+              <TabsTrigger value="returned">Returned ({returnedQueue.length})</TabsTrigger>
+              <TabsTrigger value="resubmitted">Resubmitted ({resubmittedQueue.length})</TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-          {actionQueue.length === 0 ? (
+          {visibleQueue.length === 0 ? (
             <div className="flex min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-low px-6 text-center">
               <CheckCircle2 className="h-10 w-10 text-primary" />
               <p className="mt-4 text-lg font-semibold text-on-surface">All caught up</p>
               <p className="mt-2 max-w-sm text-sm text-on-surface-variant">
-                There are no pending or returned student records right now.
+                {queueTab === 'all'
+                  ? 'There are no pending, returned, or resubmitted student records right now.'
+                  : `There are no ${queueTab} records right now.`}
               </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {actionQueue.slice(0, 5).map((submission) => (
+              {visibleQueue.slice(0, 5).map((submission) => (
                 <button
                   key={submission.id}
                   onClick={() => navigate(`/staff/review/${submission.id}`)}
@@ -377,27 +410,35 @@ export default function StaffDashboard() {
                     <span>{row.approved} approved</span>
                     <span>|</span>
                     <span>{row.returned} returned</span>
+                    <span>|</span>
+                    <span>{row.resubmitted} resubmitted</span>
                   </div>
                 </div>
                 <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-surface-variant/50">
-                  {row.pending + row.approved + row.returned > 0 ? (
+                  {row.pending + row.approved + row.returned + row.resubmitted > 0 ? (
                     <>
                       <div
                         className="bg-amber-400"
                         style={{
-                          width: `${(row.pending / (row.pending + row.approved + row.returned)) * 100}%`,
+                          width: `${(row.pending / (row.pending + row.approved + row.returned + row.resubmitted)) * 100}%`,
                         }}
                       />
                       <div
                         className="bg-emerald-500"
                         style={{
-                          width: `${(row.approved / (row.pending + row.approved + row.returned)) * 100}%`,
+                          width: `${(row.approved / (row.pending + row.approved + row.returned + row.resubmitted)) * 100}%`,
                         }}
                       />
                       <div
                         className="bg-rose-400"
                         style={{
-                          width: `${(row.returned / (row.pending + row.approved + row.returned)) * 100}%`,
+                          width: `${(row.returned / (row.pending + row.approved + row.returned + row.resubmitted)) * 100}%`,
+                        }}
+                      />
+                      <div
+                        className="bg-orange-400"
+                        style={{
+                          width: `${(row.resubmitted / (row.pending + row.approved + row.returned + row.resubmitted)) * 100}%`,
                         }}
                       />
                     </>

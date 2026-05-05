@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -12,6 +13,7 @@ import { getStudentRecords } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
 export default function StudentCertificate() {
+  const navigate = useNavigate();
   const clearanceRef = useRef<HTMLDivElement>(null);
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
@@ -131,6 +133,19 @@ export default function StudentCertificate() {
                         <p className="text-sm text-red-700 mt-1">{record.staffNotes}</p>
                       </div>
                     )}
+                    <div className="mt-3">
+                      <Button
+                        onClick={() =>
+                          navigate(
+                            `/student/privacy-waiver/${record.year || '1'}?edit=${encodeURIComponent(record.id)}`,
+                          )
+                        }
+                        size="sm"
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        Edit and Resubmit
+                      </Button>
+                    </div>
                     <Badge variant="secondary" className="bg-red-100 text-red-800 mt-2">
                       <AlertCircle className="w-3 h-3 mr-1" /> Returned
                     </Badge>
@@ -178,7 +193,7 @@ export default function StudentCertificate() {
                   <p className="text-sm text-green-600 font-medium mt-0.5">Approved - 3 copies on A4</p>
                 </div>
               </div>
-              <Button onClick={downloadClearancePDF} className="bg-green-600 hover:bg-green-700">
+              <Button onClick={downloadClearancePDF} className="bg-primary text-on-primary hover:bg-primary/90">
                 <Download className="w-4 h-4 mr-2" />
                 Download PDF
               </Button>

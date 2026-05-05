@@ -5,7 +5,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Download } from 'lucide-react';
+import { Download, FileText, TrendingUp, Clock, Award, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAnalytics, getSubmissions } from '../../lib/api';
 
@@ -159,6 +159,46 @@ function buildSimplePdf(
   return new Blob([pdf], { type: 'application/pdf' });
 }
 
+// ── Stat Card ──────────────────────────────────────────────────────────────
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ElementType;
+  accent: string;
+}) {
+  return (
+    <Card className="border-outline-variant/30 overflow-hidden">
+      <CardContent className="pt-5 pb-5 px-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1 truncate">{label}</p>
+            <p className={`text-3xl font-bold leading-none ${accent}`}>{value}</p>
+          </div>
+          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${accent.replace('text-', 'bg-').replace('600', '100').replace('foreground', '100')}`}>
+            <Icon className={`w-4.5 h-4.5 ${accent}`} strokeWidth={2} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Filter Row Label ───────────────────────────────────────────────────────
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────
 export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) {
   const [analytics, setAnalytics] = useState<any>(null);
   const [submissions, setSubmissions] = useState<any[]>([]);
@@ -170,6 +210,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const [conditionFilter, setConditionFilter] = useState('all');
   const [certificateFilter, setCertificateFilter] = useState('all');
   const [surnameFilter, setSurnameFilter] = useState('all');
+  const [studentBatchFilter, setStudentBatchFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const today = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -200,6 +241,16 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     return [...keys].sort((a, b) => a.localeCompare(b));
   }, [submissions]);
 
+  const studentBatches = useMemo(() => {
+    const batches = new Set<string>();
+    submissions.forEach((s) => {
+      const id = String(s.studentId || '');
+      const match = id.match(/^(\d{4})/);
+      if (match?.[1]) batches.add(match[1]);
+    });
+    return [...batches].sort();
+  }, [submissions]);
+
   const filteredSubmissions = useMemo(() => submissions.filter((sub) => {
     if (departmentFilter !== 'all' && !(sub.department === departmentFilter || sub.course?.includes(departmentFilter))) return false;
     if (yearFilter !== 'all' && String(sub.year) !== yearFilter) return false;
@@ -212,11 +263,15 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       const lastName = String(sub.lastName || '').trim();
       if (!lastName.toUpperCase().startsWith(surnameFilter)) return false;
     }
+    if (studentBatchFilter !== 'all') {
+      const id = String(sub.studentId || '');
+      if (!id.startsWith(studentBatchFilter)) return false;
+    }
     const subDate = sub.submittedAt ? new Date(sub.submittedAt) : null;
     if (fromDate && subDate && subDate < new Date(`${fromDate}T00:00:00`)) return false;
     if (toDate && subDate && subDate > new Date(`${toDate}T23:59:59`)) return false;
     return true;
-  }), [submissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, surnameFilter, fromDate, toDate]);
+  }), [submissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, surnameFilter, studentBatchFilter, fromDate, toDate]);
 
   const dedupedFilteredSubmissions = useMemo(() => {
     const seen = new Set<string>();
@@ -281,6 +336,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         : conditionFilter.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase());
       const friendlyCertificate = CERTIFICATE_LABELS[certificateFilter] || certificateFilter;
       const friendlySurname = surnameFilter === 'all' ? 'All Surnames' : `Surname starts with ${surnameFilter}`;
+      const friendlyBatch = studentBatchFilter === 'all' ? 'All Batches' : `${studentBatchFilter} Batch`;
       const summaryRows = [
         { label: 'Total submissions', value: String(summary.total) },
         { label: 'Approved', value: String(summary.approved) },
@@ -313,6 +369,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         { label: 'Condition', value: friendlyCondition },
         { label: 'Certificate', value: friendlyCertificate },
         { label: 'Surname', value: friendlySurname },
+        { label: 'Student ID Batch', value: friendlyBatch },
         { label: 'Submitted From', value: fromDate || '-' },
         { label: 'Submitted To', value: toDate || '-' },
       ];
@@ -331,82 +388,303 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="text-muted-foreground">Loading reports...</div></div>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Loading reports...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-primary mb-2">{mode === 'admin' ? 'Admin' : 'Staff'} Reports & Analytics</h1>
-        <p className="text-muted-foreground">Filterable reports with downloadable PDF summaries</p>
+    <div className="space-y-5 max-w-screen-xl">
+
+      {/* ── Page Header ───────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-primary leading-tight">
+            {mode === 'admin' ? 'Admin' : 'Staff'} Reports &amp; Analytics
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Filter submissions and export professional PDF summaries.
+          </p>
+        </div>
+        <Button onClick={downloadPdf} className="bg-primary text-white hover:bg-primary/90 gap-2 shrink-0">
+          <Download className="w-4 h-4" />
+          Download PDF
+        </Button>
       </div>
-      <Card>
-        <CardHeader><CardTitle>Filters</CardTitle></CardHeader>
-        <CardContent className="grid md:grid-cols-4 gap-3">
-          <Select value={departmentFilter} onValueChange={setDepartmentFilter}><SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger><SelectContent><SelectItem value="all">All Departments</SelectItem>{DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select>
-          <Select value={yearFilter} onValueChange={setYearFilter}><SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger><SelectContent><SelectItem value="all">All Years</SelectItem>{Object.entries(YEAR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent></Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="all">All Statuses</SelectItem><SelectItem value="pending">Under Review</SelectItem><SelectItem value="physical_exam_done">Physical Exam Done</SelectItem><SelectItem value="approved">Approved</SelectItem><SelectItem value="returned">Returned</SelectItem></SelectContent></Select>
-          <Select value={certificateFilter} onValueChange={setCertificateFilter}><SelectTrigger><SelectValue placeholder="Certificate" /></SelectTrigger><SelectContent><SelectItem value="all">All Certificates</SelectItem><SelectItem value="issued">Issued Only</SelectItem><SelectItem value="not_issued">Not Issued</SelectItem></SelectContent></Select>
-          <Select value={courseFilter} onValueChange={setCourseFilter}><SelectTrigger><SelectValue placeholder="Course" /></SelectTrigger><SelectContent><SelectItem value="all">All Courses</SelectItem>{allCourses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
-          <Select value={conditionFilter} onValueChange={setConditionFilter}><SelectTrigger><SelectValue placeholder="Medical Condition" /></SelectTrigger><SelectContent><SelectItem value="all">All Conditions</SelectItem>{allConditions.map((k) => <SelectItem key={k} value={k}>{k.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase())}</SelectItem>)}</SelectContent></Select>
-          <Select value={surnameFilter} onValueChange={setSurnameFilter}>
-            <SelectTrigger><SelectValue placeholder="Surname" /></SelectTrigger>
-            <SelectContent>
-              {SURNAME_FILTERS.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {value === 'all' ? 'All Surnames' : `${value} - Surnames`}
-                </SelectItem>
+
+      {/* ── Stat Cards ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <StatCard label="Filtered Submissions" value={summary.total} icon={Users} accent="text-primary" />
+        <StatCard label="Approval Rate" value={`${summary.approvalRate}%`} icon={TrendingUp} accent="text-green-600" />
+        <StatCard label="1st Year Under Review" value={summary.firstYearUnderReview} icon={Clock} accent="text-amber-600" />
+        <StatCard label="Certificates Issued" value={summary.withCertificate} icon={Award} accent="text-blue-600" />
+      </div>
+
+      {/* ── Filters Card ──────────────────────────────────────────────── */}
+      <Card className="border-outline-variant/30">
+        <CardHeader className="pb-3 pt-5 px-5">
+          <CardTitle className="text-base font-semibold">Filters</CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-5 space-y-4">
+
+          {/* Row 1 — primary filters */}
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+            <FilterGroup label="Department">
+              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </FilterGroup>
+
+            <FilterGroup label="Year Level">
+              <Select value={yearFilter} onValueChange={setYearFilter}>
+                <SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  {Object.entries(YEAR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </FilterGroup>
+
+            <FilterGroup label="Status">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="pending">Under Review</SelectItem>
+                  <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="returned">Returned</SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterGroup>
+
+            <FilterGroup label="Certificate">
+              <Select value={certificateFilter} onValueChange={setCertificateFilter}>
+                <SelectTrigger><SelectValue placeholder="Certificate" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Certificates</SelectItem>
+                  <SelectItem value="issued">Issued Only</SelectItem>
+                  <SelectItem value="not_issued">Not Issued</SelectItem>
+                </SelectContent>
+              </Select>
+            </FilterGroup>
+          </div>
+
+          {/* Row 2 — secondary filters */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <FilterGroup label="Course">
+              <Select value={courseFilter} onValueChange={setCourseFilter}>
+                <SelectTrigger><SelectValue placeholder="Course" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Courses</SelectItem>
+                  {allCourses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </FilterGroup>
+
+            <FilterGroup label="Medical Condition">
+              <Select value={conditionFilter} onValueChange={setConditionFilter}>
+                <SelectTrigger><SelectValue placeholder="Medical Condition" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Conditions</SelectItem>
+                  {allConditions.map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {k.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase())}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterGroup>
+
+            <FilterGroup label="Surname">
+              <Select value={surnameFilter} onValueChange={setSurnameFilter}>
+                <SelectTrigger><SelectValue placeholder="Surname" /></SelectTrigger>
+                <SelectContent>
+                  {SURNAME_FILTERS.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value === 'all' ? 'All Surnames' : `${value} — Surnames`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterGroup>
+
+            <FilterGroup label="Student ID Batch">
+              <Select value={studentBatchFilter} onValueChange={setStudentBatchFilter}>
+                <SelectTrigger><SelectValue placeholder="Student ID Batch" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Batches</SelectItem>
+                  {studentBatches.map((batch) => (
+                    <SelectItem key={batch} value={batch}>
+                      {batch}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterGroup>
+          </div>
+
+          {/* Row 3 — date range */}
+          <div className="grid grid-cols-2 gap-3">
+            <FilterGroup label="Submitted From">
+              <Input
+                type="date"
+                min={dateRange.minDate || undefined}
+                max={today}
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </FilterGroup>
+            <FilterGroup label="Submitted To">
+              <Input
+                type="date"
+                min={dateRange.minDate || undefined}
+                max={today}
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </FilterGroup>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Data Tables ───────────────────────────────────────────────── */}
+      <div className="grid xl:grid-cols-3 gap-4">
+
+        {/* Submission breakdown (left) */}
+        <Card className="border-outline-variant/30">
+          <CardHeader className="pb-2 pt-5 px-5">
+            <CardTitle className="text-base font-semibold">Submission Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-5">
+            <dl className="space-y-2.5 text-sm">
+              {[
+                { label: 'Total students (system)', value: analytics?.totalStudents || 0 },
+                { label: 'Under review', value: summary.pending },
+                { label: 'Approved', value: summary.approved },
+                { label: '1st year submitted', value: summary.firstYears },
+                { label: '1st year not under review', value: summary.firstYearNotUnderReview },
+                { label: 'Medical certificate released', value: summary.withCertificate },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex items-center justify-between py-1.5 border-b border-outline-variant/20 last:border-0">
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className="font-semibold tabular-nums">{value}</dd>
+                </div>
               ))}
-            </SelectContent>
-          </Select>
-          <div className="md:col-span-2"><Label>Submitted From</Label><Input type="date" min={dateRange.minDate || undefined} max={today} value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></div>
-          <div className="md:col-span-2"><Label>Submitted To</Label><Input type="date" min={dateRange.minDate || undefined} max={today} value={toDate} onChange={(e) => setToDate(e.target.value)} /></div>
-          <div className="md:col-span-4 flex justify-end"><Button onClick={downloadPdf}><Download className="w-4 h-4 mr-2" />Download PDF</Button></div>
-        </CardContent>
-      </Card>
-      <div className="grid md:grid-cols-4 gap-4">
-        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Filtered Submissions</p><p className="text-3xl font-bold">{summary.total}</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Approval Rate</p><p className="text-3xl font-bold text-green-600">{summary.approvalRate}%</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">1st Year Under Review</p><p className="text-3xl font-bold text-amber-600">{summary.firstYearUnderReview}</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Certificates Issued</p><p className="text-3xl font-bold text-blue-600">{summary.withCertificate}</p></CardContent></Card>
-      </div>
-      <Card>
-        <CardHeader><CardTitle>Course Submission Totals</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader><TableRow><TableHead>Course</TableHead><TableHead>Total Submitted</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {Object.entries(summary.byCourse).sort((a, b) => b[1] - a[1]).map(([course, count]) => <TableRow key={course}><TableCell>{course}</TableCell><TableCell>{count}</TableCell></TableRow>)}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader><CardTitle>Submission Breakdown</CardTitle></CardHeader>
-        <CardContent className="text-sm space-y-1">
-          <p>Total students (system): {analytics?.totalStudents || 0}</p>
-          <p>Under review: {summary.pending}</p>
-          <p>Approved: {summary.approved}</p>
-          <p>1st year submitted overall: {summary.firstYears}</p>
-          <p>1st year not under review: {summary.firstYearNotUnderReview}</p>
-          <p>Medical certificate released: {summary.withCertificate}</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader><CardTitle>Filtered Students</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader><TableRow><TableHead>Student</TableHead><TableHead>Course</TableHead><TableHead>Year</TableHead><TableHead>Status</TableHead><TableHead>Submitted</TableHead><TableHead>Certificate</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {dedupedFilteredSubmissions.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell>{s.firstName} {s.lastName} ({s.studentId})</TableCell>
-                  <TableCell>{s.course || '-'}</TableCell>
-                  <TableCell>{YEAR_LABELS[String(s.year)] || `Year ${s.year || '-'}`}</TableCell>
-                  <TableCell>{STATUS_LABELS[s.status] || s.status}</TableCell>
-                  <TableCell>{s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : '-'}</TableCell>
-                  <TableCell>{s.clearanceInfo?.issuedDate ? 'Issued' : 'Not Issued'}</TableCell>
+            </dl>
+          </CardContent>
+        </Card>
+
+        {/* Course totals (right, spans 2 cols) */}
+        <Card className="border-outline-variant/30 xl:col-span-2">
+          <CardHeader className="pb-2 pt-5 px-5">
+            <CardTitle className="text-base font-semibold">Course Submission Totals</CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-5">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Course</TableHead>
+                  <TableHead className="text-right">Submissions</TableHead>
+                  <TableHead className="w-40 hidden md:table-cell">Share</TableHead>
                 </TableRow>
-              ))}
+              </TableHeader>
+              <TableBody>
+                {Object.entries(summary.byCourse)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([course, count]) => {
+                    const pct = summary.total > 0 ? Math.round((count / summary.total) * 100) : 0;
+                    return (
+                      <TableRow key={course}>
+                        <TableCell className="font-medium">{course}</TableCell>
+                        <TableCell className="text-right tabular-nums">{count}</TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full bg-outline-variant/20 overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-primary"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground tabular-nums w-8 text-right">{pct}%</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Filtered Students Table ────────────────────────────────────── */}
+      <Card className="border-outline-variant/30">
+        <CardHeader className="pb-2 pt-5 px-5 flex flex-row items-center justify-between">
+          <CardTitle className="text-base font-semibold">Filtered Students</CardTitle>
+          <span className="text-xs text-muted-foreground font-normal">
+            {dedupedFilteredSubmissions.length} record{dedupedFilteredSubmissions.length !== 1 ? 's' : ''}
+          </span>
+        </CardHeader>
+        <CardContent className="px-5 pb-5">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Student</TableHead>
+                <TableHead>Course</TableHead>
+                <TableHead>Year</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Submitted</TableHead>
+                <TableHead>Certificate</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {dedupedFilteredSubmissions.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
+                    No records match the selected filters.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                dedupedFilteredSubmissions.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell>
+                      <span className="font-medium">{s.firstName} {s.lastName}</span>
+                      <span className="ml-1.5 text-xs text-muted-foreground">({s.studentId})</span>
+                    </TableCell>
+                    <TableCell>{s.course || '—'}</TableCell>
+                    <TableCell>{YEAR_LABELS[String(s.year)] || `Year ${s.year || '—'}`}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                        s.status === 'approved'
+                          ? 'bg-green-50 text-green-700 ring-green-600/20'
+                          : s.status === 'pending'
+                          ? 'bg-amber-50 text-amber-700 ring-amber-600/20'
+                          : s.status === 'returned'
+                          ? 'bg-red-50 text-red-700 ring-red-600/20'
+                          : 'bg-blue-50 text-blue-700 ring-blue-600/20'
+                      }`}>
+                        {STATUS_LABELS[s.status] || s.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : '—'}
+                    </TableCell>
+                    <TableCell>
+                      {s.clearanceInfo?.issuedDate
+                        ? <span className="text-green-600 font-medium text-sm">Issued</span>
+                        : <span className="text-muted-foreground text-sm">Not Issued</span>}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

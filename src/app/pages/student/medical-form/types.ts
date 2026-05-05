@@ -39,6 +39,11 @@ export type MedicalFormData = {
   xrayFile: File | null;
   cbcFile: File | null;
   urinalysisFile: File | null;
+  existingXrayFileUrl?: string;
+  existingCbcFileUrl?: string;
+  existingUrinalysisFileUrl?: string;
+  labTestLocation: '' | 'jlgh' | 'other';
+  otherClinicName: string;
   year: string;
 };
 

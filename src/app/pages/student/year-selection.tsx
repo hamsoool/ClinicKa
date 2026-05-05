@@ -1,6 +1,9 @@
 import { useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, GraduationCap, Lock } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { getStudentRecords } from '../../lib/api';
+import { PortalPageSkeleton } from '../../components/project-skeletons';
 
 const years = [
   { level: 1, name: '1st Year', description: 'Freshman Requirements' },
@@ -26,6 +29,26 @@ export default function StudentYearSelection() {
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const studentYearLevel = me?.student?.year_level || getStudentYearLevel(studentId);
+  const { data, isLoading } = useQuery({
+    queryKey: ['studentRecords', studentId],
+    queryFn: async () => {
+      if (!studentId) return [];
+      const response = await getStudentRecords(studentId);
+      return Array.isArray(response?.records) ? response.records : [];
+    },
+    enabled: !!studentId,
+  });
+  const records = Array.isArray(data) ? data : [];
+  const approvedYears = new Set(
+    records
+      .filter((record) => record?.status === 'approved')
+      .map((record) => Number.parseInt(String(record?.year || ''), 10))
+      .filter((year) => Number.isInteger(year) && year >= 1 && year <= 4),
+  );
+
+  if (isLoading && studentId) {
+    return <PortalPageSkeleton variant="table" />;
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -48,7 +71,9 @@ export default function StudentYearSelection() {
 
       <div className="grid gap-6 sm:grid-cols-2">
         {years.map((year) => {
-          const isLocked = year.level > studentYearLevel;
+          const isFutureYearLocked = year.level > studentYearLevel;
+          const isApprovedLocked = approvedYears.has(year.level);
+          const isLocked = isFutureYearLocked || isApprovedLocked;
           const isCurrent = year.level === studentYearLevel;
 
           return (
@@ -65,6 +90,11 @@ export default function StudentYearSelection() {
                     : 'border border-outline-variant bg-surface-container-lowest text-on-surface shadow-[0_4px_6px_-2px_rgba(16,24,40,0.03)] hover:-translate-y-1 hover:shadow-lg'
               }`}
             >
+              {isApprovedLocked ? (
+                <span className="absolute left-0 top-0 rounded-br-xl bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
+                  Already Approved
+                </span>
+              ) : null}
               {isCurrent ? (
                 <span className="absolute right-0 top-0 rounded-bl-xl bg-primary px-3 py-1 text-xs font-semibold text-on-primary">
                   Current Year
@@ -110,7 +140,7 @@ export default function StudentYearSelection() {
                       : 'text-on-surface-variant'
                 }`}
               >
-                {year.description}
+                {isApprovedLocked ? 'Already approved. Further submissions are locked.' : year.description}
               </p>
             </button>
           );

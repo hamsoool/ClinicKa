@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { MockSubmission } from '../../../lib/mock-data';
-import { submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
+import { getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import { DEFAULT_MEDICAL_HISTORY } from './constants';
 import type {
   BmiCategory,
@@ -16,6 +16,7 @@ type UseStudentMedicalFormArgs = {
   year?: string;
   me?: AuthMe | null;
   privacyAccepted?: boolean;
+  editSubmissionId?: string | null;
 };
 
 const TOTAL_STEPS = 6;
@@ -54,6 +55,11 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, priv
     xrayFile: null,
     cbcFile: null,
     urinalysisFile: null,
+    existingXrayFileUrl: '',
+    existingCbcFileUrl: '',
+    existingUrinalysisFileUrl: '',
+    labTestLocation: '',
+    otherClinicName: '',
     year: year || '1',
   };
 }
@@ -69,20 +75,83 @@ function calculateBmi(weight: string, height: string): string {
   return '';
 }
 
-export function useStudentMedicalForm({ year, me, privacyAccepted = false }: UseStudentMedicalFormArgs) {
+export function useStudentMedicalForm({ year, me, privacyAccepted = false, editSubmissionId = null }: UseStudentMedicalFormArgs) {
   const student = me?.student;
   const [step, setStep] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
+  const [originalSubmissionStatus, setOriginalSubmissionStatus] = useState<string | null>(null);
   const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, privacyAccepted));
+  const isEditingExistingSubmission = Boolean(activeSubmissionId);
   useEffect(() => {
     setSubmitted(false);
     setStep(1);
     setUploading(false);
     setActiveSubmissionId(null);
+    setOriginalSubmissionStatus(null);
     setFormData(buildInitialFormData(year, me, privacyAccepted));
-  }, [year, me?.profile.id, privacyAccepted]);
+  }, [year, me?.profile.id, privacyAccepted, editSubmissionId]);
+
+  useEffect(() => {
+    if (!editSubmissionId) return;
+    let active = true;
+
+    const loadSubmissionForEdit = async () => {
+      try {
+        const response = await getSubmission(editSubmissionId);
+        const submission = response?.submission as MockSubmission | undefined;
+        if (!active || !submission) return;
+
+        setActiveSubmissionId(submission.id || null);
+        setOriginalSubmissionStatus(submission.status || null);
+        setFormData((prev) => ({
+          ...prev,
+          studentId: submission.studentId || prev.studentId,
+          firstName: submission.firstName || prev.firstName,
+          lastName: submission.lastName || prev.lastName,
+          middleInitial: submission.middleInitial || prev.middleInitial,
+          department: submission.department || prev.department,
+          course: submission.course || prev.course,
+          yearLevel: submission.year || prev.yearLevel,
+          year: submission.year || prev.year,
+          age: submission.age || prev.age,
+          sex: submission.sex || prev.sex,
+          birthday: submission.birthday || prev.birthday,
+          civilStatus: submission.civilStatus || prev.civilStatus,
+          contactNumber: submission.contactNumber || prev.contactNumber,
+          address: submission.address || prev.address,
+          medicalHistory: {
+            ...DEFAULT_MEDICAL_HISTORY,
+            ...(submission.medicalHistory || {}),
+          },
+          allergyDetails: submission.allergyDetails || prev.allergyDetails,
+          hadOperation: submission.hadOperation || prev.hadOperation,
+          operationDetails: submission.operationDetails || prev.operationDetails,
+          emergencyContact: {
+            ...prev.emergencyContact,
+            ...(submission.emergencyContact || {}),
+          },
+          bloodPressure: submission.bloodPressure || prev.bloodPressure,
+          weight: submission.weight || prev.weight,
+          height: submission.height || prev.height,
+          bmi: submission.bmi || prev.bmi,
+          existingXrayFileUrl: (submission as any).xrayFileUrl || '',
+          existingCbcFileUrl: (submission as any).cbcFileUrl || '',
+          existingUrinalysisFileUrl: (submission as any).urinalysisFileUrl || '',
+          labTestLocation: ((submission as any).labTestLocation || '') as '' | 'jlgh' | 'other',
+          otherClinicName: (submission as any).otherClinicName || '',
+        }));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to load returned record for editing');
+      }
+    };
+
+    void loadSubmissionForEdit();
+    return () => {
+      active = false;
+    };
+  }, [editSubmissionId]);
 
   useEffect(() => {
     setFormData((prev) => ({
@@ -172,7 +241,13 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
       toast.error('File size must be less than 2MB');
       return;
     }
-    setFormData((prev) => ({ ...prev, [field]: file }));
+    setFormData((prev) => {
+      const next = { ...prev, [field]: file };
+      if (field === 'xrayFile' && file) next.existingXrayFileUrl = '';
+      if (field === 'cbcFile' && file) next.existingCbcFileUrl = '';
+      if (field === 'urinalysisFile' && file) next.existingUrinalysisFileUrl = '';
+      return next;
+    });
   }, []);
 
   const getBmiCategory = useCallback((bmi: string): BmiCategory => {
@@ -184,6 +259,9 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
   }, []);
 
   const canProceed = useMemo(() => {
+    const needsManualUploads = formData.labTestLocation === 'other';
+    const hasRequiredUploads = isEditingExistingSubmission || (formData.xrayFile && formData.cbcFile && formData.urinalysisFile);
+
     switch (step) {
       case 1:
         return (
@@ -207,7 +285,9 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
       case 4:
         return formData.bloodPressure && formData.weight && formData.height;
       case 5:
-        return formData.xrayFile && formData.cbcFile && formData.urinalysisFile;
+        if (!formData.labTestLocation) return false;
+        if (formData.labTestLocation === 'jlgh') return true;
+        return Boolean(formData.otherClinicName.trim() && (needsManualUploads ? hasRequiredUploads : true));
       case 6:
         return true;
       default:
@@ -216,8 +296,11 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
   }, [formData, step]);
 
   const canSubmit = useMemo(
-    () =>
-      Boolean(
+    () => {
+      const needsManualUploads = formData.labTestLocation === 'other';
+      const hasRequiredUploads = isEditingExistingSubmission || (formData.xrayFile && formData.cbcFile && formData.urinalysisFile);
+
+      return Boolean(
         formData.firstName &&
           formData.lastName &&
           formData.studentId &&
@@ -233,11 +316,12 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
           formData.bloodPressure &&
           formData.weight &&
           formData.height &&
-          formData.xrayFile &&
-          formData.cbcFile &&
-          formData.urinalysisFile,
-      ),
-    [formData],
+          formData.labTestLocation &&
+          (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
+          (!needsManualUploads || hasRequiredUploads),
+      );
+    },
+    [formData, isEditingExistingSubmission],
   );
 
   const previewRecord = useMemo<MockSubmission>(
@@ -315,15 +399,21 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
         weight: formData.weight,
         height: formData.height,
         bmi: formData.bmi,
+        labTestLocation: formData.labTestLocation,
+        otherClinicName: formData.otherClinicName,
       };
 
       let recordId = activeSubmissionId;
+      const isResubmission = Boolean(recordId && originalSubmissionStatus === 'returned');
       if (!recordId) {
         const result = await submitMedicalRecord(payload);
         recordId = result.recordId;
         setActiveSubmissionId(recordId);
       } else {
-        await updateMedicalRecord(recordId, payload);
+        await updateMedicalRecord(recordId, {
+          ...payload,
+          status: isResubmission ? 'resubmitted' : undefined,
+        });
       }
 
       if (!recordId) {
@@ -337,7 +427,7 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false }: Use
       ].filter(Boolean) as Promise<unknown>[];
 
       await Promise.all(uploads);
-      toast.success('Medical record submitted successfully!');
+      toast.success(isResubmission ? 'Medical record resubmitted successfully!' : 'Medical record submitted successfully!');
       setSubmitted(true);
       setActiveSubmissionId(null);
     } catch (error) {

@@ -57,6 +57,8 @@ export default function StudentDashboard() {
     switch (status) {
       case 'pending':
         return 'Pending Review';
+      case 'resubmitted':
+        return 'Resubmitted';
       case 'approved':
         return 'Approved';
       case 'returned':
@@ -72,6 +74,8 @@ export default function StudentDashboard() {
         return 'bg-primary-container/20 text-on-primary-container';
       case 'pending':
         return 'bg-amber-100 text-amber-800';
+      case 'resubmitted':
+        return 'bg-orange-100 text-orange-800';
       case 'returned':
         return 'bg-error-container/70 text-on-error-container';
       default:
@@ -104,7 +108,9 @@ export default function StudentDashboard() {
     return { label, record };
   });
   const approvedCount = sortedRecords.filter((record) => record.status === 'approved').length;
-  const pendingCount = sortedRecords.filter((record) => record.status === 'pending').length;
+  const pendingCount = sortedRecords.filter(
+    (record) => record.status === 'pending' || record.status === 'resubmitted',
+  ).length;
 
   if (loading && records.length === 0) {
     return <PortalPageSkeleton variant="dashboard" />;
@@ -181,7 +187,13 @@ export default function StudentDashboard() {
               
               <div className="flex pt-2">
                 <button
-                  onClick={() => navigate('/student/year-selection')}
+                  onClick={() =>
+                    navigate(
+                      `/student/privacy-waiver/${latestRecord?.year || '1'}?edit=${encodeURIComponent(
+                        latestRecord?.id || '',
+                      )}`,
+                    )
+                  }
                   className="inline-flex items-center gap-2 rounded-xl bg-error px-5 py-2.5 text-sm font-semibold text-on-error shadow-lg shadow-error/20 transition-all hover:bg-error/90 hover:scale-[1.02] active:scale-[0.98]"
                 >
                   Update and Resubmit

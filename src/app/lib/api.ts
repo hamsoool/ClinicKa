@@ -836,6 +836,8 @@ function mapSubmission(row: any, related: Record<string, any>) {
     cbcFileUrl: normalizeStorageFileUrl(cbcFileFromLab?.url || files.cbc?.url || cbcFileByHint?.url || genericLabFile?.url),
     urinalysisFileUrl: normalizeStorageFileUrl(urinalysisFileFromLab?.url || files.urinalysis?.url || urinalysisFileByHint?.url || genericLabFile?.url),
     certificatePdfUrl: normalizeStorageFileUrl(files.certificate?.url || certificate?.pdf_url),
+    labTestLocation: row.lab_test_location || '',
+    otherClinicName: row.lab_test_clinic || '',
   };
 }
 
@@ -1456,41 +1458,69 @@ export async function submitMedicalRecord(data: any) {
     },
   );
 
-  const insertedSubmission = await restRequest<any[]>(
-    'submissions',
-    'select=*',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
+  const submissionInsertPayload = {
+    student_id: studentId,
+    year_level: String(data.yearLevel || ''),
+    status: 'pending',
+    first_name: data.firstName || null,
+    last_name: data.lastName || null,
+    middle_initial: data.middleInitial || null,
+    department: data.department || null,
+    course: data.course || null,
+    age: data.age ? Number(data.age) : null,
+    sex: data.sex || null,
+    birthday: data.birthday || null,
+    civil_status: data.civilStatus || null,
+    contact_number: data.contactNumber || null,
+    address: data.address || null,
+    allergy_details: data.allergyDetails || null,
+    had_operation: data.hadOperation || null,
+    operation_details: data.operationDetails || null,
+    blood_pressure: data.bloodPressure || null,
+    weight: data.weight || null,
+    height: data.height || null,
+    bmi: data.bmi || null,
+    data_privacy_consent: Boolean(data.dataPrivacyConsent),
+    lab_test_location: data.labTestLocation || null,
+    lab_test_clinic: data.labTestLocation === 'other' ? data.otherClinicName || null : null,
+  };
+
+  let insertedSubmission: any[] = [];
+  try {
+    insertedSubmission = await restRequest<any[]>(
+      'submissions',
+      'select=*',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify(submissionInsertPayload),
       },
-      body: JSON.stringify({
-        student_id: studentId,
-        year_level: String(data.yearLevel || ''),
-        status: 'pending',
-        first_name: data.firstName || null,
-        last_name: data.lastName || null,
-        middle_initial: data.middleInitial || null,
-        department: data.department || null,
-        course: data.course || null,
-        age: data.age ? Number(data.age) : null,
-        sex: data.sex || null,
-        birthday: data.birthday || null,
-        civil_status: data.civilStatus || null,
-        contact_number: data.contactNumber || null,
-        address: data.address || null,
-        allergy_details: data.allergyDetails || null,
-        had_operation: data.hadOperation || null,
-        operation_details: data.operationDetails || null,
-        blood_pressure: data.bloodPressure || null,
-        weight: data.weight || null,
-        height: data.height || null,
-        bmi: data.bmi || null,
-        data_privacy_consent: Boolean(data.dataPrivacyConsent),
-      }),
-    },
-  );
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const hasMissingColumns = message.includes('lab_test_location') || message.includes('lab_test_clinic');
+    if (!hasMissingColumns) throw error;
+
+    insertedSubmission = await restRequest<any[]>(
+      'submissions',
+      'select=*',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify({
+          ...submissionInsertPayload,
+          lab_test_location: undefined,
+          lab_test_clinic: undefined,
+        }),
+      },
+    );
+  }
 
   const recordId = insertedSubmission[0]?.id;
   if (!recordId) {
@@ -1589,39 +1619,76 @@ export async function updateMedicalRecord(recordId: string, data: any) {
     },
   );
 
-  await restRequest(
-    'submissions',
-    `id=eq.${recordId}`,
-    {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
+  const submissionPatchPayload = {
+    status: data.status || undefined,
+    year_level: String(data.yearLevel || ''),
+    first_name: data.firstName || null,
+    last_name: data.lastName || null,
+    middle_initial: data.middleInitial || null,
+    department: data.department || null,
+    course: data.course || null,
+    age: data.age ? Number(data.age) : null,
+    sex: data.sex || null,
+    birthday: data.birthday || null,
+    civil_status: data.civilStatus || null,
+    contact_number: data.contactNumber || null,
+    address: data.address || null,
+    allergy_details: data.allergyDetails || null,
+    had_operation: data.hadOperation || null,
+    operation_details: data.operationDetails || null,
+    blood_pressure: data.bloodPressure || null,
+    weight: data.weight || null,
+    height: data.height || null,
+    bmi: data.bmi || null,
+    data_privacy_consent: Boolean(data.dataPrivacyConsent),
+    lab_test_location: data.labTestLocation || undefined,
+    lab_test_clinic: data.labTestLocation === 'other' ? data.otherClinicName || null : null,
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    await restRequest(
+      'submissions',
+      `id=eq.${recordId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(submissionPatchPayload),
       },
-      body: JSON.stringify({
-        year_level: String(data.yearLevel || ''),
-        first_name: data.firstName || null,
-        last_name: data.lastName || null,
-        middle_initial: data.middleInitial || null,
-        department: data.department || null,
-        course: data.course || null,
-        age: data.age ? Number(data.age) : null,
-        sex: data.sex || null,
-        birthday: data.birthday || null,
-        civil_status: data.civilStatus || null,
-        contact_number: data.contactNumber || null,
-        address: data.address || null,
-        allergy_details: data.allergyDetails || null,
-        had_operation: data.hadOperation || null,
-        operation_details: data.operationDetails || null,
-        blood_pressure: data.bloodPressure || null,
-        weight: data.weight || null,
-        height: data.height || null,
-        bmi: data.bmi || null,
-        data_privacy_consent: Boolean(data.dataPrivacyConsent),
-        updated_at: new Date().toISOString(),
-      }),
-    },
-  );
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const isResubmittedConstraintError =
+      String(data.status || '').toLowerCase() === 'resubmitted' &&
+      message.includes('submissions_status_check');
+    const hasMissingLabSourceColumns = message.includes('lab_test_location') || message.includes('lab_test_clinic');
+
+    if (!isResubmittedConstraintError && !hasMissingLabSourceColumns) {
+      throw error;
+    }
+
+    // Backward-compatible fallback for databases where either:
+    // 1) status check does not include "resubmitted"
+    // 2) lab source columns are not migrated yet
+    await restRequest(
+      'submissions',
+      `id=eq.${recordId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...submissionPatchPayload,
+          status: isResubmittedConstraintError ? 'pending' : submissionPatchPayload.status,
+          lab_test_location: undefined,
+          lab_test_clinic: undefined,
+        }),
+      },
+    );
+  }
 
   await Promise.all([
     restRequest(

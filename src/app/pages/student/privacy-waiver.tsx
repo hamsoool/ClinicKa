@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, FileCheck2, PenLine, ShieldCheck, XCircle } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Checkbox } from '../../components/ui/checkbox';
@@ -10,6 +10,7 @@ import { useAuth } from '../../lib/auth';
 export default function StudentPrivacyWaiver() {
   const navigate = useNavigate();
   const { year } = useParams();
+  const [searchParams] = useSearchParams();
   const { me } = useAuth();
   const [accepted, setAccepted] = useState(false);
   const [loadingAssets, setLoadingAssets] = useState(true);
@@ -56,6 +57,7 @@ export default function StudentPrivacyWaiver() {
 
   const profileReady = hasPhoto && hasSignature;
   const canContinue = accepted && profileReady && !loadingAssets;
+  const editSubmissionId = searchParams.get('edit');
   const yearLabel = useMemo(() => {
     switch (year) {
       case '1':
@@ -166,7 +168,13 @@ export default function StudentPrivacyWaiver() {
           <Button
             type="button"
             disabled={!canContinue}
-            onClick={() => navigate(`/student/medical-form/${year}?privacy=accepted`)}
+            onClick={() =>
+              navigate(
+                `/student/medical-form/${year}?privacy=accepted${
+                  editSubmissionId ? `&edit=${encodeURIComponent(editSubmissionId)}` : ''
+                }`,
+              )
+            }
           >
             Continue to Medical Form
           </Button>

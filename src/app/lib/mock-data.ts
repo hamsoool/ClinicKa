@@ -92,7 +92,7 @@ export type MockSubmission = {
   course: string;
   department?: string;
   year: string;
-  status: 'pending' | 'physical_exam_done' | 'approved' | 'returned';
+  status: 'pending' | 'physical_exam_done' | 'approved' | 'returned' | 'resubmitted';
   submittedAt: string;
   updatedAt?: string;
   staffNotes?: string;
@@ -119,6 +119,8 @@ export type MockSubmission = {
   staffMeasurements?: PhysicalExamination;
   labResults?: LabResults;
   clearanceInfo?: ClearanceInfo;
+  labTestLocation?: 'jlgh' | 'other' | '';
+  otherClinicName?: string;
 };
 
 export const mockStudents: MockStudent[] = [
