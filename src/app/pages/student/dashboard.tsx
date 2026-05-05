@@ -34,13 +34,13 @@ export default function StudentDashboard() {
     queryKey: ['studentRecords', studentId],
     queryFn: async () => {
       if (!studentId) return [];
-      const response = await getStudentRecords();
-      return (response.records || []) as StudentRecord[];
+      const response = await getStudentRecords(studentId);
+      return (Array.isArray(response?.records) ? response.records : []) as StudentRecord[];
     },
     enabled: !!studentId,
   });
 
-  const records = data || [];
+  const records = Array.isArray(data) ? data : [];
 
   useEffect(() => {
     if (isError && error) {

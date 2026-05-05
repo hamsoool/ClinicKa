@@ -9,18 +9,23 @@ import { FileText, Eye, X, ArrowLeft, AlertCircle } from 'lucide-react';
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import { getStudentRecords } from '../../lib/api';
 import { toast } from 'sonner';
+import { useAuth } from '../../lib/auth';
 
 export default function StudentRecords() {
   const [selectedRecord, setSelectedRecord] = useState<MockSubmission | null>(null);
+  const { me } = useAuth();
+  const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const { data, isLoading: loading, isError } = useQuery({
-    queryKey: ['studentRecords'],
+    queryKey: ['studentRecords', studentId],
     queryFn: async () => {
-      const response = await getStudentRecords();
-      return response.records || [];
-    }
+      if (!studentId) return [];
+      const response = await getStudentRecords(studentId);
+      return Array.isArray(response?.records) ? response.records : [];
+    },
+    enabled: !!studentId,
   });
 
-  const records = data || [];
+  const records = Array.isArray(data) ? data : [];
 
   useEffect(() => {
     if (isError) {

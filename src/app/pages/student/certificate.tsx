@@ -9,22 +9,28 @@ import type { MockSubmission } from '../../lib/mock-data';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { toast } from 'sonner';
 import { getStudentRecords } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
 
 export default function StudentCertificate() {
   const clearanceRef = useRef<HTMLDivElement>(null);
+  const { me } = useAuth();
+  const studentId = me?.student?.student_id || me?.profile.student_id || '';
 
-  const { data: record, isLoading: loading, isError } = useQuery({
-    queryKey: ['studentRecords'],
+  const { data, isLoading: loading, isError } = useQuery({
+    queryKey: ['studentRecords', studentId],
     queryFn: async () => {
-      const data = await getStudentRecords();
-      const records = data.records || [];
-      const approvedCertificate =
-        records.find((entry) => entry.status === 'approved' && entry.clearanceInfo?.controlNo) ||
-        records.find((entry) => entry.status === 'approved') ||
-        null;
-      return approvedCertificate || records[0] || null;
-    }
+      if (!studentId) return null;
+      const response = await getStudentRecords(studentId);
+      return Array.isArray(response?.records) ? response.records : [];
+    },
+    enabled: !!studentId,
   });
+  const records = Array.isArray(data) ? data : [];
+  const record =
+    records.find((entry) => entry.status === 'approved' && entry.clearanceInfo?.controlNo) ||
+    records.find((entry) => entry.status === 'approved') ||
+    records[0] ||
+    null;
 
   useEffect(() => {
     if (isError) {
@@ -80,9 +86,11 @@ export default function StudentCertificate() {
     );
   }
 
-  const isApproved = record.status === 'approved';
-  const isPending = record.status === 'pending';
-  const isReturned = record.status === 'returned';
+  const normalizedStatus = String(record.status || '').toLowerCase();
+  const isApproved = normalizedStatus === 'approved';
+  const isPending = normalizedStatus === 'pending';
+  const isReturned = normalizedStatus === 'returned';
+  const isPhysicalExamDone = normalizedStatus === 'physical_exam_done';
 
   return (
     <div>
@@ -128,6 +136,30 @@ export default function StudentCertificate() {
                     </Badge>
                   </div>
                 </>
+              ) : isPhysicalExamDone ? (
+                <>
+                  <Clock className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium text-amber-900">Physical Exam Completed</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your checkup is complete, but the clearance is not yet finalized. Please wait for clinic approval.
+                    </p>
+                    <Badge variant="secondary" className="bg-amber-100 text-amber-800 mt-2">
+                      <Clock className="w-3 h-3 mr-1" /> Awaiting Final Approval
+                    </Badge>
+                  </div>
+                </>
+              ) : null}
+              {!isPending && !isReturned && !isPhysicalExamDone ? (
+                <>
+                  <AlertCircle className="w-5 h-5 text-yellow-700 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium text-yellow-900">Clearance Not Available Yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Current status: <span className="font-medium">{normalizedStatus || 'unknown'}</span>. Your medical clearance will appear here once approved.
+                    </p>
+                  </div>
+                </>
               ) : null}
             </div>
           </CardContent>
@@ -143,7 +175,7 @@ export default function StudentCertificate() {
                 <ShieldCheck className="w-5 h-5 text-green-600" />
                 <div>
                   <CardTitle>Medical Clearance Certificate</CardTitle>
-                  <p className="text-sm text-green-600 font-medium mt-0.5">Approved — 3 copies on A4</p>
+                  <p className="text-sm text-green-600 font-medium mt-0.5">Approved - 3 copies on A4</p>
                 </div>
               </div>
               <Button onClick={downloadClearancePDF} className="bg-green-600 hover:bg-green-700">
@@ -171,3 +203,5 @@ export default function StudentCertificate() {
     </div>
   );
 }
+
+
