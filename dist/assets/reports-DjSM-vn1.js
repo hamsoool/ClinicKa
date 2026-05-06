@@ -1,0 +1,1 @@
+import{j as o}from"./vendor-react-D5RNiK8I.js";import{R as r}from"./reports-dashboard-CQWkXvGv.js";import"./card-BqplgWSE.js";import"./vendor-radix-ByKDuSLj.js";import"./index-CtENY8Lu.js";import"./input-D7i_zBbr.js";import"./select-Dka1sOwp.js";import"./vendor-icons-CRdled7G.js";import"./table-BtcIkPo-.js";function f(){return o.jsx(r,{mode:"admin"})}export{f as default};

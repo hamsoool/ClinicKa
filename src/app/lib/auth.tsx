@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { clearStoredSession, getMe, getStoredSession, getUserByToken, hasServerPasswordSetupCompleted, markServerPasswordSetupCompleted, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
+import { authenticateWithPassword, clearStoredSession, getMe, getStoredSession, getUserByToken, hasServerPasswordSetupCompleted, markServerPasswordSetupCompleted, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -12,6 +12,12 @@ function isGCDomain(email?: string | null) {
 
 function normalizeEmail(email?: string | null) {
   return (email || '').trim().toLowerCase();
+}
+
+function deriveStudentIdFromEmail(email?: string | null) {
+  const localPart = normalizeEmail(email).split('@')[0] || '';
+  const match = localPart.match(/^(\d{9})/);
+  return match?.[1] || null;
 }
 
 function isArchivedAccountError(error: unknown) {
@@ -64,6 +70,7 @@ type AuthContextValue = {
   refresh: () => Promise<AuthMe | null>;
   requiresPasswordSetup: boolean;
   completePasswordSetup: (newPassword: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 };
 
 const AUTH_CONTEXT_KEY = Symbol.for('gc.auth.context');
@@ -79,8 +86,7 @@ if (!authGlobal[AUTH_CONTEXT_KEY]) {
 
 function buildMeFromSession(role: UserRole, session: AuthSession | null): AuthMe {
   const email = session?.user?.email || null;
-  const emailUser = email?.split('@')[0] || '';
-  const derivedStudentId = /^[0-9]{9}$/.test(emailUser) ? emailUser : null;
+  const derivedStudentId = deriveStudentIdFromEmail(email);
 
   return {
     profile: {
@@ -103,6 +109,34 @@ function resolveRoleFromEmail(email?: string | null): UserRole {
   if (normalized.includes('admin')) return 'admin';
   if (normalized.includes('staff')) return 'staff';
   return 'student';
+}
+
+async function applyPasswordChange(
+  session: AuthSession | null,
+  me: AuthMe | null,
+  setSession: (value: AuthSession | null) => void,
+  setMe: (value: AuthMe | null) => void,
+  setRole: (value: UserRole | null) => void,
+  setRequiresPasswordSetup: (value: boolean) => void,
+  currentPassword: string,
+  newPassword: string,
+) {
+  const email = session?.user?.email || me?.profile?.email || null;
+  if (!session?.access_token || !email) {
+    throw new Error('No active session found. Please sign in again.');
+  }
+
+  const verifiedSession = await authenticateWithPassword(email, currentPassword);
+  setStoredSession(verifiedSession);
+  setSession(verifiedSession);
+
+  await updateUserPassword(newPassword, verifiedSession.access_token);
+  await markServerPasswordSetupCompleted(verifiedSession.access_token);
+  markPasswordSetupComplete(email);
+  const resolvedMe = await getMe(verifiedSession.access_token);
+  setMe(resolvedMe);
+  setRole(resolvedMe.profile.role);
+  setRequiresPasswordSetup(false);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -388,6 +422,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setMe(resolvedMe);
       setRole(resolvedMe.profile.role);
       setRequiresPasswordSetup(false);
+    },
+    changePassword: async (currentPassword: string, newPassword: string) => {
+      await applyPasswordChange(session, me, setSession, setMe, setRole, setRequiresPasswordSetup, currentPassword, newPassword);
     },
   }), [loading, me, requiresPasswordSetup, role, session]);
 

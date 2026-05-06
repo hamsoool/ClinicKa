@@ -29,6 +29,12 @@ const AUTH_LOGO_SRC = '/logo.png';
 const DASHBOARD_PREVIEW_SRC = new URL('../../../exports/figma/02-student-dashboard.png', import.meta.url).href;
 const CONTACT_EMAIL = 'digitalduo.clinicka@gmail.com';
 
+function deriveStudentIdFromEmail(email?: string | null) {
+  const localPart = (email || '').trim().toLowerCase().split('@')[0] || '';
+  const match = localPart.match(/^(\d{9})/);
+  return match?.[1] || null;
+}
+
 type LegalSection = {
   title: string;
   body: string;
@@ -403,6 +409,10 @@ export default function AuthAccessPage() {
     }
     if (!signUpForm.email.trim().toLowerCase().endsWith(`@${GC_DOMAIN}`)) {
       setError(`Please register using your @${GC_DOMAIN} email address.`);
+      return;
+    }
+    if (!deriveStudentIdFromEmail(signUpForm.email)) {
+      setError(`Use your 9-digit student email, for example 202311165@${GC_DOMAIN}.`);
       return;
     }
     if (signUpForm.password.length < 6) {
@@ -849,7 +859,7 @@ export default function AuthAccessPage() {
                       onChange={(event) =>
                         setSignUpForm((prev) => ({ ...prev, email: event.target.value }))
                       }
-                      placeholder={`name@${GC_DOMAIN}`}
+                      placeholder={`202311165@${GC_DOMAIN}`}
                       className={inputClassName}
                     />
                   </div>

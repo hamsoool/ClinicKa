@@ -207,7 +207,7 @@ export default function PortalShell({
                 </div>
                 <div className="min-w-0">
                   <h2 className="truncate text-lg font-bold tracking-tight text-white">{brandTitle}</h2>
-                  <p className="truncate text-xs font-medium uppercase tracking-[0.18em] text-emerald-200/80">
+                  <p className="truncate text-xs font-medium tracking-[0.18em] text-emerald-200/80">
                     {brandSubtitle}
                   </p>
                 </div>
@@ -283,9 +283,9 @@ export default function PortalShell({
       <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/40 bg-white/90 backdrop-blur md:left-72 md:h-16">
         <div className="flex h-full items-center justify-between gap-2 px-4 md:gap-3 md:px-8">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
+            <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
               <span className="sm:hidden">{brandSubtitle}</span>
-              <span className="hidden sm:inline">Clinic Management System</span>
+              <span className="hidden uppercase sm:inline">Clinic Management System</span>
             </p>
             <div className="flex min-w-0 items-center gap-2">
               <p className="truncate text-sm font-semibold leading-tight text-on-surface sm:text-[15px]">{currentPage}</p>

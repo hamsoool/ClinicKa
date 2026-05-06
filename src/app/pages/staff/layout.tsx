@@ -43,20 +43,18 @@ export default function StaffLayout() {
     formatEmailName(me?.profile.email) ||
     'Clinic Nurse / Doctor';
   const position = me?.staff?.position || 'Clinic Nurse / Doctor';
-  const email = me?.profile.email || 'clinic.staff@gordoncollege.edu.ph';
 
   return (
     <PortalShell
       navItems={navItems}
       portalLabel="Clinic Operations Portal"
-      brandSubtitle="Clinic Operations"
+      brandSubtitle="ClinicKa!"
       brandIcon={Stethoscope}
       brandImageSrc="/gchsu.png"
       displayName={displayName}
       profileSubtitle={position}
-      email={email}
       initials={getInitials(displayName, 'CL')}
-      roleBadge={position}
+      roleBadge="Gordon College Health Services"
       profileUploadId="clinic-profile-upload"
       profileUploadLabel="Upload clinic staff profile picture"
       topActions={topActions}

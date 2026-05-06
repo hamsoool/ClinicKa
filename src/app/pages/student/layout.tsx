@@ -46,7 +46,6 @@ export default function StudentLayout() {
 
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const course = me?.student?.course || me?.profile.course || '';
-  const email = me?.profile.email || 'student@gordoncollege.edu.ph';
   const profileSubtitle = [studentId, course].filter(Boolean).join(' | ') || 'Student account';
 
   useEffect(() => {
@@ -89,14 +88,13 @@ export default function StudentLayout() {
     <PortalShell
       navItems={navItems}
       portalLabel="Student Portal"
-      brandSubtitle="Clinic Portal"
+      brandSubtitle="ClinicKa!"
       brandIcon={FileCheck2}
       brandImageSrc="/gchsu.png"
       displayName={displayName}
       profileSubtitle={profileSubtitle}
-      email={email}
       initials={getInitials(displayName, 'ST')}
-      roleBadge={course || 'Student'}
+      roleBadge="Gordon College Health Services"
       initialProfileImageUrl={profilePic}
       profileUploadId="student-profile-upload"
       profileUploadLabel="Upload student profile picture"

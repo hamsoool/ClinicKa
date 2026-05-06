@@ -1,8 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
+import PasswordChangeCard from '../../components/password-change-card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Settings as SettingsIcon, Bell, User, Shield } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, User } from 'lucide-react';
 import { useState } from 'react';
 
 export default function StaffSettings() {
@@ -16,11 +17,6 @@ export default function StaffSettings() {
     emailAlerts: true,
     pendingReminders: true,
     weeklyReports: false,
-  });
-  const [security, setSecurity] = useState({
-    currentPassword: '••••••••',
-    newPassword: '',
-    confirmPassword: '',
   });
   const [system, setSystem] = useState({
     academicYear: '2025-2026',
@@ -143,44 +139,7 @@ export default function StaffSettings() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5 text-primary" />
-              <CardTitle>Security Settings</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="currentPassword">Current Password</Label>
-              <Input
-                id="currentPassword"
-                type="password"
-                value={security.currentPassword}
-                onChange={(e) => setSecurity(prev => ({ ...prev, currentPassword: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="newPassword">New Password</Label>
-              <Input
-                id="newPassword"
-                type="password"
-                value={security.newPassword}
-                onChange={(e) => setSecurity(prev => ({ ...prev, newPassword: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={security.confirmPassword}
-                onChange={(e) => setSecurity(prev => ({ ...prev, confirmPassword: e.target.value }))}
-              />
-            </div>
-            <Button>Change Password</Button>
-          </CardContent>
-        </Card>
+        <PasswordChangeCard title="Change Password" description="Update the password for your clinic staff account." />
 
         <Card>
           <CardHeader>
