@@ -3,7 +3,13 @@ import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { MockSubmission } from '../../../lib/mock-data';
 import { getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
-import { DEFAULT_MEDICAL_HISTORY } from './constants';
+import {
+  DEFAULT_MEDICAL_HISTORY,
+  formatPhilippinePhoneInput,
+  isValidPhilippinePhoneNumber,
+  normalizeProgramForDepartment,
+  resolveDepartmentValue,
+} from './constants';
 import type {
   BmiCategory,
   EmergencyContact,
@@ -23,19 +29,20 @@ const TOTAL_STEPS = 6;
 
 function buildInitialFormData(year: string | undefined, me?: AuthMe | null, privacyAccepted = false): MedicalFormData {
   const student = me?.student;
+  const department = resolveDepartmentValue(student?.department || me?.profile.department || 'CCS');
   return {
     studentId: student?.student_id || me?.profile.student_id || '',
     firstName: student?.first_name || me?.profile.first_name || '',
     lastName: student?.last_name || me?.profile.last_name || '',
     middleInitial: student?.middle_initial || '',
-    department: student?.department || me?.profile.department || 'CCS',
-    course: student?.course || me?.profile.course || '',
+    department,
+    course: normalizeProgramForDepartment(department, student?.course || me?.profile.course || ''),
     yearLevel: year || '1',
     age: student?.age ? String(student.age) : '',
     sex: student?.sex || 'female',
     birthday: student?.birthday || '',
     civilStatus: student?.civil_status || 'Single',
-    contactNumber: student?.contact_number || '',
+    contactNumber: formatPhilippinePhoneInput(student?.contact_number || ''),
     address: student?.address || '',
     medicalHistory: { ...DEFAULT_MEDICAL_HISTORY },
     allergyDetails: '',
@@ -111,15 +118,15 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           firstName: submission.firstName || prev.firstName,
           lastName: submission.lastName || prev.lastName,
           middleInitial: submission.middleInitial || prev.middleInitial,
-          department: submission.department || prev.department,
-          course: submission.course || prev.course,
+          department: resolveDepartmentValue(submission.department || prev.department),
+          course: normalizeProgramForDepartment(submission.department || prev.department, submission.course || prev.course),
           yearLevel: submission.year || prev.yearLevel,
           year: submission.year || prev.year,
           age: submission.age || prev.age,
           sex: submission.sex || prev.sex,
           birthday: submission.birthday || prev.birthday,
           civilStatus: submission.civilStatus || prev.civilStatus,
-          contactNumber: submission.contactNumber || prev.contactNumber,
+          contactNumber: formatPhilippinePhoneInput(submission.contactNumber || prev.contactNumber),
           address: submission.address || prev.address,
           medicalHistory: {
             ...DEFAULT_MEDICAL_HISTORY,
@@ -160,13 +167,16 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
       firstName: student?.first_name || me?.profile.first_name || prev.firstName,
       lastName: student?.last_name || me?.profile.last_name || prev.lastName,
       middleInitial: student?.middle_initial || prev.middleInitial,
-      department: student?.department || me?.profile.department || prev.department,
-      course: student?.course || me?.profile.course || prev.course,
+      department: resolveDepartmentValue(student?.department || me?.profile.department || prev.department),
+      course: normalizeProgramForDepartment(
+        student?.department || me?.profile.department || prev.department,
+        student?.course || me?.profile.course || prev.course,
+      ),
       age: student?.age ? String(student.age) : prev.age,
       sex: student?.sex || prev.sex,
       birthday: student?.birthday || prev.birthday,
       civilStatus: student?.civil_status || prev.civilStatus,
-      contactNumber: student?.contact_number || prev.contactNumber,
+      contactNumber: formatPhilippinePhoneInput(student?.contact_number || prev.contactNumber),
       address: student?.address || prev.address,
       dataPrivacyConsent: privacyAccepted || prev.dataPrivacyConsent,
       yearLevel: year || prev.yearLevel,
@@ -195,7 +205,31 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
   ]);
 
   const updateField = useCallback(<K extends keyof MedicalFormData>(field: K, value: MedicalFormData[K]) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      if (field === 'department') {
+        return {
+          ...prev,
+          department: resolveDepartmentValue(String(value)),
+          course: '',
+        };
+      }
+
+      if (field === 'course') {
+        return {
+          ...prev,
+          course: normalizeProgramForDepartment(prev.department, String(value)),
+        };
+      }
+
+      if (field === 'contactNumber') {
+        return {
+          ...prev,
+          contactNumber: formatPhilippinePhoneInput(String(value)),
+        };
+      }
+
+      return { ...prev, [field]: value };
+    });
   }, []);
 
   const updateEmergencyContact = useCallback(
@@ -269,10 +303,12 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           formData.lastName &&
           formData.studentId &&
           formData.department &&
+          formData.course &&
           formData.yearLevel &&
           formData.age &&
           formData.sex &&
-          formData.birthday
+          formData.birthday &&
+          (!formData.contactNumber || isValidPhilippinePhoneNumber(formData.contactNumber))
         );
       case 2:
         return true;
@@ -305,10 +341,12 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           formData.lastName &&
           formData.studentId &&
           formData.department &&
+          formData.course &&
           formData.yearLevel &&
           formData.age &&
           formData.sex &&
           formData.birthday &&
+          (!formData.contactNumber || isValidPhilippinePhoneNumber(formData.contactNumber)) &&
           formData.hadOperation &&
           formData.emergencyContact.name &&
           formData.emergencyContact.phone &&

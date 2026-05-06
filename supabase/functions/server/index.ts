@@ -63,7 +63,8 @@ function resolveRoleFromEmail(email?: string | null) {
 
 function deriveStudentIdFromEmail(email?: string | null) {
   const localPart = normalizeEmail(email).split('@')[0] || '';
-  return /^[0-9]{9}$/.test(localPart) ? localPart : null;
+  const match = localPart.match(/^(\d{9})/);
+  return match?.[1] || null;
 }
 
 function roleLabel(role?: string) {
@@ -202,6 +203,9 @@ async function ensureBucket() {
 }
 
 async function ensureProfile(user: any) {
+  const derivedStudentId = deriveStudentIdFromEmail(user.email);
+  const normalizedEmail = normalizeEmail(user.email) || null;
+  const resolvedRole = resolveRoleFromEmail(user.email);
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('profiles')
     .select('*')
@@ -213,6 +217,27 @@ async function ensureProfile(user: any) {
   }
 
   if (existingProfile) {
+    if (
+      resolvedRole === 'student' &&
+      (existingProfile.student_id !== derivedStudentId || existingProfile.email !== normalizedEmail)
+    ) {
+      const { data: updatedProfile, error: updatedProfileError } = await supabase
+        .from('profiles')
+        .update({
+          email: normalizedEmail,
+          student_id: derivedStudentId,
+        })
+        .eq('id', user.id)
+        .select('*')
+        .single();
+
+      if (updatedProfileError) {
+        throw updatedProfileError;
+      }
+
+      return updatedProfile;
+    }
+
     return existingProfile;
   }
 
@@ -220,9 +245,9 @@ async function ensureProfile(user: any) {
     .from('profiles')
     .upsert({
       id: user.id,
-      role: resolveRoleFromEmail(user.email),
-      email: normalizeEmail(user.email) || null,
-      student_id: deriveStudentIdFromEmail(user.email),
+      role: resolvedRole,
+      email: normalizedEmail,
+      student_id: derivedStudentId,
     })
     .select('*')
     .single();

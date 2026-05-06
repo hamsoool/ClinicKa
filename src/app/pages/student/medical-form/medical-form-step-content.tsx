@@ -7,7 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { RadioGroup, RadioGroupItem } from '../../../components/ui/radio-group';
 import { Checkbox } from '../../../components/ui/checkbox';
 import { Textarea } from '../../../components/ui/textarea';
-import { DEPARTMENTS, MEDICAL_CONDITIONS, YEAR_LEVELS } from './constants';
+import {
+  DEPARTMENT_OPTIONS,
+  getProgramOptionsForSelect,
+  isValidPhilippinePhoneNumber,
+  MEDICAL_CONDITIONS,
+  YEAR_LEVELS,
+} from './constants';
 import type { BmiCategory, MedicalConditionKey, MedicalFormData } from './types';
 
 type Props = {
@@ -92,8 +98,9 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <Input
                 id="studentId"
                 value={formData.studentId}
-                onChange={(event) => onFieldChange('studentId', event.target.value)}
-                placeholder="e.g. 202310417"
+                readOnly
+                disabled
+                className="cursor-not-allowed opacity-80"
               />
             </div>
             <div className="xl:col-span-3">
@@ -103,9 +110,9 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
-                  {DEPARTMENTS.map((department) => (
-                    <SelectItem key={department} value={department}>
-                      {department}
+                  {DEPARTMENT_OPTIONS.map((department) => (
+                    <SelectItem key={department.value} value={department.value}>
+                      {department.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -128,12 +135,22 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
             <div className="md:col-span-2 xl:col-span-4">
               <Label htmlFor="course">Course / Program *</Label>
-              <Input
-                id="course"
-                value={formData.course}
-                onChange={(event) => onFieldChange('course', event.target.value)}
-                placeholder="e.g., BS Computer Science"
-              />
+              <Select
+                value={formData.course || undefined}
+                onValueChange={(value) => onFieldChange('course', value)}
+                disabled={!formData.department}
+              >
+                <SelectTrigger id="course">
+                  <SelectValue placeholder={formData.department ? 'Select program' : 'Select department first'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {getProgramOptionsForSelect(formData.department, formData.course).map((program) => (
+                    <SelectItem key={program} value={program}>
+                      {program}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="xl:col-span-4">
               <Label htmlFor="lastName">Last Name *</Label>
@@ -195,18 +212,23 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <Label htmlFor="contactNumber">Tel./CP #</Label>
               <Input
                 id="contactNumber"
+                type="tel"
                 value={formData.contactNumber}
                 onChange={(event) => onFieldChange('contactNumber', event.target.value)}
-                placeholder="e.g., 09123456789"
+                inputMode="numeric"
+                placeholder="(+63) 9123456789"
               />
+              {!isValidPhilippinePhoneNumber(formData.contactNumber) && formData.contactNumber ? (
+                <p className="mt-1 text-sm text-red-600">Use the format (+63) 9123456789.</p>
+              ) : null}
             </div>
             <div className="md:col-span-2 xl:col-span-8">
-              <Label htmlFor="address">Present Address</Label>
+              <Label htmlFor="address">Street Address</Label>
               <Input
                 id="address"
                 value={formData.address}
                 onChange={(event) => onFieldChange('address', event.target.value)}
-                placeholder="Complete address"
+                placeholder="Enter your street address"
               />
             </div>
           </div>

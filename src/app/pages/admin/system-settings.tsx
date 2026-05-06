@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import PasswordChangeCard from '../../components/password-change-card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Switch } from '../../components/ui/switch';
@@ -68,6 +69,8 @@ export default function AdminSystemSettings() {
           </div>
         </CardContent>
       </Card>
+
+      <PasswordChangeCard title="Change Password" description="Update the password for your administrator account." />
 
       <Card>
         <CardHeader>

@@ -41,20 +41,18 @@ export default function AdminLayout() {
     formatEmailName(me?.profile.email) ||
     'System Administrator';
   const roleLabel = 'System Administrator';
-  const email = me?.profile.email || 'clinic.admin@gordoncollege.edu.ph';
 
   return (
     <PortalShell
       navItems={navItems}
       portalLabel="Admin Control Center"
-      brandSubtitle="Admin Control"
+      brandSubtitle="ClinicKa!"
       brandIcon={ShieldCheck}
       brandImageSrc="/gchsu.png"
       displayName={displayName}
       profileSubtitle={roleLabel}
-      email={email}
       initials={getInitials(displayName, 'AD')}
-      roleBadge={roleLabel}
+      roleBadge="Gordon College Health Services"
       profileUploadId="admin-profile-upload"
       profileUploadLabel="Upload admin profile picture"
       topActions={topActions}

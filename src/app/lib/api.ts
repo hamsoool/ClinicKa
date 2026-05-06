@@ -212,7 +212,12 @@ function resolveRoleFromEmail(email?: string | null): UserRole {
 
 function deriveStudentIdFromEmail(email?: string | null) {
   const localPart = normalizeEmail(email).split('@')[0] || '';
-  return /^[0-9]{9}$/.test(localPart) ? localPart : null;
+  const match = localPart.match(/^(\d{9})/);
+  return match?.[1] || null;
+}
+
+function isValidStudentRegistrationEmail(email?: string | null) {
+  return Boolean(isGCDomainEmail(email) && deriveStudentIdFromEmail(email));
 }
 
 
@@ -974,7 +979,7 @@ async function getMappedSubmissions(query: string) {
   return (rows || []).map((row: any) => mapSubmission(row, related));
 }
 
-export async function signInWithPassword(email: string, password: string) {
+export async function authenticateWithPassword(email: string, password: string) {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
   }
@@ -1009,7 +1014,12 @@ export async function signInWithPassword(email: string, password: string) {
     throw new Error('Sign in succeeded but no session token was returned.');
   }
 
-  const session: AuthSession = payload as AuthSession;
+  return payload as AuthSession;
+}
+
+export async function signInWithPassword(email: string, password: string) {
+  const session = await authenticateWithPassword(email, password);
+
   setStoredSession(session);
 
   // Enforce domain restriction using actual persisted role:
@@ -1045,6 +1055,9 @@ export async function signUpWithPassword(fullName: string, email: string, passwo
   if (!isGCDomainEmail(email)) {
     throw new Error(`Please use your @${GC_DOMAIN} email address to register.`);
   }
+  if (!isValidStudentRegistrationEmail(email)) {
+    throw new Error(`Use your 9-digit student email, for example 202311165@${GC_DOMAIN}.`);
+  }
 
   const emailRedirectTo =
     typeof window !== 'undefined'
@@ -1066,6 +1079,7 @@ export async function signUpWithPassword(fullName: string, email: string, passwo
         emailRedirectTo,
         data: {
           full_name: fullName,
+          student_id: deriveStudentIdFromEmail(email),
         },
       },
     }),
@@ -1185,6 +1199,7 @@ export async function getMe(token?: string | null) {
     return await apiRequest<AuthMe>('/functions/v1/server/me', { token });
   } catch {
     const user = await getCurrentAuthUser(token);
+    const derivedStudentId = deriveStudentIdFromEmail(user.email);
     const profileRows = await restRequest<any[]>(
       'profiles',
       `id=eq.${user.id}&select=*`,
@@ -1194,9 +1209,12 @@ export async function getMe(token?: string | null) {
       },
     );
     const profile = profileRows[0];
-    const resolvedProfile =
-      profile ||
-      (
+    const normalizedEmail = normalizeEmail(user.email) || null;
+    const resolvedRole = resolveRoleFromEmail(user.email);
+    let resolvedProfile = profile;
+
+    if (!resolvedProfile) {
+      resolvedProfile = (
         await restRequest<any[]>(
           'profiles',
           'select=*',
@@ -1209,13 +1227,36 @@ export async function getMe(token?: string | null) {
             },
             body: JSON.stringify({
               id: user.id,
-              role: resolveRoleFromEmail(user.email),
-              email: normalizeEmail(user.email) || null,
-              student_id: deriveStudentIdFromEmail(user.email),
+              role: resolvedRole,
+              email: normalizedEmail,
+              student_id: derivedStudentId,
             }),
           },
         )
       )[0];
+    } else if (
+      resolvedRole === 'student' &&
+      (resolvedProfile.student_id !== derivedStudentId || resolvedProfile.email !== normalizedEmail)
+    ) {
+      resolvedProfile = (
+        await restRequest<any[]>(
+          'profiles',
+          `id=eq.${user.id}&select=*`,
+          {
+            method: 'PATCH',
+            token,
+            headers: {
+              'Content-Type': 'application/json',
+              Prefer: 'return=representation',
+            },
+            body: JSON.stringify({
+              email: normalizedEmail,
+              student_id: derivedStudentId,
+            }),
+          },
+        )
+      )[0] || resolvedProfile;
+    }
 
     if (!resolvedProfile) {
       throw new Error('Profile not found for authenticated user.');

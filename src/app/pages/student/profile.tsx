@@ -3,10 +3,10 @@ import { Check, ImageIcon, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import PasswordChangeCard from '../../components/password-change-card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Textarea } from '../../components/ui/textarea';
 import {
   getStudentProfileAssets,
   updateStudentProfile,
@@ -15,7 +15,14 @@ import {
   type StudentProfileAssets,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { DEPARTMENTS } from './medical-form/constants';
+import {
+  DEPARTMENT_OPTIONS,
+  formatPhilippinePhoneInput,
+  getProgramOptionsForSelect,
+  isValidPhilippinePhoneNumber,
+  normalizeProgramForDepartment,
+  resolveDepartmentValue,
+} from './medical-form/constants';
 
 type StudentProfileFormState = {
   studentId: string;
@@ -29,14 +36,15 @@ type StudentProfileFormState = {
 };
 
 function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null): StudentProfileFormState {
+  const department = resolveDepartmentValue(me?.student?.department || me?.profile.department || '');
   return {
     studentId: me?.student?.student_id || me?.profile.student_id || '',
     firstName: me?.student?.first_name || me?.profile.first_name || '',
     lastName: me?.student?.last_name || me?.profile.last_name || '',
-    department: me?.student?.department || me?.profile.department || '',
-    course: me?.student?.course || me?.profile.course || '',
+    department,
+    course: normalizeProgramForDepartment(department, me?.student?.course || me?.profile.course || ''),
     birthday: me?.student?.birthday || '',
-    contactNumber: me?.student?.contact_number || '',
+    contactNumber: formatPhilippinePhoneInput(me?.student?.contact_number || ''),
     address: me?.student?.address || '',
   };
 }
@@ -139,6 +147,8 @@ export default function StudentProfile() {
 
   const hasFileChanges = Boolean(photoFile || signatureFile);
   const hasChanges = hasTextChanges || hasFileChanges;
+  const hasValidContactNumber =
+    !formData.contactNumber.trim() || isValidPhilippinePhoneNumber(formData.contactNumber);
 
   const isValid =
     Boolean(formData.studentId.trim()) &&
@@ -146,7 +156,8 @@ export default function StudentProfile() {
     Boolean(formData.lastName.trim()) &&
     Boolean(formData.department.trim()) &&
     Boolean(formData.course.trim()) &&
-    Boolean(formData.birthday.trim());
+    Boolean(formData.birthday.trim()) &&
+    hasValidContactNumber;
 
   const currentPhotoUrl = photoPreviewUrl || profileAssets.photoUrl || null;
   const currentSignatureUrl = signaturePreviewUrl || profileAssets.signatureUrl || null;
@@ -154,7 +165,22 @@ export default function StudentProfile() {
   const updateField = <K extends keyof StudentProfileFormState>(field: K, value: StudentProfileFormState[K]) => {
     setFormData((prev) => ({
       ...prev,
-      [field]: value,
+      ...(field === 'department'
+        ? {
+            department: resolveDepartmentValue(String(value)),
+            course: '',
+          }
+        : field === 'course'
+        ? {
+            course: normalizeProgramForDepartment(prev.department, String(value)),
+          }
+        : field === 'contactNumber'
+        ? {
+            contactNumber: formatPhilippinePhoneInput(String(value)),
+          }
+        : {
+            [field]: value,
+          }),
     }));
   };
 
@@ -186,6 +212,10 @@ export default function StudentProfile() {
     event.preventDefault();
 
     if (!isValid) {
+      if (!hasValidContactNumber) {
+        toast.error('Use a Philippine mobile number in the format (+63) 9123456789.');
+        return;
+      }
       toast.error('Please complete the required profile fields before saving.');
       return;
     }
@@ -249,7 +279,7 @@ export default function StudentProfile() {
           <CardContent className="grid gap-5 pt-6 md:grid-cols-2">
             <div>
               <Label htmlFor="studentId">Student ID</Label>
-              <Input id="studentId" value={formData.studentId} readOnly />
+              <Input id="studentId" value={formData.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
             </div>
             <div>
               <Label htmlFor="department">Department</Label>
@@ -258,9 +288,9 @@ export default function StudentProfile() {
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
-                  {DEPARTMENTS.map((department) => (
-                    <SelectItem key={department} value={department}>
-                      {department}
+                  {DEPARTMENT_OPTIONS.map((department) => (
+                    <SelectItem key={department.value} value={department.value}>
+                      {department.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -286,12 +316,22 @@ export default function StudentProfile() {
             </div>
             <div>
               <Label htmlFor="course">Course / Program</Label>
-              <Input
-                id="course"
-                value={formData.course}
-                onChange={(event) => updateField('course', event.target.value)}
-                placeholder="e.g. BS Computer Science"
-              />
+              <Select
+                value={formData.course || undefined}
+                onValueChange={(value) => updateField('course', value)}
+                disabled={!formData.department}
+              >
+                <SelectTrigger id="course">
+                  <SelectValue placeholder={formData.department ? 'Select program' : 'Select department first'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {getProgramOptionsForSelect(formData.department, formData.course).map((program) => (
+                    <SelectItem key={program} value={program}>
+                      {program}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="birthday">Birthday</Label>
@@ -306,19 +346,23 @@ export default function StudentProfile() {
               <Label htmlFor="contactNumber">Contact Number</Label>
               <Input
                 id="contactNumber"
+                type="tel"
                 value={formData.contactNumber}
                 onChange={(event) => updateField('contactNumber', event.target.value)}
-                placeholder="e.g. 09123456789"
+                inputMode="numeric"
+                placeholder="(+63) 9123456789"
               />
+              {!hasValidContactNumber && formData.contactNumber ? (
+                <p className="mt-1 text-sm text-red-600">Use the format (+63) 9123456789.</p>
+              ) : null}
             </div>
             <div className="md:col-span-2">
-              <Label htmlFor="address">Address</Label>
-              <Textarea
+              <Label htmlFor="address">Street Address</Label>
+              <Input
                 id="address"
                 value={formData.address}
                 onChange={(event) => updateField('address', event.target.value)}
-                placeholder="Enter your current address"
-                className="min-h-28"
+                placeholder="Enter your street address"
               />
             </div>
           </CardContent>
@@ -422,6 +466,8 @@ export default function StudentProfile() {
           </CardFooter>
         </Card>
       </form>
+
+      <PasswordChangeCard title="Change Password" description="Update the password for your student account." />
     </div>
   );
 }
