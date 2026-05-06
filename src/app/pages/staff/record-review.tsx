@@ -36,6 +36,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Textarea } from '../../components/ui/textarea';
 import { getSubmission, saveSubmissionReview } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
 import type { MedicalHistory, MockSubmission } from '../../lib/mock-data';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
 
@@ -275,6 +276,7 @@ function countVerifiedConditions(history: MedicalHistory) {
 export default function StaffRecordReview() {
   const navigate = useNavigate();
   const { submissionId } = useParams();
+  const { me } = useAuth();
   const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -285,6 +287,13 @@ export default function StaffRecordReview() {
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('pending');
   const [showReturnDialog, setShowReturnDialog] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const defaultSignatoryName = [
+    me?.staff?.first_name || me?.profile.first_name || '',
+    me?.staff?.last_name || me?.profile.last_name || '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
 
   useEffect(() => {
     void loadSubmission();
@@ -305,7 +314,11 @@ export default function StaffRecordReview() {
 
       setSubmission(loadedSubmission);
       setRecordForm(createRecordForm(loadedSubmission));
-      setAssessmentForm(createAssessmentForm(loadedSubmission));
+      const nextAssessmentForm = createAssessmentForm(loadedSubmission);
+      if (!nextAssessmentForm.examinedBy && defaultSignatoryName) {
+        nextAssessmentForm.examinedBy = defaultSignatoryName;
+      }
+      setAssessmentForm(nextAssessmentForm);
       setClearanceForm(createClearanceForm(loadedSubmission));
       setStaffNotes(loadedSubmission.staffNotes || '');
       setReviewStatus(loadedSubmission.status);
@@ -316,6 +329,11 @@ export default function StaffRecordReview() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!defaultSignatoryName) return;
+    setAssessmentForm((prev) => (prev.examinedBy ? prev : { ...prev, examinedBy: defaultSignatoryName }));
+  }, [defaultSignatoryName]);
 
   function updateRecordField<K extends keyof RecordForm>(field: K, value: RecordForm[K]) {
     setRecordForm((prev) => {
@@ -1428,6 +1446,18 @@ export default function StaffRecordReview() {
                     onChange={(event) => updateClearanceField('issuedDate', event.target.value)}
                     className="mt-2"
                   />
+                </div>
+
+                <div className="md:col-span-2 xl:col-span-2">
+                  <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
+                  <Input
+                    id="clearanceSignatory"
+                    value={assessmentForm.examinedBy}
+                    onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
+                    className="mt-2"
+                    placeholder="Nurse or doctor name"
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical clearance.</p>
                 </div>
 
                 <div className="md:col-span-2">

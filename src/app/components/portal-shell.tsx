@@ -41,6 +41,14 @@ function isRouteActive(pathname: string, path: string) {
     return pathname === path;
   }
 
+  if (path === '/student/year-selection') {
+    return (
+      pathname === path ||
+      pathname.startsWith('/student/privacy-waiver') ||
+      pathname.startsWith('/student/medical-form')
+    );
+  }
+
   return pathname.startsWith(path);
 }
 

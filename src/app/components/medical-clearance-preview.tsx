@@ -108,6 +108,10 @@ function CaduceusSeal({ size = 36 }: { size?: number }) {
 function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType: string }) {
   const cl = record.clearanceInfo || {};
   const purpose = cl.purpose || 'enrolment';
+  const signatoryName = (record.staffMeasurements?.examinedBy || '').trim() || 'GERALD S. BERNAL, MD';
+  const signatoryTitle = /(^|\s)(dr\.?|doctor|md)(\s|,|$)/i.test(signatoryName)
+    ? 'College Physician'
+    : 'Clinic Nurse / Doctor';
   // Student's copy ends with "at the College Clinic." only; others add "for Enrolment purposes only."
   const isStudentCopy = copyType === "STUDENT'S COPY";
   const remarksEnding = isStudentCopy
@@ -252,9 +256,8 @@ function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType:
 
         {/* RIGHT: Physician block — vertically aligned to Remarks/Issued rows */}
         <div style={{ ...S.sigBlock, flexShrink: 0 }}>
-          <div style={S.sigName}>GERALD S. BERNAL, MD</div>
-          <div>College Physician</div>
-          <div>License No.0084558</div>
+          <div style={S.sigName}>{signatoryName}</div>
+          <div>{signatoryTitle}</div>
         </div>
 
       </div>

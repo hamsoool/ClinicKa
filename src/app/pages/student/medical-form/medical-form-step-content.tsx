@@ -640,6 +640,19 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </div>
             </CardContent>
           </Card>
+          <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="submissionConfirmed"
+                checked={formData.submissionConfirmed}
+                onCheckedChange={(checked) => onFieldChange('submissionConfirmed', checked === true)}
+              />
+              <Label htmlFor="submissionConfirmed" className="text-sm leading-6 font-normal">
+                I confirm that all details and attached laboratory results are complete and true. I understand that
+                inaccurate information may delay medical clearance.
+              </Label>
+            </div>
+          </div>
           <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
             <p className="text-sm text-yellow-800">
               Please review all information carefully before submitting. Once submitted, your medical record will be reviewed by clinic staff.

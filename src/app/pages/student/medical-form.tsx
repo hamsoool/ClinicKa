@@ -33,6 +33,7 @@ export default function StudentMedicalForm() {
     uploading,
     submitted,
     canProceed,
+    canSubmit,
     previewRecord,
     updateField,
     updateEmergencyContact,
@@ -125,7 +126,7 @@ export default function StudentMedicalForm() {
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               ) : (
-                <Button onClick={submit} disabled={!canProceed || uploading} className="bg-primary hover:bg-primary/90">
+                <Button onClick={submit} disabled={!canSubmit || uploading} className="bg-primary hover:bg-primary/90">
                   {uploading ? 'Submitting...' : 'Submit Medical Record'}
                   {!uploading && <Upload className="ml-2 h-4 w-4" />}
                 </Button>

@@ -44,6 +44,7 @@ export type MedicalFormData = {
   existingUrinalysisFileUrl?: string;
   labTestLocation: '' | 'jlgh' | 'other';
   otherClinicName: string;
+  submissionConfirmed: boolean;
   year: string;
 };
 
