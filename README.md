@@ -1,139 +1,166 @@
-# ClinicKa!
+# ClinicKa
 
-ClinicKa! is a Gordon College clinic management portal for student medical records, clearance review, clinic staff workflows, and administrator oversight. The app runs as a Vite + React single page application with Supabase for authentication, database access, storage, and edge functions.
+ClinicKa is a web-based clinic management system for Gordon College. It helps students submit medical requirements, lets clinic staff review and clear records, and gives admins control over users and system operations.
 
-## Core Features
+The app is a React + Vite frontend connected to Supabase (Auth, Postgres, Storage, and Edge Functions).
 
-- Role-based portals for students, clinic staff, and administrators.
-- Student medical record submission with profile, health history, measurements, file uploads, and clearance tracking.
-- Staff review queue for validating records, lab files, physical exam results, notes, status changes, and clearance release.
-- Admin tools for system settings, clinic staff management, user accounts, and reporting.
-- PWA support for installable mobile-friendly access.
-- Demo mode for local development without a live Supabase project.
+## What The System Does
+
+ClinicKa has three role-based portals:
+
+- Student portal (`/student`): profile management, yearly medical form submission, requirements tracking, and certificate viewing.
+- Staff portal (`/staff`): submission queue, detailed record review, status updates (`pending`, `returned`, `physical_exam_done`, `approved`, `resubmitted`), and certificate workflows.
+- Admin portal (`/admin`): user account management, staff management, archived account lifecycle, and reports.
+
+## System Overview (End-to-End)
+
+1. User signs in (email/password or Google OAuth).
+2. Frontend reads/writes data in Supabase tables and storage buckets.
+3. Sensitive/admin-style operations go through Supabase Edge Function routes under:
+   - `/functions/v1/server/*`
+4. Staff status changes can trigger email notifications through `/api/send-email` (Vite middleware in local dev).
+
+Core backend entrypoint:
+
+- `supabase/functions/server/index.ts`
 
 ## Tech Stack
 
-- React 18, TypeScript, React Router 7
-- Vite 6 and Tailwind CSS 4
-- Radix UI primitives and lucide-react icons
-- Supabase Auth, Postgres, Storage, and Edge Functions
-- vite-plugin-pwa / Workbox
+- React 18 + TypeScript
+- React Router 7
+- Vite 6 + Tailwind CSS 4
+- TanStack Query
+- Supabase Auth + Postgres + Storage + Edge Functions
+- PWA support via `vite-plugin-pwa` / Workbox
 
 ## Prerequisites
 
-- Node.js 20 or newer
-- npm 10 or newer
-- Supabase CLI if you plan to deploy or run edge functions locally
+- Node.js 20+
+- npm 10+
+- Supabase project (required)
+- Supabase CLI (optional but recommended for function deployment/testing)
 
 ## Quick Start
 
+1. Install dependencies:
+
 ```bash
 npm install
-npm run dev
 ```
 
-The app is served at `http://localhost:5173` by default.
-
-## Environment Setup
-
-Create `.env.local` from `.env.example`.
+2. Create local environment file:
 
 ```bash
 cp .env.example .env.local
 ```
 
-For demo-only local work, keep:
-
-```env
-VITE_DEMO_MODE=true
-```
-
-For a live Supabase-backed run, set:
+3. Fill required environment variables in `.env.local`:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_DEMO_MODE=false
 
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=server-only-service-role-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
-Do not commit `.env.local` or service role keys.
-
-## Demo Accounts
-
-These accounts are intended for local/demo testing:
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Student | `202310417@gordoncollege.edu.ph` | `Clinic123!` |
-| Staff | `clinic.staff@gordoncollege.edu.ph` | `Clinic123!` |
-| Admin | `clinic.admin@gordoncollege.edu.ph` | `Clinic123!` |
-
-## Available Scripts
+4. Start development server:
 
 ```bash
 npm run dev
 ```
 
-Starts the local Vite development server.
+App URL: `http://localhost:5173`
 
-```bash
-npm run build
-```
+## Environment Variables
 
-Creates a production build in `dist/`.
+Required for frontend runtime:
 
-```bash
-npm run typecheck
-```
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
 
-Runs the TypeScript compiler without emitting files.
+Required for server-side operations used by local middleware/scripts:
 
-```bash
-npm run check
-```
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-Runs the same validation used by pull requests targeting `master`: TypeScript type checking followed by a production build.
+Optional (for email notifications in local dev middleware):
 
-## Supabase Notes
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASS`
 
-- Edge function entry point: `supabase/functions/server/index.ts`
-- Generated key-value helper: `supabase/functions/server/kv_store.tsx`
-- Storage and RLS policy reference: `supabase/rls_storage_and_files_policies.sql`
-- Files bucket migration helper: `supabase/fix_files_bucket_migration.sql`
+Notes:
 
-The frontend expects the `medical-files` storage bucket and related file-type buckets used by `src/app/lib/api.ts`. Apply the SQL policy files before using uploads in a live project.
+- `.env.example` also includes `VITE_SUPABASE_PROJECT_ID`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_PUBLISHABLE_KEY` for project compatibility; current app runtime primarily uses the variables listed above.
+- Never commit real secrets from `.env.local`.
+
+## Supabase Setup Notes
+
+This repository includes policy/patch SQL files (not a complete schema bootstrap). Ensure your Supabase project has the expected ClinicKa tables before running the app.
+
+Apply the SQL files in `supabase/` as needed:
+
+- `supabase/rls_storage_and_files_policies.sql`
+- `supabase/fix_files_bucket_migration.sql`
+- `supabase/archived_accounts_migration.sql`
+- `supabase/add_lab_test_source_columns.sql`
+- `supabase/add_resubmitted_status_constraint_migration.sql`
+
+Expected storage buckets used by uploads:
+
+- `profile`
+- `student_signature`
+- `lab_chest_xray`
+- `lab_cbc`
+- `lab_urinalysis`
+- (legacy references may still point to `medical-files`, use the migration above)
+
+## Useful Scripts
+
+- `npm run dev` - Start local development server
+- `npm run typecheck` - TypeScript check (no emit)
+- `npm run build` - Production build into `dist/`
+- `npm run check` - `typecheck` + `build`
+
+Optional helper script:
+
+- `scripts/create-admin-account.local.mjs` - create/bootstrap a user via Supabase Admin API using env credentials.
 
 ## Project Structure
 
 ```text
 src/
   app/
-    components/        Shared UI, previews, reports, and portal shell
-    lib/               Auth, API, and demo data helpers
-    pages/             Student, staff, admin, and auth routes
-  styles/              Tailwind, theme tokens, and global styles
+    pages/               Role-based pages (student, staff, admin, auth)
+    lib/                 Auth/API client logic
+    components/          Shared UI, shell, reports, previews
+  styles/                Global and font/style files
 supabase/
-  functions/server/    Edge function API
-  *.sql                Storage, RLS, and migration helpers
-public/                PWA icons, logo, and static imagery
-exports/figma/         Imported design reference screenshots
+  functions/server/      Edge function API
+  *.sql                  SQL migrations/policies
+scripts/                 Utility scripts (admin bootstrap, exports)
+public/                  Static assets + PWA icons
 ```
 
-## Production Build
+## Build And Deploy
+
+1. Build frontend:
 
 ```bash
 npm run build
 ```
 
-The build uses route-level lazy loading plus vendor chunk splitting for better browser caching. Deploy the contents of `dist/` to your static host, and deploy the Supabase edge function separately when using the live backend.
+2. Deploy `dist/` to your static host.
+3. Deploy/update Supabase edge function (`server`) for backend routes.
+
+`vercel.json` already includes SPA rewrite rules for client-side routing.
 
 ## Troubleshooting
 
-- Missing Supabase config: verify `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-- Upload failures: confirm storage buckets and RLS policies have been applied.
-- Google sign-in domain errors: only `@gordoncollege.edu.ph` accounts are accepted.
-- Demo data looks stale: clear the browser keys `gc_demo_submissions` and `gc_supabase_session`.
+- `Missing Supabase config...`: check `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+- Upload/sign URL errors: verify buckets exist and run `rls_storage_and_files_policies.sql`.
+- Archived account endpoints returning migration errors: run `archived_accounts_migration.sql`.
+- Google sign-in blocked: student accounts are restricted to `@gordoncollege.edu.ph`.
+- Email notifications not sending in local dev: verify `SMTP_*` values in `.env.local`.
