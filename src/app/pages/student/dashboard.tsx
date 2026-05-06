@@ -117,17 +117,17 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
+    <div className="-mx-4 w-[calc(100%+2rem)] space-y-1 min-[340px]:-mx-5 min-[340px]:w-[calc(100%+2.5rem)] sm:mx-auto sm:w-full sm:max-w-6xl sm:space-y-8">
+      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-3 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-6 lg:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight text-on-surface">Welcome, {displayName}</h2>
-              <p className="mt-1 text-base text-on-surface-variant">
+              <h2 className="text-[1.75rem] font-bold tracking-tight text-on-surface sm:text-3xl max-[382px]:text-[1.5rem]">Welcome, {displayName}</h2>
+              <p className="mt-1 text-sm text-on-surface-variant sm:text-base">
                 Here is your current medical clearance status.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3 text-sm text-on-surface-variant">
+            <div className="flex flex-wrap gap-2 text-xs text-on-surface-variant sm:gap-3 sm:text-sm">
               {studentId ? (
                 <span className="rounded-full bg-surface-container px-3 py-1.5">
                   Student ID: <span className="font-semibold text-on-surface">{studentId}</span>
@@ -141,8 +141,8 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 shadow-sm">
+          <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2.5 shadow-sm sm:px-4 sm:py-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 Approved Records
               </p>
@@ -151,7 +151,7 @@ export default function StudentDashboard() {
                 <span className="text-2xl font-bold">{approvedCount}</span>
               </div>
             </div>
-            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 shadow-sm">
+            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2.5 shadow-sm sm:px-4 sm:py-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 Under Review
               </p>
@@ -165,27 +165,27 @@ export default function StudentDashboard() {
       </div>
       
       {latestRecord?.status === 'returned' && (
-        <div className="rounded-[1.75rem] border border-error/20 bg-error-container/20 p-6 shadow-sm backdrop-blur sm:p-8">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-error/10 text-error">
-              <AlertCircle className="h-6 w-6" />
+        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700">
+              <AlertCircle className="h-5 w-5" />
             </div>
             <div className="flex-1 space-y-4">
               <div>
-                <h3 className="text-xl font-bold tracking-tight text-on-error-container">Action Required: Correction Needed</h3>
-                <p className="mt-1 text-on-error-container/80">
+                <h3 className="text-base font-bold tracking-tight text-red-700 sm:text-lg">Action Required: Correction Needed</h3>
+                <p className="mt-1 text-xs text-on-surface-variant sm:text-sm">
                   Your medical record submission for <span className="font-semibold">{yearLabels[Number(latestRecord.year) - 1] || 'current year'}</span> has been returned by the clinic staff.
                 </p>
               </div>
               
               {latestRecord.staffNotes && (
-                <div className="rounded-2xl border border-error/10 bg-white/50 p-5 shadow-inner backdrop-blur-sm">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-error mb-2">Note from Clinic Staff:</p>
-                  <p className="text-on-error-container italic leading-relaxed">"{latestRecord.staffNotes}"</p>
+                <div className="rounded-xl border border-red-200/70 bg-red-50 p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-red-700">Note from Clinic Staff:</p>
+                  <p className="text-sm italic leading-relaxed text-red-700">"{latestRecord.staffNotes}"</p>
                 </div>
               )}
               
-              <div className="flex pt-2">
+              <div className="flex pt-1">
                 <button
                   onClick={() =>
                     navigate(
@@ -194,7 +194,7 @@ export default function StudentDashboard() {
                       )}`,
                     )
                   }
-                  className="inline-flex items-center gap-2 rounded-xl bg-error px-5 py-2.5 text-sm font-semibold text-on-error shadow-lg shadow-error/20 transition-all hover:bg-error/90 hover:scale-[1.02] active:scale-[0.98]"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 sm:w-auto"
                 >
                   Update and Resubmit
                   <ArrowRight className="h-4 w-4" />
@@ -206,33 +206,53 @@ export default function StudentDashboard() {
       )}
 
       <div className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-        <div className="border-b border-outline-variant/30 bg-surface-container-lowest px-6 py-4">
+        <div className="border-b border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6">
           <h3 className="text-lg font-semibold text-on-surface">Yearly Status Overview</h3>
         </div>
-        <div className="overflow-x-auto">
+        <div className="sm:hidden">
+          {yearlyRecords.map(({ label, record }) => (
+            <div
+              key={`mobile-${label}`}
+              className="border-b border-outline-variant/20 px-4 py-3 last:border-b-0"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className={`text-sm font-medium ${record ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>{label}</p>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${getStatusStyles(record?.status)}`}
+                >
+                  {getStatusBadge(record?.status)}
+                </span>
+              </div>
+              <p className={`mt-1 text-xs ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
+                Last action: {formatDate(record?.updatedAt || record?.submittedAt)}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-outline-variant/30 bg-surface-container-low text-xs uppercase tracking-[0.16em] text-on-surface-variant">
-                <th className="px-6 py-3 font-semibold">Year Level</th>
-                <th className="px-6 py-3 font-semibold">Status</th>
-                <th className="px-6 py-3 font-semibold">Last Action Date</th>
+                <th className="px-4 py-3 font-semibold sm:px-6">Year Level</th>
+                <th className="px-4 py-3 font-semibold sm:px-6">Status</th>
+                <th className="px-4 py-3 font-semibold sm:px-6">Last Action Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/20">
               {yearlyRecords.map(({ label, record }) => (
                 <tr key={label} className="transition-colors hover:bg-surface-container-lowest">
-                  <td className={`px-6 py-4 text-sm ${record ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
+                  <td className={`px-4 py-4 text-sm sm:px-6 ${record ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
                     {label}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-4 sm:px-6">
                     <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusStyles(record?.status)}`}
+                      className={`inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold sm:px-2.5 sm:text-xs ${getStatusStyles(record?.status)}`}
                     >
                       {getStatusBadge(record?.status)}
                     </span>
                   </td>
                   <td
-                    className={`px-6 py-4 text-sm ${
+                    className={`px-4 py-4 text-sm sm:px-6 ${
                       record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'
                     }`}
                   >
@@ -245,8 +265,8 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+      <div className="grid gap-2 sm:gap-6 md:grid-cols-2">
+        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-6 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-on-surface">Submission Status</h3>
           </div>
@@ -270,16 +290,16 @@ export default function StudentDashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
+              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
                     <p className="text-sm text-on-surface-variant">Latest submission</p>
-                    <p className="text-lg font-semibold text-on-surface">
+                    <p className="text-base font-semibold text-on-surface sm:text-lg">
                       Year {latestRecord?.year || '--'} Medical Record
                     </p>
                   </div>
                   <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusStyles(latestRecord?.status)}`}
+                    className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusStyles(latestRecord?.status)}`}
                   >
                     {getStatusBadge(latestRecord?.status)}
                   </span>
@@ -295,7 +315,7 @@ export default function StudentDashboard() {
               </div>
 
               <button
-                className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container sm:w-auto"
                 onClick={() => navigate('/student/year-selection')}
               >
                 <Plus className="h-4 w-4" />
@@ -305,11 +325,11 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-          <div className="mb-6 flex items-center justify-between">
+        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+          <div className="mb-6 flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-on-surface">Recent Medical Record History</h3>
             <button
-              className="text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+              className="shrink-0 text-xs font-semibold text-primary transition-colors hover:text-primary/80 sm:text-sm"
               onClick={() => navigate('/student/records')}
             >
               View All
@@ -323,7 +343,7 @@ export default function StudentDashboard() {
               {sortedRecords.slice(0, 3).map((record) => (
                 <div
                   key={record.id}
-                  className="flex items-center gap-4 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 transition-colors hover:bg-surface-container-low"
+                  className="flex items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 transition-colors hover:bg-surface-container-low sm:items-center sm:gap-4"
                 >
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container text-primary">
                     <FileText className="h-5 w-5" />
@@ -337,7 +357,7 @@ export default function StudentDashboard() {
                     </p>
                   </div>
                   <span
-                    className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] ${getStatusStyles(record.status)}`}
+                    className={`inline-flex w-fit items-center rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] sm:tracking-[0.2em] ${getStatusStyles(record.status)}`}
                   >
                     {getStatusBadge(record.status)}
                   </span>

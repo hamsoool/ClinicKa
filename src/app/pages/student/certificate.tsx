@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -13,8 +13,14 @@ import { getStudentRecords } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
 export default function StudentCertificate() {
+  const PREVIEW_BASE_WIDTH = 794;
   const navigate = useNavigate();
   const clearanceRef = useRef<HTMLDivElement>(null);
+  const previewViewportRef = useRef<HTMLDivElement>(null);
+  const previewCanvasRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(1);
+  const [previewHeight, setPreviewHeight] = useState<number | null>(null);
+  const [isCompactPreview, setIsCompactPreview] = useState(false);
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
 
@@ -39,6 +45,41 @@ export default function StudentCertificate() {
       toast.error('Failed to load certificate');
     }
   }, [isError]);
+
+  useLayoutEffect(() => {
+    if (!record) return;
+
+    const updateScale = () => {
+      const viewport = previewViewportRef.current;
+      const canvas = previewCanvasRef.current;
+      if (!viewport || !canvas) return;
+
+      const availableWidth = viewport.clientWidth - 4;
+      const naturalHeight = canvas.scrollHeight;
+      if (!naturalHeight) return;
+
+      const useCompact = availableWidth < PREVIEW_BASE_WIDTH;
+      const nextScale = useCompact ? availableWidth / PREVIEW_BASE_WIDTH : 1;
+      setIsCompactPreview(useCompact);
+      setPreviewScale(nextScale);
+      setPreviewHeight(naturalHeight * nextScale);
+    };
+
+    updateScale();
+
+    const observer = new ResizeObserver(() => {
+      updateScale();
+    });
+
+    if (previewViewportRef.current) observer.observe(previewViewportRef.current);
+    if (previewCanvasRef.current) observer.observe(previewCanvasRef.current);
+
+    window.addEventListener('resize', updateScale);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateScale);
+    };
+  }, [record]);
 
   const downloadClearancePDF = () => {
     if (!clearanceRef.current || !record) return;
@@ -70,16 +111,16 @@ export default function StudentCertificate() {
 
   if (!record) {
     return (
-      <div>
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-primary mb-2">Medical Clearance</h1>
+      <div className="space-y-5 sm:space-y-6">
+        <div className="mb-2 sm:mb-4">
+          <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Medical Clearance</h1>
           <p className="text-muted-foreground">View and download your medical clearance certificate</p>
         </div>
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
+          <CardContent className="flex flex-col items-center justify-center px-4 py-12 text-center sm:py-16">
             <FileText className="w-16 h-16 text-muted-foreground mb-4" />
             <p className="text-lg font-medium mb-2">No Record Found</p>
-            <p className="text-muted-foreground text-center max-w-md">
+            <p className="max-w-md text-muted-foreground">
               You need to submit your medical record first before a clearance can be generated. Please go to <strong>Submit Record</strong> to get started.
             </p>
           </CardContent>
@@ -95,15 +136,15 @@ export default function StudentCertificate() {
   const isPhysicalExamDone = normalizedStatus === 'physical_exam_done';
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-primary mb-2">Medical Clearance</h1>
+    <div className="space-y-5 sm:space-y-6">
+      <div className="mb-2 sm:mb-4">
+        <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Medical Clearance</h1>
         <p className="text-muted-foreground">View and download your medical clearance certificate (3 copies)</p>
       </div>
 
       {/* Status Banner */}
       {!isApproved && (
-        <Card className="mb-6 border-l-4 border-l-yellow-500">
+        <Card className="mb-1 border-l-4 border-l-yellow-500 sm:mb-3">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
               {isPending ? (
@@ -141,7 +182,7 @@ export default function StudentCertificate() {
                           )
                         }
                         size="sm"
-                        className="bg-red-600 hover:bg-red-700"
+                        className="w-full bg-red-600 hover:bg-red-700 sm:w-auto"
                       >
                         Edit and Resubmit
                       </Button>
@@ -185,7 +226,7 @@ export default function StudentCertificate() {
       {isApproved ? (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <ShieldCheck className="w-5 h-5 text-green-600" />
                 <div>
@@ -193,23 +234,35 @@ export default function StudentCertificate() {
                   <p className="text-sm text-green-600 font-medium mt-0.5">Approved - 3 copies on A4</p>
                 </div>
               </div>
-              <Button onClick={downloadClearancePDF} className="bg-primary text-on-primary hover:bg-primary/90">
+              <Button onClick={downloadClearancePDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
                 <Download className="w-4 h-4 mr-2" />
                 Download PDF
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="border rounded-lg overflow-auto bg-white p-2">
-              <MedicalClearancePreview ref={clearanceRef} record={record} />
+            <div ref={previewViewportRef} className="overflow-hidden rounded-lg border bg-white p-1 sm:p-2">
+              <div style={{ height: isCompactPreview ? (previewHeight ?? 'auto') : 'auto' }}>
+                <div
+                  ref={previewCanvasRef}
+                  style={{
+                    transform: `scale(${previewScale})`,
+                    transformOrigin: isCompactPreview ? 'top left' : 'top center',
+                    width: `${PREVIEW_BASE_WIDTH}px`,
+                    margin: isCompactPreview ? '0' : '0 auto',
+                  }}
+                >
+                  <MedicalClearancePreview ref={clearanceRef} record={record} />
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
       ) : (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
+          <CardContent className="flex flex-col items-center justify-center px-4 py-12 text-center sm:py-16">
             <FileText className="w-16 h-16 text-muted-foreground mb-4 opacity-40" />
-            <p className="text-muted-foreground text-center">
+            <p className="text-muted-foreground">
               Medical clearance preview will appear here once your record is approved.
             </p>
           </CardContent>
