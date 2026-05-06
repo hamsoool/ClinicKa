@@ -33,6 +33,7 @@ export default function StudentMedicalForm() {
     uploading,
     submitted,
     canProceed,
+    canSubmit,
     previewRecord,
     updateField,
     updateEmergencyContact,

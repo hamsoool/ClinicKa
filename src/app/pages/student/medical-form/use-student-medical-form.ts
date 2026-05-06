@@ -132,6 +132,7 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, priv
     existingUrinalysisFileUrl: '',
     labTestLocation: '',
     otherClinicName: '',
+    submissionConfirmed: false,
     year: year || '1',
   };
 }
@@ -214,6 +215,7 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           existingUrinalysisFileUrl: (submission as any).urinalysisFileUrl || '',
           labTestLocation: ((submission as any).labTestLocation || '') as '' | 'jlgh' | 'other',
           otherClinicName: (submission as any).otherClinicName || '',
+          submissionConfirmed: false,
         }));
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to load returned record for editing');
