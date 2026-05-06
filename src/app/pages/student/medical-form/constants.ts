@@ -100,9 +100,10 @@ export function getDepartmentLabel(value: string) {
   return DEPARTMENT_OPTIONS.find((department) => department.value === resolved)?.label || resolved;
 }
 
-export function getProgramsForDepartment(department: string) {
+export function getProgramsForDepartment(department: string): string[] {
   const resolved = resolveDepartmentValue(department);
-  return DEPARTMENT_OPTIONS.find((item) => item.value === resolved)?.programs ?? [];
+  const matchedPrograms = DEPARTMENT_OPTIONS.find((item) => item.value === resolved)?.programs;
+  return matchedPrograms ? [...matchedPrograms] : [];
 }
 
 export function normalizeProgramForDepartment(department: string, program: string) {
