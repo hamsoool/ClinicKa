@@ -93,6 +93,7 @@ export type AuthSession = {
   access_token: string;
   refresh_token?: string;
   expires_in?: number;
+  expires_at?: number;
   token_type?: string;
   user?: {
     id: string;
@@ -262,6 +263,41 @@ const demoUserAccounts = [
   },
 ];
 
+const TOKEN_REFRESH_BUFFER_SECONDS = 60;
+
+function getNowUnixSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function parseUnixSeconds(value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  const normalized = Math.floor(value);
+  return normalized > 0 ? normalized : undefined;
+}
+
+function normalizeSessionTimestamps(session: AuthSession): AuthSession {
+  const expiresIn =
+    typeof session.expires_in === 'number' && Number.isFinite(session.expires_in)
+      ? Math.max(0, Math.floor(session.expires_in))
+      : undefined;
+  const expiresAt = parseUnixSeconds(session.expires_at);
+  const computedExpiresAt =
+    expiresAt ?? (expiresIn ? getNowUnixSeconds() + expiresIn : undefined);
+
+  return {
+    ...session,
+    expires_in: expiresIn,
+    expires_at: computedExpiresAt,
+  };
+}
+
+function isSessionExpiringSoon(session: AuthSession, bufferSeconds = TOKEN_REFRESH_BUFFER_SECONDS) {
+  if (!session.refresh_token) return false;
+  const expiresAt = parseUnixSeconds(session.expires_at);
+  if (!expiresAt) return false;
+  return expiresAt - bufferSeconds <= getNowUnixSeconds();
+}
+
 export function getStoredSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
 
@@ -269,7 +305,12 @@ export function getStoredSession(): AuthSession | null {
   if (!raw) return null;
 
   try {
-    return JSON.parse(raw) as AuthSession;
+    const parsed = JSON.parse(raw) as AuthSession;
+    if (!parsed?.access_token) {
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+      return null;
+    }
+    return normalizeSessionTimestamps(parsed);
   } catch {
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
     return null;
@@ -284,7 +325,10 @@ export function setStoredSession(session: AuthSession | null) {
     return;
   }
 
-  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  window.localStorage.setItem(
+    AUTH_STORAGE_KEY,
+    JSON.stringify(normalizeSessionTimestamps(session)),
+  );
 }
 
 export function clearStoredSession() {
@@ -331,13 +375,14 @@ async function refreshSession(): Promise<AuthSession | null> {
       const payload = await response.json();
       if (!payload?.access_token) return null;
 
-      const refreshed: AuthSession = {
+      const refreshed = normalizeSessionTimestamps({
         access_token: payload.access_token,
         refresh_token: payload.refresh_token ?? current.refresh_token,
         expires_in: payload.expires_in,
+        expires_at: payload.expires_at,
         token_type: payload.token_type,
         user: payload.user ?? current.user,
-      };
+      });
       setStoredSession(refreshed);
       return refreshed;
     } catch {
@@ -350,12 +395,21 @@ async function refreshSession(): Promise<AuthSession | null> {
   return _refreshPromise;
 }
 
+async function getValidAccessToken() {
+  const current = getStoredSession();
+  if (!current?.access_token) return null;
+  if (!isSessionExpiringSoon(current)) return current.access_token;
+
+  const refreshed = await refreshSession();
+  return refreshed?.access_token || current.access_token;
+}
+
 async function apiRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
   }
 
-  const token = options.token ?? getAccessToken();
+  const token = options.token ?? (await getValidAccessToken());
   const headers: Record<string, string> = {
     apikey: publicAnonKey,
     Authorization: `Bearer ${token || publicAnonKey}`,
@@ -419,7 +473,7 @@ async function authRequest<T>(path: string, options: RequestOptions = {}, _retri
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
   }
 
-  const token = options.token ?? getAccessToken();
+  const token = options.token ?? (await getValidAccessToken());
   const headers: Record<string, string> = {
     apikey: publicAnonKey,
     Authorization: `Bearer ${token || publicAnonKey}`,
