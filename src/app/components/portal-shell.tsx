@@ -3,6 +3,16 @@ import { Outlet, useLocation, useNavigate } from 'react-router';
 import { Camera, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { cn } from './ui/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 
 export type PortalNavItem = {
   path: string;
@@ -99,6 +109,7 @@ export default function PortalShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [profilePic, setProfilePic] = useState<string | null>(initialProfileImageUrl || null);
   const [brandImageFailed, setBrandImageFailed] = useState(false);
+  const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -269,7 +280,7 @@ export default function PortalShell({
               <button
                 type="button"
                 className="flex min-h-12 w-full items-center gap-3 rounded-md px-4 py-3 text-sm font-medium text-emerald-100/70 transition-colors hover:bg-emerald-800/50 hover:text-white"
-                onClick={() => void handleSignOut()}
+                onClick={() => setConfirmSignOutOpen(true)}
               >
                 <LogOut className="h-5 w-5 shrink-0" />
                 <span>Sign Out</span>
@@ -374,7 +385,7 @@ export default function PortalShell({
                   </div>
                   <button
                     type="button"
-                    onClick={() => void handleSignOut()}
+                    onClick={() => setConfirmSignOutOpen(true)}
                     className="mt-4 w-full rounded-md border border-outline-variant/40 px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-container-low"
                   >
                     Sign out
@@ -425,6 +436,28 @@ export default function PortalShell({
           })}
         </div>
       </nav>
+
+      <AlertDialog open={confirmSignOutOpen} onOpenChange={setConfirmSignOutOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out of your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will need to sign in again to access the portal.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                void handleSignOut();
+              }}
+              className="bg-primary text-white hover:bg-primary/90"
+            >
+              Sign Out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

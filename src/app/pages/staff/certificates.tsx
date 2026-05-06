@@ -257,7 +257,7 @@ export default function StaffCertificates() {
                           {selectedStudent.lastName}, {selectedStudent.firstName}  E{selectedStudent.studentId}
                         </p>
                       </div>
-                      <Button onClick={downloadRecordPDF} className="bg-primary text-on-primary hover:bg-primary/90">
+                      <Button onClick={downloadRecordPDF} className="bg-primary text-white hover:bg-primary/90">
                         <Download className="w-4 h-4 mr-2" />
                         Download PDF (Long Bond)
                       </Button>
@@ -299,7 +299,7 @@ export default function StaffCertificates() {
                           3 copies (Student, Coordinator, Registrar)  EA4 bond paper
                         </p>
                       </div>
-                      <Button onClick={downloadClearancePDF} className="bg-primary text-on-primary hover:bg-primary/90">
+                      <Button onClick={downloadClearancePDF} className="bg-primary text-white hover:bg-primary/90">
                         <Download className="w-4 h-4 mr-2" />
                         Download PDF (A4)
                       </Button>

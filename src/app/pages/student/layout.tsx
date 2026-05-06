@@ -7,7 +7,7 @@ import {
   FilePlus,
   HelpCircle,
   Home,
-  Settings,
+  User,
 } from 'lucide-react';
 import PortalShell, {
   getInitials,
@@ -23,12 +23,12 @@ const navItems = [
   { path: '/student/year-selection', label: 'Submit Record', mobileLabel: 'Submit', icon: FilePlus },
   { path: '/student/requirements', label: 'Requirements', mobileLabel: 'Reqs', icon: FileCheck2 },
   { path: '/student/certificate', label: 'Certificate', mobileLabel: 'Cert', icon: Award },
-  { path: '/student/profile', label: 'Profile', mobileLabel: 'Profile', icon: Settings },
+  { path: '/student/profile', label: 'Profile', mobileLabel: 'Profile', icon: User },
 ] as const satisfies readonly PortalNavItem[];
 
 const topActions = [
   { label: 'Notifications', icon: Bell },
-  { label: 'Profile settings', icon: Settings, path: '/student/profile' },
+  { label: 'Profile settings', icon: User, path: '/student/profile' },
   { label: 'Requirements help', icon: HelpCircle, path: '/student/requirements' },
 ] as const satisfies readonly PortalTopAction[];
 
