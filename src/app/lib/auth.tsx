@@ -230,6 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           refresh_token: params.get('refresh_token') || undefined,
           token_type: params.get('token_type') || undefined,
           expires_in: params.get('expires_in') ? Number(params.get('expires_in')) : undefined,
+          expires_at: params.get('expires_at') ? Number(params.get('expires_at')) : undefined,
           user: {
             id: authUser.id || params.get('user_id') || 'verified-user',
             email: email || undefined,
