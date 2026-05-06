@@ -30,39 +30,39 @@ const checklist = [
 
 export default function StudentRequirements() {
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
+    <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
       <div className="max-w-3xl">
-        <h1 className="text-3xl font-bold tracking-tight text-on-surface">Submission Requirements</h1>
-        <p className="mt-2 text-base text-on-surface-variant">
+        <h1 className="text-2xl font-bold tracking-tight text-on-surface sm:text-3xl">Submission Requirements</h1>
+        <p className="mt-2 text-sm text-on-surface-variant sm:text-base">
           Please upload the required medical documents to complete your clinical clearance.
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-12">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-8">
-          <div className="rounded-[1.25rem] border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-            <div className="mb-6 flex items-center justify-between border-b border-outline-variant/30 pb-4">
-              <h2 className="text-2xl font-semibold text-on-surface">Required Documents</h2>
+          <div className="rounded-[1.25rem] border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+            <div className="mb-4 flex items-center justify-between border-b border-outline-variant/30 pb-3 sm:mb-6 sm:pb-4">
+              <h2 className="text-xl font-semibold text-on-surface sm:text-2xl">Required Documents</h2>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {requirements.map((req) => {
                 const Icon = req.icon;
 
                 return (
                   <div
                     key={req.label}
-                    className="group rounded-xl border border-outline-variant bg-surface-bright p-4 transition-all duration-200 hover:border-primary/40 hover:shadow-sm"
+                    className="group rounded-xl border border-outline-variant bg-surface-bright p-3 transition-all duration-200 hover:border-primary/40 hover:shadow-sm sm:p-4"
                   >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-error-container text-on-error-container">
-                          <Icon className="h-5 w-5" />
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3 sm:gap-4">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-error-container text-on-error-container sm:h-10 sm:w-10">
+                          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-on-surface">{req.label}</h3>
-                          <p className="mt-1 text-sm text-on-surface-variant">{req.description}</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
+                          <h3 className="text-base font-semibold text-on-surface sm:text-lg">{req.label}</h3>
+                          <p className="mt-1 text-xs text-on-surface-variant sm:text-sm">{req.description}</p>
+                          <div className="mt-2 flex flex-wrap gap-2 sm:mt-3">
                             {req.formats.map((format) => (
                               <span
                                 key={format}
@@ -84,12 +84,12 @@ export default function StudentRequirements() {
         </div>
 
         <div className="lg:col-span-4">
-          <div className="sticky top-24 rounded-[1.25rem] border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-            <h2 className="border-b border-outline-variant/30 pb-4 text-2xl font-semibold text-on-surface">
+          <div className="sticky top-24 rounded-[1.25rem] border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+            <h2 className="border-b border-outline-variant/30 pb-3 text-xl font-semibold text-on-surface sm:pb-4 sm:text-2xl">
               Submission Checklist
             </h2>
 
-            <div className="mt-5 space-y-4">
+            <div className="mt-4 space-y-3 sm:mt-5 sm:space-y-4">
               {checklist.map((item) => (
                 <div key={item.label} className="flex items-start gap-3">
                   <CheckCircle2 className="mt-0.5 h-5 w-5 text-primary" />

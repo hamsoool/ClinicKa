@@ -39,19 +39,28 @@ export default function StudentYearSelection() {
     enabled: !!studentId,
   });
   const records = Array.isArray(data) ? data : [];
-  const approvedYears = new Set(
-    records
-      .filter((record) => record?.status === 'approved')
-      .map((record) => Number.parseInt(String(record?.year || ''), 10))
-      .filter((year) => Number.isInteger(year) && year >= 1 && year <= 4),
-  );
+  const latestByYear = new Map<number, { status: string; updatedAt?: string; submittedAt?: string }>();
+  records.forEach((record) => {
+    const year = Number.parseInt(String(record?.year || ''), 10);
+    if (!Number.isInteger(year) || year < 1 || year > 4) return;
+    const current = latestByYear.get(year);
+    const currentTs = current ? new Date(current.updatedAt || current.submittedAt || 0).getTime() : -1;
+    const nextTs = new Date(record?.updatedAt || record?.submittedAt || 0).getTime();
+    if (!current || nextTs >= currentTs) {
+      latestByYear.set(year, {
+        status: String(record?.status || '').toLowerCase(),
+        updatedAt: record?.updatedAt,
+        submittedAt: record?.submittedAt,
+      });
+    }
+  });
 
   if (isLoading && studentId) {
     return <PortalPageSkeleton variant="table" />;
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto max-w-5xl space-y-5 sm:space-y-8">
       <button
         type="button"
         onClick={() => navigate('/student')}
@@ -62,18 +71,21 @@ export default function StudentYearSelection() {
       </button>
 
       <div className="max-w-3xl">
-        <h1 className="text-3xl font-bold tracking-tight text-on-surface">Select Year Level</h1>
-        <p className="mt-2 text-base text-on-surface-variant">
+        <h1 className="text-2xl font-bold tracking-tight text-on-surface sm:text-3xl">Select Year Level</h1>
+        <p className="mt-2 text-sm text-on-surface-variant sm:text-base">
           Choose the academic year corresponding to the medical records you are preparing to submit.
           Your progress is automatically saved.
         </p>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-3 sm:gap-6 sm:grid-cols-2">
         {years.map((year) => {
           const isFutureYearLocked = year.level > studentYearLevel;
-          const isApprovedLocked = approvedYears.has(year.level);
-          const isLocked = isFutureYearLocked || isApprovedLocked;
+          const latestYearStatus = latestByYear.get(year.level)?.status || '';
+          const isApprovedLocked = latestYearStatus === 'approved';
+          const isPendingLocked = latestYearStatus === 'pending' || latestYearStatus === 'resubmitted';
+          const isReturned = latestYearStatus === 'returned';
+          const isLocked = isFutureYearLocked || isApprovedLocked || isPendingLocked;
           const isCurrent = year.level === studentYearLevel;
 
           return (
@@ -82,7 +94,7 @@ export default function StudentYearSelection() {
               type="button"
               disabled={isLocked}
               onClick={() => !isLocked && navigate(`/student/privacy-waiver/${year.level}`)}
-              className={`group relative flex min-h-[240px] flex-col items-center justify-center overflow-hidden rounded-[1.25rem] p-10 text-center transition-all duration-300 ${
+              className={`group relative flex min-h-[130px] flex-col items-center justify-center overflow-hidden rounded-[1.25rem] p-5 text-center transition-all duration-300 sm:min-h-[220px] sm:p-8 lg:min-h-[240px] lg:p-10 ${
                 isLocked
                   ? 'cursor-not-allowed bg-surface-container-high text-on-surface-variant/60'
                   : isCurrent
@@ -93,6 +105,14 @@ export default function StudentYearSelection() {
               {isApprovedLocked ? (
                 <span className="absolute left-0 top-0 rounded-br-xl bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
                   Already Approved
+                </span>
+              ) : isPendingLocked ? (
+                <span className="absolute left-0 top-0 rounded-br-xl bg-amber-600 px-3 py-1 text-xs font-semibold text-white">
+                  Pending Review
+                </span>
+              ) : isReturned ? (
+                <span className="absolute left-0 top-0 rounded-br-xl bg-red-600 px-3 py-1 text-xs font-semibold text-white">
+                  Returned
                 </span>
               ) : null}
               {isCurrent ? (
@@ -112,7 +132,7 @@ export default function StudentYearSelection() {
               ) : null}
 
               <GraduationCap
-                className={`mb-4 h-10 w-10 transition-transform duration-300 group-hover:scale-110 ${
+                className={`mb-2 h-7 w-7 transition-transform duration-300 group-hover:scale-110 sm:mb-4 sm:h-10 sm:w-10 ${
                   isLocked
                     ? 'text-outline'
                     : isCurrent
@@ -121,7 +141,7 @@ export default function StudentYearSelection() {
                 }`}
               />
               <h3
-                className={`text-2xl font-semibold ${
+                className={`text-xl font-semibold sm:text-2xl ${
                   isLocked
                     ? 'text-on-surface-variant'
                     : isCurrent
@@ -132,7 +152,7 @@ export default function StudentYearSelection() {
                 {year.name}
               </h3>
               <p
-                className={`mt-2 text-sm ${
+                className={`mt-1 text-xs sm:mt-2 sm:text-sm ${
                   isLocked
                     ? 'text-outline'
                     : isCurrent
@@ -140,7 +160,13 @@ export default function StudentYearSelection() {
                       : 'text-on-surface-variant'
                 }`}
               >
-                {isApprovedLocked ? 'Already approved. Further submissions are locked.' : year.description}
+                {isApprovedLocked
+                  ? 'Already approved. Further submissions are locked.'
+                  : isPendingLocked
+                    ? 'Submission is under review. Please wait for clinic feedback.'
+                    : isReturned
+                      ? 'Returned by clinic staff. You may edit and resubmit.'
+                      : year.description}
               </p>
             </button>
           );

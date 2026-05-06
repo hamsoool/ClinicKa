@@ -25,6 +25,7 @@ type Props = {
   onMeasurementChange: (field: 'bloodPressure' | 'weight' | 'height' | 'bmi', value: string) => void;
   onFileChange: (field: 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => void;
   getBmiCategory: (bmi: string) => BmiCategory;
+  maxBirthdate: string;
 };
 
 export const MedicalFormStepContent = memo(function MedicalFormStepContent({
@@ -36,6 +37,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   onMeasurementChange,
   onFileChange,
   getBmiCategory,
+  maxBirthdate,
 }: Props) {
   const getUploadedFileName = (url?: string) => {
     if (!url) return 'Uploaded file';
@@ -120,8 +122,8 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
             <div className="xl:col-span-2">
               <Label htmlFor="yearLevel">Year Level *</Label>
-              <Select value={formData.yearLevel} onValueChange={(value) => onFieldChange('yearLevel', value)}>
-                <SelectTrigger id="yearLevel">
+              <Select value={formData.yearLevel} onValueChange={(value) => onFieldChange('yearLevel', value)} disabled>
+                <SelectTrigger id="yearLevel" disabled>
                   <SelectValue placeholder="Select year level" />
                 </SelectTrigger>
                 <SelectContent>
@@ -154,11 +156,11 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
             <div className="xl:col-span-4">
               <Label htmlFor="lastName">Last Name *</Label>
-              <Input id="lastName" value={formData.lastName} onChange={(event) => onFieldChange('lastName', event.target.value)} />
+              <Input id="lastName" value={formData.lastName} onChange={(event) => onFieldChange('lastName', event.target.value)} maxLength={30} />
             </div>
             <div className="xl:col-span-4">
               <Label htmlFor="firstName">First Name *</Label>
-              <Input id="firstName" value={formData.firstName} onChange={(event) => onFieldChange('firstName', event.target.value)} />
+              <Input id="firstName" value={formData.firstName} onChange={(event) => onFieldChange('firstName', event.target.value)} maxLength={30} />
             </div>
             <div className="xl:col-span-1">
               <Label htmlFor="middleInitial">M.I.</Label>
@@ -171,7 +173,13 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
             <div className="xl:col-span-3">
               <Label htmlFor="birthday">Birthday *</Label>
-              <Input id="birthday" type="date" value={formData.birthday} onChange={(event) => onFieldChange('birthday', event.target.value)} />
+              <Input
+                id="birthday"
+                type="date"
+                value={formData.birthday}
+                onChange={(event) => onFieldChange('birthday', event.target.value)}
+                max={maxBirthdate}
+              />
             </div>
             <div className="xl:col-span-3">
               <Label htmlFor="civilStatus">Civil Status</Label>
@@ -187,7 +195,15 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
             <div className="xl:col-span-2">
               <Label htmlFor="age">Age *</Label>
-              <Input id="age" type="number" value={formData.age} onChange={(event) => onFieldChange('age', event.target.value)} />
+              <Input
+                id="age"
+                type="text"
+                inputMode="numeric"
+                pattern="\d{1,2}"
+                maxLength={2}
+                value={formData.age}
+                onChange={(event) => onFieldChange('age', event.target.value)}
+              />
             </div>
             <div className="xl:col-span-3">
               <Label htmlFor="sex">Sex *</Label>
@@ -229,6 +245,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 value={formData.address}
                 onChange={(event) => onFieldChange('address', event.target.value)}
                 placeholder="Enter your street address"
+                maxLength={180}
               />
             </div>
           </div>
@@ -293,6 +310,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 value={formData.operationDetails}
                 onChange={(event) => onFieldChange('operationDetails', event.target.value)}
                 placeholder="Please describe the operation..."
+                maxLength={120}
               />
             </div>
           )}
@@ -337,17 +355,21 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 value={formData.bloodPressure}
                 onChange={(event) => onMeasurementChange('bloodPressure', event.target.value)}
                 placeholder="e.g., 120/80"
+                inputMode="numeric"
+                maxLength={7}
               />
             </div>
             <div>
               <Label htmlFor="weight">Weight (kg) *</Label>
               <Input
                 id="weight"
-                type="number"
-                step="0.1"
+                type="text"
                 value={formData.weight}
                 onChange={(event) => onMeasurementChange('weight', event.target.value)}
-                placeholder="e.g., 65.5"
+                placeholder="e.g., 065"
+                inputMode="numeric"
+                pattern="\d{1,3}"
+                maxLength={3}
               />
             </div>
           </div>
@@ -356,11 +378,13 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <Label htmlFor="height">Height (cm) *</Label>
               <Input
                 id="height"
-                type="number"
-                step="0.1"
+                type="text"
                 value={formData.height}
                 onChange={(event) => onMeasurementChange('height', event.target.value)}
                 placeholder="e.g., 170"
+                inputMode="numeric"
+                pattern="\d{1,3}"
+                maxLength={3}
               />
             </div>
             <div>
@@ -424,6 +448,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               onChange={(event) => onFieldChange('otherClinicName', event.target.value)}
               placeholder="Enter clinic or laboratory name"
               className="mt-2"
+              maxLength={60}
             />
           </div>
 
@@ -551,15 +576,15 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <CardTitle className="text-lg">Personal Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <div className="grid flex-1 grid-cols-2 gap-2">
+              <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
                 <p className="text-muted-foreground">Name:</p>
-                <p className="font-medium">
+                <p className="break-words font-medium">
                   {formData.lastName}, {formData.firstName} {formData.middleInitial}
                 </p>
                 <p className="text-muted-foreground">Student ID:</p>
-                <p className="font-medium">{formData.studentId}</p>
+                <p className="break-all font-medium">{formData.studentId}</p>
                 <p className="text-muted-foreground">Course/Dept:</p>
-                <p className="font-medium">
+                <p className="break-words font-medium">
                   {formData.course} ({formData.department})
                 </p>
                 <p className="text-muted-foreground">Year Level:</p>
@@ -598,7 +623,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <CardTitle className="text-lg">Physical Measurements</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <p className="text-muted-foreground">Blood Pressure:</p>
                 <p className="font-medium">{formData.bloodPressure}</p>
                 <p className="text-muted-foreground">Weight:</p>
@@ -617,7 +642,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             <CardContent className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
-                <span>
+                <span className="break-words">
                   Test Location:{' '}
                   {formData.labTestLocation === 'jlgh'
                     ? 'James L. Gordon Hospital'
@@ -628,15 +653,15 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </div>
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
-                <span>Chest X-Ray: {formData.xrayFile?.name || (formData.existingXrayFileUrl ? 'Existing file on record' : 'Not provided')}</span>
+                <span className="break-words">Chest X-Ray: {formData.xrayFile?.name || (formData.existingXrayFileUrl ? 'Existing file on record' : 'Not provided')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
-                <span>CBC: {formData.cbcFile?.name || (formData.existingCbcFileUrl ? 'Existing file on record' : 'Not provided')}</span>
+                <span className="break-words">CBC: {formData.cbcFile?.name || (formData.existingCbcFileUrl ? 'Existing file on record' : 'Not provided')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
-                <span>Urinalysis: {formData.urinalysisFile?.name || (formData.existingUrinalysisFileUrl ? 'Existing file on record' : 'Not provided')}</span>
+                <span className="break-words">Urinalysis: {formData.urinalysisFile?.name || (formData.existingUrinalysisFileUrl ? 'Existing file on record' : 'Not provided')}</span>
               </div>
             </CardContent>
           </Card>

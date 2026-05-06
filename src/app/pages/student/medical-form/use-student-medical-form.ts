@@ -26,6 +26,71 @@ type UseStudentMedicalFormArgs = {
 };
 
 const TOTAL_STEPS = 6;
+const NAME_REGEX = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+const COURSE_REGEX = /^[A-Za-z][A-Za-z\s.'&()/-]*$/;
+const SQL_INJECTION_REGEX = /(\b(select|insert|update|delete|drop|truncate|union|alter)\b)|(--|\/\*|\*\/|;)/i;
+const MAX_NAME_LENGTH = 30;
+const MAX_ADDRESS_LENGTH = 180;
+const MAX_CLINIC_NAME_LENGTH = 60;
+const MIN_AGE = 15;
+
+function sanitizeName(value: string) {
+  return value.replace(/[^A-Za-z\s'-]/g, '').slice(0, MAX_NAME_LENGTH);
+}
+
+function sanitizeCourse(value: string) {
+  return value.replace(/[^A-Za-z\s.'&()/-]/g, '').slice(0, MAX_NAME_LENGTH);
+}
+
+function sanitizeAddress(value: string) {
+  return value
+    .replace(/[<>`]/g, '')
+    .replace(/--|\/\*|\*\//g, '')
+    .slice(0, MAX_ADDRESS_LENGTH);
+}
+
+function sanitizeSafeText(value: string, maxLength: number) {
+  return value
+    .replace(/[<>`]/g, '')
+    .replace(/--|\/\*|\*\//g, '')
+    .slice(0, maxLength);
+}
+
+function sanitizeBloodPressure(value: string) {
+  const cleaned = value.replace(/[^\d/]/g, '');
+  const [leftRaw = '', rightRaw = ''] = cleaned.split('/');
+  const left = leftRaw.slice(0, 3);
+  const right = rightRaw.slice(0, 3);
+  if (!cleaned.includes('/')) return left;
+  return `${left}/${right}`;
+}
+
+function isValidBloodPressure(value: string) {
+  const match = value.trim().match(/^(\d{2,3})\/(\d{2,3})$/);
+  if (!match) return false;
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+  return first >= 40 && first <= 220 && second >= 40 && second <= 220;
+}
+
+function sanitizeDigits(value: string, maxLen?: number) {
+  const digits = value.replace(/\D/g, '');
+  return maxLen ? digits.slice(0, maxLen) : digits;
+}
+
+function getMaxBirthdateIso(minAge: number) {
+  const today = new Date();
+  const max = new Date(today.getFullYear() - minAge, today.getMonth(), today.getDate());
+  return max.toISOString().split('T')[0];
+}
+
+function isAtLeastAge(dateValue: string, minAge: number) {
+  if (!dateValue) return false;
+  const date = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  const maxBirthdate = new Date(getMaxBirthdateIso(minAge));
+  return date <= maxBirthdate;
+}
 
 function buildInitialFormData(year: string | undefined, me?: AuthMe | null, privacyAccepted = false): MedicalFormData {
   const student = me?.student;
@@ -90,6 +155,7 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [originalSubmissionStatus, setOriginalSubmissionStatus] = useState<string | null>(null);
   const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, privacyAccepted));
+  const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_AGE), []);
   const isEditingExistingSubmission = Boolean(activeSubmissionId);
   useEffect(() => {
     setSubmitted(false);
@@ -98,7 +164,7 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     setActiveSubmissionId(null);
     setOriginalSubmissionStatus(null);
     setFormData(buildInitialFormData(year, me, privacyAccepted));
-  }, [year, me?.profile.id, privacyAccepted, editSubmissionId]);
+  }, [year, privacyAccepted, editSubmissionId]);
 
   useEffect(() => {
     if (!editSubmissionId) return;
@@ -205,32 +271,42 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
   ]);
 
   const updateField = useCallback(<K extends keyof MedicalFormData>(field: K, value: MedicalFormData[K]) => {
-    setFormData((prev) => {
-      if (field === 'department') {
-        return {
-          ...prev,
-          department: resolveDepartmentValue(String(value)),
-          course: '',
-        };
-      }
+    if (field === 'studentId') return setFormData((prev) => ({ ...prev, studentId: sanitizeDigits(String(value), 9) }));
+    if (field === 'firstName') return setFormData((prev) => ({ ...prev, firstName: sanitizeName(String(value)) }));
+    if (field === 'lastName') return setFormData((prev) => ({ ...prev, lastName: sanitizeName(String(value)) }));
+    if (field === 'middleInitial') return setFormData((prev) => ({ ...prev, middleInitial: sanitizeName(String(value)).slice(0, 1) }));
+    if (field === 'department') {
+      const department = resolveDepartmentValue(String(value));
+      return setFormData((prev) => ({ ...prev, department, course: '' }));
+    }
+    if (field === 'course') {
+      return setFormData((prev) => ({
+        ...prev,
+        course: normalizeProgramForDepartment(prev.department, sanitizeCourse(String(value))),
+      }));
+    }
+    if (field === 'age') return setFormData((prev) => ({ ...prev, age: sanitizeDigits(String(value), 2) }));
+    if (field === 'contactNumber') {
+      return setFormData((prev) => ({
+        ...prev,
+        contactNumber: formatPhilippinePhoneInput(String(value)),
+      }));
+    }
+    if (field === 'address') return setFormData((prev) => ({ ...prev, address: sanitizeAddress(String(value)) }));
+    if (field === 'otherClinicName') {
+      const safe = sanitizeCourse(String(value)).slice(0, MAX_CLINIC_NAME_LENGTH);
+      if (SQL_INJECTION_REGEX.test(safe)) return;
+      return setFormData((prev) => ({ ...prev, otherClinicName: safe }));
+    }
+    if (field === 'operationDetails') {
+      const safe = sanitizeSafeText(String(value), 120);
+      if (SQL_INJECTION_REGEX.test(safe)) return;
+      return setFormData((prev) => ({ ...prev, operationDetails: safe }));
+    }
+    if (field === 'yearLevel') return setFormData((prev) => ({ ...prev, yearLevel: year || String(value) }));
 
-      if (field === 'course') {
-        return {
-          ...prev,
-          course: normalizeProgramForDepartment(prev.department, String(value)),
-        };
-      }
-
-      if (field === 'contactNumber') {
-        return {
-          ...prev,
-          contactNumber: formatPhilippinePhoneInput(String(value)),
-        };
-      }
-
-      return { ...prev, [field]: value };
-    });
-  }, []);
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  }, [year]);
 
   const updateEmergencyContact = useCallback(
     <K extends keyof EmergencyContact>(field: K, value: EmergencyContact[K]) => {
@@ -238,7 +314,12 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
         ...prev,
         emergencyContact: {
           ...prev.emergencyContact,
-          [field]: value,
+          [field]:
+            field === 'name' || field === 'relationship'
+              ? sanitizeName(value)
+              : field === 'phone'
+                ? sanitizeDigits(value, 15)
+                : sanitizeAddress(value),
         },
       }));
     },
@@ -256,14 +337,19 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
   }, []);
 
   const updateMeasurement = useCallback((field: 'bloodPressure' | 'weight' | 'height' | 'bmi', value: string) => {
+    const nextInput =
+      field === 'bloodPressure'
+        ? sanitizeBloodPressure(value)
+        : sanitizeDigits(value, 3);
+
     setFormData((prev) => {
       const next = {
         ...prev,
-        [field]: value,
+        [field]: nextInput,
       };
 
       if (field === 'weight' || field === 'height') {
-        next.bmi = calculateBmi(field === 'weight' ? value : next.weight, field === 'height' ? value : next.height);
+        next.bmi = calculateBmi(field === 'weight' ? nextInput : next.weight, field === 'height' ? nextInput : next.height);
       }
 
       return next;
@@ -296,6 +382,21 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     const needsManualUploads = formData.labTestLocation === 'other';
     const hasRequiredUploads = isEditingExistingSubmission || (formData.xrayFile && formData.cbcFile && formData.urinalysisFile);
 
+    const hasStepOneValidationIssues =
+      formData.studentId.length !== 9 ||
+      !NAME_REGEX.test(formData.firstName) ||
+      !NAME_REGEX.test(formData.lastName) ||
+      (formData.middleInitial ? !/^[A-Za-z]$/.test(formData.middleInitial) : false) ||
+      !COURSE_REGEX.test(formData.course) ||
+      formData.firstName.length > MAX_NAME_LENGTH ||
+      formData.lastName.length > MAX_NAME_LENGTH ||
+      formData.course.length > MAX_NAME_LENGTH ||
+      formData.age.length > 2 ||
+      !isAtLeastAge(formData.birthday, MIN_AGE) ||
+      (formData.address ? SQL_INJECTION_REGEX.test(formData.address) : false) ||
+      (formData.address ? formData.address.length > MAX_ADDRESS_LENGTH : false) ||
+      (formData.hadOperation === 'yes' && formData.operationDetails ? SQL_INJECTION_REGEX.test(formData.operationDetails) : false);
+
     switch (step) {
       case 1:
         return (
@@ -308,7 +409,8 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           formData.age &&
           formData.sex &&
           formData.birthday &&
-          (!formData.contactNumber || isValidPhilippinePhoneNumber(formData.contactNumber))
+          (!formData.contactNumber || isValidPhilippinePhoneNumber(formData.contactNumber)) &&
+          !hasStepOneValidationIssues
         );
       case 2:
         return true;
@@ -319,11 +421,24 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           formData.emergencyContact.phone
         );
       case 4:
-        return formData.bloodPressure && formData.weight && formData.height;
+        return (
+          formData.bloodPressure &&
+          formData.weight &&
+          formData.height &&
+          isValidBloodPressure(formData.bloodPressure) &&
+          /^\d{1,3}$/.test(formData.weight) &&
+          /^\d{1,3}$/.test(formData.height)
+        );
       case 5:
         if (!formData.labTestLocation) return false;
         if (formData.labTestLocation === 'jlgh') return true;
-        return Boolean(formData.otherClinicName.trim() && (needsManualUploads ? hasRequiredUploads : true));
+        return Boolean(
+          formData.otherClinicName.trim() &&
+            formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
+            COURSE_REGEX.test(formData.otherClinicName) &&
+            !SQL_INJECTION_REGEX.test(formData.otherClinicName) &&
+            (needsManualUploads ? hasRequiredUploads : true),
+        );
       case 6:
         return true;
       default:
@@ -356,7 +471,23 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           formData.height &&
           formData.labTestLocation &&
           (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
-          (!needsManualUploads || hasRequiredUploads),
+          (!needsManualUploads || hasRequiredUploads) &&
+          formData.studentId.length === 9 &&
+          formData.age.length <= 2 &&
+          isAtLeastAge(formData.birthday, MIN_AGE) &&
+          NAME_REGEX.test(formData.firstName) &&
+          NAME_REGEX.test(formData.lastName) &&
+          (!formData.middleInitial || /^[A-Za-z]$/.test(formData.middleInitial)) &&
+          COURSE_REGEX.test(formData.course) &&
+          !SQL_INJECTION_REGEX.test(formData.address || '') &&
+          (formData.labTestLocation !== 'other' ||
+            (COURSE_REGEX.test(formData.otherClinicName) &&
+              formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
+              !SQL_INJECTION_REGEX.test(formData.otherClinicName))) &&
+          isValidBloodPressure(formData.bloodPressure) &&
+          /^\d{1,3}$/.test(formData.weight) &&
+          /^\d{1,3}$/.test(formData.height) &&
+          (formData.hadOperation !== 'yes' || !SQL_INJECTION_REGEX.test(formData.operationDetails || '')),
       );
     },
     [formData, isEditingExistingSubmission],
@@ -401,6 +532,10 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
 
   const submit = useCallback(async () => {
     if (uploading) return;
+    if (!canSubmit) {
+      toast.error('Please fix invalid fields before submitting. Student ID must be 9 digits, age must be valid, and text fields must follow format rules.');
+      return;
+    }
 
     // Final file size check before submission
     const files = [formData.xrayFile, formData.cbcFile, formData.urinalysisFile];
@@ -474,7 +609,7 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     } finally {
       setUploading(false);
     }
-  }, [formData, uploading, activeSubmissionId]);
+  }, [formData, uploading, activeSubmissionId, canSubmit]);
 
   return {
     step,
@@ -492,6 +627,7 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     updateMeasurement,
     handleFileChange,
     getBmiCategory,
+    maxBirthdate,
     submit,
   };
 }

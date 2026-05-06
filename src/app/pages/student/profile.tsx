@@ -375,8 +375,8 @@ export default function StudentProfile() {
               Upload your 1x1 photo and signature here. These are no longer attached during Submit Record.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-6 pt-6 lg:grid-cols-2">
-            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5">
+          <CardContent className="grid gap-4 pt-6 sm:gap-6 lg:grid-cols-2">
+            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
               <div className="mb-4 flex items-center gap-3">
                 <ImageIcon className="h-5 w-5 text-primary" />
                 <div>
@@ -391,7 +391,7 @@ export default function StudentProfile() {
                 onChange={(event) => handleAssetChange('photo', event.target.files?.[0] || null)}
                 className="cursor-pointer"
               />
-              <div className="mt-4 flex items-center gap-4">
+              <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border bg-white">
                   {currentPhotoUrl ? (
                     <img src={currentPhotoUrl} alt="Student profile" className="h-full w-full object-cover" />
@@ -399,14 +399,14 @@ export default function StudentProfile() {
                     <span className="text-xs text-muted-foreground">No photo</span>
                   )}
                 </div>
-                <div className="text-sm">
+                <div className="min-w-0 w-full text-sm">
                   {photoFile ? (
                     <div className="flex items-center gap-2 text-green-700">
                       <Check className="h-4 w-4" />
-                      <span>{photoFile.name}</span>
+                      <span className="block min-w-0 truncate" title={photoFile.name}>{photoFile.name}</span>
                     </div>
                   ) : profileAssets.photoFileName ? (
-                    <p className="text-on-surface-variant">{profileAssets.photoFileName}</p>
+                    <p className="truncate text-on-surface-variant" title={profileAssets.photoFileName}>{profileAssets.photoFileName}</p>
                   ) : loadingAssets ? (
                     <p className="text-on-surface-variant">Loading current photo...</p>
                   ) : (
@@ -416,7 +416,7 @@ export default function StudentProfile() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5">
+            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
               <div className="mb-4 flex items-center gap-3">
                 <PenLine className="h-5 w-5 text-primary" />
                 <div>
@@ -431,7 +431,7 @@ export default function StudentProfile() {
                 onChange={(event) => handleAssetChange('signature', event.target.files?.[0] || null)}
                 className="cursor-pointer"
               />
-              <div className="mt-4 flex items-center gap-4">
+              <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex h-24 w-40 items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
                   {currentSignatureUrl ? (
                     <img src={currentSignatureUrl} alt="Student signature" className="max-h-full max-w-full object-contain" />
@@ -439,14 +439,14 @@ export default function StudentProfile() {
                     <span className="text-xs text-muted-foreground">No signature</span>
                   )}
                 </div>
-                <div className="text-sm">
+                <div className="min-w-0 w-full text-sm">
                   {signatureFile ? (
                     <div className="flex items-center gap-2 text-green-700">
                       <Check className="h-4 w-4" />
-                      <span>{signatureFile.name}</span>
+                      <span className="block min-w-0 truncate" title={signatureFile.name}>{signatureFile.name}</span>
                     </div>
                   ) : profileAssets.signatureFileName ? (
-                    <p className="text-on-surface-variant">{profileAssets.signatureFileName}</p>
+                    <p className="truncate text-on-surface-variant" title={profileAssets.signatureFileName}>{profileAssets.signatureFileName}</p>
                   ) : loadingAssets ? (
                     <p className="text-on-surface-variant">Loading current signature...</p>
                   ) : (
@@ -456,11 +456,11 @@ export default function StudentProfile() {
               </div>
             </div>
           </CardContent>
-          <CardFooter className="flex items-center justify-between border-t border-outline-variant/30 bg-surface-container-low px-6 py-4">
-            <p className="text-sm text-on-surface-variant">
+          <CardFooter className="flex flex-col items-stretch gap-3 border-t border-outline-variant/30 bg-surface-container-low px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <p className="text-xs text-on-surface-variant sm:text-sm">
               {hasChanges ? 'You have unsaved profile changes.' : 'Your profile and student assets are up to date.'}
             </p>
-            <Button type="submit" disabled={saving || !hasChanges || !isValid}>
+            <Button type="submit" disabled={saving || !hasChanges || !isValid} className="w-full sm:w-auto">
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </CardFooter>

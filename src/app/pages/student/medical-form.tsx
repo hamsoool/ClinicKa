@@ -40,6 +40,7 @@ export default function StudentMedicalForm() {
     updateMeasurement,
     handleFileChange,
     getBmiCategory,
+    maxBirthdate,
     submit,
   } = useStudentMedicalForm({ year, me, privacyAccepted, editSubmissionId });
 
@@ -110,22 +111,32 @@ export default function StudentMedicalForm() {
                 onMeasurementChange={updateMeasurement}
                 onFileChange={handleFileChange}
                 getBmiCategory={getBmiCategory}
+                maxBirthdate={maxBirthdate}
               />
             </div>
 
-            <div className="mt-10 flex justify-between border-t border-border/70 pt-6">
-              <Button variant="outline" onClick={() => setStep((value) => Math.max(1, value - 1))} disabled={step === 1}>
+            <div className="mt-10 flex flex-col gap-2 border-t border-border/70 pt-6 sm:flex-row sm:justify-between sm:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setStep((value) => Math.max(1, value - 1))}
+                disabled={step === 1}
+                className="w-full sm:w-auto"
+              >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Previous
               </Button>
 
               {step < totalSteps ? (
-                <Button onClick={() => setStep((value) => value + 1)} disabled={!canProceed}>
+                <Button onClick={() => setStep((value) => value + 1)} disabled={!canProceed} className="w-full sm:w-auto">
                   Next
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               ) : (
-                <Button onClick={submit} disabled={!canProceed || uploading} className="bg-primary hover:bg-primary/90">
+                <Button
+                  onClick={submit}
+                  disabled={!canProceed || uploading}
+                  className="w-full bg-primary hover:bg-primary/90 sm:w-auto"
+                >
                   {uploading ? 'Submitting...' : 'Submit Medical Record'}
                   {!uploading && <Upload className="ml-2 h-4 w-4" />}
                 </Button>
