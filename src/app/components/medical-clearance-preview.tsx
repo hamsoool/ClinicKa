@@ -109,11 +109,13 @@ function HSULogo({ size = 36 }: { size?: number }) {
 function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType: string }) {
   const cl = record.clearanceInfo || {};
   const purpose = cl.purpose || 'enrolment';
-  const signatoryName = (record.staffMeasurements?.examinedBy || '').trim() || 'GERALD S. BERNAL, MD';
+  const signatoryName =
+    (record.staffMeasurements?.examinedBy || '').trim() || 'GERALD S. BERNAL, MD';
+
   const signatoryTitle = /(^|\s)(dr\.?|doctor|md)(\s|,|$)/i.test(signatoryName)
     ? 'College Physician'
     : 'Clinic Nurse / Doctor';
-  // Student's copy ends with "at the College Clinic." only; others add "for Enrolment purposes only."
+
   const isStudentCopy = copyType === "STUDENT'S COPY";
   const remarksEnding = isStudentCopy
     ? 'at the College Clinic.'
@@ -121,153 +123,198 @@ function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType:
 
   return (
     <div style={S.copy}>
-
-      {/* ── HEADER ── */}
-      <div style={{ position: 'relative' as const, display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+      {/* HEADER */}
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '8px',
+        }}
+      >
         <div style={{ display: 'flex', gap: '2px', flexShrink: 0, paddingTop: '2px' }}>
           <GordonCollegeLogo size={34} />
           <GCSeal size={34} />
         </div>
-        <div style={{ flex: 1, textAlign: 'center' as const }}>
+
+        <div style={{ flex: 1, textAlign: 'center' }}>
           <div style={S.schoolName}>GORDON COLLEGE</div>
-          <div style={S.schoolAddr}>Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City</div>
+          <div style={S.schoolAddr}>
+            Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City
+          </div>
           <div style={S.schoolAddr}>Tel. No.: (047) 222-4080</div>
+
           <div style={{ marginTop: '3px' }}>
-            <div style={{ fontSize: '8.5px', fontWeight: 'bold' as const }}>Office of Student Welfare and Services</div>
-            <div style={{ fontSize: '8.5px', fontWeight: 'bold' as const }}>Health Services Unit</div>
+            <div style={{ fontSize: '8.5px', fontWeight: 'bold' }}>
+              Office of Student Welfare and Services
+            </div>
+            <div style={{ fontSize: '8.5px', fontWeight: 'bold' }}>
+              Health Services Unit
+            </div>
           </div>
         </div>
+
         <div style={{ flexShrink: 0, paddingTop: '2px' }}>
           <HSULogo size={34} />
         </div>
-        {/* Copy badge — absolute so it never shifts the center text */}
-        <div style={{
-          position: 'absolute' as const,
-          top: '26px',
-          right: '42px',
-          border: '1.5px solid #000',
-          padding: '2px 6px',
-          fontSize: '7.5px',
-          fontWeight: 'bold' as const,
-          whiteSpace: 'nowrap' as const,
-          background: '#fff',
-        }}>
+
+        <div
+          style={{
+            position: 'absolute',
+            top: '26px',
+            right: '42px',
+            border: '1.5px solid #000',
+            padding: '2px 6px',
+            fontSize: '7.5px',
+            fontWeight: 'bold',
+            whiteSpace: 'nowrap',
+            background: '#fff',
+          }}
+        >
           {copyType}
         </div>
       </div>
 
-      {/* ── TITLE: centered, each letter underlined ── */}
-      <div style={{ textAlign: 'center' as const, margin: '5px 0 4px' }}>
+      {/* TITLE */}
+      <div style={{ textAlign: 'center', margin: '5px 0 4px' }}>
         {'MEDICALCERTIFICATE'.split('').map((ch, i) => (
-          <span key={i} style={{
-            display: 'inline-block',
-            fontSize: '11.5px',
-            fontWeight: 'bold' as const,
-            borderBottom: '1.5px solid #000',
-            paddingBottom: '1px',
-            marginRight: '2px',
-            minWidth: '8px',
-            textAlign: 'center' as const,
-          }}>{ch}</span>
+          <span
+            key={i}
+            style={{
+              display: 'inline-block',
+              fontSize: '11.5px',
+              fontWeight: 'bold',
+              borderBottom: '1.5px solid #000',
+              paddingBottom: '1px',
+              marginRight: '2px',
+              minWidth: '8px',
+              textAlign: 'center',
+            }}
+          >
+            {ch}
+          </span>
         ))}
       </div>
 
-      {/* ── NAME / AGE / SEX ── */}
+      {/* BODY */}
       <div style={S.bodyText}>
         This is to certify that Mr/ Ms{' '}
         <span style={S.underlineField('140px')}>
-          {record.firstName} {record.middleInitial ? record.middleInitial + '. ' : ''}{record.lastName}
-        </span>
-        {' '}Age{' '}
-        <span style={S.underlineField('28px')}>{record.age || ''}</span>
-        {' '}Sex{' '}
-        <span style={S.underlineField('18px')}>{record.sex === 'female' ? 'F' : 'M'}</span>
-        {' '}has submitted all required medical requirements and upon physical examination.
+          {record.firstName} {record.middleInitial ? record.middleInitial + '. ' : ''}
+          {record.lastName}
+        </span>{' '}
+        Age <span style={S.underlineField('28px')}>{record.age || ''}</span> Sex{' '}
+        <span style={S.underlineField('18px')}>
+          {record.sex === 'female' ? 'F' : 'M'}
+        </span>{' '}
+        has submitted all required medical requirements and upon physical examination.
       </div>
 
-      {/* ── FINDINGS ── */}
+      {/* FINDINGS */}
       <div style={{ ...S.bodyText, display: 'flex', gap: '4px', alignItems: 'flex-start' }}>
-        <span style={{ fontWeight: 'bold' as const, whiteSpace: 'nowrap' as const, marginRight: '4px' }}>Findings:</span>
+        <span
+          style={{
+            fontWeight: 'bold',
+            whiteSpace: 'nowrap',
+            marginRight: '4px',
+          }}
+        >
+          Findings:
+        </span>
+
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
-            <span style={S.checkbox(cl.findingsNormal === true)}>{cl.findingsNormal ? '✓' : ''}</span>
+            <span style={S.checkbox(cl.findingsNormal === true)}>
+              {cl.findingsNormal ? '?' : ''}
+            </span>
             <span>Essentially normal physical findings at the time of evaluation</span>
-            <span style={{ borderBottom: '1px solid #000', flex: 1, display: 'inline-block' as const }}></span>
           </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={S.checkbox(!!cl.diagnosis)}>{cl.diagnosis ? '✓' : ''}</span>
+            <span style={S.checkbox(!!cl.diagnosis)}>{cl.diagnosis ? '?' : ''}</span>
             <span>Diagnosis:</span>
-            <span style={{ ...S.underlineField('1px'), flex: 1 }}>{cl.diagnosis || ''}</span>
+            <span style={{ ...S.underlineField('550px'), width: '550px' }}>
+              {cl.diagnosis || ''}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* ── REMARKS / ISSUED / PURPOSE + PHYSICIAN — two-column row ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '2px' }}>
-
-        {/* LEFT: Remarks, Issued, Purpose, then Control/Student No */}
+      {/* REMARKS + SIGNATURE */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: '8px',
+          marginTop: '2px',
+        }}
+      >
         <div style={{ flex: 1, fontSize: '9px' }}>
-
-          {/* Row 1: Remarks */}
           <div style={{ marginBottom: '2px' }}>
-            <span style={{ fontWeight: 'bold' as const }}>Remarks: </span>
-            <span style={S.underlineField('90px')}>{cl.remarks || ''}</span>
-            {' '}{remarksEnding}
+            <span style={{ fontWeight: 'bold' }}>Remarks: </span>
+            <span style={S.underlineField('400px')}>{cl.remarks || ''}</span>
           </div>
 
-          {/* Row 2: This was issued on ___ | Purpose checkboxes — SAME LINE */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '2px', flexWrap: 'wrap' as const }}>
-            <span>
-              This was issued on{' '}
-              <span style={S.underlineField('90px')}>
-                {cl.issuedDate
-                  ? new Date(cl.issuedDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                  : ''}
-              </span>
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontWeight: 'bold' as const }}>Purpose:</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                <span style={S.checkbox(purpose === 'enrolment')}>{purpose === 'enrolment' ? '✓' : ''}</span>
-                Enrolment
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                <span style={S.checkbox(purpose === 'ojt')}>{purpose === 'ojt' ? '✓' : ''}</span>
-                OJT / Internship
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                <span style={S.checkbox(purpose === 'rle')}>{purpose === 'rle' ? '✓' : ''}</span>
-                R.L.E
-              </span>
-            </span>
+          <div style={{ marginBottom: '2px' }}>
+            This was issued on{' '}
+            <span style={S.underlineField('90px')}>
+              {cl.issuedDate
+                ? new Date(cl.issuedDate).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })
+                : ''}
+            </span>{' '}
+            {remarksEnding}
           </div>
 
-          {/* Row 3: Control No / Student No */}
-          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column' as const, gap: '2px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '6px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ fontWeight: 'bold' }}>Purpose:</span>
+            <span><span style={S.checkbox(purpose === 'enrolment')}></span> Enrolment</span>
+            <span><span style={S.checkbox(purpose === 'ojt')}></span> OJT / Internship</span>
+            <span><span style={S.checkbox(purpose === 'rle')}></span> R.L.E</span>
+          </div>
+
+          <div style={{ marginTop: '35px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <div>
-              <span style={{ fontWeight: 'bold' as const }}>Control No.: </span>
+              <span style={{ fontWeight: 'bold' }}>Control No.: </span>
               <span style={S.underlineField('100px')}>{cl.controlNo || ''}</span>
             </div>
             <div>
-              <span style={{ fontWeight: 'bold' as const }}>Student No.: </span>
+              <span style={{ fontWeight: 'bold' }}>Student No.: </span>
               <span style={S.underlineField('100px')}>{record.studentId}</span>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: Physician block — vertically aligned to Remarks/Issued rows */}
-        <div style={{ ...S.sigBlock, flexShrink: 0 }}>
+        <div
+          style={{
+            ...S.sigBlock,
+            flexShrink: 0,
+            alignSelf: 'flex-end',
+            marginBottom: '6px',
+            minWidth: '180px',
+          }}
+        >
           <div style={S.sigName}>{signatoryName}</div>
           <div>{signatoryTitle}</div>
         </div>
-
       </div>
-
     </div>
   );
 }
 
-/* ───────── main component: 3 copies on one page ───────── */
+/* MAIN */
 interface Props {
   record: MockSubmission;
 }
