@@ -11,6 +11,8 @@ import MedicalRecordPreview from '../../components/medical-record-preview';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { Download, Search, FileText, X, ClipboardList, Award } from 'lucide-react';
 import { toast } from 'sonner';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { getSubmissions } from '../../lib/api';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
@@ -205,23 +207,63 @@ export default function StaffCertificates() {
     toast.success('Medical record PDF downloading...');
   };
 
-  const downloadClearancePDF = () => {
+  const downloadClearancePDF = async () => {
     if (!clearancePreviewRef.current || !selectedStudent) return;
-    const content = clearancePreviewRef.current.innerHTML;
-    const printWindow = window.open('', '_blank', 'width=794,height=1123');
-    if (!printWindow) { toast.error('Please allow pop-ups'); return; }
-    printWindow.document.write(`<!DOCTYPE html><html><head>
-      <title>Medical Clearance - ${selectedStudent.firstName} ${selectedStudent.lastName}</title>
-      <style>
-        @page { size: A4; margin: 10mm; }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      </style>
-    </head><body>${content}
-      <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();}}</script>
-    </body></html>`);
-    printWindow.document.close();
-    toast.success('Medical clearance PDF downloading...');
+    try {
+      const exportRoot = document.createElement('div');
+      exportRoot.style.position = 'fixed';
+      exportRoot.style.left = '-10000px';
+      exportRoot.style.top = '0';
+      exportRoot.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
+      exportRoot.style.background = '#fff';
+      exportRoot.style.padding = '0';
+      exportRoot.style.margin = '0';
+
+      const clone = clearancePreviewRef.current.cloneNode(true) as HTMLDivElement;
+      clone.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
+      clone.style.maxWidth = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
+      clone.style.margin = '0';
+      clone.style.padding = '0';
+      clone.style.transform = 'none';
+
+      exportRoot.appendChild(clone);
+      document.body.appendChild(exportRoot);
+
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        width: CLEARANCE_PREVIEW_BASE_WIDTH,
+        windowWidth: CLEARANCE_PREVIEW_BASE_WIDTH,
+      });
+      document.body.removeChild(exportRoot);
+
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 5;
+      const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
+      const canvasRatio = canvas.width / canvas.height;
+      const pageRatio = usableWidth / usableHeight;
+
+      let renderWidth = usableWidth;
+      let renderHeight = usableWidth / canvasRatio;
+      if (canvasRatio < pageRatio) {
+        renderHeight = usableHeight;
+        renderWidth = usableHeight * canvasRatio;
+      }
+
+      const x = (pageWidth - renderWidth) / 2;
+      const y = (pageHeight - renderHeight) / 2;
+
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
+      pdf.save(`medical_clearance_${selectedStudent.lastName}_${selectedStudent.firstName}.pdf`);
+      toast.success('Medical clearance PDF downloaded.');
+    } catch (error) {
+      console.error('Failed to generate clearance PDF:', error);
+      toast.error('Failed to download PDF. Please try again.');
+    }
   };
 
   /* ───────── Student List Sidebar ───────── */
