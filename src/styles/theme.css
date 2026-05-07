@@ -240,3 +240,11 @@
     scroll-behavior: auto;
   }
 }
+
+@layer components {
+  .legal-dialog-native-scroll {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+  }
+}

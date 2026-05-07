@@ -88,7 +88,7 @@ export default function RoleSelection() {
             : 'border-transparent bg-transparent'
         }`}
       >
-        <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-5 sm:px-8">
+        <div className="mx-auto flex h-20 w-full max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-10">
           <button
             type="button"
             onClick={() => scrollToSection('hero')}
@@ -149,18 +149,18 @@ export default function RoleSelection() {
           <div className="absolute right-0 top-0 h-[34rem] w-[34rem] translate-x-1/4 -translate-y-1/4 rounded-full bg-[#cfeee0]/55 blur-3xl" />
           <div className="absolute bottom-0 left-0 h-[28rem] w-[28rem] -translate-x-1/4 translate-y-1/4 rounded-full bg-[#d8e6ff]/55 blur-3xl" />
 
-          <div className="relative mx-auto grid w-full max-w-7xl gap-14 px-5 pb-20 pt-36 sm:px-8 lg:grid-cols-12 lg:items-center lg:pb-24 lg:pt-44">
-            <div className="space-y-8 lg:col-span-6">
+          <div className="relative mx-auto grid w-full max-w-[90rem] gap-12 px-5 pb-20 pt-36 sm:px-8 lg:grid-cols-12 lg:items-center lg:px-10 lg:pb-24 lg:pt-44">
+            <div className="space-y-8 lg:col-span-7">
               <div className="inline-flex items-center gap-2 rounded-full border border-[#c9d9dd] bg-white/78 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_10px_35px_rgba(11,28,48,0.05)] backdrop-blur">
                 <span className="h-2 w-2 rounded-full bg-[#065f46]" />
                 Secure scholarly clinic management
               </div>
 
               <div className="space-y-5">
-                <h1 className="max-w-xl text-5xl font-bold leading-[1.05] tracking-[-0.05em] text-[#0b1c30] sm:text-6xl">
+                <h1 className="max-w-2xl text-5xl font-bold leading-[1.05] tracking-[-0.05em] text-[#0b1c30] sm:text-6xl xl:text-[4.2rem]">
                   Your Academic Health Journey, <span className="text-[#065f46]">Streamlined.</span>
                 </h1>
-                <p className="max-w-xl text-lg leading-8 text-[#4a5b68]">
+                <p className="max-w-2xl text-lg leading-8 text-[#4a5b68]">
                   ClinicKa! brings Gordon College clinic services into a calmer, clearer digital workflow. Submit medical
                   records, complete health forms, and track clearance progress without the paperwork pileup.
                 </p>
@@ -208,7 +208,7 @@ export default function RoleSelection() {
               </div>
             </div>
 
-            <div className="relative lg:col-span-6">
+            <div className="relative lg:col-span-5 lg:pl-2">
               <div className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/78 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.14)] backdrop-blur md:p-5">
                 <div className="mb-4 flex items-center justify-between rounded-[1.5rem] border border-[#d9e5e3] bg-white/86 px-4 py-3">
                   <div>
@@ -221,7 +221,7 @@ export default function RoleSelection() {
                   </div>
                 </div>
                 <div className="overflow-hidden rounded-[1.6rem] border border-[#d8e3ea] bg-[#eef4ff]">
-                  <div className="relative h-[420px] overflow-hidden bg-[#eef4ff]">
+                  <div className="relative h-[460px] overflow-hidden bg-[#eef4ff]">
                     <img
                       src={DASHBOARD_PREVIEW_SRC}
                       alt="ClinicKa student dashboard preview"
@@ -248,8 +248,8 @@ export default function RoleSelection() {
         </section>
 
         <section id="features" className="py-20">
-          <div className="mx-auto max-w-7xl px-5 sm:px-8">
-            <div className="mx-auto mb-12 max-w-2xl text-center">
+          <div className="mx-auto max-w-[90rem] px-5 sm:px-8 lg:px-10">
+            <div className="mx-auto mb-12 max-w-3xl text-center">
               <h2 className="text-4xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Comprehensive care ecosystem</h2>
               <p className="mt-4 text-lg leading-7 text-[#4a5b68]">
                 Four pillars designed to simplify clinic operations and empower student wellness.
@@ -325,7 +325,7 @@ export default function RoleSelection() {
         </section>
 
         <section id="workflow" className="border-t border-[#e2ebe7] bg-white/70 py-20">
-          <div className="mx-auto grid max-w-7xl items-center gap-16 px-5 sm:px-8 lg:grid-cols-2">
+          <div className="mx-auto grid max-w-[90rem] items-center gap-16 px-5 sm:px-8 lg:grid-cols-2 lg:px-10">
             <div className="order-2 lg:order-1">
               <div className="relative">
                 <div className="absolute inset-0 -translate-x-6 translate-y-6 rounded-full bg-[#cfeee0]/35 blur-3xl" />
@@ -363,7 +363,7 @@ export default function RoleSelection() {
         </section>
 
         <section id="clearance" className="py-16">
-          <div className="mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="mx-auto max-w-[90rem] px-5 sm:px-8 lg:px-10">
             <div className="flex flex-col items-start gap-6 rounded-[2rem] border border-[#dfe9e6] bg-white/80 p-8 shadow-[0_20px_60px_rgba(11,28,48,0.08)] md:flex-row md:items-center md:justify-between">
               <div className="flex items-start gap-5">
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5ed] text-[#065f46]">
@@ -385,7 +385,7 @@ export default function RoleSelection() {
         </section>
 
         <section className="border-t border-[#e2ebe7] bg-white/60 py-20">
-          <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 sm:px-8 lg:grid-cols-2">
+          <div className="mx-auto grid max-w-[90rem] items-center gap-12 px-5 sm:px-8 lg:grid-cols-2 lg:px-10">
             <div className="space-y-5">
               <h2 className="text-4xl font-semibold tracking-[-0.04em] text-[#0b1c30]">Your records, always within reach.</h2>
               <p className="text-lg leading-8 text-[#4a5b68]">
@@ -416,7 +416,7 @@ export default function RoleSelection() {
       </main>
 
       <footer id="resources" className="border-t border-[#e2ebe7] bg-white/70 py-12">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-5 sm:px-8 md:grid-cols-2 md:items-center">
+        <div className="mx-auto grid max-w-[90rem] grid-cols-1 gap-8 px-5 sm:px-8 md:grid-cols-2 md:items-center lg:px-10">
           <div>
             <div className="text-lg font-bold text-[#0b1c30]">ClinicKa!</div>
             <p className="mt-2 text-sm text-[#4a5b68]">Gordon College Health Services</p>

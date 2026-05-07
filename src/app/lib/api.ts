@@ -1,12 +1,16 @@
 
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL;
-const publicAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '')
+  .trim()
+  .replace(/\/+$/, '');
+const publicAnonKey = String(
+  import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
+).trim();
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
+export const PASSWORD_RESET_COOLDOWN_SECONDS = 300;
 const STORAGE_BUCKET = 'medical-files';
+const PASSWORD_RESET_COOLDOWN_KEY_PREFIX = 'lastPasswordResetEmailSent_';
 const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
   photo: 'profile',
   signature: 'student_signature',
@@ -137,6 +141,7 @@ export type AuthMe = {
   } | null;
   staff?: {
     id: string;
+    email?: string | null;
     first_name?: string | null;
     last_name?: string | null;
     middle_initial?: string | null;
@@ -162,6 +167,14 @@ export type StudentProfileUpdateInput = {
   birthday: string;
   contactNumber: string;
   address: string;
+};
+
+export type StaffProfileUpdateInput = {
+  name: string;
+  email: string;
+  position: string;
+  phone: string;
+  applyAcrossRoles?: boolean;
 };
 
 export type AdminUserAccount = {
@@ -198,6 +211,36 @@ type RequestOptions = {
 
 function normalizeEmail(email?: string | null) {
   return (email || '').trim().toLowerCase();
+}
+
+function getPasswordResetCooldownStorageKey(normalizedEmail: string) {
+  return `${PASSWORD_RESET_COOLDOWN_KEY_PREFIX}${normalizedEmail}`;
+}
+
+export function getPasswordResetCooldownRemaining(email: string) {
+  if (typeof window === 'undefined') return 0;
+
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return 0;
+
+  const storageKey = getPasswordResetCooldownStorageKey(normalizedEmail);
+  const rawLastSent = window.localStorage.getItem(storageKey);
+  if (!rawLastSent) return 0;
+
+  const lastSent = Number.parseInt(rawLastSent, 10);
+  if (!Number.isFinite(lastSent) || lastSent <= 0) {
+    window.localStorage.removeItem(storageKey);
+    return 0;
+  }
+
+  const elapsedSeconds = Math.floor((Date.now() - lastSent) / 1000);
+  const remaining = PASSWORD_RESET_COOLDOWN_SECONDS - elapsedSeconds;
+  if (remaining <= 0) {
+    window.localStorage.removeItem(storageKey);
+    return 0;
+  }
+
+  return remaining;
 }
 
 function isGCDomainEmail(email?: string | null) {
@@ -406,7 +449,9 @@ async function getValidAccessToken() {
 
 async function apiRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+    throw new Error(
+      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
+    );
   }
 
   const token = options.token ?? (await getValidAccessToken());
@@ -470,7 +515,9 @@ async function restRequest<T>(
 
 async function authRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+    throw new Error(
+      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
+    );
   }
 
   const token = options.token ?? (await getValidAccessToken());
@@ -1035,7 +1082,9 @@ async function getMappedSubmissions(query: string) {
 
 export async function authenticateWithPassword(email: string, password: string) {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+    throw new Error(
+      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
+    );
   }
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST',
@@ -1104,7 +1153,9 @@ export async function signInWithPassword(email: string, password: string) {
 
 export async function signUpWithPassword(fullName: string, email: string, password: string) {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+    throw new Error(
+      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
+    );
   }
   if (!isGCDomainEmail(email)) {
     throw new Error(`Please use your @${GC_DOMAIN} email address to register.`);
@@ -1220,6 +1271,69 @@ export async function resendVerificationEmail(email: string) {
       payload.error ||
       `Failed to resend verification email (${response.status})`;
     throw new Error(message);
+  }
+
+  return { success: true as const };
+}
+
+export async function sendPasswordResetEmail(email: string) {
+  if (!supabaseUrl || !publicAnonKey) {
+    throw new Error('Missing Supabase config.');
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    throw new Error('Please enter your email first.');
+  }
+
+  const cooldownRemaining = getPasswordResetCooldownRemaining(normalizedEmail);
+  if (cooldownRemaining > 0) {
+    const minutes = Math.floor(cooldownRemaining / 60);
+    const seconds = cooldownRemaining % 60;
+    const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    throw new Error(`Please wait ${formatted} before requesting another password reset email.`);
+  }
+
+  const emailRedirectTo =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/auth?mode=signin`
+      : undefined;
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+    method: 'POST',
+    headers: {
+      apikey: publicAnonKey,
+      Authorization: `Bearer ${publicAnonKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: normalizedEmail,
+      options: {
+        redirectTo: emailRedirectTo,
+      },
+    }),
+  });
+
+  const rawBody = await response.text();
+  let payload: Record<string, any> = {};
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const message =
+      payload.msg ||
+      payload.error_description ||
+      payload.error ||
+      `Failed to send password reset email (${response.status})`;
+    throw new Error(message);
+  }
+
+  if (typeof window !== 'undefined') {
+    const storageKey = getPasswordResetCooldownStorageKey(normalizedEmail);
+    window.localStorage.setItem(storageKey, Date.now().toString());
   }
 
   return { success: true as const };
@@ -1514,6 +1628,132 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     success: true as const,
     profile: updatedProfileRows[0] || refreshedMe.profile,
     student: refreshedMe.student,
+  };
+}
+
+function splitNameParts(fullName?: string | null) {
+  const normalized = String(fullName || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!normalized) {
+    return { firstName: '', lastName: '' };
+  }
+
+  const parts = normalized.split(' ');
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: '' };
+  }
+
+  return {
+    firstName: parts.slice(0, -1).join(' '),
+    lastName: parts.slice(-1).join(' '),
+  };
+}
+
+export async function updateStaffProfile(data: StaffProfileUpdateInput) {
+  const payload = {
+    name: String(data.name || '').trim(),
+    email: normalizeEmail(data.email) || '',
+    position: String(data.position || '').trim(),
+    phone: String(data.phone || '').trim(),
+    applyAcrossRoles: data.applyAcrossRoles !== false,
+  };
+
+  if (!payload.name || !payload.email || !payload.position) {
+    throw new Error('Name, email, and position are required.');
+  }
+
+  try {
+    return await apiRequest<{
+      success: boolean;
+      profile: AuthMe['profile'];
+      staff: AuthMe['staff'];
+    }>('/functions/v1/server/staff-profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+
+    if (!missingRoute) {
+      throw error;
+    }
+  }
+
+  const me = await getMe();
+  const { firstName, lastName } = splitNameParts(payload.name);
+
+  let updatedProfileRows: any[] = [];
+  if (payload.applyAcrossRoles) {
+    updatedProfileRows = await restRequest<any[]>(
+      'profiles',
+      `id=eq.${encodeURIComponent(me.profile.id)}&select=*`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify({
+          first_name: firstName || null,
+          last_name: lastName || null,
+          email: payload.email || null,
+        }),
+      },
+    );
+  }
+
+  await restRequest<any[]>(
+    'staff_users',
+    'on_conflict=profile_id',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        profile_id: me.profile.id,
+        email: payload.email || null,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        position: payload.position || null,
+        phone: payload.phone || null,
+      }),
+    },
+  );
+
+  if (payload.applyAcrossRoles && me.profile.student_id) {
+    await restRequest<any[]>(
+      'students',
+      'on_conflict=student_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          student_id: me.profile.student_id,
+          profile_id: me.profile.id,
+          first_name: firstName || null,
+          last_name: lastName || null,
+          contact_number: payload.phone || null,
+        }),
+      },
+    );
+  }
+
+  const refreshedMe = await getMe();
+
+  return {
+    success: true as const,
+    profile: updatedProfileRows[0] || refreshedMe.profile,
+    staff: refreshedMe.staff,
   };
 }
 

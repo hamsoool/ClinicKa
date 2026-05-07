@@ -20,7 +20,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../components/ui/dialog';
-import { signInWithGoogle } from '../lib/api';
+import {
+  getPasswordResetCooldownRemaining,
+  PASSWORD_RESET_COOLDOWN_SECONDS,
+  sendPasswordResetEmail,
+  signInWithGoogle,
+} from '../lib/api';
 import { useAuth } from '../lib/auth';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -175,13 +180,13 @@ function LegalDialog({ label, eyebrow, title, description, meta, sections, foote
           {label}
         </button>
       </DialogTrigger>
-      <DialogContent className="h-[100dvh] max-h-[100dvh] max-w-none overflow-hidden rounded-none border-0 bg-[linear-gradient(180deg,#f8fbf8_0%,#f5f9ff_100%)] p-0 shadow-none sm:h-[92vh] sm:max-h-[92vh] sm:max-w-[95vw] sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-[0_30px_90px_rgba(11,28,48,0.18)] xl:max-w-6xl">
+      <DialogContent className="flex min-h-0 flex-col h-[100dvh] max-h-[100dvh] max-w-none overflow-hidden rounded-none border-0 bg-[linear-gradient(180deg,#f8fbf8_0%,#f5f9ff_100%)] p-0 shadow-none sm:h-[92vh] sm:max-h-[92vh] sm:max-w-[95vw] sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-[0_30px_90px_rgba(11,28,48,0.18)] xl:max-w-6xl">
         <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
           <div className="absolute left-[-8rem] top-[-7rem] h-64 w-64 rounded-full bg-[#d9f3e4]/70 blur-3xl" />
           <div className="absolute right-[-7rem] top-12 h-72 w-72 rounded-full bg-[#d9e8ff]/75 blur-3xl" />
         </div>
 
-        <div className="relative flex h-full flex-col">
+        <div className="relative flex min-h-0 flex-1 flex-col">
           <div className="border-b border-emerald-950/10 bg-[linear-gradient(135deg,#f8fcf9_0%,#eef7f1_52%,#edf4ff_100%)]">
             <DialogHeader className="px-5 py-6 sm:px-8 sm:py-8">
               <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/75 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.26em] text-[#065f46] shadow-[0_10px_30px_rgba(11,28,48,0.05)]">
@@ -211,91 +216,67 @@ function LegalDialog({ label, eyebrow, title, description, meta, sections, foote
             </DialogHeader>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid gap-6 px-5 py-5 sm:px-8 sm:py-8 lg:grid-cols-[18rem,minmax(0,1fr)]">
-              <aside className="lg:sticky lg:top-4 lg:self-start">
-                <div className="rounded-[1.6rem] border border-[#e6eeea] bg-white p-5 shadow-[0_20px_50px_rgba(11,28,48,0.06)]">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#60717e]">In this document</p>
-                  <div className="mt-4 space-y-2">
-                    {sections.map((section, index) => (
-                      <div
-                        key={section.title}
-                        className="flex items-start gap-3 rounded-2xl border border-[#e2ebe7] bg-[#fbfdfb] px-3 py-3"
-                      >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#d9f3e4] text-xs font-semibold text-[#065f46]">
-                          {String(index + 1).padStart(2, '0')}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[#0b1c30]">{section.title}</p>
-                          <p className="mt-1 text-xs leading-5 text-[#60717e]">{section.body}</p>
-                        </div>
+          <div className="legal-dialog-native-scroll min-h-0 flex-1 overflow-y-auto">
+            <div className="space-y-5 px-5 py-5 sm:px-8 sm:py-8">
+              {sections.map((section, index) => (
+                <section
+                  key={section.title}
+                  className="overflow-hidden rounded-[1.7rem] border border-[#e6eeea] bg-white shadow-[0_22px_60px_rgba(11,28,48,0.06)]"
+                >
+                  <div className="h-1.5 bg-[linear-gradient(90deg,rgba(6,95,70,0.95)_0%,rgba(74,163,138,0.75)_45%,rgba(145,219,193,0.45)_100%)]" />
+                  <div className="p-5 sm:p-6">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#d9f3e4] text-sm font-semibold text-[#065f46] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                        {String(index + 1).padStart(2, '0')}
                       </div>
-                    ))}
+                      <div className="min-w-0">
+                        <h3 className="text-xl font-semibold tracking-[-0.03em] text-[#0b1c30]">{section.title}</h3>
+                        <p className="mt-3 text-sm leading-7 text-[#425468]">{section.body}</p>
+                        {section.bullets?.length ? (
+                          <ul className="mt-5 space-y-3">
+                            {section.bullets.map((bullet) => (
+                              <li
+                                key={bullet}
+                                className="flex items-start gap-3 rounded-2xl border border-[#e4ece8] bg-[#fcfefd] px-4 py-3 text-sm leading-6 text-[#3f4944]"
+                              >
+                                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#4aa38a]" />
+                                <span>{bullet}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
+                </section>
+              ))}
 
-                  <div className="mt-5 rounded-[1.35rem] border border-[#d5e7de] bg-[linear-gradient(135deg,#edf9f2_0%,#f7fcff_100%)] p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#065f46] shadow-[0_10px_24px_rgba(11,28,48,0.08)]">
-                        <Mail className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-[#0b1c30]">Need help?</p>
-                        <p className="mt-1 text-sm leading-6 text-[#425468]">
-                          Contact the support team at <span className="font-semibold text-[#065f46]">{CONTACT_EMAIL}</span>.
-                        </p>
-                      </div>
+              {footer ? (
+                <div className="rounded-[1.7rem] border border-[#bbe4d0] bg-[linear-gradient(135deg,#ecfaf2_0%,#f7fcff_100%)] p-5 shadow-[0_20px_45px_rgba(11,28,48,0.05)] sm:p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#065f46] shadow-[0_10px_24px_rgba(11,28,48,0.08)]">
+                      <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#065f46]">Key acknowledgement</p>
+                      <p className="mt-2 text-sm leading-7 text-emerald-950/85">{footer}</p>
                     </div>
                   </div>
                 </div>
-              </aside>
+              ) : null}
 
-              <div className="space-y-5">
-                {sections.map((section, index) => (
-                  <section
-                    key={section.title}
-                    className="group relative z-10 overflow-hidden rounded-[1.7rem] border border-[#e6eeea] bg-white shadow-[0_22px_60px_rgba(11,28,48,0.06)] transition-transform duration-300 hover:-translate-y-0.5"
-                  >
-                    <div className="h-1.5 bg-[linear-gradient(90deg,rgba(6,95,70,0.95)_0%,rgba(74,163,138,0.75)_45%,rgba(145,219,193,0.45)_100%)]" />
-                    <div className="p-5 sm:p-6">
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#d9f3e4] text-sm font-semibold text-[#065f46] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                          {String(index + 1).padStart(2, '0')}
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-xl font-semibold tracking-[-0.03em] text-[#0b1c30]">{section.title}</h3>
-                          <p className="mt-3 text-sm leading-7 text-[#425468]">{section.body}</p>
-                          {section.bullets?.length ? (
-                            <ul className="mt-5 space-y-3">
-                              {section.bullets.map((bullet) => (
-                                <li
-                                  key={bullet}
-                                  className="flex items-start gap-3 rounded-2xl border border-[#e4ece8] bg-[#fcfefd] px-4 py-3 text-sm leading-6 text-[#3f4944]"
-                                >
-                                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#4aa38a]" />
-                                  <span>{bullet}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                ))}
-
-                {footer ? (
-                  <div className="rounded-[1.7rem] border border-[#bbe4d0] bg-[linear-gradient(135deg,#ecfaf2_0%,#f7fcff_100%)] p-5 shadow-[0_20px_45px_rgba(11,28,48,0.05)] sm:p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#065f46] shadow-[0_10px_24px_rgba(11,28,48,0.08)]">
-                        <ShieldCheck className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#065f46]">Key acknowledgement</p>
-                        <p className="mt-2 text-sm leading-7 text-emerald-950/85">{footer}</p>
-                      </div>
-                    </div>
+              <div className="rounded-[1.35rem] border border-[#d5e7de] bg-[linear-gradient(135deg,#edf9f2_0%,#f7fcff_100%)] p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#065f46] shadow-[0_10px_24px_rgba(11,28,48,0.08)]">
+                    <Mail className="h-4 w-4" />
                   </div>
-                ) : null}
+                  <div>
+                    <p className="text-sm font-semibold text-[#0b1c30]">Need help?</p>
+                    <p className="mt-1 text-sm leading-6 text-[#425468]">
+                      Contact the support team at <span className="font-semibold text-[#065f46]">{CONTACT_EMAIL}</span>.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -344,6 +325,10 @@ export default function AuthAccessPage() {
     password: '',
     confirmPassword: '',
   });
+  const [sendingResetEmail, setSendingResetEmail] = useState(false);
+  const [forgotPasswordDialogOpen, setForgotPasswordDialogOpen] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [resetCooldown, setResetCooldown] = useState(0);
 
   const fromPath = useMemo(() => {
     const state = location.state as { from?: string } | null;
@@ -363,6 +348,21 @@ export default function AuthAccessPage() {
     }
   }, [verifiedFromEmail]);
 
+  useEffect(() => {
+    if (!forgotPasswordDialogOpen) return;
+
+    const remaining = getPasswordResetCooldownRemaining(forgotPasswordEmail);
+    setResetCooldown(remaining);
+  }, [forgotPasswordDialogOpen, forgotPasswordEmail]);
+
+  useEffect(() => {
+    if (resetCooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setResetCooldown((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resetCooldown]);
+
   async function handleSignIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -378,13 +378,8 @@ export default function AuthAccessPage() {
       const role = me.profile.role ?? fallbackRole;
       navigate(fromPath || getHomePath(role), { replace: true });
     } catch (nextError) {
-      const message =
-        nextError instanceof Error ? nextError.message : 'Unable to sign in. Please try again.';
-      if (message.toLowerCase().includes('invalid login credentials')) {
-        setError('Invalid login credentials. Verify email confirmation first, then recheck email/password.');
-        return;
-      }
-      setError(message);
+      void nextError;
+      setError('Invalid login credentials.');
     }
   }
 
@@ -392,6 +387,49 @@ export default function AuthAccessPage() {
     setError(null);
     setSuccessMessage(null);
     signInWithGoogle();
+  }
+
+  function openForgotPasswordDialog() {
+    setError(null);
+    setSuccessMessage(null);
+    const nextEmail = signInForm.email.trim();
+    setForgotPasswordEmail(nextEmail);
+    setResetCooldown(getPasswordResetCooldownRemaining(nextEmail));
+    setForgotPasswordDialogOpen(true);
+  }
+
+  async function handleForgotPassword() {
+    setError(null);
+    setSuccessMessage(null);
+
+    if (!forgotPasswordEmail.trim()) {
+      setError('Please enter your email first.');
+      return;
+    }
+
+    if (resetCooldown > 0) {
+      setError(`Please wait ${formatCooldown(resetCooldown)} before requesting another password reset email.`);
+      return;
+    }
+
+    setSendingResetEmail(true);
+    try {
+      await sendPasswordResetEmail(forgotPasswordEmail);
+      setResetCooldown(getPasswordResetCooldownRemaining(forgotPasswordEmail));
+      setForgotPasswordDialogOpen(false);
+      setSuccessMessage('If the account exists, password reset instructions have been sent to your email.');
+    } catch (nextError) {
+      setResetCooldown(getPasswordResetCooldownRemaining(forgotPasswordEmail));
+      setError(nextError instanceof Error ? nextError.message : 'Unable to send password reset email. Please try again.');
+    } finally {
+      setSendingResetEmail(false);
+    }
+  }
+
+  function formatCooldown(seconds: number) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
 
   async function handleSignUp(event: FormEvent<HTMLFormElement>) {
@@ -624,7 +662,7 @@ export default function AuthAccessPage() {
             to="/"
             className="inline-flex h-11 items-center justify-center rounded-full border border-[#cad8d5] bg-white/74 px-5 text-sm font-semibold text-[#0b1c30] transition hover:bg-white"
           >
-            Back to landing
+            Back to Homepage
           </Link>
         </div>
 
@@ -769,7 +807,16 @@ export default function AuthAccessPage() {
                       />
                       Remember me
                     </label>
-                    <span className="font-medium text-[#60717e]">Use your active GC credentials</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openForgotPasswordDialog();
+                      }}
+                      disabled={loading || sendingResetEmail}
+                      className="font-semibold text-[#065f46] hover:text-[#004532] disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      Forgot password?
+                    </button>
                   </div>
 
                   {error ? (
@@ -797,6 +844,63 @@ export default function AuthAccessPage() {
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </form>
+
+                <Dialog open={forgotPasswordDialogOpen} onOpenChange={setForgotPasswordDialogOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Reset password</DialogTitle>
+                      <DialogDescription>
+                        Enter your email and we will send you a password reset link.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form
+                      className="space-y-4"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void handleForgotPassword();
+                      }}
+                    >
+                      <input
+                        type="email"
+                        required
+                        value={forgotPasswordEmail}
+                        onChange={(event) => {
+                          const nextEmail = event.target.value;
+                          setForgotPasswordEmail(nextEmail);
+                          setResetCooldown(getPasswordResetCooldownRemaining(nextEmail));
+                        }}
+                        placeholder={`name@${GC_DOMAIN}`}
+                        className={inputClassName}
+                      />
+                      <p className="text-xs leading-6 text-[#4a5b68]">
+                        {resetCooldown > 0
+                          ? `You can request another reset link in ${formatCooldown(resetCooldown)}.`
+                          : `You can request one reset email every ${Math.floor(PASSWORD_RESET_COOLDOWN_SECONDS / 60)} minutes.`}
+                      </p>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setForgotPasswordDialogOpen(false)}
+                          disabled={sendingResetEmail}
+                          className="rounded-full border border-[#c8d6d1] px-4 py-2 text-sm font-semibold text-[#4a5b68] transition hover:bg-[#f7fbff] disabled:opacity-70"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={sendingResetEmail || resetCooldown > 0}
+                          className="rounded-full bg-[#004532] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#065f46] disabled:opacity-70"
+                        >
+                          {sendingResetEmail
+                            ? 'Sending...'
+                            : resetCooldown > 0
+                              ? `Try again in ${formatCooldown(resetCooldown)}`
+                              : 'Send reset link'}
+                        </button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
 
                 <div className="relative py-1">
                   <div className="h-px bg-[#dbe5e4]" />
