@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Download, FileText, TrendingUp, Clock, Award, Users } from 'lucide-react';
+import { Download, TrendingUp, Clock, Award, Users, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAnalytics, getSubmissions } from '../../lib/api';
 
@@ -188,12 +187,39 @@ function StatCard({
   );
 }
 
-// ── Filter Row Label ───────────────────────────────────────────────────────
-function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+// ── Filter Section Label ───────────────────────────────────────────────────
+function FilterSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2.5">
+      <p className="text-[11px] font-semibold text-muted-foreground/70 uppercase tracking-widest">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+// ── Labeled Select ─────────────────────────────────────────────────────────
+function LabeledSelect({
+  label,
+  value,
+  onValueChange,
+  placeholder,
+  children,
+}: {
+  label: string;
+  value: string;
+  onValueChange: (v: string) => void;
+  placeholder: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</span>
-      {children}
+      <span className="text-xs text-muted-foreground font-medium">{label}</span>
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger className="h-9 text-sm">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>{children}</SelectContent>
+      </Select>
     </div>
   );
 }
@@ -307,6 +333,23 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     if (!fromDate) setFromDate(dateRange.minDate);
     if (!toDate) setToDate(dateRange.maxDate);
   }, [submissions, fromDate, toDate, dateRange.minDate, dateRange.maxDate]);
+
+  const hasActiveFilters = departmentFilter !== 'all' || yearFilter !== 'all' || statusFilter !== 'all' ||
+    courseFilter !== 'all' || conditionFilter !== 'all' || certificateFilter !== 'all' ||
+    surnameFilter !== 'all' || studentBatchFilter !== 'all';
+
+  const resetFilters = () => {
+    setDepartmentFilter('all');
+    setYearFilter('all');
+    setStatusFilter('all');
+    setCourseFilter('all');
+    setConditionFilter('all');
+    setCertificateFilter('all');
+    setSurnameFilter('all');
+    setStudentBatchFilter('all');
+    setFromDate(dateRange.minDate);
+    setToDate(dateRange.maxDate);
+  };
 
   const summary = useMemo<ReportsSummary>(() => {
     const total = dedupedFilteredSubmissions.length;
@@ -425,133 +468,124 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
       {/* ── Filters Card ──────────────────────────────────────────────── */}
       <Card className="border-outline-variant/30">
-        <CardHeader className="pb-3 pt-5 px-5">
-          <CardTitle className="text-base font-semibold">Filters</CardTitle>
+        <CardHeader className="pb-0 pt-5 px-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+              <CardTitle className="text-base font-semibold">Filters</CardTitle>
+              {hasActiveFilters && (
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  Active
+                </span>
+              )}
+            </div>
+            {hasActiveFilters && (
+              <button
+                onClick={resetFilters}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reset all
+              </button>
+            )}
+          </div>
         </CardHeader>
-        <CardContent className="px-5 pb-5 space-y-4">
 
-          {/* Row 1 — primary filters */}
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-            <FilterGroup label="Department">
-              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </FilterGroup>
+        <CardContent className="px-5 pb-5 pt-5 space-y-5">
 
-            <FilterGroup label="Year Level">
-              <Select value={yearFilter} onValueChange={setYearFilter}>
-                <SelectTrigger><SelectValue placeholder="Year" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Years</SelectItem>
-                  {Object.entries(YEAR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </FilterGroup>
+          {/* ── Group 1: Student Info ──────────────────────────────────── */}
+          <FilterSection label="Student">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <LabeledSelect label="Department" value={departmentFilter} onValueChange={setDepartmentFilter} placeholder="Department">
+                <SelectItem value="all">All Departments</SelectItem>
+                {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </LabeledSelect>
 
-            <FilterGroup label="Status">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="pending">Under Review</SelectItem>
-                  <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="returned">Returned</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterGroup>
+              <LabeledSelect label="Year Level" value={yearFilter} onValueChange={setYearFilter} placeholder="Year">
+                <SelectItem value="all">All Years</SelectItem>
+                {Object.entries(YEAR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+              </LabeledSelect>
 
-            <FilterGroup label="Certificate">
-              <Select value={certificateFilter} onValueChange={setCertificateFilter}>
-                <SelectTrigger><SelectValue placeholder="Certificate" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Certificates</SelectItem>
-                  <SelectItem value="issued">Issued Only</SelectItem>
-                  <SelectItem value="not_issued">Not Issued</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterGroup>
-          </div>
+              <LabeledSelect label="Course" value={courseFilter} onValueChange={setCourseFilter} placeholder="Course">
+                <SelectItem value="all">All Courses</SelectItem>
+                {allCourses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </LabeledSelect>
 
-          {/* Row 2 — secondary filters */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <FilterGroup label="Course">
-              <Select value={courseFilter} onValueChange={setCourseFilter}>
-                <SelectTrigger><SelectValue placeholder="Course" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Courses</SelectItem>
-                  {allCourses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </FilterGroup>
+              <LabeledSelect label="Student ID Batch" value={studentBatchFilter} onValueChange={setStudentBatchFilter} placeholder="Batch">
+                <SelectItem value="all">All Batches</SelectItem>
+                {studentBatches.map((batch) => <SelectItem key={batch} value={batch}>{batch}</SelectItem>)}
+              </LabeledSelect>
+            </div>
+          </FilterSection>
 
-            <FilterGroup label="Medical Condition">
-              <Select value={conditionFilter} onValueChange={setConditionFilter}>
-                <SelectTrigger><SelectValue placeholder="Medical Condition" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Conditions</SelectItem>
-                  {allConditions.map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {k.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase())}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FilterGroup>
+          <div className="border-t border-outline-variant/20" />
 
-            <FilterGroup label="Surname">
-              <Select value={surnameFilter} onValueChange={setSurnameFilter}>
-                <SelectTrigger><SelectValue placeholder="Surname" /></SelectTrigger>
-                <SelectContent>
-                  {SURNAME_FILTERS.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {value === 'all' ? 'All Surnames' : `${value} — Surnames`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FilterGroup>
+          {/* ── Group 2: Submission Info ───────────────────────────────── */}
+          <FilterSection label="Submission">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <LabeledSelect label="Status" value={statusFilter} onValueChange={setStatusFilter} placeholder="Status">
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Under Review</SelectItem>
+                <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="returned">Returned</SelectItem>
+              </LabeledSelect>
 
-            <FilterGroup label="Student ID Batch">
-              <Select value={studentBatchFilter} onValueChange={setStudentBatchFilter}>
-                <SelectTrigger><SelectValue placeholder="Student ID Batch" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Batches</SelectItem>
-                  {studentBatches.map((batch) => (
-                    <SelectItem key={batch} value={batch}>
-                      {batch}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FilterGroup>
-          </div>
+              <LabeledSelect label="Certificate" value={certificateFilter} onValueChange={setCertificateFilter} placeholder="Certificate">
+                <SelectItem value="all">All Certificates</SelectItem>
+                <SelectItem value="issued">Issued Only</SelectItem>
+                <SelectItem value="not_issued">Not Issued</SelectItem>
+              </LabeledSelect>
 
-          {/* Row 3 — date range */}
-          <div className="grid grid-cols-2 gap-3">
-            <FilterGroup label="Submitted From">
-              <Input
-                type="date"
-                min={dateRange.minDate || undefined}
-                max={today}
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
-            </FilterGroup>
-            <FilterGroup label="Submitted To">
-              <Input
-                type="date"
-                min={dateRange.minDate || undefined}
-                max={today}
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
-            </FilterGroup>
-          </div>
+              <LabeledSelect label="Medical Condition" value={conditionFilter} onValueChange={setConditionFilter} placeholder="Condition">
+                <SelectItem value="all">All Conditions</SelectItem>
+                {allConditions.map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {k.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase())}
+                  </SelectItem>
+                ))}
+              </LabeledSelect>
+
+              <LabeledSelect label="Surname" value={surnameFilter} onValueChange={setSurnameFilter} placeholder="Surname">
+                {SURNAME_FILTERS.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value === 'all' ? 'All Surnames' : `${value} — Surnames`}
+                  </SelectItem>
+                ))}
+              </LabeledSelect>
+            </div>
+          </FilterSection>
+
+          <div className="border-t border-outline-variant/20" />
+
+          {/* ── Group 3: Date Range ────────────────────────────────────── */}
+          <FilterSection label="Date Range">
+            <div className="grid grid-cols-2 gap-3 max-w-sm">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground font-medium">From</span>
+                <Input
+                  type="date"
+                  className="h-9 text-sm"
+                  min={dateRange.minDate || undefined}
+                  max={today}
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground font-medium">To</span>
+                <Input
+                  type="date"
+                  className="h-9 text-sm"
+                  min={dateRange.minDate || undefined}
+                  max={today}
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </FilterSection>
+
         </CardContent>
       </Card>
 

@@ -59,7 +59,7 @@ export default function PasswordChangeCard({
   };
 
   return (
-    <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+    <Card id="password" className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
       <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
         <div className="flex items-center gap-3">
           <LockKeyhole className="h-5 w-5 text-primary" />

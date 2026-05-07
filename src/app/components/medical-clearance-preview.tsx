@@ -85,22 +85,23 @@ function GCSeal({ size = 36 }: { size?: number }) {
   );
 }
 
-function CaduceusSeal({ size = 36 }: { size?: number }) {
+function GordonCollegeLogo({ size = 36 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
-      <circle cx="18" cy="18" r="17" fill="none" stroke="#333" strokeWidth="1.2" />
-      <circle cx="18" cy="18" r="14" fill="none" stroke="#333" strokeWidth="0.5" />
-      {/* Staff */}
-      <line x1="18" y1="8" x2="18" y2="28" stroke="#333" strokeWidth="1" />
-      {/* Snake left */}
-      <path d="M18,10 Q13,13 18,16 Q13,19 18,22" fill="none" stroke="#333" strokeWidth="0.8" />
-      {/* Snake right */}
-      <path d="M18,10 Q23,13 18,16 Q23,19 18,22" fill="none" stroke="#333" strokeWidth="0.8" />
-      {/* Wings */}
-      <path d="M18,9 Q12,7 10,9" fill="none" stroke="#333" strokeWidth="0.8" />
-      <path d="M18,9 Q24,7 26,9" fill="none" stroke="#333" strokeWidth="0.8" />
-      <text x="18" y="31" textAnchor="middle" fontSize="3" fill="#333">HEALTH SERVICES</text>
-    </svg>
+    <img
+      src="/gordon-college-logo.png"
+      alt="Gordon College logo"
+      style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
+    />
+  );
+}
+
+function HSULogo({ size = 36 }: { size?: number }) {
+  return (
+    <img
+      src="/gordonhsc.png"
+      alt="Health Services Unit logo"
+      style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
+    />
   );
 }
 
@@ -124,7 +125,7 @@ function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType:
       {/* ── HEADER ── */}
       <div style={{ position: 'relative' as const, display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
         <div style={{ display: 'flex', gap: '2px', flexShrink: 0, paddingTop: '2px' }}>
-          <GCSeal size={34} />
+          <GordonCollegeLogo size={34} />
           <GCSeal size={34} />
         </div>
         <div style={{ flex: 1, textAlign: 'center' as const }}>
@@ -137,7 +138,7 @@ function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType:
           </div>
         </div>
         <div style={{ flexShrink: 0, paddingTop: '2px' }}>
-          <CaduceusSeal size={34} />
+          <HSULogo size={34} />
         </div>
         {/* Copy badge — absolute so it never shifts the center text */}
         <div style={{
