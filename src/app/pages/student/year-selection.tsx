@@ -116,13 +116,13 @@ export default function StudentYearSelection() {
                 </span>
               ) : null}
               {isCurrent ? (
-                <span className="absolute right-0 top-0 rounded-bl-xl bg-primary px-3 py-1 text-xs font-semibold text-on-primary">
+                <span className="absolute right-0 top-0 rounded-bl-xl bg-primary px-3 py-1 text-xs font-semibold text-white">
                   Current Year
                 </span>
               ) : null}
 
               {isLocked ? (
-                <span className="absolute right-4 top-4 text-outline">
+                <span className={`absolute right-4 text-outline ${isCurrent ? 'top-10' : 'top-4'}`}>
                   <Lock className="h-4 w-4" />
                 </span>
               ) : !isCurrent ? (

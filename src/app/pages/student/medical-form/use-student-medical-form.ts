@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { MockSubmission } from '../../../lib/mock-data';
-import { getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
+import { getStudentProfileAssets, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import {
   DEFAULT_MEDICAL_HISTORY,
   formatPhilippinePhoneInput,
@@ -159,6 +159,10 @@ function calculateBmi(weight: string, height: string): string {
 
 export function useStudentMedicalForm({ year, me, privacyAccepted = false, editSubmissionId = null }: UseStudentMedicalFormArgs) {
   const student = me?.student;
+  const [profileAssetUrls, setProfileAssetUrls] = useState<{ photoUrl: string | null; signatureUrl: string | null }>({
+    photoUrl: null,
+    signatureUrl: null,
+  });
   const [step, setStep] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -236,6 +240,36 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
       active = false;
     };
   }, [editSubmissionId]);
+
+  useEffect(() => {
+    const studentId = me?.student?.student_id || me?.profile.student_id || '';
+    const profileId = me?.student?.profile_id || me?.profile.id || '';
+    if (!studentId || !profileId) {
+      setProfileAssetUrls({ photoUrl: null, signatureUrl: null });
+      return;
+    }
+
+    let active = true;
+
+    const loadProfileAssets = async () => {
+      try {
+        const assets = await getStudentProfileAssets(studentId, profileId);
+        if (!active) return;
+        setProfileAssetUrls({
+          photoUrl: assets.photoUrl || null,
+          signatureUrl: assets.signatureUrl || null,
+        });
+      } catch {
+        if (!active) return;
+        setProfileAssetUrls({ photoUrl: null, signatureUrl: null });
+      }
+    };
+
+    void loadProfileAssets();
+    return () => {
+      active = false;
+    };
+  }, [me?.profile.id, me?.profile.student_id, me?.student?.profile_id, me?.student?.student_id]);
 
   useEffect(() => {
     setFormData((prev) => ({
@@ -535,12 +569,18 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
         height: formData.height,
         bmi: formData.bmi,
       },
+      photoUrl: profileAssetUrls.photoUrl || undefined,
+      signatureUrl: profileAssetUrls.signatureUrl || undefined,
     }),
-    [formData],
+    [formData, profileAssetUrls.photoUrl, profileAssetUrls.signatureUrl],
   );
 
   const submit = useCallback(async () => {
     if (uploading) return;
+    if (!formData.submissionConfirmed) {
+      toast.error('Please confirm that all details are complete before submitting.');
+      return;
+    }
     if (!canSubmit) {
       toast.error('Please fix invalid fields before submitting. Student ID must be 9 digits, age must be valid, and text fields must follow format rules.');
       return;
