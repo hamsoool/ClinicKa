@@ -140,12 +140,36 @@ export default function StudentRecords() {
                           </p>
                         )}
                       </div>
+                      {record.staffNotes ? (
+                        <div className="mt-3 hidden rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700 sm:block sm:max-w-[320px]">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                            <p className={`${expandedNotes[record.id] ? '' : 'line-clamp-2'}`}>
+                              <strong>Staff Note:</strong> {record.staffNotes}
+                            </p>
+                          </div>
+                          {record.staffNotes.length > 100 ? (
+                            <button
+                              type="button"
+                              className="mt-1 text-[11px] font-semibold underline underline-offset-2"
+                              onClick={() =>
+                                setExpandedNotes((prev) => ({
+                                  ...prev,
+                                  [record.id]: !prev[record.id],
+                                }))
+                              }
+                            >
+                              {expandedNotes[record.id] ? 'See less' : 'See more'}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-2 sm:items-end">
                     {record.staffNotes ? (
-                      <div className="w-full rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700 sm:max-w-[240px]">
+                      <div className="w-full rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700 sm:hidden">
                         <div className="flex items-start gap-2">
                           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                           <p className={`${expandedNotes[record.id] ? '' : 'line-clamp-2'}`}>
