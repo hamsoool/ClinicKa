@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import type { MockSubmission } from '../../lib/mock-data';
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
@@ -21,6 +22,9 @@ const YEAR_LABELS: Record<string, string> = {
 };
 
 export default function StaffCertificates() {
+  const RECORD_PREVIEW_BASE_WIDTH = 816;
+  const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
+  const STUDENTS_PER_PAGE = 10;
   const [submissions, setSubmissions] = useState<MockSubmission[]>([]);
   const [filteredSubmissions, setFilteredSubmissions] = useState<MockSubmission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,9 +33,26 @@ export default function StaffCertificates() {
   const [yearFilter, setYearFilter] = useState('all');
   const [selectedStudent, setSelectedStudent] = useState<MockSubmission | null>(null);
   const [activeTab, setActiveTab] = useState('records');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [openRecordPreview, setOpenRecordPreview] = useState(false);
+  const [openClearancePreview, setOpenClearancePreview] = useState(false);
 
   const recordPreviewRef = useRef<HTMLDivElement>(null);
   const clearancePreviewRef = useRef<HTMLDivElement>(null);
+  const recordPreviewViewportRef = useRef<HTMLDivElement>(null);
+  const recordPreviewCanvasRef = useRef<HTMLDivElement>(null);
+  const clearancePreviewViewportRef = useRef<HTMLDivElement>(null);
+  const clearancePreviewCanvasRef = useRef<HTMLDivElement>(null);
+  const recordPreviewModalViewportRef = useRef<HTMLDivElement>(null);
+  const recordPreviewModalCanvasRef = useRef<HTMLDivElement>(null);
+  const clearancePreviewModalViewportRef = useRef<HTMLDivElement>(null);
+  const clearancePreviewModalCanvasRef = useRef<HTMLDivElement>(null);
+  const [recordPreviewScale, setRecordPreviewScale] = useState(1);
+  const [recordPreviewHeight, setRecordPreviewHeight] = useState<number | null>(null);
+  const [isRecordCompactPreview, setIsRecordCompactPreview] = useState(false);
+  const [clearancePreviewScale, setClearancePreviewScale] = useState(1);
+  const [clearancePreviewHeight, setClearancePreviewHeight] = useState<number | null>(null);
+  const [isClearanceCompactPreview, setIsClearanceCompactPreview] = useState(false);
 
   useEffect(() => {
     loadSubmissions();
@@ -40,6 +61,78 @@ export default function StaffCertificates() {
   useEffect(() => {
     filterSubmissions();
   }, [searchQuery, departmentFilter, yearFilter, submissions]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, departmentFilter, yearFilter]);
+
+  useLayoutEffect(() => {
+    if (!selectedStudent) return;
+
+    const updateScale = () => {
+      const viewport = openRecordPreview ? recordPreviewModalViewportRef.current : recordPreviewViewportRef.current;
+      const canvas = openRecordPreview ? recordPreviewModalCanvasRef.current : recordPreviewCanvasRef.current;
+      if (!viewport || !canvas) return;
+
+      const availableWidth = Math.max(0, viewport.clientWidth - 6);
+      const naturalHeight = canvas.scrollHeight;
+      if (!naturalHeight) return;
+
+      const compact = availableWidth < RECORD_PREVIEW_BASE_WIDTH;
+      const nextScale = compact ? availableWidth / RECORD_PREVIEW_BASE_WIDTH : 1;
+      setIsRecordCompactPreview(compact);
+      setRecordPreviewScale(nextScale);
+      setRecordPreviewHeight(naturalHeight * nextScale);
+    };
+
+    updateScale();
+
+    const observer = new ResizeObserver(updateScale);
+    if (recordPreviewViewportRef.current) observer.observe(recordPreviewViewportRef.current);
+    if (recordPreviewCanvasRef.current) observer.observe(recordPreviewCanvasRef.current);
+    if (recordPreviewModalViewportRef.current) observer.observe(recordPreviewModalViewportRef.current);
+    if (recordPreviewModalCanvasRef.current) observer.observe(recordPreviewModalCanvasRef.current);
+    window.addEventListener('resize', updateScale);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateScale);
+    };
+  }, [selectedStudent, activeTab, openRecordPreview]);
+
+  useLayoutEffect(() => {
+    if (!selectedStudent) return;
+
+    const updateScale = () => {
+      const viewport = openClearancePreview ? clearancePreviewModalViewportRef.current : clearancePreviewViewportRef.current;
+      const canvas = openClearancePreview ? clearancePreviewModalCanvasRef.current : clearancePreviewCanvasRef.current;
+      if (!viewport || !canvas) return;
+
+      const availableWidth = Math.max(0, viewport.clientWidth - 6);
+      const naturalHeight = canvas.scrollHeight;
+      if (!naturalHeight) return;
+
+      const compact = availableWidth < CLEARANCE_PREVIEW_BASE_WIDTH;
+      const nextScale = compact ? availableWidth / CLEARANCE_PREVIEW_BASE_WIDTH : 1;
+      setIsClearanceCompactPreview(compact);
+      setClearancePreviewScale(nextScale);
+      setClearancePreviewHeight(naturalHeight * nextScale);
+    };
+
+    updateScale();
+
+    const observer = new ResizeObserver(updateScale);
+    if (clearancePreviewViewportRef.current) observer.observe(clearancePreviewViewportRef.current);
+    if (clearancePreviewCanvasRef.current) observer.observe(clearancePreviewCanvasRef.current);
+    if (clearancePreviewModalViewportRef.current) observer.observe(clearancePreviewModalViewportRef.current);
+    if (clearancePreviewModalCanvasRef.current) observer.observe(clearancePreviewModalCanvasRef.current);
+    window.addEventListener('resize', updateScale);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateScale);
+    };
+  }, [selectedStudent, activeTab, openClearancePreview]);
 
   const loadSubmissions = async () => {
     setLoading(true);
@@ -87,6 +180,11 @@ export default function StaffCertificates() {
   };
 
   const hasActiveFilters = searchQuery || departmentFilter !== 'all' || yearFilter !== 'all';
+  const totalPages = Math.max(1, Math.ceil(filteredSubmissions.length / STUDENTS_PER_PAGE));
+  const clampedPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (clampedPage - 1) * STUDENTS_PER_PAGE;
+  const paginatedSubmissions = filteredSubmissions.slice(pageStartIndex, pageStartIndex + STUDENTS_PER_PAGE);
+  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   const downloadRecordPDF = () => {
     if (!recordPreviewRef.current || !selectedStudent) return;
@@ -193,7 +291,7 @@ export default function StaffCertificates() {
               </div>
             ) : (
               <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                {filteredSubmissions.map((submission) => (
+                {paginatedSubmissions.map((submission) => (
                   <div
                     key={submission.id}
                     className={`p-3 border rounded cursor-pointer transition-colors ${
@@ -216,6 +314,49 @@ export default function StaffCertificates() {
                 ))}
               </div>
             )}
+            {!loading && filteredSubmissions.length > STUDENTS_PER_PAGE ? (
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <p className="text-xs text-muted-foreground">
+                  Page {clampedPage} of {totalPages}
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    disabled={clampedPage <= 1}
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  >
+                    Prev
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {pageNumbers.map((page) => (
+                      <Button
+                        key={page}
+                        type="button"
+                        size="sm"
+                        variant={page === clampedPage ? 'default' : 'outline'}
+                        className="h-7 min-w-7 px-2 text-xs"
+                        onClick={() => setCurrentPage(page)}
+                      >
+                        {page}
+                      </Button>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    disabled={clampedPage >= totalPages}
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </CardContent>
       </Card>
@@ -230,13 +371,13 @@ export default function StaffCertificates() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-          <TabsTrigger value="records" className="flex items-center gap-2">
-            <ClipboardList className="w-4 h-4" />
+        <TabsList className="mb-6 grid w-full grid-cols-2">
+          <TabsTrigger value="records" className="flex items-center gap-1 px-2 text-[10px] sm:gap-2 sm:text-sm">
+            <ClipboardList className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Completed Medical Records
           </TabsTrigger>
-          <TabsTrigger value="clearance" className="flex items-center gap-2">
-            <Award className="w-4 h-4" />
+          <TabsTrigger value="clearance" className="flex items-center gap-1 px-2 text-[10px] sm:gap-2 sm:text-sm">
+            <Award className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Medical Clearance
           </TabsTrigger>
         </TabsList>
@@ -257,15 +398,52 @@ export default function StaffCertificates() {
                           {selectedStudent.lastName}, {selectedStudent.firstName}  E{selectedStudent.studentId}
                         </p>
                       </div>
-                      <Button onClick={downloadRecordPDF} className="bg-primary text-white hover:bg-primary/90">
+                      <Button onClick={downloadRecordPDF} className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90">
                         <Download className="w-4 h-4 mr-2" />
                         Download PDF (Long Bond)
                       </Button>
+                      <Dialog open={openRecordPreview} onOpenChange={setOpenRecordPreview}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full sm:hidden">Preview</Button>
+                        </DialogTrigger>
+                        <DialogContent className="flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden rounded-none p-0 sm:h-[92vh] sm:max-w-5xl sm:rounded-lg">
+                          <DialogHeader className="border-b bg-primary px-4 py-3 text-primary-foreground">
+                            <DialogTitle className="text-sm font-semibold">Medical Record - {selectedStudent.year}</DialogTitle>
+                          </DialogHeader>
+                          <div ref={recordPreviewModalViewportRef} className="flex-1 overflow-auto bg-muted/30 p-2">
+                            <div style={{ height: isRecordCompactPreview ? (recordPreviewHeight ?? 'auto') : 'auto' }}>
+                              <div
+                                ref={recordPreviewModalCanvasRef}
+                                style={{
+                                  width: `${RECORD_PREVIEW_BASE_WIDTH}px`,
+                                  margin: isRecordCompactPreview ? '0' : '0 auto',
+                                  transform: `scale(${recordPreviewScale})`,
+                                  transformOrigin: isRecordCompactPreview ? 'top left' : 'top center',
+                                }}
+                              >
+                                <MedicalRecordPreview record={selectedStudent} />
+                              </div>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="border rounded-lg overflow-auto bg-white p-4" style={{ maxHeight: '70vh' }}>
-                      <MedicalRecordPreview ref={recordPreviewRef} record={selectedStudent} />
+                    <div ref={recordPreviewViewportRef} className="hidden max-h-[68vh] overflow-auto rounded-lg border bg-muted/30 p-2 sm:block sm:p-4 md:p-8">
+                      <div style={{ height: isRecordCompactPreview ? (recordPreviewHeight ?? 'auto') : 'auto' }}>
+                        <div
+                          ref={recordPreviewCanvasRef}
+                          style={{
+                            width: `${RECORD_PREVIEW_BASE_WIDTH}px`,
+                            margin: isRecordCompactPreview ? '0' : '0 auto',
+                            transform: `scale(${recordPreviewScale})`,
+                            transformOrigin: isRecordCompactPreview ? 'top left' : 'top center',
+                          }}
+                        >
+                          <MedicalRecordPreview ref={recordPreviewRef} record={selectedStudent} />
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -299,15 +477,52 @@ export default function StaffCertificates() {
                           3 copies (Student, Coordinator, Registrar)  EA4 bond paper
                         </p>
                       </div>
-                      <Button onClick={downloadClearancePDF} className="bg-primary text-white hover:bg-primary/90">
+                      <Button onClick={downloadClearancePDF} className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90">
                         <Download className="w-4 h-4 mr-2" />
                         Download PDF (A4)
                       </Button>
+                      <Dialog open={openClearancePreview} onOpenChange={setOpenClearancePreview}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full sm:hidden">Preview</Button>
+                        </DialogTrigger>
+                        <DialogContent className="flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden rounded-none p-0 sm:h-[92vh] sm:max-w-5xl sm:rounded-lg">
+                          <DialogHeader className="border-b bg-primary px-4 py-3 text-primary-foreground">
+                            <DialogTitle className="text-sm font-semibold">Medical Clearance Certificate</DialogTitle>
+                          </DialogHeader>
+                          <div ref={clearancePreviewModalViewportRef} className="flex-1 overflow-auto bg-muted/30 p-2">
+                            <div style={{ height: isClearanceCompactPreview ? (clearancePreviewHeight ?? 'auto') : 'auto' }}>
+                              <div
+                                ref={clearancePreviewModalCanvasRef}
+                                style={{
+                                  width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px`,
+                                  margin: isClearanceCompactPreview ? '0' : '0 auto',
+                                  transform: `scale(${clearancePreviewScale})`,
+                                  transformOrigin: isClearanceCompactPreview ? 'top left' : 'top center',
+                                }}
+                              >
+                                <MedicalClearancePreview record={selectedStudent} />
+                              </div>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="border rounded-lg overflow-auto bg-white p-2" style={{ maxHeight: '80vh' }}>
-                      <MedicalClearancePreview ref={clearancePreviewRef} record={selectedStudent} />
+                    <div ref={clearancePreviewViewportRef} className="hidden overflow-hidden rounded-lg border bg-white p-1 sm:block sm:p-2">
+                      <div style={{ height: isClearanceCompactPreview ? (clearancePreviewHeight ?? 'auto') : 'auto' }}>
+                        <div
+                          ref={clearancePreviewCanvasRef}
+                          style={{
+                            width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px`,
+                            margin: isClearanceCompactPreview ? '0' : '0 auto',
+                            transform: `scale(${clearancePreviewScale})`,
+                            transformOrigin: isClearanceCompactPreview ? 'top left' : 'top center',
+                          }}
+                        >
+                          <MedicalClearancePreview ref={clearancePreviewRef} record={selectedStudent} />
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

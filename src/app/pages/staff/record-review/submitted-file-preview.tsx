@@ -181,17 +181,17 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
 
   return (
     <div className="mb-4 overflow-hidden rounded-lg border">
-      <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-3">
+      <div className="flex flex-col gap-3 border-b bg-muted/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{title} submitted file</p>
           <p className="text-xs text-muted-foreground">
             {previewType === 'pdf' ? 'PDF preview' : previewType === 'image' ? 'Image preview' : 'File attachment'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
           <Dialog>
             <DialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm">
+              <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto">
                 <Expand className="mr-2 h-4 w-4" />
                 Preview
               </Button>
@@ -213,17 +213,17 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
               </div>
             </DialogContent>
           </Dialog>
-          <Button type="button" variant="outline" size="sm" onClick={handleDownloadOriginal}>
+          <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleDownloadOriginal}>
             <Download className="mr-2 h-4 w-4" />
             Download {previewType === 'pdf' ? 'PDF' : 'Original'}
           </Button>
           {previewType === 'image' ? (
-            <Button type="button" variant="outline" size="sm" onClick={handleDownloadImageAsPdf}>
+            <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleDownloadImageAsPdf}>
               <Download className="mr-2 h-4 w-4" />
               Download as PDF
             </Button>
           ) : null}
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="ghost" size="sm" className="w-full sm:w-auto">
             <a href={fileUrl} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="mr-2 h-4 w-4" />
               Open

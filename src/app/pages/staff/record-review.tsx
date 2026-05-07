@@ -707,11 +707,19 @@ export default function StaffRecordReview() {
       </div>
 
       <Tabs defaultValue="record" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 gap-2 md:grid-cols-4">
-          <TabsTrigger value="record">Student Record</TabsTrigger>
-          <TabsTrigger value="assessment">Assessment</TabsTrigger>
-          <TabsTrigger value="labs">Lab Results</TabsTrigger>
-          <TabsTrigger value="decision">Clinic Notes</TabsTrigger>
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-xl bg-muted/50 p-1 md:grid-cols-4">
+          <TabsTrigger value="record" className="w-full px-2 py-2 text-xs sm:text-sm">
+            Student Record
+          </TabsTrigger>
+          <TabsTrigger value="assessment" className="w-full px-2 py-2 text-xs sm:text-sm">
+            Assessment
+          </TabsTrigger>
+          <TabsTrigger value="labs" className="w-full px-2 py-2 text-xs sm:text-sm">
+            Lab Results
+          </TabsTrigger>
+          <TabsTrigger value="decision" className="w-full px-2 py-2 text-xs sm:text-sm">
+            Clinic Notes
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="record" className="space-y-6">
