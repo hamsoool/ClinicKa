@@ -162,16 +162,16 @@ export default function StudentCertificate() {
                 </>
               ) : isReturned ? (
                 <>
-                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+                  <AlertCircle className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
                   <div>
-                    <p className="font-medium text-red-800">Record Returned</p>
+                    <p className="font-medium text-amber-900">Record Returned</p>
                     <p className="text-sm text-muted-foreground mt-1">
                       Your medical record has been returned for revision. Please check the staff notes and resubmit your record.
                     </p>
                     {record.staffNotes && (
-                      <div className="mt-2 p-3 bg-red-50 rounded-md border border-red-100">
-                        <p className="text-sm font-medium text-red-800">Staff Notes:</p>
-                        <p className="text-sm text-red-700 mt-1">{record.staffNotes}</p>
+                      <div className="mt-2 p-3 rounded-md border border-amber-200 bg-amber-50/70">
+                        <p className="text-sm font-medium text-amber-900">Staff Notes:</p>
+                        <p className="text-sm text-amber-800 mt-1">{record.staffNotes}</p>
                       </div>
                     )}
                     <div className="mt-3">
@@ -182,12 +182,12 @@ export default function StudentCertificate() {
                           )
                         }
                         size="sm"
-                        className="w-full bg-red-600 hover:bg-red-700 sm:w-auto"
+                        className="w-full bg-amber-700 hover:bg-amber-800 sm:w-auto"
                       >
                         Edit and Resubmit
                       </Button>
                     </div>
-                    <Badge variant="secondary" className="bg-red-100 text-red-800 mt-2">
+                    <Badge variant="secondary" className="bg-amber-100 text-amber-900 mt-2">
                       <AlertCircle className="w-3 h-3 mr-1" /> Returned
                     </Badge>
                   </div>

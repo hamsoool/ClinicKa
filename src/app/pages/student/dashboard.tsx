@@ -167,21 +167,21 @@ export default function StudentDashboard() {
       {latestRecord?.status === 'returned' && (
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="flex flex-col gap-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
               <AlertCircle className="h-5 w-5" />
             </div>
             <div className="flex-1 space-y-4">
               <div>
-                <h3 className="text-base font-bold tracking-tight text-red-700 sm:text-lg">Action Required: Correction Needed</h3>
+                <h3 className="text-base font-bold tracking-tight text-amber-900 sm:text-lg">Action Required: Correction Needed</h3>
                 <p className="mt-1 text-xs text-on-surface-variant sm:text-sm">
                   Your medical record submission for <span className="font-semibold">{yearLabels[Number(latestRecord.year) - 1] || 'current year'}</span> has been returned by the clinic staff.
                 </p>
               </div>
               
               {latestRecord.staffNotes && (
-                <div className="rounded-xl border border-red-200/70 bg-red-50 p-4">
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-red-700">Note from Clinic Staff:</p>
-                  <p className="text-sm italic leading-relaxed text-red-700">"{latestRecord.staffNotes}"</p>
+                <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-900">Note from Clinic Staff:</p>
+                  <p className="text-sm italic leading-relaxed text-amber-800">"{latestRecord.staffNotes}"</p>
                 </div>
               )}
               
@@ -194,7 +194,7 @@ export default function StudentDashboard() {
                       )}`,
                     )
                   }
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 sm:w-auto"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-700 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-800 sm:w-auto"
                 >
                   Update and Resubmit
                   <ArrowRight className="h-4 w-4" />
