@@ -109,12 +109,10 @@ function HSULogo({ size = 36 }: { size?: number }) {
 function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType: string }) {
   const cl = record.clearanceInfo || {};
   const purpose = cl.purpose || 'enrolment';
-  const signatoryName =
-    (record.staffMeasurements?.examinedBy || '').trim() || 'GERALD S. BERNAL, MD';
 
-  const signatoryTitle = /(^|\s)(dr\.?|doctor|md)(\s|,|$)/i.test(signatoryName)
-    ? 'College Physician'
-    : 'Clinic Nurse / Doctor';
+  // Permanently fixed — not connected to any input field
+  const signatoryName = 'GERALD S. BERNAL, MD';
+  const signatoryTitle = 'College Physician';
 
   const isStudentCopy = copyType === "STUDENT'S COPY";
   const remarksEnding = isStudentCopy
@@ -308,6 +306,7 @@ function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType:
         >
           <div style={S.sigName}>{signatoryName}</div>
           <div>{signatoryTitle}</div>
+          <div>License No. 008455</div>
         </div>
       </div>
     </div>
