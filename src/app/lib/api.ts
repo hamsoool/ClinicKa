@@ -1,8 +1,10 @@
 
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL;
-const publicAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '')
+  .trim()
+  .replace(/\/+$/, '');
+const publicAnonKey = String(
+  import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
+).trim();
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
@@ -139,6 +141,7 @@ export type AuthMe = {
   } | null;
   staff?: {
     id: string;
+    email?: string | null;
     first_name?: string | null;
     last_name?: string | null;
     middle_initial?: string | null;
@@ -446,7 +449,9 @@ async function getValidAccessToken() {
 
 async function apiRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+    throw new Error(
+      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
+    );
   }
 
   const token = options.token ?? (await getValidAccessToken());
@@ -510,7 +515,9 @@ async function restRequest<T>(
 
 async function authRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+    throw new Error(
+      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
+    );
   }
 
   const token = options.token ?? (await getValidAccessToken());
@@ -1075,7 +1082,9 @@ async function getMappedSubmissions(query: string) {
 
 export async function authenticateWithPassword(email: string, password: string) {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+    throw new Error(
+      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
+    );
   }
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST',
@@ -1144,7 +1153,9 @@ export async function signInWithPassword(email: string, password: string) {
 
 export async function signUpWithPassword(fullName: string, email: string, password: string) {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.');
+    throw new Error(
+      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
+    );
   }
   if (!isGCDomainEmail(email)) {
     throw new Error(`Please use your @${GC_DOMAIN} email address to register.`);
