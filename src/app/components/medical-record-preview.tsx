@@ -166,6 +166,7 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
   const yrIndex = parseInt(yr, 10) - 1; // 0-based
   const civilStatusNormalized = String(record.civilStatus || '').trim().toLowerCase();
   const photoUrl = (record as any).photoUrl as string | undefined;
+  const signatureUrl = (record as any).signatureUrl as string | undefined;
 
   const getExamValue = (row: string) => {
     const field = EXAM_FIELD_MAP[row];
@@ -345,7 +346,15 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
       </div>
       <div style={{ textAlign: 'right', fontSize: '9px', marginBottom: '6px' }}>
         <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '160px', textAlign: 'center' }}>
-          &nbsp;
+          {signatureUrl ? (
+            <img
+              src={signatureUrl}
+              alt="Student signature"
+              style={{ width: '140px', height: '26px', objectFit: 'contain', verticalAlign: 'middle' }}
+            />
+          ) : (
+            <>&nbsp;</>
+          )}
         </span>
         <div style={{ fontSize: '8px', color: '#555' }}>Signature of Student</div>
       </div>
