@@ -13,6 +13,7 @@ import { useAuth } from '../../lib/auth';
 
 export default function StudentRecords() {
   const [selectedRecord, setSelectedRecord] = useState<MockSubmission | null>(null);
+  const [detailViewMode, setDetailViewMode] = useState<'summary' | 'form'>('summary');
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
   const previewViewportRef = useRef<HTMLDivElement>(null);
   const previewCanvasRef = useRef<HTMLDivElement>(null);
@@ -41,7 +42,7 @@ export default function StudentRecords() {
   }, [isError]);
 
   useLayoutEffect(() => {
-    if (!selectedRecord) return;
+    if (!selectedRecord || detailViewMode !== 'form') return;
 
     const updateScale = () => {
       const viewport = previewViewportRef.current;
@@ -70,7 +71,7 @@ export default function StudentRecords() {
       observer.disconnect();
       window.removeEventListener('resize', updateScale);
     };
-  }, [selectedRecord]);
+  }, [selectedRecord, detailViewMode]);
 
   if (loading) {
     return <PortalPageSkeleton variant="table" />;
@@ -89,6 +90,31 @@ export default function StudentRecords() {
       default:
         return <Badge>{status}</Badge>;
     }
+  };
+
+  const getSelectedMedicalConditions = (record: MockSubmission) => {
+    const history = record.medicalHistory || {};
+    const labels: Array<{ key: keyof typeof history; label: string }> = [
+      { key: 'allergy', label: 'Allergy' },
+      { key: 'asthma', label: 'Asthma' },
+      { key: 'chickenPox', label: 'Chicken Pox' },
+      { key: 'diabetes', label: 'Diabetes' },
+      { key: 'dysmenorrhea', label: 'Dysmenorrhea' },
+      { key: 'epilepsySeizure', label: 'Epilepsy/Seizure' },
+      { key: 'heartDisorder', label: 'Heart Disorder' },
+      { key: 'hepatitis', label: 'Hepatitis' },
+      { key: 'hypertension', label: 'Hypertension' },
+      { key: 'measles', label: 'Measles' },
+      { key: 'mumps', label: 'Mumps' },
+      { key: 'anxietyDisorder', label: 'Anxiety Disorder' },
+      { key: 'panicAttack', label: 'Panic Attack/Hyperventilation' },
+      { key: 'pneumonia', label: 'Pneumonia' },
+      { key: 'ptbPrimaryComplex', label: 'PTB/Primary Complex' },
+      { key: 'typhoidFever', label: 'Typhoid Fever' },
+      { key: 'covid19', label: 'COVID-19' },
+      { key: 'uti', label: 'Urinary Tract Infection' },
+    ];
+    return labels.filter(({ key }) => Boolean(history[key])).map(({ label }) => label);
   };
 
   return (
@@ -140,12 +166,36 @@ export default function StudentRecords() {
                           </p>
                         )}
                       </div>
+                      {record.staffNotes ? (
+                        <div className="mt-3 hidden rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700 sm:block sm:max-w-[320px]">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                            <p className={`${expandedNotes[record.id] ? '' : 'line-clamp-2'}`}>
+                              <strong>Staff Note:</strong> {record.staffNotes}
+                            </p>
+                          </div>
+                          {record.staffNotes.length > 100 ? (
+                            <button
+                              type="button"
+                              className="mt-1 text-[11px] font-semibold underline underline-offset-2"
+                              onClick={() =>
+                                setExpandedNotes((prev) => ({
+                                  ...prev,
+                                  [record.id]: !prev[record.id],
+                                }))
+                              }
+                            >
+                              {expandedNotes[record.id] ? 'See less' : 'See more'}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-2 sm:items-end">
                     {record.staffNotes ? (
-                      <div className="w-full rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700 sm:max-w-[240px]">
+                      <div className="w-full rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700 sm:hidden">
                         <div className="flex items-start gap-2">
                           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                           <p className={`${expandedNotes[record.id] ? '' : 'line-clamp-2'}`}>
@@ -170,7 +220,10 @@ export default function StudentRecords() {
                     ) : null}
                     <div className="self-start sm:self-auto">{getStatusBadge(record.status)}</div>
                     <Button
-                      onClick={() => setSelectedRecord(record as MockSubmission)}
+                      onClick={() => {
+                        setSelectedRecord(record as MockSubmission);
+                        setDetailViewMode('summary');
+                      }}
                       variant="outline"
                       size="sm"
                       className="mt-1 w-full sm:w-auto"
@@ -205,26 +258,107 @@ export default function StudentRecords() {
               </Button>
             </div>
             
-            <div ref={previewViewportRef} className="max-h-[68vh] overflow-auto bg-muted/30 p-2 sm:flex-1 sm:max-h-none sm:p-4 md:p-8">
-              <div className="mx-auto max-w-[816px] overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5">
-                <div style={{ height: isCompactPreview ? (previewHeight ?? 'auto') : 'auto' }}>
-                  <div
-                    ref={previewCanvasRef}
-                    style={{
-                      width: `${PREVIEW_BASE_WIDTH}px`,
-                      margin: isCompactPreview ? '0' : '0 auto',
-                      transform: `scale(${previewScale})`,
-                      transformOrigin: isCompactPreview ? 'top left' : 'top center',
-                    }}
-                  >
-                    <MedicalRecordPreview record={selectedRecord} />
+            {detailViewMode === 'summary' ? (
+              <div className="max-h-[68vh] space-y-4 overflow-auto bg-muted/30 p-3 sm:flex-1 sm:max-h-none sm:p-5 md:p-6">
+                <Card>
+                  <CardHeader><CardTitle className="text-base">Step 1: Personal Information</CardTitle></CardHeader>
+                  <CardContent className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                    <p className="text-muted-foreground">Name:</p><p className="font-medium">{selectedRecord.lastName}, {selectedRecord.firstName} {selectedRecord.middleInitial || ''}</p>
+                    <p className="text-muted-foreground">Student ID:</p><p className="font-medium">{selectedRecord.studentId || '-'}</p>
+                    <p className="text-muted-foreground">Course / Department:</p><p className="font-medium">{selectedRecord.course || '-'} ({selectedRecord.department || '-'})</p>
+                    <p className="text-muted-foreground">Year Level:</p><p className="font-medium">{selectedRecord.year || '-'}</p>
+                    <p className="text-muted-foreground">Birthday:</p><p className="font-medium">{selectedRecord.birthday || '-'}</p>
+                    <p className="text-muted-foreground">Age / Sex:</p><p className="font-medium">{selectedRecord.age || '-'} / {selectedRecord.sex === 'female' ? 'F' : selectedRecord.sex === 'male' ? 'M' : '-'}</p>
+                    <p className="text-muted-foreground">Civil Status:</p><p className="font-medium">{selectedRecord.civilStatus || '-'}</p>
+                    <p className="text-muted-foreground">Contact Number:</p><p className="font-medium">{selectedRecord.contactNumber || '-'}</p>
+                    <p className="text-muted-foreground">Address:</p><p className="font-medium">{selectedRecord.address || '-'}</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader><CardTitle className="text-base">Step 2: Medical History</CardTitle></CardHeader>
+                  <CardContent className="text-sm">
+                    {getSelectedMedicalConditions(selectedRecord).length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {getSelectedMedicalConditions(selectedRecord).map((label) => (
+                          <span key={label} className="rounded bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-800">{label}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No medical conditions reported.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader><CardTitle className="text-base">Step 3: Operations & Emergency Contact</CardTitle></CardHeader>
+                  <CardContent className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                    <p className="text-muted-foreground">Had operation:</p><p className="font-medium">{selectedRecord.hadOperation === 'yes' ? 'Yes' : 'No'}</p>
+                    <p className="text-muted-foreground">Operation details:</p><p className="font-medium">{selectedRecord.operationDetails || '-'}</p>
+                    <p className="text-muted-foreground">Emergency Contact Name:</p><p className="font-medium">{selectedRecord.emergencyContact?.name || '-'}</p>
+                    <p className="text-muted-foreground">Relationship:</p><p className="font-medium">{selectedRecord.emergencyContact?.relationship || '-'}</p>
+                    <p className="text-muted-foreground">Phone:</p><p className="font-medium">{selectedRecord.emergencyContact?.phone || '-'}</p>
+                    <p className="text-muted-foreground">Address:</p><p className="font-medium">{selectedRecord.emergencyContact?.address || '-'}</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader><CardTitle className="text-base">Step 4: Physical Measurements</CardTitle></CardHeader>
+                  <CardContent className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                    <p className="text-muted-foreground">Blood Pressure:</p><p className="font-medium">{selectedRecord.bloodPressure || '-'}</p>
+                    <p className="text-muted-foreground">Weight:</p><p className="font-medium">{selectedRecord.weight ? `${selectedRecord.weight} kg` : '-'}</p>
+                    <p className="text-muted-foreground">Height:</p><p className="font-medium">{selectedRecord.height ? `${selectedRecord.height} cm` : '-'}</p>
+                    <p className="text-muted-foreground">BMI:</p><p className="font-medium">{selectedRecord.bmi || '-'}</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader><CardTitle className="text-base">Step 5: Laboratory Results</CardTitle></CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <p><span className="text-muted-foreground">Test Location:</span> <span className="font-medium">{selectedRecord.labTestLocation === 'jlgh' ? 'James L. Gordon Hospital' : selectedRecord.labTestLocation === 'other' ? selectedRecord.otherClinicName || 'Other clinic/lab' : 'Not specified'}</span></p>
+                    <p><span className="text-muted-foreground">Chest X-Ray:</span> <span className="font-medium">{(selectedRecord as any).xrayFileUrl ? 'Uploaded' : 'Not provided'}</span></p>
+                    <p><span className="text-muted-foreground">CBC:</span> <span className="font-medium">{(selectedRecord as any).cbcFileUrl ? 'Uploaded' : 'Not provided'}</span></p>
+                    <p><span className="text-muted-foreground">Urinalysis:</span> <span className="font-medium">{(selectedRecord as any).urinalysisFileUrl ? 'Uploaded' : 'Not provided'}</span></p>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <div ref={previewViewportRef} className="max-h-[68vh] overflow-auto bg-muted/30 p-2 sm:flex-1 sm:max-h-none sm:p-4 md:p-8">
+                <div className="mx-auto max-w-[816px] overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5">
+                  <div style={{ height: isCompactPreview ? (previewHeight ?? 'auto') : 'auto' }}>
+                    <div
+                      ref={previewCanvasRef}
+                      style={{
+                        width: `${PREVIEW_BASE_WIDTH}px`,
+                        margin: isCompactPreview ? '0' : '0 auto',
+                        transform: `scale(${previewScale})`,
+                        transformOrigin: isCompactPreview ? 'top left' : 'top center',
+                      }}
+                    >
+                      <MedicalRecordPreview record={selectedRecord} />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
             
-            <div className="px-4 py-3 sm:px-6 sm:py-4 border-t bg-white flex justify-end">
-              <Button onClick={() => setSelectedRecord(null)} className="w-full sm:w-auto">Close Preview</Button>
+            <div className="px-4 py-3 sm:px-6 sm:py-4 border-t bg-white flex flex-col gap-2 sm:flex-row sm:justify-between">
+              {detailViewMode === 'form' ? (
+                <Button variant="outline" onClick={() => setDetailViewMode('summary')} className="w-full sm:w-auto">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Details
+                </Button>
+              ) : (
+                <div />
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                {detailViewMode === 'summary' && selectedRecord.status === 'approved' ? (
+                  <Button onClick={() => setDetailViewMode('form')} variant="outline" className="w-full sm:w-auto">
+                    View Medical Form
+                  </Button>
+                ) : null}
+                <Button onClick={() => setSelectedRecord(null)} className="w-full sm:w-auto">Close Preview</Button>
+              </div>
             </div>
           </div>
         </div>

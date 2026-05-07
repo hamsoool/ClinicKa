@@ -135,7 +135,7 @@ export default function StudentMedicalForm() {
               ) : (
                 <Button
                   onClick={submit}
-                  disabled={!canProceed || uploading}
+                  disabled={!canProceed || uploading || !formData.submissionConfirmed}
                   className="w-full bg-primary hover:bg-primary/90 sm:w-auto"
                 >
                   {uploading ? 'Submitting...' : 'Submit Medical Record'}

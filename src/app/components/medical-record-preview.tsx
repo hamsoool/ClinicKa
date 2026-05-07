@@ -164,6 +164,9 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
   const history = record.medicalHistory || {};
   const yr = record.year || '1';
   const yrIndex = parseInt(yr, 10) - 1; // 0-based
+  const civilStatusNormalized = String(record.civilStatus || '').trim().toLowerCase();
+  const photoUrl = (record as any).photoUrl as string | undefined;
+  const signatureUrl = (record as any).signatureUrl as string | undefined;
 
   const getExamValue = (row: string) => {
     const field = EXAM_FIELD_MAP[row];
@@ -204,7 +207,17 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
           flexShrink: 0,
           textAlign: 'center',
         }}>
-          1×1<br />photo
+          {photoUrl ? (
+            <img
+              src={photoUrl}
+              alt="Student 1x1"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            <>
+              1×1<br />photo
+            </>
+          )}
         </div>
       </div>
 
@@ -241,11 +254,11 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
         <span style={{ ...S.fieldValue, minWidth: '80px' }}>{record.birthday || ''}</span>
         <span style={S.fieldLabel}>Civil Status:</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-          <span style={S.checkbox(record.civilStatus === 'single' || !record.civilStatus)}>{(record.civilStatus === 'single' || !record.civilStatus) ? '✓' : ''}</span>
+          <span style={S.checkbox(civilStatusNormalized === 'single' || !civilStatusNormalized)}>{(civilStatusNormalized === 'single' || !civilStatusNormalized) ? '✓' : ''}</span>
           Single
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-          <span style={S.checkbox(record.civilStatus === 'married')}>{record.civilStatus === 'married' ? '✓' : ''}</span>
+          <span style={S.checkbox(civilStatusNormalized === 'married')}>{civilStatusNormalized === 'married' ? '✓' : ''}</span>
           Married
         </span>
         <span style={{ marginLeft: '4px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
@@ -333,7 +346,15 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
       </div>
       <div style={{ textAlign: 'right', fontSize: '9px', marginBottom: '6px' }}>
         <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '160px', textAlign: 'center' }}>
-          &nbsp;
+          {signatureUrl ? (
+            <img
+              src={signatureUrl}
+              alt="Student signature"
+              style={{ width: '140px', height: '26px', objectFit: 'contain', verticalAlign: 'middle' }}
+            />
+          ) : (
+            <>&nbsp;</>
+          )}
         </span>
         <div style={{ fontSize: '8px', color: '#555' }}>Signature of Student</div>
       </div>

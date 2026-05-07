@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { MockSubmission } from '../../../lib/mock-data';
-import { getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
+import { getStudentProfileAssets, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import {
   DEFAULT_MEDICAL_HISTORY,
   formatPhilippinePhoneInput,
@@ -33,6 +33,15 @@ const MAX_NAME_LENGTH = 30;
 const MAX_ADDRESS_LENGTH = 180;
 const MAX_CLINIC_NAME_LENGTH = 60;
 const MIN_AGE = 15;
+function normalizeStudentId(value: string) {
+  return String(value || '').replace(/\D/g, '').slice(0, 9);
+}
+
+function normalizeMiddleInitial(value: string) {
+  const letter = String(value || '').replace(/[^A-Za-z]/g, '').slice(0, 1);
+  return letter;
+}
+
 
 function sanitizeName(value: string) {
   return value.replace(/[^A-Za-z\s'-]/g, '').slice(0, MAX_NAME_LENGTH);
@@ -96,10 +105,10 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, priv
   const student = me?.student;
   const department = resolveDepartmentValue(student?.department || me?.profile.department || 'CCS');
   return {
-    studentId: student?.student_id || me?.profile.student_id || '',
+    studentId: normalizeStudentId(student?.student_id || me?.profile.student_id || ''),
     firstName: student?.first_name || me?.profile.first_name || '',
     lastName: student?.last_name || me?.profile.last_name || '',
-    middleInitial: student?.middle_initial || '',
+    middleInitial: normalizeMiddleInitial(student?.middle_initial || ''),
     department,
     course: normalizeProgramForDepartment(department, student?.course || me?.profile.course || ''),
     yearLevel: year || '1',
@@ -150,6 +159,10 @@ function calculateBmi(weight: string, height: string): string {
 
 export function useStudentMedicalForm({ year, me, privacyAccepted = false, editSubmissionId = null }: UseStudentMedicalFormArgs) {
   const student = me?.student;
+  const [profileAssetUrls, setProfileAssetUrls] = useState<{ photoUrl: string | null; signatureUrl: string | null }>({
+    photoUrl: null,
+    signatureUrl: null,
+  });
   const [step, setStep] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -181,10 +194,10 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
         setOriginalSubmissionStatus(submission.status || null);
         setFormData((prev) => ({
           ...prev,
-          studentId: submission.studentId || prev.studentId,
+          studentId: normalizeStudentId(submission.studentId || prev.studentId),
           firstName: submission.firstName || prev.firstName,
           lastName: submission.lastName || prev.lastName,
-          middleInitial: submission.middleInitial || prev.middleInitial,
+          middleInitial: normalizeMiddleInitial(submission.middleInitial || prev.middleInitial),
           department: resolveDepartmentValue(submission.department || prev.department),
           course: normalizeProgramForDepartment(submission.department || prev.department, submission.course || prev.course),
           yearLevel: submission.year || prev.yearLevel,
@@ -229,12 +242,42 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
   }, [editSubmissionId]);
 
   useEffect(() => {
+    const studentId = me?.student?.student_id || me?.profile.student_id || '';
+    const profileId = me?.student?.profile_id || me?.profile.id || '';
+    if (!studentId || !profileId) {
+      setProfileAssetUrls({ photoUrl: null, signatureUrl: null });
+      return;
+    }
+
+    let active = true;
+
+    const loadProfileAssets = async () => {
+      try {
+        const assets = await getStudentProfileAssets(studentId, profileId);
+        if (!active) return;
+        setProfileAssetUrls({
+          photoUrl: assets.photoUrl || null,
+          signatureUrl: assets.signatureUrl || null,
+        });
+      } catch {
+        if (!active) return;
+        setProfileAssetUrls({ photoUrl: null, signatureUrl: null });
+      }
+    };
+
+    void loadProfileAssets();
+    return () => {
+      active = false;
+    };
+  }, [me?.profile.id, me?.profile.student_id, me?.student?.profile_id, me?.student?.student_id]);
+
+  useEffect(() => {
     setFormData((prev) => ({
       ...prev,
-      studentId: student?.student_id || me?.profile.student_id || prev.studentId,
+      studentId: normalizeStudentId(student?.student_id || me?.profile.student_id || prev.studentId),
       firstName: student?.first_name || me?.profile.first_name || prev.firstName,
       lastName: student?.last_name || me?.profile.last_name || prev.lastName,
-      middleInitial: student?.middle_initial || prev.middleInitial,
+      middleInitial: normalizeMiddleInitial(student?.middle_initial || prev.middleInitial),
       department: resolveDepartmentValue(student?.department || me?.profile.department || prev.department),
       course: normalizeProgramForDepartment(
         student?.department || me?.profile.department || prev.department,
@@ -381,38 +424,29 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
   }, []);
 
   const canProceed = useMemo(() => {
+    const normalizedStudentId = normalizeStudentId(formData.studentId);
+    const normalizedMiddleInitial = normalizeMiddleInitial(formData.middleInitial);
     const needsManualUploads = formData.labTestLocation === 'other';
     const hasRequiredUploads = isEditingExistingSubmission || (formData.xrayFile && formData.cbcFile && formData.urinalysisFile);
-
-    const hasStepOneValidationIssues =
-      formData.studentId.length !== 9 ||
-      !NAME_REGEX.test(formData.firstName) ||
-      !NAME_REGEX.test(formData.lastName) ||
-      (formData.middleInitial ? !/^[A-Za-z]$/.test(formData.middleInitial) : false) ||
-      !COURSE_REGEX.test(formData.course) ||
-      formData.firstName.length > MAX_NAME_LENGTH ||
-      formData.lastName.length > MAX_NAME_LENGTH ||
-      formData.course.length > MAX_NAME_LENGTH ||
-      formData.age.length > 2 ||
-      !isAtLeastAge(formData.birthday, MIN_AGE) ||
-      (formData.address ? SQL_INJECTION_REGEX.test(formData.address) : false) ||
-      (formData.address ? formData.address.length > MAX_ADDRESS_LENGTH : false) ||
-      (formData.hadOperation === 'yes' && formData.operationDetails ? SQL_INJECTION_REGEX.test(formData.operationDetails) : false);
 
     switch (step) {
       case 1:
         return (
-          formData.firstName &&
-          formData.lastName &&
-          formData.studentId &&
-          formData.department &&
-          formData.course &&
-          formData.yearLevel &&
-          formData.age &&
-          formData.sex &&
-          formData.birthday &&
-          (!formData.contactNumber || isValidPhilippinePhoneNumber(formData.contactNumber)) &&
-          !hasStepOneValidationIssues
+          Boolean(formData.firstName?.trim()) &&
+          Boolean(formData.lastName?.trim()) &&
+          normalizedStudentId.length === 9 &&
+          Boolean(formData.department) &&
+          Boolean(formData.course) &&
+          Boolean(formData.yearLevel) &&
+          Boolean(normalizedMiddleInitial) &&
+          Boolean(formData.age) &&
+          Boolean(formData.sex) &&
+          Boolean(formData.birthday) &&
+          Boolean(formData.contactNumber?.trim()) &&
+          Boolean(formData.address?.trim()) &&
+          formData.age.length <= 2 &&
+          isAtLeastAge(formData.birthday, MIN_AGE) &&
+          isValidPhilippinePhoneNumber(formData.contactNumber)
         );
       case 2:
         return true;
@@ -420,7 +454,9 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
         return (
           formData.hadOperation &&
           formData.emergencyContact.name &&
-          formData.emergencyContact.phone
+          formData.emergencyContact.relationship &&
+          formData.emergencyContact.phone &&
+          formData.emergencyContact.address
         );
       case 4:
         return (
@@ -450,20 +486,25 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
 
   const canSubmit = useMemo(
     () => {
+      const normalizedStudentId = normalizeStudentId(formData.studentId);
+      const normalizedMiddleInitial = normalizeMiddleInitial(formData.middleInitial);
       const needsManualUploads = formData.labTestLocation === 'other';
       const hasRequiredUploads = isEditingExistingSubmission || (formData.xrayFile && formData.cbcFile && formData.urinalysisFile);
 
       return Boolean(
         formData.firstName &&
           formData.lastName &&
-          formData.studentId &&
+          normalizedStudentId &&
           formData.department &&
           formData.course &&
           formData.yearLevel &&
+          normalizedMiddleInitial &&
           formData.age &&
           formData.sex &&
           formData.birthday &&
-          (!formData.contactNumber || isValidPhilippinePhoneNumber(formData.contactNumber)) &&
+          formData.contactNumber &&
+          isValidPhilippinePhoneNumber(formData.contactNumber) &&
+          formData.address &&
           formData.hadOperation &&
           formData.emergencyContact.name &&
           formData.emergencyContact.phone &&
@@ -474,12 +515,12 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           formData.labTestLocation &&
           (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
           (!needsManualUploads || hasRequiredUploads) &&
-          formData.studentId.length === 9 &&
+          normalizedStudentId.length === 9 &&
           formData.age.length <= 2 &&
           isAtLeastAge(formData.birthday, MIN_AGE) &&
           NAME_REGEX.test(formData.firstName) &&
           NAME_REGEX.test(formData.lastName) &&
-          (!formData.middleInitial || /^[A-Za-z]$/.test(formData.middleInitial)) &&
+          (!normalizedMiddleInitial || /^[A-Za-z]$/.test(normalizedMiddleInitial)) &&
           COURSE_REGEX.test(formData.course) &&
           !SQL_INJECTION_REGEX.test(formData.address || '') &&
           (formData.labTestLocation !== 'other' ||
@@ -528,12 +569,18 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
         height: formData.height,
         bmi: formData.bmi,
       },
+      photoUrl: profileAssetUrls.photoUrl || undefined,
+      signatureUrl: profileAssetUrls.signatureUrl || undefined,
     }),
-    [formData],
+    [formData, profileAssetUrls.photoUrl, profileAssetUrls.signatureUrl],
   );
 
   const submit = useCallback(async () => {
     if (uploading) return;
+    if (!formData.submissionConfirmed) {
+      toast.error('Please confirm that all details are complete before submitting.');
+      return;
+    }
     if (!canSubmit) {
       toast.error('Please fix invalid fields before submitting. Student ID must be 9 digits, age must be valid, and text fields must follow format rules.');
       return;

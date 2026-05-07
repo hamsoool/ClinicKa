@@ -9,6 +9,8 @@ import { PortalPageSkeleton } from '../../components/project-skeletons';
 import type { MockSubmission } from '../../lib/mock-data';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { toast } from 'sonner';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { getStudentRecords } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -81,28 +83,63 @@ export default function StudentCertificate() {
     };
   }, [record]);
 
-  const downloadClearancePDF = () => {
+  const downloadClearancePDF = async () => {
     if (!clearanceRef.current || !record) return;
+    try {
+      const exportRoot = document.createElement('div');
+      exportRoot.style.position = 'fixed';
+      exportRoot.style.left = '-10000px';
+      exportRoot.style.top = '0';
+      exportRoot.style.width = `${PREVIEW_BASE_WIDTH}px`;
+      exportRoot.style.background = '#fff';
+      exportRoot.style.padding = '0';
+      exportRoot.style.margin = '0';
 
-    const content = clearanceRef.current.innerHTML;
-    const printWindow = window.open('', '_blank', 'width=794,height=1123');
-    if (!printWindow) {
-      toast.error('Please allow pop-ups to download the certificate');
-      return;
+      const clone = clearanceRef.current.cloneNode(true) as HTMLDivElement;
+      clone.style.width = `${PREVIEW_BASE_WIDTH}px`;
+      clone.style.maxWidth = `${PREVIEW_BASE_WIDTH}px`;
+      clone.style.margin = '0';
+      clone.style.padding = '0';
+      clone.style.transform = 'none';
+
+      exportRoot.appendChild(clone);
+      document.body.appendChild(exportRoot);
+
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        width: PREVIEW_BASE_WIDTH,
+        windowWidth: PREVIEW_BASE_WIDTH,
+      });
+      document.body.removeChild(exportRoot);
+
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 5;
+      const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
+      const canvasRatio = canvas.width / canvas.height;
+      const pageRatio = usableWidth / usableHeight;
+
+      let renderWidth = usableWidth;
+      let renderHeight = usableWidth / canvasRatio;
+      if (canvasRatio < pageRatio) {
+        renderHeight = usableHeight;
+        renderWidth = usableHeight * canvasRatio;
+      }
+
+      const x = (pageWidth - renderWidth) / 2;
+      const y = (pageHeight - renderHeight) / 2;
+
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
+      pdf.save(`medical_clearance_${record.lastName}_${record.firstName}.pdf`);
+      toast.success('Medical clearance PDF downloaded.');
+    } catch (error) {
+      console.error('Failed to generate clearance PDF:', error);
+      toast.error('Failed to download PDF. Please try again.');
     }
-
-    printWindow.document.write(`<!DOCTYPE html><html><head>
-      <title>Medical Clearance - ${record.firstName} ${record.lastName}</title>
-      <style>
-        @page { size: A4; margin: 10mm; }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      </style>
-    </head><body>${content}
-      <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();}}</script>
-    </body></html>`);
-    printWindow.document.close();
-    toast.success('Medical clearance PDF downloading...');
   };
 
   if (loading) {
@@ -162,16 +199,16 @@ export default function StudentCertificate() {
                 </>
               ) : isReturned ? (
                 <>
-                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+                  <AlertCircle className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
                   <div>
-                    <p className="font-medium text-red-800">Record Returned</p>
+                    <p className="font-medium text-amber-900">Record Returned</p>
                     <p className="text-sm text-muted-foreground mt-1">
                       Your medical record has been returned for revision. Please check the staff notes and resubmit your record.
                     </p>
                     {record.staffNotes && (
-                      <div className="mt-2 p-3 bg-red-50 rounded-md border border-red-100">
-                        <p className="text-sm font-medium text-red-800">Staff Notes:</p>
-                        <p className="text-sm text-red-700 mt-1">{record.staffNotes}</p>
+                      <div className="mt-2 p-3 rounded-md border border-amber-200 bg-amber-50/70">
+                        <p className="text-sm font-medium text-amber-900">Staff Notes:</p>
+                        <p className="text-sm text-amber-800 mt-1">{record.staffNotes}</p>
                       </div>
                     )}
                     <div className="mt-3">
@@ -182,12 +219,12 @@ export default function StudentCertificate() {
                           )
                         }
                         size="sm"
-                        className="w-full bg-red-600 hover:bg-red-700 sm:w-auto"
+                        className="w-full bg-amber-700 hover:bg-amber-800 sm:w-auto"
                       >
                         Edit and Resubmit
                       </Button>
                     </div>
-                    <Badge variant="secondary" className="bg-red-100 text-red-800 mt-2">
+                    <Badge variant="secondary" className="bg-amber-100 text-amber-900 mt-2">
                       <AlertCircle className="w-3 h-3 mr-1" /> Returned
                     </Badge>
                   </div>

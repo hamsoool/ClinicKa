@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { Camera, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
+import { Camera, KeyRound, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { cn } from './ui/utils';
 import {
@@ -114,6 +114,13 @@ export default function PortalShell({
   const objectUrlRef = useRef<string | null>(null);
 
   const currentPage = navItems.find((item) => isRouteActive(location.pathname, item.path))?.label || portalLabel;
+
+  const getPasswordSettingsPath = () => {
+    if (location.pathname.startsWith('/student')) return '/student/profile#password';
+    if (location.pathname.startsWith('/staff')) return '/staff/settings#password';
+    if (location.pathname.startsWith('/admin')) return '/admin/system-settings#password';
+    return '/';
+  };
 
   useEffect(() => {
     setMenuOpen(false);
@@ -385,8 +392,19 @@ export default function PortalShell({
                   </div>
                   <button
                     type="button"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      navigate(getPasswordSettingsPath());
+                    }}
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-outline-variant/40 px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-container-low"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                    Forgot password
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setConfirmSignOutOpen(true)}
-                    className="mt-4 w-full rounded-md border border-outline-variant/40 px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-container-low"
+                    className="mt-2 w-full rounded-md border border-outline-variant/40 px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-container-low"
                   >
                     Sign out
                   </button>

@@ -39,6 +39,39 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   getBmiCategory,
   maxBirthdate,
 }: Props) {
+  const stepOneMissingRequired = [
+    !formData.studentId,
+    !formData.department,
+    !formData.yearLevel,
+    !formData.course,
+    !formData.lastName?.trim(),
+    !formData.firstName?.trim(),
+    !formData.middleInitial?.trim(),
+    !formData.birthday,
+    !formData.age,
+    !formData.sex,
+    !formData.contactNumber?.trim(),
+    !formData.address?.trim(),
+  ].filter(Boolean).length;
+  const stepThreeMissingRequired = [
+    !formData.hadOperation,
+    !formData.emergencyContact.name?.trim(),
+    !formData.emergencyContact.relationship?.trim(),
+    !formData.emergencyContact.phone?.trim(),
+    !formData.emergencyContact.address?.trim(),
+  ].filter(Boolean).length;
+  const stepFourMissingRequired = [
+    !formData.bloodPressure?.trim(),
+    !formData.weight?.trim(),
+    !formData.height?.trim(),
+    formData.bloodPressure ? !/^\d{2,3}\/\d{2,3}$/.test(formData.bloodPressure.trim()) : false,
+    formData.weight ? !/^\d{1,3}$/.test(formData.weight.trim()) : false,
+    formData.height ? !/^\d{1,3}$/.test(formData.height.trim()) : false,
+  ].filter(Boolean).length;
+
+  const requiredFieldClass = (missing: boolean) =>
+    missing ? 'border-red-500 ring-1 ring-red-200 focus-visible:ring-red-300' : '';
+
   const getUploadedFileName = (url?: string) => {
     if (!url) return 'Uploaded file';
     try {
@@ -94,6 +127,12 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </p>
           </div>
 
+          {stepOneMissingRequired > 0 ? (
+            <div className="break-words rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Required fields are missing. Please complete all fields marked with <span className="font-semibold">*</span>.
+            </div>
+          ) : null}
+
           <div className="grid gap-x-5 gap-y-5 md:grid-cols-2 xl:grid-cols-12">
             <div className="xl:col-span-3">
               <Label htmlFor="studentId">Student ID *</Label>
@@ -102,13 +141,13 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 value={formData.studentId}
                 readOnly
                 disabled
-                className="cursor-not-allowed opacity-80"
+                className={`cursor-not-allowed opacity-80 ${requiredFieldClass(!formData.studentId)}`}
               />
             </div>
             <div className="xl:col-span-3">
               <Label htmlFor="department">Department *</Label>
               <Select value={formData.department} onValueChange={(value) => onFieldChange('department', value)}>
-                <SelectTrigger id="department">
+                <SelectTrigger id="department" className={requiredFieldClass(!formData.department)}>
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
@@ -123,7 +162,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             <div className="xl:col-span-2">
               <Label htmlFor="yearLevel">Year Level *</Label>
               <Select value={formData.yearLevel} onValueChange={(value) => onFieldChange('yearLevel', value)} disabled>
-                <SelectTrigger id="yearLevel" disabled>
+                <SelectTrigger id="yearLevel" disabled className={requiredFieldClass(!formData.yearLevel)}>
                   <SelectValue placeholder="Select year level" />
                 </SelectTrigger>
                 <SelectContent>
@@ -142,7 +181,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 onValueChange={(value) => onFieldChange('course', value)}
                 disabled={!formData.department}
               >
-                <SelectTrigger id="course">
+                <SelectTrigger id="course" className={requiredFieldClass(!formData.course)}>
                   <SelectValue placeholder={formData.department ? 'Select program' : 'Select department first'} />
                 </SelectTrigger>
                 <SelectContent>
@@ -156,19 +195,32 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
             <div className="xl:col-span-4">
               <Label htmlFor="lastName">Last Name *</Label>
-              <Input id="lastName" value={formData.lastName} onChange={(event) => onFieldChange('lastName', event.target.value)} maxLength={30} />
+              <Input
+                id="lastName"
+                value={formData.lastName}
+                onChange={(event) => onFieldChange('lastName', event.target.value)}
+                maxLength={30}
+                className={requiredFieldClass(!formData.lastName?.trim())}
+              />
             </div>
             <div className="xl:col-span-4">
               <Label htmlFor="firstName">First Name *</Label>
-              <Input id="firstName" value={formData.firstName} onChange={(event) => onFieldChange('firstName', event.target.value)} maxLength={30} />
+              <Input
+                id="firstName"
+                value={formData.firstName}
+                onChange={(event) => onFieldChange('firstName', event.target.value)}
+                maxLength={30}
+                className={requiredFieldClass(!formData.firstName?.trim())}
+              />
             </div>
             <div className="xl:col-span-1">
-              <Label htmlFor="middleInitial">M.I.</Label>
+              <Label htmlFor="middleInitial">M.I. *</Label>
               <Input
                 id="middleInitial"
                 value={formData.middleInitial}
                 onChange={(event) => onFieldChange('middleInitial', event.target.value)}
                 maxLength={1}
+                className={requiredFieldClass(!formData.middleInitial?.trim())}
               />
             </div>
             <div className="xl:col-span-3">
@@ -179,6 +231,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 value={formData.birthday}
                 onChange={(event) => onFieldChange('birthday', event.target.value)}
                 max={maxBirthdate}
+                className={requiredFieldClass(!formData.birthday)}
               />
             </div>
             <div className="xl:col-span-3">
@@ -203,11 +256,16 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 maxLength={2}
                 value={formData.age}
                 onChange={(event) => onFieldChange('age', event.target.value)}
+                className={requiredFieldClass(!formData.age)}
               />
             </div>
             <div className="xl:col-span-3">
               <Label htmlFor="sex">Sex *</Label>
-              <RadioGroup value={formData.sex} onValueChange={(value) => onFieldChange('sex', value)} className="pt-3">
+              <RadioGroup
+                value={formData.sex}
+                onValueChange={(value) => onFieldChange('sex', value)}
+                className={`pt-3 ${requiredFieldClass(!formData.sex)}`}
+              >
                 <div className="flex gap-6">
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="female" id="female" />
@@ -225,7 +283,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </RadioGroup>
             </div>
             <div className="xl:col-span-4">
-              <Label htmlFor="contactNumber">Tel./CP #</Label>
+              <Label htmlFor="contactNumber">Tel./CP # *</Label>
               <Input
                 id="contactNumber"
                 type="tel"
@@ -233,19 +291,21 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 onChange={(event) => onFieldChange('contactNumber', event.target.value)}
                 inputMode="numeric"
                 placeholder="(+63) 9123456789"
+                className={requiredFieldClass(!formData.contactNumber?.trim() || !isValidPhilippinePhoneNumber(formData.contactNumber))}
               />
               {!isValidPhilippinePhoneNumber(formData.contactNumber) && formData.contactNumber ? (
                 <p className="mt-1 text-sm text-red-600">Use the format (+63) 9123456789.</p>
               ) : null}
             </div>
             <div className="md:col-span-2 xl:col-span-8">
-              <Label htmlFor="address">Street Address</Label>
+              <Label htmlFor="address">Street Address *</Label>
               <Input
                 id="address"
                 value={formData.address}
                 onChange={(event) => onFieldChange('address', event.target.value)}
                 placeholder="Enter your street address"
                 maxLength={180}
+                className={requiredFieldClass(!formData.address?.trim())}
               />
             </div>
           </div>
@@ -283,9 +343,18 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
       return (
         <div className="space-y-4">
           <h3 className="mb-4 text-xl font-semibold">Operations & Emergency Contact</h3>
+          {stepThreeMissingRequired > 0 ? (
+            <div className="break-words rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Required fields are missing. Please complete all fields marked with <span className="font-semibold">*</span>.
+            </div>
+          ) : null}
           <div>
             <Label>Have you had any operation in the past? *</Label>
-            <RadioGroup value={formData.hadOperation} onValueChange={(value) => onFieldChange('hadOperation', value as 'yes' | 'no')}>
+            <RadioGroup
+              value={formData.hadOperation}
+              onValueChange={(value) => onFieldChange('hadOperation', value as 'yes' | 'no')}
+              className={requiredFieldClass(!formData.hadOperation)}
+            >
               <div className="mt-2 flex gap-4">
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="yes" id="op-yes" />
@@ -319,25 +388,41 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <Label htmlFor="ecName">Name *</Label>
-                <Input id="ecName" value={formData.emergencyContact.name} onChange={(event) => onEmergencyContactChange('name', event.target.value)} />
+                <Input
+                  id="ecName"
+                  value={formData.emergencyContact.name}
+                  onChange={(event) => onEmergencyContactChange('name', event.target.value)}
+                  className={requiredFieldClass(!formData.emergencyContact.name?.trim())}
+                />
               </div>
               <div>
-                <Label htmlFor="ecRelationship">Relationship</Label>
+                <Label htmlFor="ecRelationship">Relationship *</Label>
                 <Input
                   id="ecRelationship"
                   value={formData.emergencyContact.relationship}
                   onChange={(event) => onEmergencyContactChange('relationship', event.target.value)}
+                  className={requiredFieldClass(!formData.emergencyContact.relationship?.trim())}
                 />
               </div>
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <Label htmlFor="ecPhone">Tel. phone No. CP *</Label>
-                <Input id="ecPhone" value={formData.emergencyContact.phone} onChange={(event) => onEmergencyContactChange('phone', event.target.value)} />
+                <Input
+                  id="ecPhone"
+                  value={formData.emergencyContact.phone}
+                  onChange={(event) => onEmergencyContactChange('phone', event.target.value)}
+                  className={requiredFieldClass(!formData.emergencyContact.phone?.trim())}
+                />
               </div>
               <div>
-                <Label htmlFor="ecAddress">Address</Label>
-                <Input id="ecAddress" value={formData.emergencyContact.address} onChange={(event) => onEmergencyContactChange('address', event.target.value)} />
+                <Label htmlFor="ecAddress">Address *</Label>
+                <Input
+                  id="ecAddress"
+                  value={formData.emergencyContact.address}
+                  onChange={(event) => onEmergencyContactChange('address', event.target.value)}
+                  className={requiredFieldClass(!formData.emergencyContact.address?.trim())}
+                />
               </div>
             </div>
           </div>
@@ -347,6 +432,11 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
       return (
         <div className="space-y-4">
           <h3 className="mb-4 text-xl font-semibold">Physical Measurements</h3>
+          {stepFourMissingRequired > 0 ? (
+            <div className="break-words rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Required fields are missing or invalid. Please complete all fields marked with <span className="font-semibold">*</span>.
+            </div>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label htmlFor="bp">Blood Pressure *</Label>
@@ -357,6 +447,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 placeholder="e.g., 120/80"
                 inputMode="numeric"
                 maxLength={7}
+                className={requiredFieldClass(!formData.bloodPressure?.trim() || !/^\d{2,3}\/\d{2,3}$/.test(formData.bloodPressure.trim()))}
               />
             </div>
             <div>
@@ -370,6 +461,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 inputMode="numeric"
                 pattern="\d{1,3}"
                 maxLength={3}
+                className={requiredFieldClass(!formData.weight?.trim() || !/^\d{1,3}$/.test(formData.weight.trim()))}
               />
             </div>
           </div>
@@ -385,6 +477,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 inputMode="numeric"
                 pattern="\d{1,3}"
                 maxLength={3}
+                className={requiredFieldClass(!formData.height?.trim() || !/^\d{1,3}$/.test(formData.height.trim()))}
               />
             </div>
             <div>

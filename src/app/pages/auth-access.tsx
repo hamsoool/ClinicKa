@@ -843,6 +843,11 @@ export default function AuthAccessPage() {
                     {loading ? 'Signing in...' : 'Sign in'}
                     <ArrowRight className="h-4 w-4" />
                   </button>
+                  <p className="text-xs leading-5 text-[#60717e]">
+                    By clicking the login button, you recognize the authority of Gordon College Clinic to process your
+                    personal and sensitive information, pursuant to the Gordon College General Privacy Notice and
+                    applicable laws.
+                  </p>
                 </form>
 
                 <Dialog open={forgotPasswordDialogOpen} onOpenChange={setForgotPasswordDialogOpen}>
