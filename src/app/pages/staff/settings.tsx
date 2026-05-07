@@ -3,16 +3,52 @@ import { Button } from '../../components/ui/button';
 import PasswordChangeCard from '../../components/password-change-card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Settings as SettingsIcon, Bell, User } from 'lucide-react';
-import { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
+import { useAuth } from '../../lib/auth';
+import { updateStaffProfile } from '../../lib/api';
+import { Bell, Settings as SettingsIcon, User } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+
+type StaffProfileFormState = {
+  name: string;
+  email: string;
+  position: string;
+  phone: string;
+};
+
+function normalizeProfileValue(value: string) {
+  return value.trim();
+}
+
+function buildProfileFormState(me?: ReturnType<typeof useAuth>['me'] | null): StaffProfileFormState {
+  const name =
+    [me?.staff?.first_name || me?.profile.first_name || '', me?.staff?.last_name || me?.profile.last_name || '']
+      .filter(Boolean)
+      .join(' ')
+      .trim() || '';
+
+  return {
+    name,
+    email: me?.staff?.email || me?.profile.email || '',
+    position: me?.staff?.position || 'Clinic Nurse / Doctor',
+    phone: me?.staff?.phone || '',
+  };
+}
 
 export default function StaffSettings() {
-  const [profile, setProfile] = useState({
-    name: 'Dr. Andrea Salonga',
-    email: 'asalonga@gordoncollege.edu.ph',
-    position: 'Clinic Physician',
-    phone: '0917 555 2040',
-  });
+  const { me, refresh } = useAuth();
+  const initialProfileData = useMemo(() => buildProfileFormState(me), [me]);
+  const [profile, setProfile] = useState<StaffProfileFormState>(initialProfileData);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const [notifications, setNotifications] = useState({
     emailAlerts: true,
     pendingReminders: true,
@@ -23,6 +59,54 @@ export default function StaffSettings() {
     semester: 'Second Semester',
     maintenanceMode: false,
   });
+
+  useEffect(() => {
+    setProfile(initialProfileData);
+  }, [initialProfileData]);
+
+  const hasProfileChanges = useMemo(
+    () =>
+      (Object.keys(initialProfileData) as Array<keyof StaffProfileFormState>).some(
+        (key) => normalizeProfileValue(profile[key]) !== normalizeProfileValue(initialProfileData[key]),
+      ),
+    [initialProfileData, profile],
+  );
+
+  const isProfileValid =
+    Boolean(profile.name.trim()) && Boolean(profile.email.trim()) && Boolean(profile.position.trim());
+
+  const updateProfileField = <K extends keyof StaffProfileFormState>(field: K, value: StaffProfileFormState[K]) => {
+    setProfile((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const requestSaveConfirmation = () => {
+    if (!isProfileValid) {
+      toast.error('Please complete name, email, and position before saving.');
+      return;
+    }
+    if (!hasProfileChanges) {
+      toast.info('No profile changes to save yet.');
+      return;
+    }
+    setConfirmSaveOpen(true);
+  };
+
+  const handleProfileSave = async () => {
+    setSavingProfile(true);
+    try {
+      await updateStaffProfile(profile);
+      await refresh();
+      setConfirmSaveOpen(false);
+      toast.success('Profile updated successfully.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save profile updates.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   return (
     <div>
@@ -46,7 +130,7 @@ export default function StaffSettings() {
                 <Input
                   id="staffName"
                   value={profile.name}
-                  onChange={(e) => setProfile(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => updateProfileField('name', e.target.value)}
                   placeholder="Enter your name"
                 />
               </div>
@@ -56,7 +140,7 @@ export default function StaffSettings() {
                   id="staffEmail"
                   type="email"
                   value={profile.email}
-                  onChange={(e) => setProfile(prev => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) => updateProfileField('email', e.target.value)}
                   placeholder="Enter your email"
                 />
               </div>
@@ -67,7 +151,7 @@ export default function StaffSettings() {
                 <Input
                   id="staffPosition"
                   value={profile.position}
-                  onChange={(e) => setProfile(prev => ({ ...prev, position: e.target.value }))}
+                  onChange={(e) => updateProfileField('position', e.target.value)}
                   placeholder="e.g., Nurse, Doctor"
                 />
               </div>
@@ -76,12 +160,21 @@ export default function StaffSettings() {
                 <Input
                   id="staffPhone"
                   value={profile.phone}
-                  onChange={(e) => setProfile(prev => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => updateProfileField('phone', e.target.value)}
                   placeholder="Contact number"
                 />
               </div>
             </div>
-            <Button>Save Profile</Button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                {hasProfileChanges
+                  ? 'You have unsaved profile updates.'
+                  : 'Your profile details are already up to date.'}
+              </p>
+              <Button onClick={requestSaveConfirmation} disabled={savingProfile || !hasProfileChanges || !isProfileValid}>
+                {savingProfile ? 'Saving...' : 'Save Profile'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -213,6 +306,34 @@ export default function StaffSettings() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={confirmSaveOpen} onOpenChange={setConfirmSaveOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save profile changes?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to save your updated profile information?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmSaveOpen(false)}
+              disabled={savingProfile}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                void handleProfileSave();
+              }}
+              disabled={savingProfile}
+            >
+              {savingProfile ? 'Saving...' : 'Save Profile'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

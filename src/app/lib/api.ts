@@ -6,7 +6,9 @@ const publicAnonKey =
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
+export const PASSWORD_RESET_COOLDOWN_SECONDS = 300;
 const STORAGE_BUCKET = 'medical-files';
+const PASSWORD_RESET_COOLDOWN_KEY_PREFIX = 'lastPasswordResetEmailSent_';
 const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
   photo: 'profile',
   signature: 'student_signature',
@@ -164,6 +166,14 @@ export type StudentProfileUpdateInput = {
   address: string;
 };
 
+export type StaffProfileUpdateInput = {
+  name: string;
+  email: string;
+  position: string;
+  phone: string;
+  applyAcrossRoles?: boolean;
+};
+
 export type AdminUserAccount = {
   userId: string;
   id: string;
@@ -198,6 +208,36 @@ type RequestOptions = {
 
 function normalizeEmail(email?: string | null) {
   return (email || '').trim().toLowerCase();
+}
+
+function getPasswordResetCooldownStorageKey(normalizedEmail: string) {
+  return `${PASSWORD_RESET_COOLDOWN_KEY_PREFIX}${normalizedEmail}`;
+}
+
+export function getPasswordResetCooldownRemaining(email: string) {
+  if (typeof window === 'undefined') return 0;
+
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return 0;
+
+  const storageKey = getPasswordResetCooldownStorageKey(normalizedEmail);
+  const rawLastSent = window.localStorage.getItem(storageKey);
+  if (!rawLastSent) return 0;
+
+  const lastSent = Number.parseInt(rawLastSent, 10);
+  if (!Number.isFinite(lastSent) || lastSent <= 0) {
+    window.localStorage.removeItem(storageKey);
+    return 0;
+  }
+
+  const elapsedSeconds = Math.floor((Date.now() - lastSent) / 1000);
+  const remaining = PASSWORD_RESET_COOLDOWN_SECONDS - elapsedSeconds;
+  if (remaining <= 0) {
+    window.localStorage.removeItem(storageKey);
+    return 0;
+  }
+
+  return remaining;
 }
 
 function isGCDomainEmail(email?: string | null) {
@@ -1225,6 +1265,69 @@ export async function resendVerificationEmail(email: string) {
   return { success: true as const };
 }
 
+export async function sendPasswordResetEmail(email: string) {
+  if (!supabaseUrl || !publicAnonKey) {
+    throw new Error('Missing Supabase config.');
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    throw new Error('Please enter your email first.');
+  }
+
+  const cooldownRemaining = getPasswordResetCooldownRemaining(normalizedEmail);
+  if (cooldownRemaining > 0) {
+    const minutes = Math.floor(cooldownRemaining / 60);
+    const seconds = cooldownRemaining % 60;
+    const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    throw new Error(`Please wait ${formatted} before requesting another password reset email.`);
+  }
+
+  const emailRedirectTo =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/auth?mode=signin`
+      : undefined;
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+    method: 'POST',
+    headers: {
+      apikey: publicAnonKey,
+      Authorization: `Bearer ${publicAnonKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: normalizedEmail,
+      options: {
+        redirectTo: emailRedirectTo,
+      },
+    }),
+  });
+
+  const rawBody = await response.text();
+  let payload: Record<string, any> = {};
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const message =
+      payload.msg ||
+      payload.error_description ||
+      payload.error ||
+      `Failed to send password reset email (${response.status})`;
+    throw new Error(message);
+  }
+
+  if (typeof window !== 'undefined') {
+    const storageKey = getPasswordResetCooldownStorageKey(normalizedEmail);
+    window.localStorage.setItem(storageKey, Date.now().toString());
+  }
+
+  return { success: true as const };
+}
+
 export async function signOut() {
   if (!supabaseUrl || !publicAnonKey) {
     clearStoredSession();
@@ -1514,6 +1617,132 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     success: true as const,
     profile: updatedProfileRows[0] || refreshedMe.profile,
     student: refreshedMe.student,
+  };
+}
+
+function splitNameParts(fullName?: string | null) {
+  const normalized = String(fullName || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!normalized) {
+    return { firstName: '', lastName: '' };
+  }
+
+  const parts = normalized.split(' ');
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: '' };
+  }
+
+  return {
+    firstName: parts.slice(0, -1).join(' '),
+    lastName: parts.slice(-1).join(' '),
+  };
+}
+
+export async function updateStaffProfile(data: StaffProfileUpdateInput) {
+  const payload = {
+    name: String(data.name || '').trim(),
+    email: normalizeEmail(data.email) || '',
+    position: String(data.position || '').trim(),
+    phone: String(data.phone || '').trim(),
+    applyAcrossRoles: data.applyAcrossRoles !== false,
+  };
+
+  if (!payload.name || !payload.email || !payload.position) {
+    throw new Error('Name, email, and position are required.');
+  }
+
+  try {
+    return await apiRequest<{
+      success: boolean;
+      profile: AuthMe['profile'];
+      staff: AuthMe['staff'];
+    }>('/functions/v1/server/staff-profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+
+    if (!missingRoute) {
+      throw error;
+    }
+  }
+
+  const me = await getMe();
+  const { firstName, lastName } = splitNameParts(payload.name);
+
+  let updatedProfileRows: any[] = [];
+  if (payload.applyAcrossRoles) {
+    updatedProfileRows = await restRequest<any[]>(
+      'profiles',
+      `id=eq.${encodeURIComponent(me.profile.id)}&select=*`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify({
+          first_name: firstName || null,
+          last_name: lastName || null,
+          email: payload.email || null,
+        }),
+      },
+    );
+  }
+
+  await restRequest<any[]>(
+    'staff_users',
+    'on_conflict=profile_id',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        profile_id: me.profile.id,
+        email: payload.email || null,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        position: payload.position || null,
+        phone: payload.phone || null,
+      }),
+    },
+  );
+
+  if (payload.applyAcrossRoles && me.profile.student_id) {
+    await restRequest<any[]>(
+      'students',
+      'on_conflict=student_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          student_id: me.profile.student_id,
+          profile_id: me.profile.id,
+          first_name: firstName || null,
+          last_name: lastName || null,
+          contact_number: payload.phone || null,
+        }),
+      },
+    );
+  }
+
+  const refreshedMe = await getMe();
+
+  return {
+    success: true as const,
+    profile: updatedProfileRows[0] || refreshedMe.profile,
+    staff: refreshedMe.staff,
   };
 }
 
