@@ -164,6 +164,7 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
   const history = record.medicalHistory || {};
   const yr = record.year || '1';
   const yrIndex = parseInt(yr, 10) - 1; // 0-based
+  const civilStatusNormalized = String(record.civilStatus || '').trim().toLowerCase();
 
   const getExamValue = (row: string) => {
     const field = EXAM_FIELD_MAP[row];
@@ -241,11 +242,11 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
         <span style={{ ...S.fieldValue, minWidth: '80px' }}>{record.birthday || ''}</span>
         <span style={S.fieldLabel}>Civil Status:</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-          <span style={S.checkbox(record.civilStatus === 'single' || !record.civilStatus)}>{(record.civilStatus === 'single' || !record.civilStatus) ? '✓' : ''}</span>
+          <span style={S.checkbox(civilStatusNormalized === 'single' || !civilStatusNormalized)}>{(civilStatusNormalized === 'single' || !civilStatusNormalized) ? '✓' : ''}</span>
           Single
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-          <span style={S.checkbox(record.civilStatus === 'married')}>{record.civilStatus === 'married' ? '✓' : ''}</span>
+          <span style={S.checkbox(civilStatusNormalized === 'married')}>{civilStatusNormalized === 'married' ? '✓' : ''}</span>
           Married
         </span>
         <span style={{ marginLeft: '4px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
