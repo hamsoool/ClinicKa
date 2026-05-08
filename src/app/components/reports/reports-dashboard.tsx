@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Download, TrendingUp, Clock, Award, Users, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
 import { getAnalytics, getSubmissions } from '../../lib/api';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
@@ -31,97 +32,189 @@ type ReportsSummary = {
   byCourse: Record<string, number>;
 };
 
-function buildSimplePdf(
+function normalizeCourseValue(value: unknown) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function abbreviateCourse(value?: string) {
+  const raw = String(value || '').trim();
+  if (!raw) return '-';
+
+  const parenMatch = raw.match(/\(([A-Za-z]{2,10})\)\s*$/);
+  if (parenMatch?.[1]) return parenMatch[1].toUpperCase();
+
+  const normalized = raw.toLowerCase().replace(/\./g, '');
+  const known: Array<[string, string]> = [
+    ['bachelor of science in information technology', 'BSIT'],
+    ['bs information technology', 'BSIT'],
+    ['bachelor of science in computer science', 'BSCS'],
+    ['bs computer science', 'BSCS'],
+    ['bachelor of science in nursing', 'BSN'],
+    ['bs nursing', 'BSN'],
+    ['bachelor of science in business administration', 'BSBA'],
+    ['bs business administration', 'BSBA'],
+    ['bachelor of science in psychology', 'BSPsych'],
+    ['bs psychology', 'BSPsych'],
+    ['bachelor of science in hospitality management', 'BSHM'],
+    ['bs hospitality management', 'BSHM'],
+    ['bachelor of secondary education', 'BSEd'],
+    ['bachelor of elementary education', 'BEEd'],
+  ];
+  const exact = known.find(([key]) => normalized === key);
+  if (exact) return exact[1];
+
+  const bsInMatch = normalized.match(/^bachelor of science in\s+(.+)$/i);
+  if (bsInMatch?.[1]) {
+    const major = bsInMatch[1]
+      .replace(/[()]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((w) => !['and', 'of', 'the', 'in'].includes(w));
+    const majorAcronym = major.map((w) => w[0]).join('').toUpperCase();
+    if (majorAcronym) return `BS${majorAcronym}`;
+  }
+
+  if (/^[A-Za-z]{2,8}$/.test(raw.replace(/\s+/g, ''))) return raw.toUpperCase();
+
+  const acronym = raw
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((part) => !['of', 'in', 'and', 'the'].includes(part.toLowerCase()))
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
+  return acronym.length >= 3 && acronym.length <= 8 ? acronym : raw;
+}
+
+async function imagePathToDataUrl(path: string) {
+  return new Promise<string>((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to prepare image canvas'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error(`Failed to load image: ${path}`));
+    img.src = path;
+  });
+}
+
+async function buildSimplePdf(
   summaryRows: Array<{ label: string; value: string }>,
   studentRows: Array<{ fullName: string; studentId: string; course: string; year: string; status: string; submitted: string; certificate: string }>,
   reportTitle: string,
   filters: Array<{ label: string; value: string }>,
 ) {
-  const escapePdfText = (value: string) =>
-    String(value || '')
-      .replace(/\\/g, '\\\\')
-      .replace(/\(/g, '\\(')
-      .replace(/\)/g, '\\)')
-      .replace(/[^\x20-\x7E]/g, '');
-  const t = (x: number, y: number, text: string, size = 10) => `BT /F1 ${size} Tf ${x} ${y} Td (${escapePdfText(text)}) Tj ET`;
-  const line = (x1: number, y1: number, x2: number, y2: number) => `${x1} ${y1} m ${x2} ${y2} l S`;
-  const rect = (x: number, y: number, w: number, h: number) => `${x} ${y} ${w} ${h} re S`;
-
-  const pageTop = 812;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
   const left = 32;
   const right = 563;
-  const summaryTop = 600;
-  const summaryHeight = 150;
-  const tableTop = 380;
+  const contentWidth = right - left;
+  const border: [number, number, number] = [31, 115, 46];
+  const headingFill: [number, number, number] = [237, 250, 237];
+  const zebraFill: [number, number, number] = [250, 250, 250];
+  const startY = 24;
   const rowHeight = 20;
   const maxRows = 14;
   const rows = studentRows.slice(0, maxRows);
-  const tableHeight = rowHeight * (rows.length + 1);
-
   const colXs = [left, 200, 252, 322, 380, 446, 508, right];
-  const colTitles = ['Full Name', 'Student ID', 'Course', 'Year', 'Status', 'Submitted', 'Cert'];
+  const colTitles = ['Full Name', 'Student ID', 'Course', 'Year', 'Status', 'Submitted', 'Cert'] as const;
 
-  const parts: string[] = [];
-  parts.push('1 w');
-  parts.push('0 g');
-  parts.push(t(left, pageTop - 28, reportTitle, 16));
-  parts.push(t(left, pageTop - 62, `Generated: ${new Date().toLocaleString()}`, 9));
+  const [gcLogo, acadLogo, hsuLogo] = await Promise.all([
+    imagePathToDataUrl('/gordon-college-logo.png'),
+    imagePathToDataUrl('/gordon_college_academicaffairs.png'),
+    imagePathToDataUrl('/gordonhsc.png'),
+  ]);
 
-  parts.push('0.12 0.45 0.18 RG');
-  parts.push('0.93 0.98 0.93 rg');
-  parts.push(`${left} ${pageTop - 98} ${right - left} 26 re f`);
-  parts.push(rect(left, pageTop - 188, right - left, 116));
-  parts.push('0 g');
-  parts.push(t(left + 10, pageTop - 86, 'Applied Filters', 11));
-  const filterCols = [left + 12, left + 280];
+  doc.setDrawColor(...border);
+  doc.setFillColor(...headingFill);
+  doc.setTextColor(0, 0, 0);
+  doc.setLineWidth(0.9);
+
+  doc.addImage(gcLogo, 'PNG', left, startY, 26, 26);
+  doc.addImage(acadLogo, 'PNG', left + 30, startY, 26, 26);
+  doc.addImage(hsuLogo, 'PNG', left + 60, startY, 26, 26);
+
+  doc.setFontSize(16);
+  doc.text(reportTitle, left + 96, startY + 11);
+  doc.setFontSize(9);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, left + 96, startY + 25);
+
+  const filtersY = 82;
+  const filtersHeight = 98;
+  doc.setFillColor(...headingFill);
+  doc.rect(left, filtersY, contentWidth, filtersHeight);
+  doc.setDrawColor(...border);
+  doc.rect(left, filtersY, contentWidth, filtersHeight);
+  doc.setFillColor(...headingFill);
+  doc.rect(left, filtersY, contentWidth, 22, 'F');
+  doc.setFontSize(10);
+  doc.text('Applied Filters', left + 10, filtersY + 15);
+  const filterCols = [left + 12, left + 265];
   filters.forEach((filter, idx) => {
     const col = idx % 2;
     const row = Math.floor(idx / 2);
-    const y = pageTop - 112 - row * 17;
-    parts.push(t(filterCols[col], y, `${filter.label}: ${filter.value}`, 9));
+    const y = filtersY + 37 + row * 14;
+    doc.setFontSize(8.5);
+    doc.text(`${filter.label}: ${filter.value}`, filterCols[col], y);
   });
 
-  parts.push('0.12 0.45 0.18 RG');
-  parts.push('0.93 0.98 0.93 rg');
-  parts.push(`${left} ${summaryTop - 24} ${right - left} 24 re f`);
-  parts.push(rect(left, summaryTop - summaryHeight, right - left, summaryHeight));
-  parts.push('0 g');
-  parts.push(t(left + 10, summaryTop - 16, 'Summary', 11));
+  const summaryY = 198;
+  const summaryHeight = 116;
+  doc.setFillColor(...headingFill);
+  doc.rect(left, summaryY, contentWidth, summaryHeight);
+  doc.setDrawColor(...border);
+  doc.rect(left, summaryY, contentWidth, summaryHeight);
+  doc.setFillColor(...headingFill);
+  doc.rect(left, summaryY, contentWidth, 22, 'F');
+  doc.setFontSize(10);
+  doc.text('Summary', left + 10, summaryY + 15);
   summaryRows.forEach((row, idx) => {
     const col = idx % 2;
     const rowIndex = Math.floor(idx / 2);
-    const y = summaryTop - 42 - rowIndex * 17;
-    const x = left + 12 + col * 258;
-    if (y > summaryTop - summaryHeight + 8) {
-      parts.push(t(x, y, `${row.label}: ${row.value}`, 9));
+    const y = summaryY + 38 + rowIndex * 15;
+    const x = left + 12 + col * 245;
+    if (y < summaryY + summaryHeight - 8) {
+      doc.setFontSize(8.5);
+      doc.text(`${row.label}: ${row.value}`, x, y);
     }
   });
 
-  parts.push(t(left, tableTop + 18, `Students Included (${rows.length}${studentRows.length > maxRows ? ` of ${studentRows.length}` : ''})`, 11));
-  parts.push('0.12 0.45 0.18 RG');
-  parts.push('0.93 0.98 0.93 rg');
-  parts.push(`${left} ${tableTop - rowHeight} ${right - left} ${rowHeight} re f`);
-  parts.push(rect(left, tableTop - tableHeight, right - left, tableHeight));
-  parts.push('0 g');
-  parts.push('0.7 w');
-  parts.push('0.2 0.55 0.25 RG');
-  parts.push(line(left, tableTop - rowHeight, right, tableTop - rowHeight));
-  colXs.forEach((x) => parts.push(line(x, tableTop, x, tableTop - tableHeight)));
+  const tableLabelY = 332;
+  doc.setFontSize(11);
+  doc.text(`Students Included (${rows.length}${studentRows.length > maxRows ? ` of ${studentRows.length}` : ''})`, left, tableLabelY);
+
+  const tableTopY = 346;
+  const tableHeight = rowHeight * (rows.length + 1);
+  doc.setDrawColor(...border);
+  doc.rect(left, tableTopY, contentWidth, tableHeight);
+  doc.setFillColor(...headingFill);
+  doc.rect(left, tableTopY, contentWidth, rowHeight, 'F');
+  doc.setLineWidth(0.7);
+  doc.line(left, tableTopY + rowHeight, right, tableTopY + rowHeight);
+  colXs.forEach((x) => doc.line(x, tableTopY, x, tableTopY + tableHeight));
   colTitles.forEach((title, idx) => {
-    parts.push(t(colXs[idx] + 4, tableTop - 13, title, 8.5));
+    doc.setFontSize(8.5);
+    doc.text(title, colXs[idx] + 4, tableTopY + 13);
   });
-  parts.push('1 w');
-  parts.push('0.12 0.45 0.18 RG');
 
   rows.forEach((row, rowIndex) => {
-    const yTop = tableTop - rowHeight * (rowIndex + 1);
-    const yText = yTop - 13;
+    const rowY = tableTopY + rowHeight * (rowIndex + 1);
+    const textY = rowY + 13;
     if (rowIndex % 2 === 1) {
-      parts.push('0.98 0.98 0.98 rg');
-      parts.push(`${left} ${yTop - rowHeight} ${right - left} ${rowHeight} re f`);
-      parts.push('0 g');
+      doc.setFillColor(...zebraFill);
+      doc.rect(left, rowY, contentWidth, rowHeight, 'F');
+      doc.setFillColor(...headingFill);
     }
-    parts.push(line(left, yTop - rowHeight, right, yTop - rowHeight));
+    doc.line(left, rowY + rowHeight, right, rowY + rowHeight);
     const values = [
       row.fullName.slice(0, 30),
       row.studentId.slice(0, 12),
@@ -132,30 +225,11 @@ function buildSimplePdf(
       row.certificate.slice(0, 10),
     ];
     values.forEach((value, idx) => {
-      parts.push(t(colXs[idx] + 4, yText, value, 8));
+      doc.setFontSize(7.2);
+      doc.text(value, colXs[idx] + 4, textY);
     });
   });
-
-  const stream = parts.join('\n');
-  const objects: string[] = [];
-  objects.push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj');
-  objects.push('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj');
-  objects.push('3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj');
-  objects.push('4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj');
-  objects.push(`5 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj`);
-  let pdf = '%PDF-1.4\n';
-  const offsets = [0];
-  for (const obj of objects) {
-    offsets.push(pdf.length);
-    pdf += `${obj}\n`;
-  }
-  const xrefStart = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (let i = 1; i < offsets.length; i += 1) {
-    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
-  }
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-  return new Blob([pdf], { type: 'application/pdf' });
+  return doc.output('blob');
 }
 
 // ── Stat Card ──────────────────────────────────────────────────────────────
@@ -257,7 +331,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   }, []);
 
   const allCourses = useMemo(
-    () => [...new Set(submissions.map((s) => s.course).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b))),
+    () =>
+      [...new Set(submissions.map((s) => String(s.course || '').trim()).filter(Boolean))]
+        .sort((a, b) => String(a).localeCompare(String(b))),
     [submissions],
   );
 
@@ -281,7 +357,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     if (departmentFilter !== 'all' && !(sub.department === departmentFilter || sub.course?.includes(departmentFilter))) return false;
     if (yearFilter !== 'all' && String(sub.year) !== yearFilter) return false;
     if (statusFilter !== 'all' && sub.status !== statusFilter) return false;
-    if (courseFilter !== 'all' && sub.course !== courseFilter) return false;
+    if (courseFilter !== 'all' && normalizeCourseValue(sub.course) !== normalizeCourseValue(courseFilter)) return false;
     if (conditionFilter !== 'all' && !sub.medicalHistory?.[conditionFilter]) return false;
     if (certificateFilter === 'issued' && !sub.clearanceInfo?.issuedDate) return false;
     if (certificateFilter === 'not_issued' && sub.clearanceInfo?.issuedDate) return false;
@@ -368,7 +444,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     return { total, approved, pending, firstYears: firstYears.length, firstYearUnderReview, firstYearNotUnderReview, withCertificate, approvalRate, byCourse };
   }, [dedupedFilteredSubmissions]);
 
-  const downloadPdf = () => {
+  const downloadPdf = async () => {
     try {
       const friendlyDepartment = departmentFilter === 'all' ? 'All Departments' : departmentFilter;
       const friendlyYear = yearFilter === 'all' ? 'All Years' : (YEAR_LABELS[yearFilter] || `Year ${yearFilter}`);
@@ -386,18 +462,29 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         { label: 'Under review', value: String(summary.pending) },
         { label: 'Approval rate', value: `${summary.approvalRate}%` },
         { label: 'With medical certificate', value: String(summary.withCertificate) },
-        { label: '1st year submitted', value: String(summary.firstYears) },
-        { label: '1st year under review', value: String(summary.firstYearUnderReview) },
-        { label: '1st year not under review', value: String(summary.firstYearNotUnderReview) },
-        { label: 'Top course totals', value: Object.entries(summary.byCourse).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([course, count]) => `${course}: ${count}`).join(' | ') || '-' },
+        {
+          label: 'Top course totals',
+          value: Object.entries(summary.byCourse)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 2)
+            .map(([course, count]) => `${abbreviateCourse(course)}: ${count}`)
+            .join(' | ') || '-',
+        },
       ];
+      if (yearFilter === '1' || summary.firstYears > 0) {
+        summaryRows.splice(5, 0,
+          { label: '1st year submitted', value: String(summary.firstYears) },
+          { label: '1st year under review', value: String(summary.firstYearUnderReview) },
+          { label: '1st year not under review', value: String(summary.firstYearNotUnderReview) },
+        );
+      }
       const studentRows = dedupedFilteredSubmissions.map((s) => {
         const middle = s.middleInitial ? ` ${String(s.middleInitial).charAt(0)}.` : '';
         const fullName = `${s.lastName || '-'}, ${s.firstName || '-'}${middle}`;
         return {
           fullName,
           studentId: s.studentId || '-',
-          course: s.course || '-',
+          course: abbreviateCourse(s.course),
           year: YEAR_LABELS[String(s.year)] || `Year ${s.year || '-'}`,
           status: STATUS_LABELS[s.status] || s.status || '-',
           submitted: s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : '-',
@@ -416,7 +503,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         { label: 'Submitted From', value: fromDate || '-' },
         { label: 'Submitted To', value: toDate || '-' },
       ];
-      const blob = buildSimplePdf(summaryRows, studentRows, `${mode === 'admin' ? 'ADMIN' : 'STAFF'} CLINIC REPORT`, filterList);
+      const blob = await buildSimplePdf(summaryRows, studentRows, `${mode === 'admin' ? 'ADMIN' : 'STAFF'} CLINIC REPORT`, filterList);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -440,22 +527,18 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   }
 
   return (
-    <div className="space-y-5 max-w-screen-xl">
+    <div className="space-y-5">
 
       {/* ── Page Header ───────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primary leading-tight">
+          <h1 className="mb-2 text-3xl font-bold text-primary">
             {mode === 'admin' ? 'Admin' : 'Staff'} Reports &amp; Analytics
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-muted-foreground">
             Filter submissions and export professional PDF summaries.
           </p>
         </div>
-        <Button onClick={downloadPdf} className="bg-primary text-white hover:bg-primary/90 gap-2 shrink-0">
-          <Download className="w-4 h-4" />
-          Download PDF
-        </Button>
       </div>
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
@@ -479,15 +562,21 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                 </span>
               )}
             </div>
-            {hasActiveFilters && (
-              <button
-                onClick={resetFilters}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <RotateCcw className="w-3 h-3" />
-                Reset all
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {hasActiveFilters && (
+                <button
+                  onClick={resetFilters}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Reset all
+                </button>
+              )}
+              <Button onClick={downloadPdf} size="sm" className="bg-primary text-white hover:bg-primary/90 gap-2 shrink-0">
+                <Download className="w-4 h-4" />
+                Download PDF
+              </Button>
+            </div>
           </div>
         </CardHeader>
 

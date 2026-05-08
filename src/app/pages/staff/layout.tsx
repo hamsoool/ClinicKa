@@ -1,7 +1,6 @@
 import {
   Activity,
   Award,
-  Bell,
   ClipboardCheck,
   FileText,
   Home,
@@ -27,7 +26,6 @@ const navItems = [
 ] as const satisfies readonly PortalNavItem[];
 
 const topActions = [
-  { label: 'Notifications', icon: Bell },
   { label: 'Clinic safeguards', icon: ShieldPlus },
   { label: 'Staff settings', icon: Settings, path: '/staff/settings' },
 ] as const satisfies readonly PortalTopAction[];

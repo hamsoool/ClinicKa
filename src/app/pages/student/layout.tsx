@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   Award,
-  Bell,
   ClipboardList,
   FileCheck2,
   FilePlus,
@@ -27,7 +26,6 @@ const navItems = [
 ] as const satisfies readonly PortalNavItem[];
 
 const topActions = [
-  { label: 'Notifications', icon: Bell },
   { label: 'Profile settings', icon: User, path: '/student/profile' },
   { label: 'Requirements help', icon: HelpCircle, path: '/student/requirements' },
 ] as const satisfies readonly PortalTopAction[];

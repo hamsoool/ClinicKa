@@ -1,6 +1,5 @@
 import {
   BarChart3,
-  Bell,
   Home,
   Settings,
   ShieldCheck,
@@ -25,7 +24,6 @@ const navItems = [
 ] as const satisfies readonly PortalNavItem[];
 
 const topActions = [
-  { label: 'Notifications', icon: Bell },
   { label: 'System safeguards', icon: ShieldPlus },
   { label: 'System settings', icon: Settings, path: '/admin/settings' },
 ] as const satisfies readonly PortalTopAction[];

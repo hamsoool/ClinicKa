@@ -282,29 +282,6 @@ export default function StaffSettings() {
           </CardContent>
         </Card>
 
-        <Card className="border-destructive">
-          <CardHeader>
-            <CardTitle className="text-destructive">Danger Zone</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <p className="font-medium mb-2">Export All Data</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Download all medical records and submissions
-                </p>
-                <Button variant="outline">Export Data</Button>
-              </div>
-              <div className="border-t pt-4">
-                <p className="font-medium mb-2 text-destructive">Clear All Data</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  This will permanently delete all submissions and records
-                </p>
-                <Button variant="destructive">Clear All Data</Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <Dialog open={confirmSaveOpen} onOpenChange={setConfirmSaveOpen}>
