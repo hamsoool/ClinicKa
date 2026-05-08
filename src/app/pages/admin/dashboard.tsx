@@ -158,10 +158,6 @@ export default function AdminDashboard() {
 
   const loading = analyticsLoading || staffLoading || userLoading || submissionLoading;
 
-  if (loading) {
-    return <PortalPageSkeleton variant="dashboard" />;
-  }
-
   const {
     activeStaffCount,
     adminCount,
@@ -191,6 +187,10 @@ export default function AdminDashboard() {
       submissionsNeedingAttention: queue,
     };
   }, [staffUsers, submissions, userAccounts]);
+
+  if (loading) {
+    return <PortalPageSkeleton variant="dashboard" />;
+  }
 
   const summaryCards = [
     {
