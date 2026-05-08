@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Upload } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Progress } from '../../components/ui/progress';
@@ -45,29 +47,78 @@ export default function StudentMedicalForm() {
     submit,
   } = useStudentMedicalForm({ year, me, privacyAccepted, editSubmissionId });
 
-  const downloadPdf = useCallback(() => {
+  const downloadPdf = useCallback(async () => {
     if (!previewRef.current) return;
+    try {
+      const element = previewRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      });
 
-    const content = previewRef.current.innerHTML;
-    const printWindow = window.open('', '_blank', 'width=816,height=1260');
-    if (!printWindow) {
-      toast.error('Please allow pop-ups to download');
-      return;
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [330.2, 215.9], // Long bond: 8.5in x 13in
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 6;
+      const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
+
+      const imgWidth = usableWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      const imgData = canvas.toDataURL('image/png');
+
+      if (imgHeight <= usableHeight) {
+        pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight);
+      } else {
+        const fullCanvas = canvas;
+        const pageSliceHeightPx = Math.floor((usableHeight * fullCanvas.width) / usableWidth);
+        let renderedPx = 0;
+        let pageIndex = 0;
+
+        while (renderedPx < fullCanvas.height) {
+          const sliceHeightPx = Math.min(pageSliceHeightPx, fullCanvas.height - renderedPx);
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = fullCanvas.width;
+          pageCanvas.height = sliceHeightPx;
+          const ctx = pageCanvas.getContext('2d');
+          if (!ctx) break;
+          ctx.drawImage(
+            fullCanvas,
+            0,
+            renderedPx,
+            fullCanvas.width,
+            sliceHeightPx,
+            0,
+            0,
+            fullCanvas.width,
+            sliceHeightPx,
+          );
+
+          const sliceData = pageCanvas.toDataURL('image/png');
+          const sliceHeightMm = (sliceHeightPx * usableWidth) / fullCanvas.width;
+
+          if (pageIndex > 0) pdf.addPage();
+          pdf.addImage(sliceData, 'PNG', margin, margin, usableWidth, sliceHeightMm);
+
+          renderedPx += sliceHeightPx;
+          pageIndex += 1;
+        }
+      }
+
+      const safeFirstName = String(formData.firstName || 'Student').trim().replace(/\s+/g, '_');
+      const safeLastName = String(formData.lastName || 'Record').trim().replace(/\s+/g, '_');
+      pdf.save(`medical_record_${safeLastName}_${safeFirstName}.pdf`);
+      toast.success('Medical record PDF downloaded');
+    } catch {
+      toast.error('Failed to download PDF. Please try again.');
     }
-
-    printWindow.document.write(`<!DOCTYPE html><html><head>
-      <title>Medical Record - ${formData.firstName} ${formData.lastName}</title>
-      <style>
-        @page { size: 8.5in 13in; margin: 0.5in; }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      </style>
-    </head><body>${content}
-      <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();}}</script>
-    </body></html>`);
-
-    printWindow.document.close();
-    toast.success('Medical record PDF downloading...');
   }, [formData.firstName, formData.lastName]);
 
   if (submitted) {

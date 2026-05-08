@@ -188,23 +188,97 @@ export default function StaffCertificates() {
   const paginatedSubmissions = filteredSubmissions.slice(pageStartIndex, pageStartIndex + STUDENTS_PER_PAGE);
   const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
 
-  const downloadRecordPDF = () => {
+  const downloadRecordPDF = async () => {
     if (!recordPreviewRef.current || !selectedStudent) return;
-    const content = recordPreviewRef.current.innerHTML;
-    const printWindow = window.open('', '_blank', 'width=816,height=1260');
-    if (!printWindow) { toast.error('Please allow pop-ups'); return; }
-    printWindow.document.write(`<!DOCTYPE html><html><head>
-      <title>Medical Record - ${selectedStudent.firstName} ${selectedStudent.lastName}</title>
-      <style>
-        @page { size: 8.5in 13in; margin: 0.5in; }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      </style>
-    </head><body>${content}
-      <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();}}</script>
-    </body></html>`);
-    printWindow.document.close();
-    toast.success('Medical record PDF downloading...');
+    try {
+      const exportRoot = document.createElement('div');
+      exportRoot.style.position = 'fixed';
+      exportRoot.style.left = '-10000px';
+      exportRoot.style.top = '0';
+      exportRoot.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
+      exportRoot.style.background = '#fff';
+      exportRoot.style.padding = '0';
+      exportRoot.style.margin = '0';
+
+      const clone = recordPreviewRef.current.cloneNode(true) as HTMLDivElement;
+      clone.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
+      clone.style.maxWidth = `${RECORD_PREVIEW_BASE_WIDTH}px`;
+      clone.style.margin = '0';
+      clone.style.padding = '0';
+      clone.style.transform = 'none';
+
+      exportRoot.appendChild(clone);
+      document.body.appendChild(exportRoot);
+
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        width: RECORD_PREVIEW_BASE_WIDTH,
+        windowWidth: RECORD_PREVIEW_BASE_WIDTH,
+      });
+      document.body.removeChild(exportRoot);
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [330.2, 215.9], // Long bond: 8.5in x 13in
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 6;
+      const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
+
+      const imgWidth = usableWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgData = canvas.toDataURL('image/png');
+
+      if (imgHeight <= usableHeight) {
+        pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
+      } else {
+        const fullCanvas = canvas;
+        const pageSliceHeightPx = Math.floor((usableHeight * fullCanvas.width) / usableWidth);
+        let renderedPx = 0;
+        let pageIndex = 0;
+
+        while (renderedPx < fullCanvas.height) {
+          const sliceHeightPx = Math.min(pageSliceHeightPx, fullCanvas.height - renderedPx);
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = fullCanvas.width;
+          pageCanvas.height = sliceHeightPx;
+          const ctx = pageCanvas.getContext('2d');
+          if (!ctx) break;
+
+          ctx.drawImage(
+            fullCanvas,
+            0,
+            renderedPx,
+            fullCanvas.width,
+            sliceHeightPx,
+            0,
+            0,
+            fullCanvas.width,
+            sliceHeightPx,
+          );
+
+          if (pageIndex > 0) pdf.addPage();
+          const sliceData = pageCanvas.toDataURL('image/png');
+          const sliceHeightMm = (sliceHeightPx * usableWidth) / fullCanvas.width;
+          pdf.addImage(sliceData, 'PNG', margin, margin, usableWidth, sliceHeightMm, undefined, 'FAST');
+
+          renderedPx += sliceHeightPx;
+          pageIndex += 1;
+        }
+      }
+
+      pdf.save(`medical_record_${selectedStudent.lastName}_${selectedStudent.firstName}.pdf`);
+      toast.success('Medical record PDF downloaded.');
+    } catch (error) {
+      console.error('Failed to generate medical record PDF:', error);
+      toast.error('Failed to download PDF. Please try again.');
+    }
   };
 
   const downloadClearancePDF = async () => {
