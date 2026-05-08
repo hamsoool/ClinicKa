@@ -72,24 +72,22 @@ const S = {
 
 const COPY_TYPES = ["STUDENT'S COPY", "COORDINATOR'S COPY", "REGISTRAR'S COPY"] as const;
 
-/* ───────── SVG Seals ───────── */
-function GCSeal({ size = 36 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
-      <circle cx="18" cy="18" r="17" fill="none" stroke="#333" strokeWidth="1.2" />
-      <circle cx="18" cy="18" r="14" fill="none" stroke="#333" strokeWidth="0.5" />
-      <text x="18" y="15" textAnchor="middle" fontSize="5" fontWeight="bold" fill="#333">GORDON</text>
-      <text x="18" y="20" textAnchor="middle" fontSize="5" fontWeight="bold" fill="#333">COLLEGE</text>
-      <text x="18" y="26" textAnchor="middle" fontSize="3.5" fill="#333">OLONGAPO CITY</text>
-    </svg>
-  );
-}
-
+/* ───────── Logos ───────── */
 function GordonCollegeLogo({ size = 36 }: { size?: number }) {
   return (
     <img
       src="/gordon-college-logo.png"
       alt="Gordon College logo"
+      style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
+    />
+  );
+}
+
+function AcademicAffairsLogo({ size = 36 }: { size?: number }) {
+  return (
+    <img
+      src="/gordon_college_academicaffairs.png"
+      alt="Gordon College Academic Affairs logo"
       style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
     />
   );
@@ -132,7 +130,7 @@ function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType:
       >
         <div style={{ display: 'flex', gap: '2px', flexShrink: 0, paddingTop: '2px' }}>
           <GordonCollegeLogo size={34} />
-          <GCSeal size={34} />
+          <AcademicAffairsLogo size={34} />
         </div>
 
         <div style={{ flex: 1, textAlign: 'center' }}>

@@ -125,31 +125,34 @@ const S = {
   },
 };
 
-/* ───────── SVG Seals ───────── */
-function GCSeal({ size = 32 }: { size?: number }) {
+/* ───────── Logos ───────── */
+function GordonCollegeLogo({ size = 34 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
-      <circle cx="18" cy="18" r="17" fill="none" stroke="#333" strokeWidth="1.2" />
-      <circle cx="18" cy="18" r="14" fill="none" stroke="#333" strokeWidth="0.5" />
-      <text x="18" y="15" textAnchor="middle" fontSize="5" fontWeight="bold" fill="#333">GORDON</text>
-      <text x="18" y="20" textAnchor="middle" fontSize="5" fontWeight="bold" fill="#333">COLLEGE</text>
-      <text x="18" y="26" textAnchor="middle" fontSize="3.5" fill="#333">OLONGAPO CITY</text>
-    </svg>
+    <img
+      src="/gordon-college-logo.png"
+      alt="Gordon College logo"
+      style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
+    />
   );
 }
 
-function CaduceusSeal({ size = 32 }: { size?: number }) {
+function AcademicAffairsLogo({ size = 34 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
-      <circle cx="18" cy="18" r="17" fill="none" stroke="#333" strokeWidth="1.2" />
-      <circle cx="18" cy="18" r="14" fill="none" stroke="#333" strokeWidth="0.5" />
-      <line x1="18" y1="8" x2="18" y2="28" stroke="#333" strokeWidth="1" />
-      <path d="M18,10 Q13,13 18,16 Q13,19 18,22" fill="none" stroke="#333" strokeWidth="0.8" />
-      <path d="M18,10 Q23,13 18,16 Q23,19 18,22" fill="none" stroke="#333" strokeWidth="0.8" />
-      <path d="M18,9 Q12,7 10,9" fill="none" stroke="#333" strokeWidth="0.8" />
-      <path d="M18,9 Q24,7 26,9" fill="none" stroke="#333" strokeWidth="0.8" />
-      <text x="18" y="31" textAnchor="middle" fontSize="3" fill="#333">HEALTH SERVICES</text>
-    </svg>
+    <img
+      src="/gordon_college_academicaffairs.png"
+      alt="Gordon College Academic Affairs logo"
+      style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
+    />
+  );
+}
+
+function HSULogo({ size = 34 }: { size?: number }) {
+  return (
+    <img
+      src="/gordonhsc.png"
+      alt="Health Services Unit logo"
+      style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }}
+    />
   );
 }
 
@@ -176,13 +179,13 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
   return (
     <div ref={ref} style={S.page}>
 
-      {/* ====== HEADER: 3 seals top-left | school info center | 1x1 photo box top-right ====== */}
+      {/* ====== HEADER: 3 logos top-left | school info center | 1x1 photo box top-right ====== */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-        {/* Left: 3 seals */}
+        {/* Left: 3 logos */}
         <div style={{ display: 'flex', gap: '3px', alignItems: 'center', flexShrink: 0 }}>
-          <GCSeal size={34} />
-          <GCSeal size={34} />
-          <CaduceusSeal size={34} />
+          <GordonCollegeLogo size={34} />
+          <AcademicAffairsLogo size={34} />
+          <HSULogo size={34} />
         </div>
 
         {/* Center: school info */}
