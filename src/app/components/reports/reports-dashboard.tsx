@@ -22,6 +22,13 @@ const STATUS_LABELS: Record<string, string> = {
 const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', issued: 'Issued Only', not_issued: 'Not Issued' };
 const REPORTS_CACHE_KEY = 'clinic_reports_cache_v1';
 
+function statusChipClass(status: string) {
+  if (status === 'approved') return 'bg-green-50 text-green-700 ring-green-600/20';
+  if (status === 'pending') return 'bg-amber-50 text-amber-700 ring-amber-600/20';
+  if (status === 'returned') return 'bg-red-50 text-red-700 ring-red-600/20';
+  return 'bg-blue-50 text-blue-700 ring-blue-600/20';
+}
+
 type ReportsSummary = {
   total: number;
   approved: number;
@@ -470,6 +477,11 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     return { total, approved, pending, firstYears: firstYears.length, firstYearUnderReview, firstYearNotUnderReview, withCertificate, approvalRate, byCourse };
   }, [dedupedFilteredSubmissions]);
 
+  const courseEntries = useMemo(
+    () => Object.entries(summary.byCourse).sort((a, b) => b[1] - a[1]),
+    [summary.byCourse],
+  );
+
   const downloadPdf = async () => {
     try {
       const friendlyDepartment = departmentFilter === 'all' ? 'All Departments' : departmentFilter;
@@ -547,15 +559,15 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   if (loading) {
     return (
       <div className="space-y-5">
-        <div className="mb-8 flex items-start justify-between gap-4">
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
-            <Skeleton className="h-10 w-80" />
-            <Skeleton className="h-5 w-96" />
+            <Skeleton className="h-9 w-56 sm:h-10 sm:w-80" />
+            <Skeleton className="h-5 w-full max-w-md" />
           </div>
-          <Skeleton className="h-10 w-36 rounded-md" />
+          <Skeleton className="h-10 w-full rounded-md sm:w-36" />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, idx) => (
             <Card key={`stats-skeleton-${idx}`} className="border-outline-variant/30">
               <CardContent className="px-5 pb-5 pt-5">
@@ -609,19 +621,19 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     <div className="space-y-5">
 
       {/* ── Page Header ───────────────────────────────────────────────── */}
-      <div className="mb-8 flex items-start justify-between gap-4">
+      <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="mb-2 text-3xl font-bold text-primary">
+          <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">
             {mode === 'admin' ? 'Admin' : 'Staff'} Reports &amp; Analytics
           </h1>
-          <p className="text-muted-foreground">
+          <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
             Filter submissions and export professional PDF summaries.
           </p>
         </div>
       </div>
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Filtered Submissions" value={summary.total} icon={Users} accent="text-primary" />
         <StatCard label="Approval Rate" value={`${summary.approvalRate}%`} icon={TrendingUp} accent="text-green-600" />
         <StatCard label="1st Year Under Review" value={summary.firstYearUnderReview} icon={Clock} accent="text-amber-600" />
@@ -631,7 +643,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       {/* ── Filters Card ──────────────────────────────────────────────── */}
       <Card className="border-outline-variant/30">
         <CardHeader className="pb-0 pt-5 px-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
               <CardTitle className="text-base font-semibold">Filters</CardTitle>
@@ -641,17 +653,17 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
               {hasActiveFilters && (
                 <button
                   onClick={resetFilters}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  className="flex items-center justify-center gap-1.5 rounded-md border border-outline-variant/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground sm:justify-start sm:border-0 sm:px-0 sm:py-0"
                 >
                   <RotateCcw className="w-3 h-3" />
                   Reset all
                 </button>
               )}
-              <Button onClick={downloadPdf} size="sm" className="bg-primary text-white hover:bg-primary/90 gap-2 shrink-0">
+              <Button onClick={downloadPdf} size="sm" className="w-full gap-2 bg-primary text-white hover:bg-primary/90 sm:w-auto sm:shrink-0">
                 <Download className="w-4 h-4" />
                 Download PDF
               </Button>
@@ -663,7 +675,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
           {/* ── Group 1: Student Info ──────────────────────────────────── */}
           <FilterSection label="Student">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <LabeledSelect label="Department" value={departmentFilter} onValueChange={setDepartmentFilter} placeholder="Department">
                 <SelectItem value="all">All Departments</SelectItem>
                 {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
@@ -690,7 +702,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
           {/* ── Group 2: Submission Info ───────────────────────────────── */}
           <FilterSection label="Submission">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <LabeledSelect label="Status" value={statusFilter} onValueChange={setStatusFilter} placeholder="Status">
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Under Review</SelectItem>
@@ -728,7 +740,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
           {/* ── Group 3: Date Range ────────────────────────────────────── */}
           <FilterSection label="Date Range">
-            <div className="grid grid-cols-2 gap-3 max-w-sm">
+            <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-sm sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground font-medium">From</span>
                 <Input
@@ -790,24 +802,49 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
             <CardTitle className="text-base font-semibold">Course Submission Totals</CardTitle>
           </CardHeader>
           <CardContent className="px-5 pb-5">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Course</TableHead>
-                  <TableHead className="text-right">Submissions</TableHead>
-                  <TableHead className="w-40 hidden md:table-cell">Share</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(summary.byCourse)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([course, count]) => {
+            {courseEntries.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                No course totals available for the selected filters.
+              </div>
+            ) : null}
+
+            <div className="space-y-2 md:hidden">
+              {courseEntries.map(([course, count]) => {
+                const pct = summary.total > 0 ? Math.round((count / summary.total) * 100) : 0;
+                return (
+                  <div key={course} className="rounded-lg border border-outline-variant/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-on-surface">{course}</p>
+                      <p className="text-sm font-semibold tabular-nums text-on-surface">{count}</p>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-outline-variant/20">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">{pct}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Course</TableHead>
+                    <TableHead className="text-right">Submissions</TableHead>
+                    <TableHead className="w-40">Share</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {courseEntries.map(([course, count]) => {
                     const pct = summary.total > 0 ? Math.round((count / summary.total) * 100) : 0;
                     return (
                       <TableRow key={course}>
                         <TableCell className="font-medium">{course}</TableCell>
                         <TableCell className="text-right tabular-nums">{count}</TableCell>
-                        <TableCell className="hidden md:table-cell">
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             <div className="flex-1 h-1.5 rounded-full bg-outline-variant/20 overflow-hidden">
                               <div
@@ -821,41 +858,72 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                       </TableRow>
                     );
                   })}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* ── Filtered Students Table ────────────────────────────────────── */}
       <Card className="border-outline-variant/30">
-        <CardHeader className="pb-2 pt-5 px-5 flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col items-start justify-between gap-1 pb-2 pt-5 px-5 sm:flex-row sm:items-center">
           <CardTitle className="text-base font-semibold">Filtered Students</CardTitle>
           <span className="text-xs text-muted-foreground font-normal">
             {dedupedFilteredSubmissions.length} record{dedupedFilteredSubmissions.length !== 1 ? 's' : ''}
           </span>
         </CardHeader>
         <CardContent className="px-5 pb-5">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Course</TableHead>
-                <TableHead>Year</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Submitted</TableHead>
-                <TableHead>Certificate</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {dedupedFilteredSubmissions.length === 0 ? (
+          {dedupedFilteredSubmissions.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
+              No records match the selected filters.
+            </div>
+          ) : null}
+
+          <div className="space-y-3 md:hidden">
+            {dedupedFilteredSubmissions.map((s) => (
+              <Card key={s.id} className="border-outline-variant/40">
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-on-surface">{s.firstName} {s.lastName}</p>
+                      <p className="text-xs text-muted-foreground">{s.studentId || '—'}</p>
+                    </div>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${statusChipClass(s.status)}`}>
+                      {STATUS_LABELS[s.status] || s.status}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <p className="text-muted-foreground">Course</p>
+                    <p className="text-right text-on-surface">{s.course || '—'}</p>
+                    <p className="text-muted-foreground">Year</p>
+                    <p className="text-right text-on-surface">{YEAR_LABELS[String(s.year)] || `Year ${s.year || '—'}`}</p>
+                    <p className="text-muted-foreground">Submitted</p>
+                    <p className="text-right text-on-surface">{s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : '—'}</p>
+                    <p className="text-muted-foreground">Certificate</p>
+                    <p className={`text-right font-medium ${s.clearanceInfo?.issuedDate ? 'text-green-600' : 'text-muted-foreground'}`}>
+                      {s.clearanceInfo?.issuedDate ? 'Issued' : 'Not Issued'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                    No records match the selected filters.
-                  </TableCell>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Course</TableHead>
+                  <TableHead>Year</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead>Certificate</TableHead>
                 </TableRow>
-              ) : (
-                dedupedFilteredSubmissions.map((s) => (
+              </TableHeader>
+              <TableBody>
+                {dedupedFilteredSubmissions.map((s) => (
                   <TableRow key={s.id}>
                     <TableCell>
                       <span className="font-medium">{s.firstName} {s.lastName}</span>
@@ -864,15 +932,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                     <TableCell>{s.course || '—'}</TableCell>
                     <TableCell>{YEAR_LABELS[String(s.year)] || `Year ${s.year || '—'}`}</TableCell>
                     <TableCell>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                        s.status === 'approved'
-                          ? 'bg-green-50 text-green-700 ring-green-600/20'
-                          : s.status === 'pending'
-                          ? 'bg-amber-50 text-amber-700 ring-amber-600/20'
-                          : s.status === 'returned'
-                          ? 'bg-red-50 text-red-700 ring-red-600/20'
-                          : 'bg-blue-50 text-blue-700 ring-blue-600/20'
-                      }`}>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${statusChipClass(s.status)}`}>
                         {STATUS_LABELS[s.status] || s.status}
                       </span>
                     </TableCell>
@@ -885,10 +945,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                         : <span className="text-muted-foreground text-sm">Not Issued</span>}
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

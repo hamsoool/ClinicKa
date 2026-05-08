@@ -5,9 +5,11 @@ import {
   ClipboardList,
   FileText,
   FolderOpen,
+  Menu,
   ShieldCheck,
   Stethoscope,
   Users,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 
@@ -43,6 +45,7 @@ export default function RoleSelection() {
   const { requiresPasswordSetup } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [logoVisible, setLogoVisible] = useState(true);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -68,6 +71,11 @@ export default function RoleSelection() {
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  };
+
+  const handleNavClick = (sectionId: string) => {
+    scrollToSection(sectionId);
+    setIsMenuOpen(false);
   };
 
   return (
@@ -116,7 +124,7 @@ export default function RoleSelection() {
               <button
                 key={link.label}
                 type="button"
-                onClick={() => scrollToSection(link.target)}
+                onClick={() => handleNavClick(link.target)}
                 className="transition hover:text-[#065f46]"
               >
                 {link.label}
@@ -127,10 +135,50 @@ export default function RoleSelection() {
           <div className="flex items-center gap-3">
             <Link
               to="/auth?mode=signin"
-              className="inline-flex h-11 items-center justify-center rounded-full bg-[#004532] px-5 text-sm font-semibold text-white transition hover:bg-[#065f46]"
+              className="hidden md:inline-flex h-11 items-center justify-center rounded-full bg-[#004532] px-5 text-sm font-semibold text-white transition hover:bg-[#065f46]"
             >
               Sign In
             </Link>
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              className="md:hidden inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#d8e6ea] bg-white/85 text-[#004532] shadow-sm transition hover:bg-white"
+              aria-expanded={isMenuOpen}
+              aria-controls="mobile-dropbar"
+              aria-label="Toggle navigation menu"
+            >
+              {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
+        </div>
+        <div
+          id="mobile-dropbar"
+          className={`md:hidden overflow-hidden border-b border-[#d8e6ea] bg-white/95 shadow-[0_16px_40px_rgba(6,95,70,0.08)] backdrop-blur-xl transition-[max-height,opacity,transform] duration-300 ease-out ${
+            isMenuOpen
+              ? 'max-h-[360px] opacity-100 translate-y-0 pointer-events-auto'
+              : 'max-h-0 opacity-0 -translate-y-2 pointer-events-none'
+          }`}
+        >
+          <div className="mx-auto w-full max-w-[90rem] px-5 sm:px-8 lg:px-10">
+            <div className="flex flex-col gap-4 py-6">
+              {navLinks.map((link) => (
+                <button
+                  key={link.label}
+                  type="button"
+                  onClick={() => handleNavClick(link.target)}
+                  className="rounded-2xl border border-[#e0e8e7] bg-white/80 px-4 py-3 text-left text-base font-semibold text-[#0b1c30] shadow-sm transition hover:bg-white"
+                >
+                  {link.label}
+                </button>
+              ))}
+              <Link
+                to="/auth?mode=signin"
+                onClick={() => setIsMenuOpen(false)}
+                className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[#004532] px-5 text-sm font-semibold text-white transition hover:bg-[#065f46]"
+              >
+                Sign In
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
@@ -148,18 +196,18 @@ export default function RoleSelection() {
           <div className="absolute right-0 top-0 h-[34rem] w-[34rem] translate-x-1/4 -translate-y-1/4 rounded-full bg-[#cfeee0]/55 blur-3xl" />
           <div className="absolute bottom-0 left-0 h-[28rem] w-[28rem] -translate-x-1/4 translate-y-1/4 rounded-full bg-[#d8e6ff]/55 blur-3xl" />
 
-          <div className="relative mx-auto grid w-full max-w-[90rem] gap-12 px-5 pb-20 pt-36 sm:px-8 lg:grid-cols-12 lg:items-center lg:px-10 lg:pb-24 lg:pt-44">
-            <div className="space-y-8 lg:col-span-7">
+          <div className="relative mx-auto grid w-full max-w-[90rem] gap-10 px-5 pb-16 pt-28 sm:px-8 md:gap-12 md:pb-20 md:pt-36 lg:grid-cols-12 lg:items-center lg:px-10 lg:pb-24 lg:pt-44">
+            <div className="space-y-6 md:space-y-8 lg:col-span-7">
               <div className="inline-flex items-center gap-2 rounded-full border border-[#c9d9dd] bg-white/78 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_10px_35px_rgba(11,28,48,0.05)] backdrop-blur">
                 <span className="h-2 w-2 rounded-full bg-[#065f46]" />
                 Secure scholarly clinic management
               </div>
 
               <div className="space-y-5">
-                <h1 className="max-w-2xl text-5xl font-bold leading-[1.05] tracking-[-0.05em] text-[#0b1c30] sm:text-6xl xl:text-[4.2rem]">
+                <h1 className="max-w-2xl text-4xl font-bold leading-[1.1] tracking-[-0.04em] text-[#0b1c30] md:text-5xl lg:text-6xl xl:text-[4.2rem]">
                   Your Academic Health Journey, <span className="text-[#065f46]">Streamlined.</span>
                 </h1>
-                <p className="max-w-2xl text-lg leading-8 text-[#4a5b68]">
+                <p className="max-w-2xl text-base leading-7 text-[#4a5b68] md:text-lg md:leading-8">
                   ClinicKa! brings Gordon College clinic services into a calmer, clearer digital workflow. Submit medical
                   records, complete health forms, and track clearance progress without the paperwork pileup.
                 </p>
@@ -219,11 +267,11 @@ export default function RoleSelection() {
           </div>
         </section>
 
-        <section id="features" className="py-20">
+        <section id="features" className="py-16 md:py-20">
           <div className="mx-auto max-w-[90rem] px-5 sm:px-8 lg:px-10">
-            <div className="mx-auto mb-12 max-w-3xl text-center">
-              <h2 className="text-4xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Comprehensive care ecosystem</h2>
-              <p className="mt-4 text-lg leading-7 text-[#4a5b68]">
+            <div className="mx-auto mb-10 max-w-3xl text-center md:mb-12">
+              <h2 className="text-3xl font-semibold tracking-[-0.03em] text-[#0b1c30] md:text-4xl">Comprehensive care ecosystem</h2>
+              <p className="mt-3 text-base leading-7 text-[#4a5b68] md:mt-4 md:text-lg">
                 Four pillars designed to simplify clinic operations and empower student wellness.
               </p>
             </div>
@@ -296,8 +344,8 @@ export default function RoleSelection() {
           </div>
         </section>
 
-        <section id="workflow" className="border-t border-[#e2ebe7] bg-white/70 py-20">
-          <div className="mx-auto grid max-w-[90rem] items-center gap-16 px-5 sm:px-8 lg:grid-cols-2 lg:px-10">
+        <section id="workflow" className="border-t border-[#e2ebe7] bg-white/70 py-16 md:py-20">
+          <div className="mx-auto grid max-w-[90rem] items-center gap-10 px-5 sm:px-8 md:gap-16 lg:grid-cols-2 lg:px-10">
             <div className="order-2 lg:order-1">
               <div className="relative">
                 <div className="absolute inset-0 -translate-x-6 translate-y-6 rounded-full bg-[#cfeee0]/35 blur-3xl" />
@@ -309,11 +357,11 @@ export default function RoleSelection() {
               </div>
             </div>
 
-            <div className="order-1 space-y-6 lg:order-2">
-              <h2 className="text-4xl font-semibold tracking-[-0.04em] text-[#0b1c30]">
+            <div className="order-1 space-y-5 lg:order-2 md:space-y-6">
+              <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30] md:text-4xl">
                 Goodbye paperwork.<br />Hello clarity.
               </h2>
-              <p className="max-w-xl text-lg leading-8 text-[#4a5b68]">
+              <p className="max-w-xl text-base leading-7 text-[#4a5b68] md:text-lg md:leading-8">
                 Health requirements should not feel like guesswork. ClinicKa! turns the paper-heavy routine into a guided
                 digital process that is easier to finish and easier to review.
               </p>
@@ -336,13 +384,13 @@ export default function RoleSelection() {
 
         <section id="clearance" className="py-16">
           <div className="mx-auto max-w-[90rem] px-5 sm:px-8 lg:px-10">
-            <div className="flex flex-col items-start gap-6 rounded-[2rem] border border-[#dfe9e6] bg-white/80 p-8 shadow-[0_20px_60px_rgba(11,28,48,0.08)] md:flex-row md:items-center md:justify-between">
-              <div className="flex items-start gap-5">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5ed] text-[#065f46]">
+            <div className="flex flex-col items-start gap-6 rounded-[2rem] border border-[#dfe9e6] bg-white/80 p-6 shadow-[0_20px_60px_rgba(11,28,48,0.08)] md:flex-row md:items-center md:justify-between md:p-8">
+              <div className="flex flex-col md:flex-row md:items-start gap-4 md:gap-5">
+                <div className="flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#e8f5ed] text-[#065f46] shrink-0">
                   <ShieldCheck className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Uncompromising security</h3>
+                  <h3 className="text-xl md:text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Uncompromising security</h3>
                   <p className="mt-2 max-w-2xl text-sm leading-7 text-[#4a5b68]">
                     Student health records are sensitive. ClinicKa! uses controlled access, school-managed workflows,
                     and privacy-aware handling to protect data with care.
@@ -356,11 +404,11 @@ export default function RoleSelection() {
           </div>
         </section>
 
-        <section className="border-t border-[#e2ebe7] bg-white/60 py-20">
-          <div className="mx-auto grid max-w-[90rem] items-center gap-12 px-5 sm:px-8 lg:grid-cols-2 lg:px-10">
-            <div className="space-y-5">
-              <h2 className="text-4xl font-semibold tracking-[-0.04em] text-[#0b1c30]">Your records, always within reach.</h2>
-              <p className="text-lg leading-8 text-[#4a5b68]">
+        <section className="border-t border-[#e2ebe7] bg-white/60 py-16 md:py-20">
+          <div className="mx-auto grid max-w-[90rem] items-center gap-10 px-5 sm:px-8 md:gap-12 lg:grid-cols-2 lg:px-10">
+            <div className="space-y-4 md:space-y-5">
+              <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30] md:text-4xl">Your records, always within reach.</h2>
+              <p className="text-base leading-7 text-[#4a5b68] md:text-lg md:leading-8">
                 ClinicKa! keeps medical forms, submissions, and approvals in one place so students and clinic teams can
                 work with confidence.
               </p>

@@ -3,6 +3,8 @@ import { ArrowLeft, CheckCircle2, FileCheck2, PenLine, ShieldCheck, XCircle } fr
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import { Checkbox } from '../../components/ui/checkbox';
+import { Label } from '../../components/ui/label';
 import { getStudentProfileAssets } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -104,23 +106,25 @@ export default function StudentPrivacyWaiver() {
         </CardHeader>
         <CardContent className="space-y-6 pt-6">
           <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5 text-sm leading-7 text-on-surface">
-            I am willing to disclose my personal information with the Gordon College clinic. I have the right to
-            access my personal data in a timely manner within five days of request. The clinic respects patient privacy
-            and is accountable for protecting my personal information.
+            Under the Data Privacy Act of 2012 (Republic Act No. 10173) and its IRR, I consent to the collection, use,
+            and processing of my personal information by the Gordon College clinic for clinic record processing and
+            related health services. I understand my rights as a data subject, including the right to be informed and
+            to access or request correction of my personal data, and that the clinic will protect my information in
+            accordance with the law.
           </div>
 
           <div className="flex items-start gap-3 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4">
-            <input
+            <Checkbox
               id="privacyConsent"
-              type="checkbox"
               checked={accepted}
-              onChange={(event) => setAccepted(event.target.checked)}
-              className="mt-0.5 h-5 w-5 flex-shrink-0 cursor-pointer appearance-auto accent-[#0a7a43]"
+              onCheckedChange={(checked) => setAccepted(checked === true)}
+              className="mt-1"
             />
-            <label htmlFor="privacyConsent" className="cursor-pointer text-sm leading-6 text-on-surface">
-              I have read and understood the Data Privacy Waiver, and I consent to the collection and use of my
-              personal information for clinic record processing.
-            </label>
+            <Label htmlFor="privacyConsent" className="text-sm leading-6 font-normal text-on-surface">
+              I have read and understood this Data Privacy Waiver pursuant to the Data Privacy Act of 2012 (Republic
+              Act No. 10173), and I consent to the collection and use of my personal information for clinic record
+              processing.
+            </Label>
           </div>
 
           <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5">
