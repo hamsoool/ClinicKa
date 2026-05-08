@@ -105,9 +105,11 @@ export default defineConfig({
       },
     },
     VitePWA({
+      injectRegister: false,
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "icon-192.png", "icon-512.png"],
       manifest: {
+        id: "/",
         name: "Gordon College Clinic",
         short_name: "GCC Clinic",
         description: "Gordon College Clinic health records and patient management",
@@ -115,7 +117,9 @@ export default defineConfig({
         background_color: "#ffffff",
         display: "standalone",
         start_url: "/",
+        scope: "/",
         orientation: "portrait",
+        categories: ["medical", "health", "education"],
         icons: [
           {
             src: "icon-192.png",
@@ -130,18 +134,39 @@ export default defineConfig({
             purpose: "any maskable",
           },
         ],
+        shortcuts: [
+          {
+            name: "Student Portal",
+            short_name: "Student",
+            url: "/student/dashboard",
+          },
+          {
+            name: "Staff Portal",
+            short_name: "Staff",
+            url: "/staff/dashboard",
+          },
+        ],
       },
       workbox: {
         cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: "NetworkFirst",
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: "StaleWhileRevalidate",
             options: {
-              cacheName: "supabase-api",
-              networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 },
+              cacheName: "google-fonts-stylesheets",
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "google-fonts-webfonts",
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
