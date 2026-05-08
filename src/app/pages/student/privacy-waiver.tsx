@@ -3,7 +3,6 @@ import { ArrowLeft, CheckCircle2, FileCheck2, PenLine, ShieldCheck, XCircle } fr
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
-import { Checkbox } from '../../components/ui/checkbox';
 import { getStudentProfileAssets } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -110,24 +109,13 @@ export default function StudentPrivacyWaiver() {
             and is accountable for protecting my personal information.
           </div>
 
-          <div
-            className="flex items-start gap-3 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4"
-            role="button"
-            tabIndex={0}
-            onClick={() => setAccepted((prev) => !prev)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                setAccepted((prev) => !prev);
-              }
-            }}
-          >
-            <Checkbox
+          <div className="flex items-start gap-3 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4">
+            <input
               id="privacyConsent"
+              type="checkbox"
               checked={accepted}
-              onCheckedChange={(checked) => setAccepted(checked === true)}
-              onClick={(event) => event.stopPropagation()}
-              className="mt-0.5 h-5 w-5 border-2 border-[#0a7a43] bg-white data-[state=checked]:bg-[#0a7a43] data-[state=checked]:text-white"
+              onChange={(event) => setAccepted(event.target.checked)}
+              className="mt-0.5 h-5 w-5 flex-shrink-0 cursor-pointer appearance-auto accent-[#0a7a43]"
             />
             <label htmlFor="privacyConsent" className="cursor-pointer text-sm leading-6 text-on-surface">
               I have read and understood the Data Privacy Waiver, and I consent to the collection and use of my
