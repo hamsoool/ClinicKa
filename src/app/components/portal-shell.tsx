@@ -128,6 +128,20 @@ export default function PortalShell({
   }, [location.pathname]);
 
   useEffect(() => {
+    if (!location.hash) return;
+    const id = location.hash.slice(1);
+    if (!id) return;
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(id);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [location.hash, location.pathname]);
+
+  useEffect(() => {
     if (!objectUrlRef.current) {
       setProfilePic(initialProfileImageUrl || null);
     }
@@ -399,7 +413,7 @@ export default function PortalShell({
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-outline-variant/40 px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-container-low"
                   >
                     <KeyRound className="h-4 w-4" />
-                    Forgot password
+                    Change Password
                   </button>
                   <button
                     type="button"

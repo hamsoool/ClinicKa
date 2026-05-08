@@ -430,14 +430,14 @@ export default function AdminUserAccounts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="mb-2 text-3xl font-bold text-primary">User Accounts</h1>
-          <p className="text-muted-foreground">
+          <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">User Accounts</h1>
+          <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
             Archive student and clinic staff accounts first, then permanently delete them from the archive when they should be removed from the system.
           </p>
         </div>
-        <Button className="self-start md:self-auto" onClick={() => setOpenCreate(true)}>
+        <Button className="w-full sm:w-fit md:self-auto" onClick={() => setOpenCreate(true)}>
           <UserPlus className="mr-2 h-4 w-4" />
           Create Account
         </Button>
@@ -448,7 +448,7 @@ export default function AdminUserAccounts() {
           <CardContent className="flex items-center justify-between p-5">
             <div>
               <p className="text-sm text-muted-foreground">Active Accounts</p>
-              <p className="mt-2 text-3xl font-bold text-on-surface">{userAccounts.length}</p>
+              <p className="mt-2 text-2xl font-bold text-on-surface sm:text-3xl">{userAccounts.length}</p>
             </div>
             <Users className="h-8 w-8 text-primary" />
           </CardContent>
@@ -457,7 +457,7 @@ export default function AdminUserAccounts() {
           <CardContent className="flex items-center justify-between p-5">
             <div>
               <p className="text-sm text-muted-foreground">Archived Accounts</p>
-              <p className="mt-2 text-3xl font-bold text-on-surface">{archivedAccounts.length}</p>
+              <p className="mt-2 text-2xl font-bold text-on-surface sm:text-3xl">{archivedAccounts.length}</p>
             </div>
             <Archive className="h-8 w-8 text-amber-600" />
           </CardContent>
@@ -466,7 +466,7 @@ export default function AdminUserAccounts() {
           <CardContent className="flex items-center justify-between p-5">
             <div>
               <p className="text-sm text-muted-foreground">Protected Admins</p>
-              <p className="mt-2 text-3xl font-bold text-on-surface">{protectedCount}</p>
+              <p className="mt-2 text-2xl font-bold text-on-surface sm:text-3xl">{protectedCount}</p>
             </div>
             <Badge className="bg-purple-100 px-3 py-1 text-purple-700">Protected</Badge>
           </CardContent>
@@ -702,25 +702,25 @@ export default function AdminUserAccounts() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <TabsList className="w-full md:w-fit">
+          <TabsList className="w-full sm:w-fit">
             <TabsTrigger value="active">Active Accounts</TabsTrigger>
             <TabsTrigger value="archive">Archive</TabsTrigger>
           </TabsList>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             {selectedUserIds.size > 0 && (
-              <div className="flex shrink-0 items-center gap-2 rounded-md bg-primary/10 px-3 py-1.5 print:hidden">
+              <div className="flex flex-wrap items-center gap-2 rounded-md bg-primary/10 px-3 py-1.5 print:hidden">
                 <span className="text-sm font-medium text-primary">{selectedUserIds.size} selected</span>
                 {tab === 'active' ? (
-                  <Button variant="default" size="sm" onClick={() => setBulkArchiveOpen(true)} className="h-8">
+                  <Button variant="default" size="sm" onClick={() => setBulkArchiveOpen(true)} className="h-8 w-full sm:w-auto">
                     <Archive className="mr-2 h-4 w-4" /> Bulk Archive
                   </Button>
                 ) : (
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setBulkRestoreOpen(true)} className="h-8">
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button variant="outline" size="sm" onClick={() => setBulkRestoreOpen(true)} className="h-8 w-full sm:w-auto">
                       <RefreshCcw className="mr-2 h-4 w-4" /> Bulk Restore
                     </Button>
-                    <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)} className="h-8">
+                    <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)} className="h-8 w-full sm:w-auto">
                       <Trash2 className="mr-2 h-4 w-4" /> Bulk Delete
                     </Button>
                   </div>
@@ -776,12 +776,12 @@ export default function AdminUserAccounts() {
                 <SelectItem value="Administrator">Administrator</SelectItem>
               </SelectContent>
             </Select>
-            <div className="flex gap-2 print:hidden">
-              <Button variant="outline" size="sm" onClick={exportToPDF}>
+            <div className="flex flex-col gap-2 sm:flex-row print:hidden">
+              <Button variant="outline" size="sm" onClick={exportToPDF} className="w-full sm:w-auto">
                 <Printer className="mr-2 h-4 w-4" />
                 PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={exportToCSV}>
+              <Button variant="outline" size="sm" onClick={exportToCSV} className="w-full sm:w-auto">
                 <Download className="mr-2 h-4 w-4" />
                 Export Data
               </Button>
@@ -798,9 +798,68 @@ export default function AdminUserAccounts() {
               <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
                 Only student and clinic staff accounts can be archived here. Administrator accounts stay protected.
               </div>
-              <div className="overflow-x-auto">
+              {sortedActiveUsers.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                  No active accounts matched your search.
+                </div>
+              ) : null}
+
+              <div className="space-y-3 md:hidden">
+                {sortedActiveUsers.map((user) => (
+                  <Card key={user.userId} className="border-outline-variant/40">
+                    <CardContent className="space-y-3 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-on-surface">{getDisplayName(user)}</p>
+                          <p className="text-xs text-muted-foreground">{user.id}</p>
+                        </div>
+                        {user.canArchive ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedUserIds.has(user.userId)}
+                            onChange={(e) => {
+                              const next = new Set(selectedUserIds);
+                              if (e.target.checked) next.add(user.userId);
+                              else next.delete(user.userId);
+                              setSelectedUserIds(next);
+                            }}
+                            className="mt-0.5 rounded border-gray-300"
+                          />
+                        ) : null}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Badge className={roleTone(user.role)}>{user.role}</Badge>
+                        <Badge className={statusTone(user.status)}>{user.status}</Badge>
+                      </div>
+
+                      <div className="space-y-1 text-sm">
+                        <p className="break-all">
+                          <span className="font-medium text-on-surface">Email:</span> {user.email || '-'}
+                        </p>
+                        <p>
+                          <span className="font-medium text-on-surface">Last Active:</span> {formatDateTime(user.lastActive)}
+                        </p>
+                      </div>
+
+                      {user.canArchive ? (
+                        <Button variant="outline" size="sm" onClick={() => setArchiveTarget(user)} className="w-full">
+                          <Archive className="mr-2 h-4 w-4" />
+                          Archive Account
+                        </Button>
+                      ) : (
+                        <Button variant="secondary" size="sm" disabled className="w-full">
+                          Protected Administrator
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
-                  <TableHeader className="hidden md:table-header-group">
+                  <TableHeader>
                     <TableRow>
                       <TableHead className="w-12">
                         <input
@@ -844,69 +903,47 @@ export default function AdminUserAccounts() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedActiveUsers.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
-                          No active accounts matched your search.
+                    {sortedActiveUsers.map((user) => (
+                      <TableRow key={user.userId}>
+                        <TableCell>
+                          {user.canArchive ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedUserIds.has(user.userId)}
+                              onChange={(e) => {
+                                const next = new Set(selectedUserIds);
+                                if (e.target.checked) next.add(user.userId);
+                                else next.delete(user.userId);
+                                setSelectedUserIds(next);
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="font-medium">{user.id}</TableCell>
+                        <TableCell>{getDisplayName(user)}</TableCell>
+                        <TableCell>
+                          <Badge className={roleTone(user.role)}>{user.role}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={statusTone(user.status)}>{user.status}</Badge>
+                        </TableCell>
+                        <TableCell>{user.email || '-'}</TableCell>
+                        <TableCell>{formatDateTime(user.lastActive)}</TableCell>
+                        <TableCell>
+                          {user.canArchive ? (
+                            <Button variant="outline" size="sm" onClick={() => setArchiveTarget(user)}>
+                              <Archive className="mr-2 h-4 w-4" />
+                              Archive
+                            </Button>
+                          ) : (
+                            <Button variant="secondary" size="sm" disabled>
+                              Protected
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      sortedActiveUsers.map((user) => (
-                        <TableRow key={user.userId} className="flex flex-col md:table-row border-b md:border-b-0 pb-4 md:pb-0 mb-4 md:mb-0 relative">
-                          <TableCell className="absolute right-0 top-0 md:relative md:block md:table-cell">
-                            {user.canArchive && (
-                              <input
-                                type="checkbox"
-                                checked={selectedUserIds.has(user.userId)}
-                                onChange={(e) => {
-                                  const next = new Set(selectedUserIds);
-                                  if (e.target.checked) next.add(user.userId);
-                                  else next.delete(user.userId);
-                                  setSelectedUserIds(next);
-                                }}
-                                className="rounded border-gray-300"
-                              />
-                            )}
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">User ID:</span>
-                            <span className="font-medium">{user.id}</span>
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Name:</span>
-                            {getDisplayName(user)}
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Role:</span>
-                            <Badge className={roleTone(user.role)}>{user.role}</Badge>
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Status:</span>
-                            <Badge className={statusTone(user.status)}>{user.status}</Badge>
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Email:</span>
-                            {user.email || '-'}
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Last Active:</span>
-                            {formatDateTime(user.lastActive)}
-                          </TableCell>
-                          <TableCell className="block md:table-cell pt-4 md:pt-2">
-                            {user.canArchive ? (
-                              <Button variant="outline" size="sm" onClick={() => setArchiveTarget(user)}>
-                                <Archive className="h-4 w-4 md:mr-2" />
-                                <span className="hidden md:inline">Archive</span>
-                              </Button>
-                            ) : (
-                              <Button variant="secondary" size="sm" disabled>
-                                Protected
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -923,9 +960,66 @@ export default function AdminUserAccounts() {
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 Permanently deleting an archived account removes its system access and linked database data so the same user can register again later.
               </div>
-              <div className="overflow-x-auto">
+              {sortedArchivedUsers.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                  No archived accounts matched your search.
+                </div>
+              ) : null}
+
+              <div className="space-y-3 md:hidden">
+                {sortedArchivedUsers.map((user) => (
+                  <Card key={user.archiveId} className="border-outline-variant/40">
+                    <CardContent className="space-y-3 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-on-surface">{getDisplayName(user)}</p>
+                          <p className="text-xs text-muted-foreground">{user.id}</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={selectedUserIds.has(user.archiveId)}
+                          onChange={(e) => {
+                            const next = new Set(selectedUserIds);
+                            if (e.target.checked) next.add(user.archiveId);
+                            else next.delete(user.archiveId);
+                            setSelectedUserIds(next);
+                          }}
+                          className="mt-0.5 rounded border-gray-300"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Badge className={roleTone(user.role)}>{user.role}</Badge>
+                        <Badge className={statusTone(user.status)}>{user.status}</Badge>
+                      </div>
+
+                      <div className="space-y-1 text-sm">
+                        <p>
+                          <span className="font-medium text-on-surface">Archived On:</span> {formatDateTime(user.archivedAt)}
+                        </p>
+                        <p className="break-words">
+                          <span className="font-medium text-on-surface">Reason:</span> {user.archivedReason || '-'}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setRestoreTarget(user)} className="w-full">
+                          <RefreshCcw className="mr-2 h-4 w-4" />
+                          Restore Account
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(user)} className="w-full">
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Permanently
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
-                  <TableHeader className="hidden md:table-header-group">
+                  <TableHeader>
                     <TableRow>
                       <TableHead className="w-12">
                         <input
@@ -966,67 +1060,47 @@ export default function AdminUserAccounts() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedArchivedUsers.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
-                          No archived accounts matched your search.
+                    {sortedArchivedUsers.map((user) => (
+                      <TableRow key={user.archiveId}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={selectedUserIds.has(user.archiveId)}
+                            onChange={(e) => {
+                              const next = new Set(selectedUserIds);
+                              if (e.target.checked) next.add(user.archiveId);
+                              else next.delete(user.archiveId);
+                              setSelectedUserIds(next);
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{user.id}</TableCell>
+                        <TableCell>{getDisplayName(user)}</TableCell>
+                        <TableCell>
+                          <Badge className={roleTone(user.role)}>{user.role}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={statusTone(user.status)}>{user.status}</Badge>
+                        </TableCell>
+                        <TableCell>{formatDateTime(user.archivedAt)}</TableCell>
+                        <TableCell>
+                          <span className="inline-block max-w-60 truncate align-bottom">{user.archivedReason || '-'}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setRestoreTarget(user)}>
+                              <RefreshCcw className="mr-2 h-4 w-4" />
+                              Restore
+                            </Button>
+                            <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(user)}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      sortedArchivedUsers.map((user) => (
-                        <TableRow key={user.archiveId} className="flex flex-col md:table-row border-b md:border-b-0 pb-4 md:pb-0 mb-4 md:mb-0 relative">
-                          <TableCell className="absolute right-0 top-0 md:relative md:block md:table-cell">
-                            <input
-                              type="checkbox"
-                              checked={selectedUserIds.has(user.archiveId)}
-                              onChange={(e) => {
-                                const next = new Set(selectedUserIds);
-                                if (e.target.checked) next.add(user.archiveId);
-                                else next.delete(user.archiveId);
-                                setSelectedUserIds(next);
-                              }}
-                              className="rounded border-gray-300"
-                            />
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">User ID:</span>
-                            <span className="font-medium">{user.id}</span>
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Name:</span>
-                            {getDisplayName(user)}
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Role:</span>
-                            <Badge className={roleTone(user.role)}>{user.role}</Badge>
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Status:</span>
-                            <Badge className={statusTone(user.status)}>{user.status}</Badge>
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Archived On:</span>
-                            {formatDateTime(user.archivedAt)}
-                          </TableCell>
-                          <TableCell className="block md:table-cell">
-                            <span className="md:hidden font-bold inline-block w-28">Note:</span>
-                            <span className="max-w-60 truncate inline-block align-bottom">{user.archivedReason || '-'}</span>
-                          </TableCell>
-                          <TableCell className="block md:table-cell pt-4 md:pt-2">
-                            <div className="flex flex-col gap-2 md:flex-row">
-                              <Button variant="outline" size="sm" onClick={() => setRestoreTarget(user)}>
-                                <RefreshCcw className="h-4 w-4 md:mr-2" />
-                                <span className="hidden md:inline">Restore</span>
-                              </Button>
-                              <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(user)}>
-                                <Trash2 className="h-4 w-4 md:mr-2" />
-                                <span className="hidden md:inline">Delete Permanently</span>
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
+                    ))}
                   </TableBody>
                 </Table>
               </div>
