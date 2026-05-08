@@ -85,9 +85,29 @@ function matchesSearch(
     .includes(needle);
 }
 
+function prettifyEmailName(email?: string | null) {
+  const source = String(email || '').trim();
+  if (!source.includes('@')) return '';
+  return source
+    .split('@')[0]
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function getDisplayName(account: { name?: string; email?: string | null; id?: string }) {
+  const rawName = String(account.name || '').trim();
+  if (rawName && !rawName.includes('@')) return rawName;
+  const fromEmail = prettifyEmailName(account.email);
+  if (fromEmail) return fromEmail;
+  return rawName || String(account.id || 'Unnamed User');
+}
+
 export default function AdminUserAccounts() {
   const [tab, setTab] = useState('active');
   const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
   const [openCreate, setOpenCreate] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<AdminUserAccount | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ArchivedUserAccount | null>(null);
@@ -136,13 +156,23 @@ export default function AdminUserAccounts() {
   
 
   const filteredActiveUsers = useMemo(
-    () => userAccounts.filter((user) => matchesSearch(user, searchQuery)),
-    [searchQuery, userAccounts],
+    () =>
+      userAccounts.filter((user) => {
+        if (!matchesSearch(user, searchQuery)) return false;
+        if (roleFilter !== 'all' && user.role !== roleFilter) return false;
+        return true;
+      }),
+    [searchQuery, roleFilter, userAccounts],
   );
 
   const filteredArchivedUsers = useMemo(
-    () => archivedAccounts.filter((user) => matchesSearch(user, searchQuery)),
-    [archivedAccounts, searchQuery],
+    () =>
+      archivedAccounts.filter((user) => {
+        if (!matchesSearch(user, searchQuery)) return false;
+        if (roleFilter !== 'all' && user.role !== roleFilter) return false;
+        return true;
+      }),
+    [archivedAccounts, searchQuery, roleFilter],
   );
 
   const sortedActiveUsers = useMemo(() => {
@@ -358,7 +388,7 @@ export default function AdminUserAccounts() {
         tab === 'archive'
           ? filteredArchivedUsers.map((user) => ({
               id: user.id,
-              name: user.name,
+              name: getDisplayName(user),
               role: user.role,
               status: user.status,
               date: user.archivedAt,
@@ -366,7 +396,7 @@ export default function AdminUserAccounts() {
             }))
           : filteredActiveUsers.map((user) => ({
               id: user.id,
-              name: user.name,
+              name: getDisplayName(user),
               role: user.role,
               status: user.status,
               date: user.lastActive || '',
@@ -735,6 +765,17 @@ export default function AdminUserAccounts() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="w-full sm:w-[190px]">
+                <SelectValue placeholder="All Roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                <SelectItem value="Student">Student</SelectItem>
+                <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
+                <SelectItem value="Administrator">Administrator</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="flex gap-2 print:hidden">
               <Button variant="outline" size="sm" onClick={exportToPDF}>
                 <Printer className="mr-2 h-4 w-4" />
@@ -833,7 +874,7 @@ export default function AdminUserAccounts() {
                           </TableCell>
                           <TableCell className="block md:table-cell">
                             <span className="md:hidden font-bold inline-block w-28">Name:</span>
-                            {user.name}
+                            {getDisplayName(user)}
                           </TableCell>
                           <TableCell className="block md:table-cell">
                             <span className="md:hidden font-bold inline-block w-28">Role:</span>
@@ -953,7 +994,7 @@ export default function AdminUserAccounts() {
                           </TableCell>
                           <TableCell className="block md:table-cell">
                             <span className="md:hidden font-bold inline-block w-28">Name:</span>
-                            {user.name}
+                            {getDisplayName(user)}
                           </TableCell>
                           <TableCell className="block md:table-cell">
                             <span className="md:hidden font-bold inline-block w-28">Role:</span>
