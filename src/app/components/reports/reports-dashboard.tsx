@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Skeleton } from '../ui/skeleton';
 import { Download, TrendingUp, Clock, Award, Users, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
@@ -19,6 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
   physical_exam_done: 'Physical Exam Done',
 };
 const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', issued: 'Issued Only', not_issued: 'Not Issued' };
+const REPORTS_CACHE_KEY = 'clinic_reports_cache_v1';
 
 type ReportsSummary = {
   total: number;
@@ -316,12 +318,36 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const today = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedRaw = window.sessionStorage.getItem(REPORTS_CACHE_KEY);
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw) as { analytics?: any; submissions?: any[] };
+          if (cached?.analytics) setAnalytics(cached.analytics);
+          if (Array.isArray(cached?.submissions)) setSubmissions(cached.submissions);
+          if (cached?.analytics || Array.isArray(cached?.submissions)) setLoading(false);
+        }
+      } catch {
+        // ignore cache parse errors
+      }
+    }
+
     (async () => {
-      setLoading(true);
+      setLoading((prev) => prev && submissions.length === 0 && !analytics);
       try {
         const [analyticsData, submissionsData] = await Promise.all([getAnalytics(), getSubmissions()]);
+        const nextSubmissions = submissionsData.submissions || [];
         setAnalytics(analyticsData);
-        setSubmissions(submissionsData.submissions || []);
+        setSubmissions(nextSubmissions);
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(
+            REPORTS_CACHE_KEY,
+            JSON.stringify({
+              analytics: analyticsData,
+              submissions: nextSubmissions,
+            }),
+          );
+        }
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -520,8 +546,61 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading reports...</div>
+      <div className="space-y-5">
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-80" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <Skeleton className="h-10 w-36 rounded-md" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <Card key={`stats-skeleton-${idx}`} className="border-outline-variant/30">
+              <CardContent className="px-5 pb-5 pt-5">
+                <Skeleton className="mb-3 h-3 w-32" />
+                <Skeleton className="h-9 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card className="border-outline-variant/30">
+          <CardHeader className="pb-0 pt-5 px-5">
+            <Skeleton className="h-6 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-4 px-5 pb-5 pt-5">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-64" />
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Card className="border-outline-variant/30">
+            <CardHeader className="pb-2 pt-5 px-5">
+              <Skeleton className="h-6 w-44" />
+            </CardHeader>
+            <CardContent className="space-y-2 px-5 pb-5">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <Skeleton key={`breakdown-skeleton-${idx}`} className="h-5 w-full" />
+              ))}
+            </CardContent>
+          </Card>
+          <Card className="border-outline-variant/30 xl:col-span-2">
+            <CardHeader className="pb-2 pt-5 px-5">
+              <Skeleton className="h-6 w-52" />
+            </CardHeader>
+            <CardContent className="space-y-3 px-5 pb-5">
+              <Skeleton className="h-8 w-full" />
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <Skeleton key={`course-skeleton-${idx}`} className="h-6 w-full" />
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
