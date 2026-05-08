@@ -223,11 +223,11 @@ export default function StudentProfile() {
     setSaving(true);
     try {
       const result = await updateStudentProfile(formData);
-      const nextState = buildProfileFormState({
+      const nextStateFromResult = buildProfileFormState({
         profile: result.profile,
         student: result.student,
       });
-      const resolvedStudentId = result.student?.student_id || nextState.studentId;
+      const resolvedStudentId = result.student?.student_id || nextStateFromResult.studentId;
       const resolvedProfileId = result.student?.profile_id || me?.student?.profile_id || result.profile.id;
 
       if (photoFile) {
@@ -239,12 +239,12 @@ export default function StudentProfile() {
       }
 
       const assets = await getStudentProfileAssets(resolvedStudentId, resolvedProfileId);
-      setFormData(nextState);
       setProfileAssets(assets);
       setPhotoFile(null);
       setSignatureFile(null);
 
-      await refresh();
+      const refreshedMe = await refresh();
+      setFormData(refreshedMe ? buildProfileFormState(refreshedMe) : nextStateFromResult);
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('gc-profile-assets-updated'));
