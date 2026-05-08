@@ -1552,8 +1552,8 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     address: data.address || '',
   };
 
-    try {
-    return await apiRequest<{
+  try {
+    const serverResult = await apiRequest<{
       success: boolean;
       profile: AuthMe['profile'];
       student: AuthMe['student'];
@@ -1564,6 +1564,14 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
       },
       body: JSON.stringify(payload),
     });
+
+    // Always re-read profile data after server updates so the UI reflects committed DB state.
+    const refreshedMe = await getMe();
+    return {
+      success: Boolean(serverResult?.success),
+      profile: refreshedMe.profile || serverResult.profile,
+      student: refreshedMe.student || serverResult.student,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message.toLowerCase() : '';
     const missingRoute = message.includes('404') || message.includes('not found');
