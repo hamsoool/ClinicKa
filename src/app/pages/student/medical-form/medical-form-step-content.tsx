@@ -761,6 +761,19 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
             <div className="flex items-start gap-3">
               <Checkbox
+                id="dataPrivacyConsent"
+                checked={formData.dataPrivacyConsent}
+                onCheckedChange={(checked) => onFieldChange('dataPrivacyConsent', checked === true)}
+              />
+              <Label htmlFor="dataPrivacyConsent" className="text-sm leading-6 font-normal">
+                I have read and accepted the Data Privacy Waiver, and I consent to the collection and use of my
+                personal information for clinic record processing.
+              </Label>
+            </div>
+          </div>
+          <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
+            <div className="flex items-start gap-3">
+              <Checkbox
                 id="submissionConfirmed"
                 checked={formData.submissionConfirmed}
                 onCheckedChange={(checked) => onFieldChange('submissionConfirmed', checked === true)}

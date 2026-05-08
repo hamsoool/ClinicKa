@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   ArrowRight,
-  CheckCircle2,
   ClipboardList,
   FileText,
   FolderOpen,
@@ -13,7 +12,7 @@ import {
 import { useAuth } from '../lib/auth';
 
 const LOGO_SRC = '/logo.png';
-const DASHBOARD_PREVIEW_SRC = new URL('../../../exports/figma/02-student-dashboard.png', import.meta.url).href;
+const LANDING_PREVIEW_SRC = '/clinickalogo.png';
 const FORM_PREVIEW_SRC = new URL('../../../exports/figma/05-student-medical-form.png', import.meta.url).href;
 const CAMPUS_PREVIEW_SRC = '/backdrop.jpg';
 
@@ -209,39 +208,12 @@ export default function RoleSelection() {
             </div>
 
             <div className="relative lg:col-span-5 lg:pl-2">
-              <div className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/78 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.14)] backdrop-blur md:p-5">
-                <div className="mb-4 flex items-center justify-between rounded-[1.5rem] border border-[#d9e5e3] bg-white/86 px-4 py-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Student portal preview</p>
-                    <p className="mt-1 text-sm font-semibold text-[#0b1c30]">Unified medical submission dashboard</p>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-full bg-[#e2f5ea] px-3 py-1 text-xs font-semibold text-[#065f46]">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Live workflow
-                  </div>
-                </div>
-                <div className="overflow-hidden rounded-[1.6rem] border border-[#d8e3ea] bg-[#eef4ff]">
-                  <div className="relative h-[460px] overflow-hidden bg-[#eef4ff]">
-                    <img
-                      src={DASHBOARD_PREVIEW_SRC}
-                      alt="ClinicKa student dashboard preview"
-                      className="h-full w-full object-cover object-left-top"
-                    />
-                    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0)_22%,rgba(248,249,255,0.14)_100%)]" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="pointer-events-none absolute -bottom-7 left-4 max-w-[19rem] rounded-[1.5rem] border border-white/85 bg-white/88 p-4 shadow-[0_24px_60px_rgba(11,28,48,0.12)] backdrop-blur sm:-left-8 sm:max-w-[18rem]">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#d9f3e4] text-[#065f46]">
-                    <CheckCircle2 className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[#0b1c30]">Clearance status</p>
-                    <p className="mt-1 text-xs text-[#4a5b68]">Approved requirements and visible progress.</p>
-                  </div>
-                </div>
+              <div className="flex items-center justify-center">
+                <img
+                  src={LANDING_PREVIEW_SRC}
+                  alt="ClinicKa logo"
+                  className="w-full max-w-[520px] object-contain drop-shadow-[0_18px_45px_rgba(11,28,48,0.12)]"
+                />
               </div>
             </div>
           </div>

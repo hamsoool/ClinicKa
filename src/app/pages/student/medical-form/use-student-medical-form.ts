@@ -577,6 +577,10 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
 
   const submit = useCallback(async () => {
     if (uploading) return;
+    if (!formData.dataPrivacyConsent) {
+      toast.error('Please accept the Data Privacy Waiver before submitting.');
+      return;
+    }
     if (!formData.submissionConfirmed) {
       toast.error('Please confirm that all details are complete before submitting.');
       return;
