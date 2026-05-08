@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import {
@@ -69,11 +69,7 @@ function formatDate(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '--';
 
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-  }).format(date);
+  return dateFormatter.format(date);
 }
 
 function formatDateTime(value?: string) {
@@ -82,14 +78,22 @@ function formatDateTime(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '--';
 
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
+  return dateTimeFormatter.format(date);
 }
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: '2-digit',
+  year: 'numeric',
+});
+
+const dateTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: '2-digit',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
 
 function getStatusLabel(status: SubmissionSummary['status']) {
   switch (status) {
@@ -158,18 +162,35 @@ export default function AdminDashboard() {
     return <PortalPageSkeleton variant="dashboard" />;
   }
 
-  const activeStaffCount = staffUsers.filter((staff) => staff.status === 'Active').length;
-  const adminCount = userAccounts.filter((user) => user.role === 'Administrator').length;
-  const clinicStaffCount = userAccounts.filter((user) => user.role === 'Clinic Staff').length;
-  const studentAccounts = userAccounts.filter((user) => user.role === 'Student').length;
-  const recentAccounts = [...userAccounts]
-    .filter((user) => user.lastActive)
-    .sort((a, b) => new Date(b.lastActive || 0).getTime() - new Date(a.lastActive || 0).getTime())
-    .slice(0, 5);
-  const submissionsNeedingAttention = [...submissions]
-    .filter((submission) => submission.status === 'pending' || submission.status === 'returned')
-    .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
-    .slice(0, 5);
+  const {
+    activeStaffCount,
+    adminCount,
+    clinicStaffCount,
+    studentAccounts,
+    recentAccounts,
+    submissionsNeedingAttention,
+  } = useMemo(() => {
+    const activeStaff = staffUsers.filter((staff) => staff.status === 'Active').length;
+    const admin = userAccounts.filter((user) => user.role === 'Administrator').length;
+    const clinicStaff = userAccounts.filter((user) => user.role === 'Clinic Staff').length;
+    const students = userAccounts.filter((user) => user.role === 'Student').length;
+    const recent = [...userAccounts]
+      .filter((user) => user.lastActive)
+      .sort((a, b) => new Date(b.lastActive || 0).getTime() - new Date(a.lastActive || 0).getTime())
+      .slice(0, 5);
+    const queue = [...submissions]
+      .filter((submission) => submission.status === 'pending' || submission.status === 'returned')
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+      .slice(0, 5);
+    return {
+      activeStaffCount: activeStaff,
+      adminCount: admin,
+      clinicStaffCount: clinicStaff,
+      studentAccounts: students,
+      recentAccounts: recent,
+      submissionsNeedingAttention: queue,
+    };
+  }, [staffUsers, submissions, userAccounts]);
 
   const summaryCards = [
     {

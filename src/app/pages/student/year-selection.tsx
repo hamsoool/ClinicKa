@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, GraduationCap, Lock } from 'lucide-react';
@@ -39,21 +40,24 @@ export default function StudentYearSelection() {
     enabled: !!studentId,
   });
   const records = Array.isArray(data) ? data : [];
-  const latestByYear = new Map<number, { status: string; updatedAt?: string; submittedAt?: string }>();
-  records.forEach((record) => {
-    const year = Number.parseInt(String(record?.year || ''), 10);
-    if (!Number.isInteger(year) || year < 1 || year > 4) return;
-    const current = latestByYear.get(year);
-    const currentTs = current ? new Date(current.updatedAt || current.submittedAt || 0).getTime() : -1;
-    const nextTs = new Date(record?.updatedAt || record?.submittedAt || 0).getTime();
-    if (!current || nextTs >= currentTs) {
-      latestByYear.set(year, {
-        status: String(record?.status || '').toLowerCase(),
-        updatedAt: record?.updatedAt,
-        submittedAt: record?.submittedAt,
-      });
-    }
-  });
+  const latestByYear = useMemo(() => {
+    const map = new Map<number, { status: string; updatedAt?: string; submittedAt?: string }>();
+    records.forEach((record) => {
+      const year = Number.parseInt(String(record?.year || ''), 10);
+      if (!Number.isInteger(year) || year < 1 || year > 4) return;
+      const current = map.get(year);
+      const currentTs = current ? new Date(current.updatedAt || current.submittedAt || 0).getTime() : -1;
+      const nextTs = new Date(record?.updatedAt || record?.submittedAt || 0).getTime();
+      if (!current || nextTs >= currentTs) {
+        map.set(year, {
+          status: String(record?.status || '').toLowerCase(),
+          updatedAt: record?.updatedAt,
+          submittedAt: record?.submittedAt,
+        });
+      }
+    });
+    return map;
+  }, [records]);
 
   if (isLoading && studentId) {
     return <PortalPageSkeleton variant="table" />;

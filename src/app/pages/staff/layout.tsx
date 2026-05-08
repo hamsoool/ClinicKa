@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   Activity,
   Award,
@@ -14,6 +15,7 @@ import PortalShell, {
   type PortalNavItem,
   type PortalTopAction,
 } from '../../components/portal-shell';
+import { prefetchPortalRoutes } from '../../route-modules';
 import { useAuth } from '../../lib/auth';
 
 const navItems = [
@@ -41,6 +43,18 @@ export default function StaffLayout() {
     formatEmailName(me?.profile.email) ||
     'Clinic Nurse / Doctor';
   const position = me?.staff?.position || 'Clinic Nurse / Doctor';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (typeof window.requestIdleCallback === 'function') {
+      const callbackId = window.requestIdleCallback(() => {
+        prefetchPortalRoutes('staff');
+      });
+      return () => window.cancelIdleCallback?.(callbackId);
+    }
+    const timerId = window.setTimeout(() => prefetchPortalRoutes('staff'), 250);
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   return (
     <PortalShell

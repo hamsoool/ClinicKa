@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -20,7 +20,6 @@ const YEAR_LABELS: Record<string, string> = {
 
 export default function StaffSubmissions() {
   const navigate = useNavigate();
-  const [filteredSubmissions, setFilteredSubmissions] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
@@ -43,31 +42,26 @@ export default function StaffSubmissions() {
     }
   }, [isError]);
 
-  useEffect(() => {
-    filterSubmissions();
-  }, [searchQuery, statusFilter, departmentFilter, yearFilter, sortOrder, submissions]);
-
-  const filterSubmissions = () => {
-    let filtered = [...submissions];
-
-    if (searchQuery) {
-      filtered = filtered.filter(sub =>
-        sub.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sub.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sub.studentId?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(sub => sub.status === statusFilter);
-    }
-    if (departmentFilter !== 'all') {
-      filtered = filtered.filter(sub =>
-        sub.department === departmentFilter || sub.course?.includes(departmentFilter)
-      );
-    }
-    if (yearFilter !== 'all') {
-      filtered = filtered.filter(sub => String(sub.year) === yearFilter);
-    }
+  const filteredSubmissions = useMemo(() => {
+    const needle = searchQuery.trim().toLowerCase();
+    const filtered = submissions.filter((sub) => {
+      if (needle) {
+        const matchesSearch =
+          sub.firstName?.toLowerCase().includes(needle) ||
+          sub.lastName?.toLowerCase().includes(needle) ||
+          sub.studentId?.toLowerCase().includes(needle);
+        if (!matchesSearch) return false;
+      }
+      if (statusFilter !== 'all' && sub.status !== statusFilter) return false;
+      if (
+        departmentFilter !== 'all' &&
+        !(sub.department === departmentFilter || sub.course?.includes(departmentFilter))
+      ) {
+        return false;
+      }
+      if (yearFilter !== 'all' && String(sub.year) !== yearFilter) return false;
+      return true;
+    });
 
     filtered.sort((a, b) => {
       const timeA = new Date(a.submittedAt).getTime();
@@ -75,8 +69,8 @@ export default function StaffSubmissions() {
       return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
     });
 
-    setFilteredSubmissions(filtered);
-  };
+    return filtered;
+  }, [departmentFilter, searchQuery, sortOrder, statusFilter, submissions, yearFilter]);
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -107,14 +101,24 @@ export default function StaffSubmissions() {
     }
   };
 
-  const getQueueNumber = (submission: any, allSubmissions: any[]) => {
-    if (!submission.submittedAt) return 0;
-    const submitDate = new Date(submission.submittedAt).toDateString();
-    const sameDaySubmissions = allSubmissions.filter(s => s.submittedAt && new Date(s.submittedAt).toDateString() === submitDate);
-    sameDaySubmissions.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
-    const index = sameDaySubmissions.findIndex(s => s.id === submission.id);
-    return index + 1;
-  };
+  const queueNumbersBySubmissionId = useMemo(() => {
+    const groups = new Map<string, Array<{ id: string; submittedAt: string }>>();
+    for (const submission of submissions) {
+      if (!submission?.id || !submission?.submittedAt) continue;
+      const submitDate = new Date(submission.submittedAt).toDateString();
+      if (!groups.has(submitDate)) groups.set(submitDate, []);
+      groups.get(submitDate)!.push({ id: submission.id, submittedAt: submission.submittedAt });
+    }
+
+    const queueMap = new Map<string, number>();
+    for (const entries of groups.values()) {
+      entries.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+      entries.forEach((entry, index) => {
+        queueMap.set(entry.id, index + 1);
+      });
+    }
+    return queueMap;
+  }, [submissions]);
 
   return (
     <div>
@@ -251,7 +255,7 @@ export default function StaffSubmissions() {
                           {submission.firstName} {submission.lastName}
                         </h4>
                         <Badge variant="outline" className="bg-secondary/50 text-secondary-foreground">
-                          Queue #{getQueueNumber(submission, submissions)}
+                          Queue #{queueNumbersBySubmissionId.get(submission.id) || 0}
                         </Badge>
                         {getStatusBadge(submission.status)}
                       </div>

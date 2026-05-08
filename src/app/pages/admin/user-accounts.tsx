@@ -215,6 +215,31 @@ export default function AdminUserAccounts() {
     return sortableItems;
   }, [filteredArchivedUsers, sortConfig]);
 
+  const archiveableActiveUsers = useMemo(
+    () => sortedActiveUsers.filter((user) => user.canArchive),
+    [sortedActiveUsers],
+  );
+  const allArchiveableSelected = useMemo(
+    () =>
+      archiveableActiveUsers.length > 0 &&
+      archiveableActiveUsers.every((user) => selectedUserIds.has(user.userId)),
+    [archiveableActiveUsers, selectedUserIds],
+  );
+  const someArchiveableSelected = useMemo(
+    () => archiveableActiveUsers.some((user) => selectedUserIds.has(user.userId)),
+    [archiveableActiveUsers, selectedUserIds],
+  );
+  const allArchivedSelected = useMemo(
+    () =>
+      sortedArchivedUsers.length > 0 &&
+      sortedArchivedUsers.every((user) => selectedUserIds.has(user.archiveId)),
+    [selectedUserIds, sortedArchivedUsers],
+  );
+  const someArchivedSelected = useMemo(
+    () => sortedArchivedUsers.some((user) => selectedUserIds.has(user.archiveId)),
+    [selectedUserIds, sortedArchivedUsers],
+  );
+
   const requestSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -864,16 +889,15 @@ export default function AdminUserAccounts() {
                       <TableHead className="w-12">
                         <input
                           type="checkbox"
-                          checked={selectedUserIds.size > 0 && selectedUserIds.size === sortedActiveUsers.filter(u => u.canArchive).length && sortedActiveUsers.filter(u => u.canArchive).length > 0}
+                          checked={allArchiveableSelected}
                           ref={input => {
                             if (input) {
-                              const archiveable = sortedActiveUsers.filter(u => u.canArchive);
-                              input.indeterminate = selectedUserIds.size > 0 && selectedUserIds.size < archiveable.length;
+                              input.indeterminate = someArchiveableSelected && !allArchiveableSelected;
                             }
                           }}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setSelectedUserIds(new Set(sortedActiveUsers.filter(u => u.canArchive).map(u => u.userId)));
+                              setSelectedUserIds(new Set(archiveableActiveUsers.map((user) => user.userId)));
                             } else {
                               setSelectedUserIds(new Set());
                             }
@@ -1024,10 +1048,10 @@ export default function AdminUserAccounts() {
                       <TableHead className="w-12">
                         <input
                           type="checkbox"
-                          checked={selectedUserIds.size > 0 && selectedUserIds.size === sortedArchivedUsers.length && sortedArchivedUsers.length > 0}
+                          checked={allArchivedSelected}
                           ref={input => {
                             if (input) {
-                              input.indeterminate = selectedUserIds.size > 0 && selectedUserIds.size < sortedArchivedUsers.length;
+                              input.indeterminate = someArchivedSelected && !allArchivedSelected;
                             }
                           }}
                           onChange={(e) => {
