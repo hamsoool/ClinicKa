@@ -7,7 +7,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Skeleton } from '../ui/skeleton';
 import { Download, TrendingUp, Clock, Award, Users, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
-import jsPDF from 'jspdf';
 import { getAnalytics, getSubmissions } from '../../lib/api';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
@@ -118,12 +117,13 @@ async function imagePathToDataUrl(path: string) {
 }
 
 async function buildSimplePdf(
+  createDoc: () => any,
   summaryRows: Array<{ label: string; value: string }>,
   studentRows: Array<{ fullName: string; studentId: string; course: string; year: string; status: string; submitted: string; certificate: string }>,
   reportTitle: string,
   filters: Array<{ label: string; value: string }>,
 ) {
-  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+  const doc = createDoc();
   const left = 32;
   const right = 563;
   const contentWidth = right - left;
@@ -484,6 +484,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
   const downloadPdf = async () => {
     try {
+      const { default: jsPDF } = await import('jspdf');
       const friendlyDepartment = departmentFilter === 'all' ? 'All Departments' : departmentFilter;
       const friendlyYear = yearFilter === 'all' ? 'All Years' : (YEAR_LABELS[yearFilter] || `Year ${yearFilter}`);
       const friendlyStatus = statusFilter === 'all' ? 'All Statuses' : (STATUS_LABELS[statusFilter] || statusFilter);
@@ -541,7 +542,13 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         { label: 'Submitted From', value: fromDate || '-' },
         { label: 'Submitted To', value: toDate || '-' },
       ];
-      const blob = await buildSimplePdf(summaryRows, studentRows, `${mode === 'admin' ? 'ADMIN' : 'STAFF'} CLINIC REPORT`, filterList);
+      const blob = await buildSimplePdf(
+        () => new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' }),
+        summaryRows,
+        studentRows,
+        `${mode === 'admin' ? 'ADMIN' : 'STAFF'} CLINIC REPORT`,
+        filterList,
+      );
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

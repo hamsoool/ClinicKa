@@ -13,6 +13,7 @@ import PortalShell, {
   type PortalNavItem,
   type PortalTopAction,
 } from '../../components/portal-shell';
+import { prefetchPortalRoutes } from '../../route-modules';
 import { getStudentProfilePhoto } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -45,6 +46,18 @@ export default function StudentLayout() {
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const course = me?.student?.course || me?.profile.course || '';
   const profileSubtitle = [studentId, course].filter(Boolean).join(' | ') || 'Student account';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (typeof window.requestIdleCallback === 'function') {
+      const callbackId = window.requestIdleCallback(() => {
+        prefetchPortalRoutes('student');
+      });
+      return () => window.cancelIdleCallback?.(callbackId);
+    }
+    const timerId = window.setTimeout(() => prefetchPortalRoutes('student'), 250);
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   useEffect(() => {
     const profileStudentId = me?.student?.student_id || me?.profile.student_id || '';

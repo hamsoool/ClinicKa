@@ -39,6 +39,46 @@ const storageBuckets = [
   'lab_cbc',
   'lab_urinalysis',
 ];
+const ARCHIVE_TABLE_STATE_TTL_MS = 60_000;
+const ARCHIVED_USER_IDS_TTL_MS = 30_000;
+const SUBMISSION_LIST_COLUMNS = [
+  'id',
+  'student_id',
+  'first_name',
+  'last_name',
+  'middle_initial',
+  'course',
+  'department',
+  'year_level',
+  'status',
+  'submitted_at',
+  'updated_at',
+  'staff_notes',
+  'age',
+  'sex',
+  'birthday',
+  'civil_status',
+  'contact_number',
+  'address',
+  'allergy_details',
+  'had_operation',
+  'operation_details',
+  'blood_pressure',
+  'weight',
+  'height',
+  'bmi',
+  'lab_test_location',
+  'lab_test_clinic',
+].join(',');
+
+type TimedValue<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+let archivedTableStateCache: TimedValue<{ available: boolean; rows: any[] }> | null = null;
+let archivedTableStatePromise: Promise<{ available: boolean; rows: any[] }> | null = null;
+let archivedUserIdsCache: TimedValue<{ available: boolean; userIds: Set<string> }> | null = null;
 
 type Requester = {
   user: any;
@@ -138,49 +178,92 @@ function isMissingArchivedAccountsTableError(error: any) {
 }
 
 async function getArchivedAccountsTableState() {
-  const { data, error } = await supabase.from('archived_accounts').select('*').limit(1);
-
-  if (error) {
-    if (isMissingArchivedAccountsTableError(error)) {
-      return {
-        available: false,
-        rows: [] as any[],
-      };
-    }
-
-    throw new Error(error.message);
+  const now = Date.now();
+  if (archivedTableStateCache && archivedTableStateCache.expiresAt > now) {
+    return archivedTableStateCache.value;
+  }
+  if (archivedTableStatePromise) {
+    return archivedTableStatePromise;
   }
 
-  return {
-    available: true,
-    rows: data || [],
-  };
+  archivedTableStatePromise = (async () => {
+    const { data, error } = await supabase.from('archived_accounts').select('id').limit(1);
+
+    let value: { available: boolean; rows: any[] };
+    if (error) {
+      if (isMissingArchivedAccountsTableError(error)) {
+        value = { available: false, rows: [] };
+      } else {
+        throw new Error(error.message);
+      }
+    } else {
+      value = { available: true, rows: data || [] };
+    }
+
+    archivedTableStateCache = {
+      value,
+      expiresAt: Date.now() + ARCHIVE_TABLE_STATE_TTL_MS,
+    };
+    return value;
+  })();
+
+  try {
+    return await archivedTableStatePromise;
+  } finally {
+    archivedTableStatePromise = null;
+  }
 }
 
 async function getArchivedUserIds() {
+  const now = Date.now();
+  if (archivedUserIdsCache && archivedUserIdsCache.expiresAt > now) {
+    return {
+      available: archivedUserIdsCache.value.available,
+      userIds: new Set(archivedUserIdsCache.value.userIds),
+    };
+  }
+
   const state = await getArchivedAccountsTableState();
   if (!state.available) {
-    return {
+    const value = {
       available: false,
       userIds: new Set<string>(),
     };
+    archivedUserIdsCache = {
+      value,
+      expiresAt: Date.now() + ARCHIVED_USER_IDS_TTL_MS,
+    };
+    return value;
   }
 
   const { data, error } = await supabase.from('archived_accounts').select('user_id');
   if (error) {
     if (isMissingArchivedAccountsTableError(error)) {
-      return {
+      const value = {
         available: false,
         userIds: new Set<string>(),
       };
+      archivedUserIdsCache = {
+        value,
+        expiresAt: Date.now() + ARCHIVED_USER_IDS_TTL_MS,
+      };
+      return value;
     }
 
     throw new Error(error.message);
   }
 
-  return {
+  const value = {
     available: true,
     userIds: new Set((data || []).map((row) => row.user_id).filter(Boolean)),
+  };
+  archivedUserIdsCache = {
+    value,
+    expiresAt: Date.now() + ARCHIVED_USER_IDS_TTL_MS,
+  };
+  return {
+    available: value.available,
+    userIds: new Set(value.userIds),
   };
 }
 
@@ -191,6 +274,11 @@ function archivedAccountsMigrationRequired() {
     status: 409,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+function invalidateArchivedCaches() {
+  archivedTableStateCache = null;
+  archivedUserIdsCache = null;
 }
 
 async function ensureBucket() {
@@ -313,25 +401,18 @@ async function authenticate(c: any): Promise<Requester | null> {
   const user = authData.user;
 
   let archivedAccount = null;
-  const { available: archiveTableAvailable } = await getArchivedAccountsTableState().catch(() => ({
-    available: true,
-    rows: [],
-  }));
+  const { data, error: archivedError } = await supabase
+    .from('archived_accounts')
+    .select('id,user_id,role,email,display_name,account_identifier,archive_reason,archived_at,snapshot')
+    .eq('user_id', user.id)
+    .maybeSingle();
 
-  if (archiveTableAvailable) {
-    const { data, error: archivedError } = await supabase
-      .from('archived_accounts')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (archivedError) {
-      if (!isMissingArchivedAccountsTableError(archivedError)) {
-        return null;
-      }
-    } else {
-      archivedAccount = data || null;
+  if (archivedError) {
+    if (!isMissingArchivedAccountsTableError(archivedError)) {
+      return null;
     }
+  } else {
+    archivedAccount = data || null;
   }
 
   if (archivedAccount) {
@@ -354,12 +435,12 @@ async function authenticate(c: any): Promise<Requester | null> {
   const [{ data: student }, { data: staff }] = await Promise.all([
     supabase
       .from('students')
-      .select('*')
+      .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address')
       .or(`profile_id.eq.${user.id},student_id.eq.${profile.student_id || '__none__'}`)
       .maybeSingle(),
     supabase
       .from('staff_users')
-      .select('*')
+      .select('id,profile_id,email,first_name,last_name,middle_initial,position,phone,is_active')
       .or(`profile_id.eq.${user.id},email.eq.${user.email || '__none__'}`)
       .maybeSingle(),
   ]);
@@ -504,6 +585,8 @@ function mapSubmission(row: any, related: Record<string, any>) {
     cbcFileUrl: files.cbc?.url,
     urinalysisFileUrl: files.urinalysis?.url,
     certificatePdfUrl: files.certificate?.url || certificate?.pdf_url,
+    labTestLocation: row.lab_test_location || '',
+    otherClinicName: row.lab_test_clinic || '',
   };
 }
 
@@ -523,31 +606,58 @@ async function loadRelatedData(rows: any[]) {
     filesRes,
   ] = await Promise.all([
     studentIds.length
-      ? supabase.from('students').select('*').in('student_id', studentIds)
+      ? supabase
+          .from('students')
+          .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address')
+          .in('student_id', studentIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
-      ? supabase.from('emergency_contacts').select('*').in('submission_id', submissionIds)
+      ? supabase
+          .from('emergency_contacts')
+          .select('submission_id,name,relationship,phone,address')
+          .in('submission_id', submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
-      ? supabase.from('medical_history').select('*').in('submission_id', submissionIds)
+      ? supabase
+          .from('medical_history')
+          .select('submission_id,allergy,asthma,chicken_pox,diabetes,dysmenorrhea,epilepsy_seizure,heart_disorder,hepatitis,hypertension,measles,mumps,anxiety_disorder,panic_attack,pneumonia,ptb_primary_complex,typhoid_fever,covid19,uti')
+          .in('submission_id', submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
-      ? supabase.from('staff_measurements').select('*').in('submission_id', submissionIds)
+      ? supabase
+          .from('staff_measurements')
+          .select('submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by')
+          .in('submission_id', submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
-      ? supabase.from('lab_chest_xray').select('*').in('submission_id', submissionIds)
+      ? supabase
+          .from('lab_chest_xray')
+          .select('submission_id,xray_date,xray_result,xray_findings,file_id')
+          .in('submission_id', submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
-      ? supabase.from('lab_cbc').select('*').in('submission_id', submissionIds)
+      ? supabase
+          .from('lab_cbc')
+          .select('submission_id,cbc_date,hemoglobin,hematocrit,wbc,platelet_count,blood_type,glucose,protein,file_id')
+          .in('submission_id', submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
-      ? supabase.from('lab_urinalysis').select('*').in('submission_id', submissionIds)
+      ? supabase
+          .from('lab_urinalysis')
+          .select('submission_id,urinalysis_date,glucose,protein,file_id')
+          .in('submission_id', submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
-      ? supabase.from('certificates').select('*').in('submission_id', submissionIds)
+      ? supabase
+          .from('certificates')
+          .select('submission_id,findings_normal,diagnosis,remarks,purpose,control_no,issued_date,issued_at,pdf_url')
+          .in('submission_id', submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
-      ? supabase.from('files').select('*').in('submission_id', submissionIds)
+      ? supabase
+          .from('files')
+          .select('id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by')
+          .in('submission_id', submissionIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
 
@@ -813,7 +923,7 @@ app.get("/student-records", async (c) => {
     }
 
     const records = await getMappedSubmissions(
-      supabase.from('submissions').select('*').eq('student_id', requester.profile.student_id),
+      supabase.from('submissions').select(SUBMISSION_LIST_COLUMNS).eq('student_id', requester.profile.student_id),
     );
 
     return c.json({ records });
@@ -833,7 +943,7 @@ app.get("/student-records/:studentId", async (c) => {
     const targetStudentId = isStaffRole(requester.profile.role) ? studentId : requester.profile.student_id;
 
     const records = await getMappedSubmissions(
-      supabase.from('submissions').select('*').eq('student_id', targetStudentId),
+      supabase.from('submissions').select(SUBMISSION_LIST_COLUMNS).eq('student_id', targetStudentId),
     );
 
     return c.json({ records });
@@ -850,7 +960,7 @@ app.get("/submissions", async (c) => {
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
-    const submissions = await getMappedSubmissions(supabase.from('submissions').select('*'));
+    const submissions = await getMappedSubmissions(supabase.from('submissions').select(SUBMISSION_LIST_COLUMNS));
     return c.json({ submissions });
   } catch (error) {
     console.log('Error fetching submissions:', error);
@@ -869,7 +979,7 @@ app.get("/submission/:id", async (c) => {
     if (access.response) return access.response;
 
     const [submission] = await getMappedSubmissions(
-      supabase.from('submissions').select('*').eq('id', id),
+      supabase.from('submissions').select(SUBMISSION_LIST_COLUMNS).eq('id', id),
     );
 
     return c.json({ submission });
@@ -1052,23 +1162,32 @@ app.get("/analytics", async (c) => {
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
-    const { count: totalStudents } = await supabase
-      .from('students')
-      .select('*', { count: 'exact', head: true });
+    const [
+      { count: totalStudents, error: totalStudentsError },
+      { count: totalSubmissions, error: totalSubmissionsError },
+      { count: pendingRecords, error: pendingError },
+      { count: approvedRecords, error: approvedError },
+      { count: returnedRecords, error: returnedError },
+    ] = await Promise.all([
+      supabase.from('students').select('student_id', { count: 'exact', head: true }),
+      supabase.from('submissions').select('id', { count: 'exact', head: true }),
+      supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
+      supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'returned'),
+    ]);
 
-    const { data: records, error } = await supabase.from('submissions').select('status');
-    if (error) throw new Error(error.message);
-
-    const pendingRecords = (records || []).filter((r) => r.status === 'pending').length;
-    const approvedRecords = (records || []).filter((r) => r.status === 'approved').length;
-    const returnedRecords = (records || []).filter((r) => r.status === 'returned').length;
+    if (totalStudentsError) throw new Error(totalStudentsError.message);
+    if (totalSubmissionsError) throw new Error(totalSubmissionsError.message);
+    if (pendingError) throw new Error(pendingError.message);
+    if (approvedError) throw new Error(approvedError.message);
+    if (returnedError) throw new Error(returnedError.message);
 
     return c.json({
       totalStudents: totalStudents || 0,
-      pendingRecords,
-      approvedRecords,
-      returnedRecords,
-      totalSubmissions: records?.length || 0,
+      pendingRecords: pendingRecords || 0,
+      approvedRecords: approvedRecords || 0,
+      returnedRecords: returnedRecords || 0,
+      totalSubmissions: totalSubmissions || 0,
     });
   } catch (error) {
     console.log('Error fetching analytics:', error);
@@ -1086,7 +1205,7 @@ app.get("/staff-users", async (c) => {
     const [{ data: staff, error }, archivedState] = await Promise.all([
       supabase
         .from('staff_users')
-        .select('*')
+        .select('id,profile_id,staff_code,first_name,last_name,name,position,is_active,email')
         .order('last_name', { ascending: true }),
       getArchivedUserIds(),
     ]);
@@ -1124,8 +1243,13 @@ app.get("/user-accounts", async (c) => {
       { data: staffUsers, error: staffError },
       archivedState,
     ] = await Promise.all([
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('staff_users').select('*'),
+      supabase
+        .from('profiles')
+        .select('id,student_id,first_name,last_name,email,role,created_at,updated_at')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('staff_users')
+        .select('profile_id,staff_code,first_name,last_name,email,is_active'),
       getArchivedUserIds(),
     ]);
 
@@ -1181,7 +1305,7 @@ app.get("/archived-accounts", async (c) => {
 
     const { data: archivedAccounts, error } = await supabase
       .from('archived_accounts')
-      .select('*')
+      .select('id,user_id,account_identifier,display_name,email,role,archived_at,archive_reason')
       .order('archived_at', { ascending: false });
 
     if (error) throw new Error(error.message);
@@ -1310,6 +1434,7 @@ app.post("/admin/archive-account", async (c) => {
     }
 
     await setArchivedAuthState(userId);
+    invalidateArchivedCaches();
 
     return c.json({ success: true });
   } catch (error) {
@@ -1355,6 +1480,7 @@ app.post("/admin/restore-account/:archiveId", async (c) => {
     }
 
     await clearArchivedAuthState(userId);
+    invalidateArchivedCaches();
 
     return c.json({ success: true });
   } catch (error) {
@@ -1478,6 +1604,7 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
 
     const { error: archiveDeleteError } = await supabase.from('archived_accounts').delete().eq('id', archiveId);
     if (archiveDeleteError) throw new Error(archiveDeleteError.message);
+    invalidateArchivedCaches();
 
     return c.json({ success: true });
   } catch (error) {

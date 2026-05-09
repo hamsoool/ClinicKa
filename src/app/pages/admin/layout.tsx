@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   BarChart3,
   Home,
@@ -13,6 +14,7 @@ import PortalShell, {
   type PortalNavItem,
   type PortalTopAction,
 } from '../../components/portal-shell';
+import { prefetchPortalRoutes } from '../../route-modules';
 import { useAuth } from '../../lib/auth';
 
 const navItems = [
@@ -39,6 +41,18 @@ export default function AdminLayout() {
     formatEmailName(me?.profile.email) ||
     'System Administrator';
   const roleLabel = 'System Administrator';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (typeof window.requestIdleCallback === 'function') {
+      const callbackId = window.requestIdleCallback(() => {
+        prefetchPortalRoutes('admin');
+      });
+      return () => window.cancelIdleCallback?.(callbackId);
+    }
+    const timerId = window.setTimeout(() => prefetchPortalRoutes('admin'), 250);
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   return (
     <PortalShell

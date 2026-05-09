@@ -9,8 +9,6 @@ import { PortalPageSkeleton } from '../../components/project-skeletons';
 import type { MockSubmission } from '../../lib/mock-data';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { toast } from 'sonner';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { getStudentRecords } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -86,6 +84,10 @@ export default function StudentCertificate() {
   const downloadClearancePDF = async () => {
     if (!clearanceRef.current || !record) return;
     try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
       const exportRoot = document.createElement('div');
       exportRoot.style.position = 'fixed';
       exportRoot.style.left = '-10000px';

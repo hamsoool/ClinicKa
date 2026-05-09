@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
@@ -18,7 +18,6 @@ const YEAR_LABELS: Record<string, string> = {
 };
 
 export default function StaffRecords() {
-  const [filteredRecords, setFilteredRecords] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -39,34 +38,27 @@ export default function StaffRecords() {
     }
   }, [isError]);
 
-  useEffect(() => {
-    filterRecords();
-  }, [searchQuery, departmentFilter, yearFilter, records]);
-
-  const filterRecords = () => {
-    let filtered = records;
-
-    if (searchQuery) {
-      filtered = filtered.filter(record =>
-        record.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.studentId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.course?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    
-    if (departmentFilter !== 'all') {
-      filtered = filtered.filter(record =>
-        record.department === departmentFilter || record.course?.includes(departmentFilter)
-      );
-    }
-    
-    if (yearFilter !== 'all') {
-      filtered = filtered.filter(record => String(record.year) === yearFilter);
-    }
-
-    setFilteredRecords(filtered);
-  };
+  const filteredRecords = useMemo(() => {
+    const needle = searchQuery.trim().toLowerCase();
+    return records.filter((record) => {
+      if (needle) {
+        const matchesSearch =
+          record.firstName?.toLowerCase().includes(needle) ||
+          record.lastName?.toLowerCase().includes(needle) ||
+          record.studentId?.toLowerCase().includes(needle) ||
+          record.course?.toLowerCase().includes(needle);
+        if (!matchesSearch) return false;
+      }
+      if (
+        departmentFilter !== 'all' &&
+        !(record.department === departmentFilter || record.course?.includes(departmentFilter))
+      ) {
+        return false;
+      }
+      if (yearFilter !== 'all' && String(record.year) !== yearFilter) return false;
+      return true;
+    });
+  }, [departmentFilter, records, searchQuery, yearFilter]);
   
   const clearFilters = () => {
     setSearchQuery('');
@@ -77,17 +69,21 @@ export default function StaffRecords() {
   const hasActiveFilters = searchQuery || departmentFilter !== 'all' || yearFilter !== 'all';
 
   // Group records by student
-  const groupedRecords = filteredRecords.reduce((acc, record) => {
-    const studentId = record.studentId;
-    if (!acc[studentId]) {
-      acc[studentId] = {
-        student: record,
-        records: [],
-      };
-    }
-    acc[studentId].records.push(record);
-    return acc;
-  }, {} as Record<string, any>);
+  const groupedRecords = useMemo(
+    () =>
+      filteredRecords.reduce((acc, record) => {
+        const studentId = record.studentId;
+        if (!acc[studentId]) {
+          acc[studentId] = {
+            student: record,
+            records: [],
+          };
+        }
+        acc[studentId].records.push(record);
+        return acc;
+      }, {} as Record<string, any>),
+    [filteredRecords],
+  );
 
   return (
     <div>

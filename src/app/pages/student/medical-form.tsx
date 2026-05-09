@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Upload } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Progress } from '../../components/ui/progress';
@@ -50,6 +48,10 @@ export default function StudentMedicalForm() {
   const downloadPdf = useCallback(async () => {
     if (!previewRef.current) return;
     try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
       const element = previewRef.current;
       const canvas = await html2canvas(element, {
         scale: 2,

@@ -307,6 +307,34 @@ const demoUserAccounts = [
 ];
 
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
+const ME_CACHE_TTL_MS = 15_000;
+const SIGNED_URL_CACHE_TTL_MS = 5 * 60 * 1000;
+const STORAGE_FALLBACK_MAX_SUBMISSIONS = 12;
+const PROFILE_ASSET_FALLBACK_MAX_STUDENTS = 20;
+
+type TimedValue<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const _meCache = new Map<string, TimedValue<AuthMe>>();
+const _mePromiseCache = new Map<string, Promise<AuthMe>>();
+const _signedUrlCache = new Map<string, TimedValue<string>>();
+const _signedUrlPromiseCache = new Map<string, Promise<string | null>>();
+
+function getMeCacheKey(token?: string | null) {
+  return `me:${token || getAccessToken() || 'anon'}`;
+}
+
+function invalidateMeCache() {
+  _meCache.clear();
+  _mePromiseCache.clear();
+}
+
+function invalidateSignedUrlCache() {
+  _signedUrlCache.clear();
+  _signedUrlPromiseCache.clear();
+}
 
 function getNowUnixSeconds() {
   return Math.floor(Date.now() / 1000);
@@ -362,6 +390,8 @@ export function getStoredSession(): AuthSession | null {
 
 export function setStoredSession(session: AuthSession | null) {
   if (typeof window === 'undefined') return;
+  invalidateMeCache();
+  invalidateSignedUrlCache();
 
   if (!session) {
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -745,52 +775,80 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
     path = path.slice(targetBucket.length + 1);
   }
   if (!path || !supabaseUrl || !publicAnonKey) return null;
-
-  const trySign = async (targetPath: string) => {
-    // Use the bulk sign endpoint to avoid HTTP 400 Bad Request console spam
-    // when an object does not exist.
-    const response = await fetch(
-      `${supabaseUrl}/storage/v1/object/sign/${targetBucket}`,
-      {
-        method: 'POST',
-        headers: {
-          apikey: publicAnonKey,
-          Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365, paths: [targetPath] }),
-      },
-    );
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) return null;
-
-    // Bulk sign returns an array of results
-    const result = Array.isArray(payload) ? payload[0] : payload;
-    if (!result || result.error) return null;
-
-    const rawSigned =
-      result.signedURL || result.signedUrl || result.signed_url || null;
-    if (!rawSigned) return null;
-    if (/^https?:\/\//i.test(rawSigned)) return rawSigned as string;
-    return `${supabaseUrl}/storage/v1${rawSigned}`;
-  };
-
-  try {
-    const signedDirect = await trySign(path);
-    if (signedDirect) return signedDirect;
-
-    const encodedPath = path
-      .split('/')
-      .filter(Boolean)
-      .map((segment) => encodeURIComponent(segment))
-      .join('/');
-    const signedEncoded = encodedPath && encodedPath !== path ? await trySign(encodedPath) : null;
-    if (signedEncoded) return signedEncoded;
-
-    return null;
-  } catch {
-    return null;
+  const cacheKey = `${targetBucket}:${path}`;
+  const now = Date.now();
+  const cached = _signedUrlCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
   }
+
+  const inFlight = _signedUrlPromiseCache.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = (async () => {
+    const trySign = async (targetPath: string) => {
+      // Use the bulk sign endpoint to avoid HTTP 400 Bad Request console spam
+      // when an object does not exist.
+      const response = await fetch(
+        `${supabaseUrl}/storage/v1/object/sign/${targetBucket}`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: publicAnonKey,
+            Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365, paths: [targetPath] }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) return null;
+
+      // Bulk sign returns an array of results
+      const result = Array.isArray(payload) ? payload[0] : payload;
+      if (!result || result.error) return null;
+
+      const rawSigned =
+        result.signedURL || result.signedUrl || result.signed_url || null;
+      if (!rawSigned) return null;
+      if (/^https?:\/\//i.test(rawSigned)) return rawSigned as string;
+      return `${supabaseUrl}/storage/v1${rawSigned}`;
+    };
+
+    try {
+      const signedDirect = await trySign(path);
+      if (signedDirect) {
+        _signedUrlCache.set(cacheKey, {
+          value: signedDirect,
+          expiresAt: Date.now() + SIGNED_URL_CACHE_TTL_MS,
+        });
+        return signedDirect;
+      }
+
+      const encodedPath = path
+        .split('/')
+        .filter(Boolean)
+        .map((segment) => encodeURIComponent(segment))
+        .join('/');
+      const signedEncoded = encodedPath && encodedPath !== path ? await trySign(encodedPath) : null;
+      if (signedEncoded) {
+        _signedUrlCache.set(cacheKey, {
+          value: signedEncoded,
+          expiresAt: Date.now() + SIGNED_URL_CACHE_TTL_MS,
+        });
+      }
+      return signedEncoded;
+    } catch {
+      return null;
+    } finally {
+      _signedUrlPromiseCache.delete(cacheKey);
+    }
+  })();
+
+  _signedUrlPromiseCache.set(cacheKey, promise);
+  return promise;
 }
 
 async function listStorageFilesForSubmission(submissionId: string, token?: string | null, bucket?: string) {
@@ -1002,7 +1060,10 @@ async function loadRelatedData(rows: any[]) {
     return acc;
   }, {} as Record<string, any[]>);
 
-  const submissionsMissingFiles = submissionIds.filter((id) => !(filesBySubmissionCurrent[id]?.length));
+  const shouldRunStorageFallback = submissionIds.length <= STORAGE_FALLBACK_MAX_SUBMISSIONS;
+  const submissionsMissingFiles = shouldRunStorageFallback
+    ? submissionIds.filter((id) => !(filesBySubmissionCurrent[id]?.length))
+    : [];
   const fallbackBuckets = [...new Set([STORAGE_BUCKET, ...Object.values(STORAGE_BUCKET_BY_FILE_TYPE)])];
   const listedFallbackFiles = (
     await Promise.all(
@@ -1028,10 +1089,13 @@ async function loadRelatedData(rows: any[]) {
     acc[file.uploaded_by].push(file);
     return acc;
   }, {} as Record<string, any[]>);
-  const missingProfileAssetStudents = studentRows.filter((student) => {
-    const latest = latestFilesByType(profileAssetsByUploadedBy[student?.profile_id] || []);
-    return !latest.photo || !latest.signature;
-  });
+  const shouldRunProfileAssetFallback = studentRows.length <= PROFILE_ASSET_FALLBACK_MAX_STUDENTS;
+  const missingProfileAssetStudents = shouldRunProfileAssetFallback
+    ? studentRows.filter((student) => {
+        const latest = latestFilesByType(profileAssetsByUploadedBy[student?.profile_id] || []);
+        return !latest.photo || !latest.signature;
+      })
+    : [];
   const fallbackProfileAssets = await Promise.all(
     missingProfileAssetStudents.map(async (student) => ({
       profileId: student.profile_id,
@@ -1363,89 +1427,117 @@ export async function signOut() {
 }
 
 export async function getMe(token?: string | null) {
+  const cacheKey = getMeCacheKey(token);
+  const now = Date.now();
+  const cached = _meCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  const inFlight = _mePromiseCache.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const requestPromise = (async () => {
+    let resolvedMe: AuthMe;
     try {
-    return await apiRequest<AuthMe>('/functions/v1/server/me', { token });
-  } catch {
-    const user = await getCurrentAuthUser(token);
-    const derivedStudentId = deriveStudentIdFromEmail(user.email);
-    const profileRows = await restRequest<any[]>(
-      'profiles',
-      `id=eq.${user.id}&select=*`,
-      {
-        token,
-        headers: { Prefer: 'count=exact' },
-      },
-    );
-    const profile = profileRows[0];
-    const normalizedEmail = normalizeEmail(user.email) || null;
-    const resolvedRole = resolveRoleFromEmail(user.email);
-    let resolvedProfile = profile;
+      resolvedMe = await apiRequest<AuthMe>('/functions/v1/server/me', { token });
+    } catch {
+      const user = await getCurrentAuthUser(token);
+      const derivedStudentId = deriveStudentIdFromEmail(user.email);
+      const profileRows = await restRequest<any[]>(
+        'profiles',
+        `id=eq.${user.id}&select=*`,
+        {
+          token,
+          headers: { Prefer: 'count=exact' },
+        },
+      );
+      const profile = profileRows[0];
+      const normalizedEmail = normalizeEmail(user.email) || null;
+      const resolvedRole = resolveRoleFromEmail(user.email);
+      let resolvedProfile = profile;
 
-    if (!resolvedProfile) {
-      resolvedProfile = (
-        await restRequest<any[]>(
-          'profiles',
-          'select=*',
-          {
-            method: 'POST',
-            token,
-            headers: {
-              'Content-Type': 'application/json',
-              Prefer: 'return=representation',
+      if (!resolvedProfile) {
+        resolvedProfile = (
+          await restRequest<any[]>(
+            'profiles',
+            'select=*',
+            {
+              method: 'POST',
+              token,
+              headers: {
+                'Content-Type': 'application/json',
+                Prefer: 'return=representation',
+              },
+              body: JSON.stringify({
+                id: user.id,
+                role: resolvedRole,
+                email: normalizedEmail,
+                student_id: derivedStudentId,
+              }),
             },
-            body: JSON.stringify({
-              id: user.id,
-              role: resolvedRole,
-              email: normalizedEmail,
-              student_id: derivedStudentId,
-            }),
-          },
-        )
-      )[0];
-    } else if (
-      resolvedRole === 'student' &&
-      (resolvedProfile.student_id !== derivedStudentId || resolvedProfile.email !== normalizedEmail)
-    ) {
-      resolvedProfile = (
-        await restRequest<any[]>(
-          'profiles',
-          `id=eq.${user.id}&select=*`,
-          {
-            method: 'PATCH',
-            token,
-            headers: {
-              'Content-Type': 'application/json',
-              Prefer: 'return=representation',
-            },
-            body: JSON.stringify({
-              email: normalizedEmail,
-              student_id: derivedStudentId,
-            }),
-          },
-        )
-      )[0] || resolvedProfile;
-    }
-
-    if (!resolvedProfile) {
-      throw new Error('Profile not found for authenticated user.');
-    }
-
-    const [studentRows, staffRows] = await Promise.all([
-      resolvedProfile.student_id
-        ? restRequest<any[]>(
-            'students',
-            `student_id=eq.${encodeURIComponent(resolvedProfile.student_id)}&select=*`,
-            { token },
           )
-        : Promise.resolve([]),
-      restRequest<any[]>('staff_users', `profile_id=eq.${user.id}&select=*`, { token }),
-    ]);
+        )[0];
+      } else if (
+        resolvedRole === 'student' &&
+        (resolvedProfile.student_id !== derivedStudentId || resolvedProfile.email !== normalizedEmail)
+      ) {
+        resolvedProfile = (
+          await restRequest<any[]>(
+            'profiles',
+            `id=eq.${user.id}&select=*`,
+            {
+              method: 'PATCH',
+              token,
+              headers: {
+                'Content-Type': 'application/json',
+                Prefer: 'return=representation',
+              },
+              body: JSON.stringify({
+                email: normalizedEmail,
+                student_id: derivedStudentId,
+              }),
+            },
+          )
+        )[0] || resolvedProfile;
+      }
 
-    return {
-      profile: resolvedProfile,
-      student: studentRows[0] || null,
-      staff: staffRows[0] || null,
-    } satisfies AuthMe;
+      if (!resolvedProfile) {
+        throw new Error('Profile not found for authenticated user.');
+      }
+
+      const [studentRows, staffRows] = await Promise.all([
+        resolvedProfile.student_id
+          ? restRequest<any[]>(
+              'students',
+              `student_id=eq.${encodeURIComponent(resolvedProfile.student_id)}&select=*`,
+              { token },
+            )
+          : Promise.resolve([]),
+        restRequest<any[]>('staff_users', `profile_id=eq.${user.id}&select=*`, { token }),
+      ]);
+
+      resolvedMe = {
+        profile: resolvedProfile,
+        student: studentRows[0] || null,
+        staff: staffRows[0] || null,
+      } satisfies AuthMe;
+    }
+
+    _meCache.set(cacheKey, {
+      value: resolvedMe,
+      expiresAt: Date.now() + ME_CACHE_TTL_MS,
+    });
+    return resolvedMe;
+  })();
+
+  _mePromiseCache.set(cacheKey, requestPromise);
+  try {
+    return await requestPromise;
+  } finally {
+    _mePromiseCache.delete(cacheKey);
   }
 }
 
@@ -1566,6 +1658,7 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     });
 
     // Always re-read profile data after server updates so the UI reflects committed DB state.
+    invalidateMeCache();
     const refreshedMe = await getMe();
     return {
       success: Boolean(serverResult?.success),
@@ -1630,6 +1723,7 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     },
   );
 
+  invalidateMeCache();
   const refreshedMe = await getMe();
 
   return {
@@ -1756,6 +1850,7 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
     );
   }
 
+  invalidateMeCache();
   const refreshedMe = await getMe();
 
   return {
@@ -1766,6 +1861,22 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
 }
 
 export async function submitMedicalRecord(data: any) {
+  try {
+    return await apiRequest<{ success: true; recordId: string }>('/functions/v1/server/submit-record', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data || {}),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+    if (!missingRoute) {
+      throw error;
+    }
+  }
+
     const me = await getMe();
   const studentId = me.profile.student_id || data.studentId;
   if (!studentId) {
@@ -2091,13 +2202,29 @@ export async function updateMedicalRecord(recordId: string, data: any) {
 
 
 export async function getStudentRecords(studentId?: string) {
-    const me = await getMe();
-  const targetStudentId = studentId || me.profile.student_id;
-  if (!targetStudentId) {
+  const targetStudentId = String(studentId || '').trim();
+  const endpoint = targetStudentId
+    ? `/functions/v1/server/student-records/${encodeURIComponent(targetStudentId)}`
+    : '/functions/v1/server/student-records';
+
+  try {
+    return await apiRequest<{ records: any[] }>(endpoint);
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+    if (!missingRoute) {
+      throw error;
+    }
+  }
+
+  const me = await getMe();
+  const fallbackStudentId = targetStudentId || me.profile.student_id;
+  if (!fallbackStudentId) {
     return { records: [] };
   }
+
   const records = await getMappedSubmissions(
-    `student_id=eq.${encodeURIComponent(targetStudentId)}&order=submitted_at.desc`,
+    `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
   );
   return { records };
 }
@@ -2182,12 +2309,32 @@ export async function getStudentProfilePhoto(studentId?: string) {
 }
 
 export async function getSubmissions() {
-    const submissions = await getMappedSubmissions('order=submitted_at.desc');
+  try {
+    return await apiRequest<{ submissions: any[] }>('/functions/v1/server/submissions');
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+    if (!missingRoute) {
+      throw error;
+    }
+  }
+
+  const submissions = await getMappedSubmissions('order=submitted_at.desc');
   return { submissions };
 }
 
 export async function getSubmission(id: string) {
-    const submissions = await getMappedSubmissions(`id=eq.${id}&order=submitted_at.desc`);
+  try {
+    return await apiRequest<{ submission: any }>(`/functions/v1/server/submission/${encodeURIComponent(id)}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+    if (!missingRoute) {
+      throw error;
+    }
+  }
+
+  const submissions = await getMappedSubmissions(`id=eq.${id}&order=submitted_at.desc`);
   const submission = submissions[0];
   if (!submission) {
     throw new Error('Record not found');
@@ -2464,24 +2611,43 @@ async function sendStatusEmailNotification(submissionId: string, status: string,
 }
 
 export async function updateSubmissionStatus(id: string, status: string, staffNotes?: string) {
-    const me = await getMe();
-  const reviewedBy = me.staff?.id || null;
-  await restRequest(
-    'submissions',
-    `id=eq.${id}`,
-    {
-      method: 'PATCH',
+  try {
+    await apiRequest<{ success: boolean }>(`/functions/v1/server/submission/${encodeURIComponent(id)}/status`, {
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         status,
-        staff_notes: staffNotes || null,
-        reviewed_by: reviewedBy,
-        updated_at: new Date().toISOString(),
+        staffNotes: staffNotes || null,
       }),
-    },
-  );
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+    if (!missingRoute) {
+      throw error;
+    }
+
+    const me = await getMe();
+    const reviewedBy = me.staff?.id || null;
+    await restRequest(
+      'submissions',
+      `id=eq.${id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status,
+          staff_notes: staffNotes || null,
+          reviewed_by: reviewedBy,
+          updated_at: new Date().toISOString(),
+        }),
+      },
+    );
+  }
 
   // Trigger email notification
   if (status === 'returned' || status === 'approved' || status === 'physical_exam_done') {
@@ -2496,110 +2662,126 @@ export async function updateSubmissionStatus(id: string, status: string, staffNo
 }
 
 export async function updateMeasurements(id: string, measurements: any) {
+  try {
+    await apiRequest<{ success: boolean }>(`/functions/v1/server/submission/${encodeURIComponent(id)}/measurements`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(measurements || {}),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+    if (!missingRoute) {
+      throw error;
+    }
+
     const me = await getMe();
-  await Promise.all([
-    restRequest(
-      'staff_measurements',
-      'on_conflict=submission_id',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
+    await Promise.all([
+      restRequest(
+        'staff_measurements',
+        'on_conflict=submission_id',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify({
+            submission_id: id,
+            blood_pressure: measurements.bloodPressure || null,
+            cardiac_rate: measurements.cardiacRate || null,
+            respiratory_rate: measurements.respiratoryRate || null,
+            temperature: measurements.temperature || null,
+            weight: measurements.weight || null,
+            height: measurements.height || null,
+            bmi: measurements.bmi || null,
+            visual_acuity: measurements.visualAcuity || null,
+            skin: measurements.skin || null,
+            heent: measurements.heent || null,
+            chest_lungs: measurements.chestLungs || null,
+            heart: measurements.heart || null,
+            abdomen: measurements.abdomen || null,
+            extremities: measurements.extremities || null,
+            others: measurements.others || null,
+            examined_by: measurements.examinedBy || null,
+            updated_by: me.staff?.id || null,
+            updated_at: new Date().toISOString(),
+          }),
         },
-        body: JSON.stringify({
-          submission_id: id,
-          blood_pressure: measurements.bloodPressure || null,
-          cardiac_rate: measurements.cardiacRate || null,
-          respiratory_rate: measurements.respiratoryRate || null,
-          temperature: measurements.temperature || null,
-          weight: measurements.weight || null,
-          height: measurements.height || null,
-          bmi: measurements.bmi || null,
-          visual_acuity: measurements.visualAcuity || null,
-          skin: measurements.skin || null,
-          heent: measurements.heent || null,
-          chest_lungs: measurements.chestLungs || null,
-          heart: measurements.heart || null,
-          abdomen: measurements.abdomen || null,
-          extremities: measurements.extremities || null,
-          others: measurements.others || null,
-          examined_by: measurements.examinedBy || null,
-          updated_by: me.staff?.id || null,
-          updated_at: new Date().toISOString(),
-        }),
-      },
-    ),
-    restRequest(
-      'lab_chest_xray',
-      'on_conflict=submission_id',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
+      ),
+      restRequest(
+        'lab_chest_xray',
+        'on_conflict=submission_id',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify({
+            submission_id: id,
+            xray_date: measurements.xrayDate || null,
+            xray_result: measurements.xrayResult || null,
+            xray_findings: measurements.xrayFindings || null,
+          }),
         },
-        body: JSON.stringify({
-          submission_id: id,
-          xray_date: measurements.xrayDate || null,
-          xray_result: measurements.xrayResult || null,
-          xray_findings: measurements.xrayFindings || null,
-        }),
-      },
-    ),
-    restRequest(
-      'lab_cbc',
-      'on_conflict=submission_id',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
+      ),
+      restRequest(
+        'lab_cbc',
+        'on_conflict=submission_id',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify({
+            submission_id: id,
+            cbc_date: measurements.cbcDate || null,
+            hemoglobin: measurements.hemoglobin || null,
+            hematocrit: measurements.hematocrit || null,
+            wbc: measurements.wbc || null,
+            platelet_count: measurements.plateletCount || null,
+            blood_type: measurements.bloodType || null,
+            glucose: measurements.glucose || null,
+            protein: measurements.protein || null,
+          }),
         },
-        body: JSON.stringify({
-          submission_id: id,
-          cbc_date: measurements.cbcDate || null,
-          hemoglobin: measurements.hemoglobin || null,
-          hematocrit: measurements.hematocrit || null,
-          wbc: measurements.wbc || null,
-          platelet_count: measurements.plateletCount || null,
-          blood_type: measurements.bloodType || null,
-          glucose: measurements.glucose || null,
-          protein: measurements.protein || null,
-        }),
-      },
-    ),
-    restRequest(
-      'lab_urinalysis',
-      'on_conflict=submission_id',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
+      ),
+      restRequest(
+        'lab_urinalysis',
+        'on_conflict=submission_id',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify({
+            submission_id: id,
+            urinalysis_date: measurements.urinalysisDate || null,
+            glucose: measurements.urinalysisGlucose || null,
+            protein: measurements.urinalysisProtein || null,
+          }),
         },
-        body: JSON.stringify({
-          submission_id: id,
-          urinalysis_date: measurements.urinalysisDate || null,
-          glucose: measurements.urinalysisGlucose || null,
-          protein: measurements.urinalysisProtein || null,
-        }),
-      },
-    ),
-    restRequest(
-      'submissions',
-      `id=eq.${id}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
+      ),
+      restRequest(
+        'submissions',
+        `id=eq.${id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            updated_at: new Date().toISOString(),
+          }),
         },
-        body: JSON.stringify({
-          updated_at: new Date().toISOString(),
-        }),
-      },
-    ),
-  ]);
+      ),
+    ]);
+  }
 
   return { success: true as const };
 }
@@ -2811,7 +2993,23 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
 }
 
 export async function getAnalytics() {
-    const [students, submissionStatuses] = await Promise.all([
+  try {
+    return await apiRequest<{
+      totalStudents: number;
+      pendingRecords: number;
+      approvedRecords: number;
+      returnedRecords: number;
+      totalSubmissions: number;
+    }>('/functions/v1/server/analytics');
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+    if (!missingRoute) {
+      throw error;
+    }
+  }
+
+  const [students, submissionStatuses] = await Promise.all([
     restRequest<any[]>('students', 'select=student_id'),
     restRequest<any[]>('submissions', 'select=status'),
   ]);

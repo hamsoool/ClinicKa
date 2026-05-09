@@ -2,33 +2,61 @@ import { lazy, Suspense, type ComponentType } from 'react';
 import { createBrowserRouter } from 'react-router';
 import { PortalPageSkeleton, PortalShellSkeleton, PublicPageSkeleton } from './components/project-skeletons';
 import { RedirectIfAuthenticated, RequireAuth } from './lib/auth';
+import {
+  loadAdminDashboard,
+  loadAdminLayout,
+  loadAdminReports,
+  loadAdminStaffManagement,
+  loadAdminSystemSettings,
+  loadAdminUserAccounts,
+  loadAuthAccessPage,
+  loadCheckEmailPage,
+  loadRoleSelection,
+  loadStaffCertificates,
+  loadStaffDashboard,
+  loadStaffLayout,
+  loadStaffRecordReview,
+  loadStaffRecords,
+  loadStaffReports,
+  loadStaffSettings,
+  loadStaffSubmissions,
+  loadStudentCertificate,
+  loadStudentDashboard,
+  loadStudentLayout,
+  loadStudentMedicalForm,
+  loadStudentPrivacyWaiver,
+  loadStudentProfile,
+  loadStudentRecords,
+  loadStudentRequirements,
+  loadStudentYearSelection,
+} from './route-modules';
 
-const RoleSelection = lazy(() => import('./pages/role-selection'));
-const AuthAccessPage = lazy(() => import('./pages/auth-access'));
-const CheckEmailPage = lazy(() => import('./pages/check-email'));
-const StudentDashboard = lazy(() => import('./pages/student/dashboard'));
-const StudentYearSelection = lazy(() => import('./pages/student/year-selection'));
-const StudentPrivacyWaiver = lazy(() => import('./pages/student/privacy-waiver'));
-const StudentMedicalForm = lazy(() => import('./pages/student/medical-form'));
-const StudentLayout = lazy(() => import('./pages/student/layout'));
-const StudentRecords = lazy(() => import('./pages/student/records'));
-const StudentRequirements = lazy(() => import('./pages/student/requirements'));
-const StudentProfile = lazy(() => import('./pages/student/profile'));
-const StudentCertificate = lazy(() => import('./pages/student/certificate'));
-const StaffLayout = lazy(() => import('./pages/staff/layout'));
-const StaffDashboard = lazy(() => import('./pages/staff/dashboard'));
-const StaffSubmissions = lazy(() => import('./pages/staff/submissions'));
-const StaffRecordReview = lazy(() => import('./pages/staff/record-review'));
-const StaffRecords = lazy(() => import('./pages/staff/records'));
-const StaffReports = lazy(() => import('./pages/staff/reports'));
-const StaffCertificates = lazy(() => import('./pages/staff/certificates'));
-const StaffSettings = lazy(() => import('./pages/staff/settings'));
-const AdminLayout = lazy(() => import('./pages/admin/layout'));
-const AdminDashboard = lazy(() => import('./pages/admin/dashboard'));
-const AdminSystemSettings = lazy(() => import('./pages/admin/system-settings'));
-const AdminStaffManagement = lazy(() => import('./pages/admin/staff-management'));
-const AdminUserAccounts = lazy(() => import('./pages/admin/user-accounts'));
-const AdminReports = lazy(() => import('./pages/admin/reports'));
+const RoleSelection = lazy(loadRoleSelection);
+const AuthAccessPage = lazy(loadAuthAccessPage);
+const CheckEmailPage = lazy(loadCheckEmailPage);
+const StudentDashboard = lazy(loadStudentDashboard);
+const StudentYearSelection = lazy(loadStudentYearSelection);
+const StudentPrivacyWaiver = lazy(loadStudentPrivacyWaiver);
+const StudentMedicalForm = lazy(loadStudentMedicalForm);
+const StudentLayout = lazy(loadStudentLayout);
+const StudentRecords = lazy(loadStudentRecords);
+const StudentRequirements = lazy(loadStudentRequirements);
+const StudentProfile = lazy(loadStudentProfile);
+const StudentCertificate = lazy(loadStudentCertificate);
+const StaffLayout = lazy(loadStaffLayout);
+const StaffDashboard = lazy(loadStaffDashboard);
+const StaffSubmissions = lazy(loadStaffSubmissions);
+const StaffRecordReview = lazy(loadStaffRecordReview);
+const StaffRecords = lazy(loadStaffRecords);
+const StaffReports = lazy(loadStaffReports);
+const StaffCertificates = lazy(loadStaffCertificates);
+const StaffSettings = lazy(loadStaffSettings);
+const AdminLayout = lazy(loadAdminLayout);
+const AdminDashboard = lazy(loadAdminDashboard);
+const AdminSystemSettings = lazy(loadAdminSystemSettings);
+const AdminStaffManagement = lazy(loadAdminStaffManagement);
+const AdminUserAccounts = lazy(loadAdminUserAccounts);
+const AdminReports = lazy(loadAdminReports);
 
 type RouteSkeletonVariant =
   | 'marketing'

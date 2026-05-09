@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { AlertCircle, ArrowRight, CheckCircle2, Clock3, FileText, Plus } from 'lucide-react';
@@ -17,19 +17,29 @@ type StudentRecord = {
 };
 
 const yearLabels = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+const dashboardDateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: '2-digit',
+  year: 'numeric',
+});
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
-  const displayName = [
-    me?.student?.first_name || me?.profile.first_name || '',
-    me?.student?.last_name || me?.profile.last_name || '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .trim() || 'Student';
-  const studentId = me?.student?.student_id || me?.profile.student_id || '';
-  const course = me?.student?.course || me?.profile.course || '';
+  const { displayName, studentId, course } = useMemo(() => {
+    const name = [
+      me?.student?.first_name || me?.profile.first_name || '',
+      me?.student?.last_name || me?.profile.last_name || '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    return {
+      displayName: name || 'Student',
+      studentId: me?.student?.student_id || me?.profile.student_id || '',
+      course: me?.student?.course || me?.profile.course || '',
+    };
+  }, [me]);
   const { data, isLoading: loading, isError, error } = useQuery({
     queryKey: ['studentRecords', studentId],
     queryFn: async () => {
@@ -87,30 +97,32 @@ export default function StudentDashboard() {
     if (!value) return '--';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '--';
-
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-    }).format(date);
+    return dashboardDateFormatter.format(date);
   };
-
-  const sortedRecords = [...records].sort((a, b) => {
-    const aTime = new Date(a.updatedAt || a.submittedAt || 0).getTime();
-    const bTime = new Date(b.updatedAt || b.submittedAt || 0).getTime();
-    return bTime - aTime;
-  });
-
-  const latestRecord = sortedRecords[0];
-  const yearlyRecords = yearLabels.map((label, index) => {
-    const year = index + 1;
-    const record = sortedRecords.find((item) => Number.parseInt(item.year || '', 10) === year);
-    return { label, record };
-  });
-  const approvedCount = sortedRecords.filter((record) => record.status === 'approved').length;
-  const pendingCount = sortedRecords.filter(
-    (record) => record.status === 'pending' || record.status === 'resubmitted',
-  ).length;
+  const { sortedRecords, latestRecord, yearlyRecords, approvedCount, pendingCount } = useMemo(() => {
+    const sorted = [...records].sort((a, b) => {
+      const aTime = new Date(a.updatedAt || a.submittedAt || 0).getTime();
+      const bTime = new Date(b.updatedAt || b.submittedAt || 0).getTime();
+      return bTime - aTime;
+    });
+    const latest = sorted[0];
+    const yearly = yearLabels.map((label, index) => {
+      const year = index + 1;
+      const record = sorted.find((item) => Number.parseInt(item.year || '', 10) === year);
+      return { label, record };
+    });
+    const approved = sorted.filter((record) => record.status === 'approved').length;
+    const pending = sorted.filter(
+      (record) => record.status === 'pending' || record.status === 'resubmitted',
+    ).length;
+    return {
+      sortedRecords: sorted,
+      latestRecord: latest,
+      yearlyRecords: yearly,
+      approvedCount: approved,
+      pendingCount: pending,
+    };
+  }, [records]);
 
   if (loading && records.length === 0) {
     return <PortalPageSkeleton variant="dashboard" />;

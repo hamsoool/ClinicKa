@@ -11,8 +11,6 @@ import MedicalRecordPreview from '../../components/medical-record-preview';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { Download, Search, FileText, X, ClipboardList, Award } from 'lucide-react';
 import { toast } from 'sonner';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { getSubmissions } from '../../lib/api';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
@@ -22,6 +20,14 @@ const YEAR_LABELS: Record<string, string> = {
   '3': '3rd Year',
   '4': '4th Year',
 };
+
+async function loadPdfDependencies() {
+  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ]);
+  return { html2canvas, jsPDF };
+}
 
 export default function StaffCertificates() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
@@ -191,6 +197,7 @@ export default function StaffCertificates() {
   const downloadRecordPDF = async () => {
     if (!recordPreviewRef.current || !selectedStudent) return;
     try {
+      const { html2canvas, jsPDF } = await loadPdfDependencies();
       const exportRoot = document.createElement('div');
       exportRoot.style.position = 'fixed';
       exportRoot.style.left = '-10000px';
@@ -284,6 +291,7 @@ export default function StaffCertificates() {
   const downloadClearancePDF = async () => {
     if (!clearancePreviewRef.current || !selectedStudent) return;
     try {
+      const { html2canvas, jsPDF } = await loadPdfDependencies();
       const exportRoot = document.createElement('div');
       exportRoot.style.position = 'fixed';
       exportRoot.style.left = '-10000px';
