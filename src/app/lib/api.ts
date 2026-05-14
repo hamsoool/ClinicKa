@@ -1,4 +1,6 @@
 
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+
 const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '')
   .trim()
   .replace(/\/+$/, '');
@@ -21,6 +23,27 @@ const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
   cbc: 'lab_cbc',
   urinalysis: 'lab_urinalysis',
 };
+let authClient: SupabaseClient | null = null;
+
+function getAuthClient() {
+  if (!supabaseUrl || !publicAnonKey) {
+    throw new Error(
+      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
+    );
+  }
+
+  if (!authClient) {
+    authClient = createClient(supabaseUrl, publicAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+  }
+
+  return authClient;
+}
 
 function inferBucketFromStoragePath(storagePath?: string | null) {
   const path = String(storagePath || '').replace(/^\/+/, '');
@@ -1315,11 +1338,7 @@ export async function signUpWithPassword(
   email: string,
   password: string,
 ) {
-  if (!supabaseUrl || !publicAnonKey) {
-    throw new Error(
-      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
-    );
-  }
+  const supabase = getAuthClient();
   if (!isGCDomainEmail(email)) {
     throw new Error(`Please use your @${GC_DOMAIN} email address to register.`);
   }
@@ -1331,52 +1350,41 @@ export async function signUpWithPassword(
   const normalizedLastName = normalizeNamePart(lastName);
   const fullName = [normalizedFirstName, normalizedLastName].filter(Boolean).join(' ').trim();
   const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin&verified=1');
-
-  const response = await fetch(`${supabaseUrl}/auth/v1/signup`, {
-    method: 'POST',
-    headers: {
-      apikey: publicAnonKey,
-      Authorization: `Bearer ${publicAnonKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email,
-      password,
-      email_redirect_to: emailRedirectTo,
-      options: {
-        emailRedirectTo,
-        data: {
-          full_name: fullName,
-          first_name: normalizedFirstName,
-          last_name: normalizedLastName,
-          student_id: deriveStudentIdFromEmail(email),
-        },
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo,
+      data: {
+        full_name: fullName,
+        first_name: normalizedFirstName,
+        last_name: normalizedLastName,
+        student_id: deriveStudentIdFromEmail(email),
       },
-    }),
+    },
   });
 
-  const rawBody = await response.text();
-  let payload: Record<string, any> = {};
-  try {
-    payload = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    payload = {};
-  }
-
-  if (!response.ok) {
-    const message =
-      payload.msg ||
-      payload.error_description ||
-      payload.error ||
-      (response.status >= 500
-        ? 'Supabase returned a server error while creating the account. Check Auth logs and DB triggers.'
-        : `Failed to sign up (${response.status})`);
-    throw new Error(message);
+  if (error) {
+    throw new Error(error.message);
   }
 
   const session: AuthSession | null =
-    payload?.session || (payload?.access_token ? (payload as AuthSession) : null);
-  const user = (payload?.user || null) as SupabaseAuthUser | null;
+    data.session
+      ? {
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+          expires_in: data.session.expires_in,
+          expires_at: data.session.expires_at,
+          token_type: data.session.token_type,
+          user: data.session.user
+            ? {
+                id: data.session.user.id,
+                email: data.session.user.email || undefined,
+              }
+            : undefined,
+        }
+      : null;
+  const user = (data.user || null) as SupabaseAuthUser | null;
   const hasNoIdentity = Array.isArray(user?.identities) && user.identities.length === 0;
   if (!session && hasNoIdentity) {
     throw new Error('This email may already be registered. Try Sign In or reset your password.');
@@ -1396,52 +1404,27 @@ export async function signUpWithPassword(
 }
 
 export async function resendVerificationEmail(email: string) {
-  if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config.');
-  }
+  const supabase = getAuthClient();
 
   const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin&verified=1');
 
-  const response = await fetch(`${supabaseUrl}/auth/v1/resend`, {
-    method: 'POST',
-    headers: {
-      apikey: publicAnonKey,
-      Authorization: `Bearer ${publicAnonKey}`,
-      'Content-Type': 'application/json',
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: {
+      emailRedirectTo,
     },
-    body: JSON.stringify({
-      type: 'signup',
-      email,
-      options: {
-        emailRedirectTo,
-      },
-    }),
   });
 
-  const rawBody = await response.text();
-  let payload: Record<string, any> = {};
-  try {
-    payload = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    payload = {};
-  }
-
-  if (!response.ok) {
-    const message =
-      payload.msg ||
-      payload.error_description ||
-      payload.error ||
-      `Failed to resend verification email (${response.status})`;
-    throw new Error(message);
+  if (error) {
+    throw new Error(error.message);
   }
 
   return { success: true as const };
 }
 
 export async function sendPasswordResetEmail(email: string) {
-  if (!supabaseUrl || !publicAnonKey) {
-    throw new Error('Missing Supabase config.');
-  }
+  const supabase = getAuthClient();
 
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) {
@@ -1457,37 +1440,12 @@ export async function sendPasswordResetEmail(email: string) {
   }
 
   const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin');
-
-  const response = await fetch(`${supabaseUrl}/auth/v1/recover`, {
-    method: 'POST',
-    headers: {
-      apikey: publicAnonKey,
-      Authorization: `Bearer ${publicAnonKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email: normalizedEmail,
-      options: {
-        redirectTo: emailRedirectTo,
-      },
-    }),
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+    redirectTo: emailRedirectTo,
   });
 
-  const rawBody = await response.text();
-  let payload: Record<string, any> = {};
-  try {
-    payload = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    payload = {};
-  }
-
-  if (!response.ok) {
-    const message =
-      payload.msg ||
-      payload.error_description ||
-      payload.error ||
-      `Failed to send password reset email (${response.status})`;
-    throw new Error(message);
+  if (error) {
+    throw new Error(error.message);
   }
 
   if (typeof window !== 'undefined') {
