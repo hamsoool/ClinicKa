@@ -28,9 +28,13 @@ type StudentProfileFormState = {
   studentId: string;
   firstName: string;
   lastName: string;
+  middleInitial: string;
   department: string;
   course: string;
+  age: string;
+  sex: string;
   birthday: string;
+  civilStatus: string;
   contactNumber: string;
   address: string;
 };
@@ -41,9 +45,13 @@ function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null):
     studentId: me?.student?.student_id || me?.profile.student_id || '',
     firstName: me?.student?.first_name || me?.profile.first_name || '',
     lastName: me?.student?.last_name || me?.profile.last_name || '',
+    middleInitial: me?.student?.middle_initial || '',
     department,
     course: normalizeProgramForDepartment(department, me?.student?.course || me?.profile.course || ''),
+    age: me?.student?.age ? String(me.student.age) : '',
+    sex: me?.student?.sex || 'female',
     birthday: me?.student?.birthday || '',
+    civilStatus: me?.student?.civil_status || 'Single',
     contactNumber: formatPhilippinePhoneInput(me?.student?.contact_number || ''),
     address: me?.student?.address || '',
   };
@@ -154,13 +162,19 @@ export default function StudentProfile() {
     Boolean(formData.studentId.trim()) &&
     Boolean(formData.firstName.trim()) &&
     Boolean(formData.lastName.trim()) &&
+    Boolean(formData.middleInitial.trim()) &&
     Boolean(formData.department.trim()) &&
     Boolean(formData.course.trim()) &&
+    Boolean(formData.age.trim()) &&
+    Boolean(formData.sex.trim()) &&
     Boolean(formData.birthday.trim()) &&
+    Boolean(formData.civilStatus.trim()) &&
     hasValidContactNumber;
 
   const currentPhotoUrl = photoPreviewUrl || profileAssets.photoUrl || null;
   const currentSignatureUrl = signaturePreviewUrl || profileAssets.signatureUrl || null;
+  const requiredFieldClass = (missing: boolean) =>
+    missing ? 'border-red-500 ring-1 ring-red-200 focus-visible:ring-red-300' : '';
 
   const updateField = <K extends keyof StudentProfileFormState>(field: K, value: StudentProfileFormState[K]) => {
     setFormData((prev) => ({
@@ -177,6 +191,14 @@ export default function StudentProfile() {
         : field === 'contactNumber'
         ? {
             contactNumber: formatPhilippinePhoneInput(String(value)),
+          }
+        : field === 'middleInitial'
+        ? {
+            middleInitial: String(value).replace(/[^A-Za-z]/g, '').slice(0, 1),
+          }
+        : field === 'age'
+        ? {
+            age: String(value).replace(/\D/g, '').slice(0, 2),
           }
         : {
             [field]: value,
@@ -243,8 +265,9 @@ export default function StudentProfile() {
       setPhotoFile(null);
       setSignatureFile(null);
 
-      const refreshedMe = await refresh();
-      setFormData(refreshedMe ? buildProfileFormState(refreshedMe) : nextStateFromResult);
+      // Keep the just-saved values even if auth refresh returns a partial student payload.
+      setFormData(nextStateFromResult);
+      void refresh();
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('gc-profile-assets-updated'));
@@ -282,10 +305,10 @@ export default function StudentProfile() {
               <Input id="studentId" value={formData.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
             </div>
             <div>
-              <Label htmlFor="department">Department</Label>
+              <Label htmlFor="department">Department *</Label>
               <Select value={formData.department} onValueChange={(value) => updateField('department', value)}>
-                <SelectTrigger id="department">
-                  <SelectValue placeholder="Select department" />
+                <SelectTrigger id="department" className={requiredFieldClass(!formData.department.trim())}>
+                  <SelectValue placeholder="Required: select department" />
                 </SelectTrigger>
                 <SelectContent>
                   {DEPARTMENT_OPTIONS.map((department) => (
@@ -297,32 +320,45 @@ export default function StudentProfile() {
               </Select>
             </div>
             <div>
-              <Label htmlFor="firstName">First Name</Label>
+              <Label htmlFor="firstName">First Name *</Label>
               <Input
                 id="firstName"
                 value={formData.firstName}
                 onChange={(event) => updateField('firstName', event.target.value)}
-                placeholder="Enter your first name"
+                placeholder="Required"
+                className={requiredFieldClass(!formData.firstName.trim())}
               />
             </div>
             <div>
-              <Label htmlFor="lastName">Last Name</Label>
+              <Label htmlFor="lastName">Last Name *</Label>
               <Input
                 id="lastName"
                 value={formData.lastName}
                 onChange={(event) => updateField('lastName', event.target.value)}
-                placeholder="Enter your last name"
+                placeholder="Required"
+                className={requiredFieldClass(!formData.lastName.trim())}
               />
             </div>
             <div>
-              <Label htmlFor="course">Course / Program</Label>
+              <Label htmlFor="middleInitial">Middle Initial *</Label>
+              <Input
+                id="middleInitial"
+                value={formData.middleInitial}
+                onChange={(event) => updateField('middleInitial', event.target.value)}
+                placeholder="Required"
+                maxLength={1}
+                className={requiredFieldClass(!formData.middleInitial.trim())}
+              />
+            </div>
+            <div>
+              <Label htmlFor="course">Course / Program *</Label>
               <Select
                 value={formData.course || undefined}
                 onValueChange={(value) => updateField('course', value)}
                 disabled={!formData.department}
               >
-                <SelectTrigger id="course">
-                  <SelectValue placeholder={formData.department ? 'Select program' : 'Select department first'} />
+                <SelectTrigger id="course" className={requiredFieldClass(!formData.course.trim())}>
+                  <SelectValue placeholder={formData.department ? 'Required: select program' : 'Select department first'} />
                 </SelectTrigger>
                 <SelectContent>
                   {getProgramOptionsForSelect(formData.department, formData.course).map((program) => (
@@ -334,16 +370,55 @@ export default function StudentProfile() {
               </Select>
             </div>
             <div>
-              <Label htmlFor="birthday">Birthday</Label>
+              <Label htmlFor="age">Age *</Label>
+              <Input
+                id="age"
+                type="text"
+                inputMode="numeric"
+                pattern="\d{1,2}"
+                maxLength={2}
+                value={formData.age}
+                onChange={(event) => updateField('age', event.target.value)}
+                placeholder="Required"
+                className={requiredFieldClass(!formData.age.trim())}
+              />
+            </div>
+            <div>
+              <Label htmlFor="sex">Sex *</Label>
+              <Select value={formData.sex} onValueChange={(value) => updateField('sex', value)}>
+                <SelectTrigger id="sex" className={requiredFieldClass(!formData.sex.trim())}>
+                  <SelectValue placeholder="Required: select sex" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="male">Male</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="birthday">Birthday *</Label>
               <Input
                 id="birthday"
                 type="date"
                 value={formData.birthday}
                 onChange={(event) => updateField('birthday', event.target.value)}
+                className={requiredFieldClass(!formData.birthday.trim())}
               />
             </div>
             <div>
-              <Label htmlFor="contactNumber">Contact Number</Label>
+              <Label htmlFor="civilStatus">Civil Status *</Label>
+              <Select value={formData.civilStatus} onValueChange={(value) => updateField('civilStatus', value)}>
+                <SelectTrigger id="civilStatus" className={requiredFieldClass(!formData.civilStatus.trim())}>
+                  <SelectValue placeholder="Required: select civil status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Single">Single</SelectItem>
+                  <SelectItem value="Married">Married</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="contactNumber">Contact Number *</Label>
               <Input
                 id="contactNumber"
                 type="tel"
@@ -351,18 +426,20 @@ export default function StudentProfile() {
                 onChange={(event) => updateField('contactNumber', event.target.value)}
                 inputMode="numeric"
                 placeholder="(+63) 9123456789"
+                className={requiredFieldClass(!formData.contactNumber.trim() || !hasValidContactNumber)}
               />
               {!hasValidContactNumber && formData.contactNumber ? (
                 <p className="mt-1 text-sm text-red-600">Use the format (+63) 9123456789.</p>
               ) : null}
             </div>
             <div className="md:col-span-2">
-              <Label htmlFor="address">Street Address</Label>
+              <Label htmlFor="address">Street Address *</Label>
               <Input
                 id="address"
                 value={formData.address}
                 onChange={(event) => updateField('address', event.target.value)}
-                placeholder="Enter your street address"
+                placeholder="Required"
+                className={requiredFieldClass(!formData.address.trim())}
               />
             </div>
           </CardContent>

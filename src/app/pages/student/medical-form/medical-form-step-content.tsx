@@ -1,17 +1,14 @@
 import { memo } from 'react';
-import { Check } from 'lucide-react';
+import { Check, CheckCircle2, PenLine, UserRound, XCircle } from 'lucide-react';
+import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Checkbox } from '../../../components/ui/checkbox';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { RadioGroup, RadioGroupItem } from '../../../components/ui/radio-group';
 
 import { Textarea } from '../../../components/ui/textarea';
 import {
-  DEPARTMENT_OPTIONS,
-  getProgramOptionsForSelect,
-  isValidPhilippinePhoneNumber,
   MEDICAL_CONDITIONS,
   YEAR_LEVELS,
 } from './constants';
@@ -26,7 +23,10 @@ type Props = {
   onMeasurementChange: (field: 'weight' | 'height', value: string) => void;
   onFileChange: (field: 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => void;
   getBmiCategory: (bmi: string) => BmiCategory;
-  maxBirthdate: string;
+  hasRequiredProfileFields: boolean;
+  hasProfilePhoto: boolean;
+  hasProfileSignature: boolean;
+  onGoToProfile: () => void;
 };
 
 export const MedicalFormStepContent = memo(function MedicalFormStepContent({
@@ -38,25 +38,15 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   onMeasurementChange,
   onFileChange,
   getBmiCategory,
-  maxBirthdate,
+  hasRequiredProfileFields,
+  hasProfilePhoto,
+  hasProfileSignature,
+  onGoToProfile,
 }: Props) {
-  const showLabUploads = formData.labTestLocation === 'jlgh' || formData.labTestLocation === 'other';
+  const showLabUploads = formData.labTestLocation === 'other';
   const uploadsRequired = formData.labTestLocation === 'other';
   const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
-  const stepOneMissingRequired = [
-    !formData.studentId,
-    !formData.department,
-    !formData.yearLevel,
-    !formData.course,
-    !formData.lastName?.trim(),
-    !formData.firstName?.trim(),
-    !formData.middleInitial?.trim(),
-    !formData.birthday,
-    !formData.age,
-    !formData.sex,
-    !formData.contactNumber?.trim(),
-    !formData.address?.trim(),
-  ].filter(Boolean).length;
+  const stepOneReady = hasRequiredProfileFields && hasProfilePhoto && hasProfileSignature;
   const stepThreeMissingRequired = [
     !formData.hadOperation,
     !formData.emergencyContact.name?.trim(),
@@ -125,192 +115,51 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           <div className="space-y-2">
             <h3 className="text-2xl font-semibold tracking-tight">Personal Information</h3>
             <p className="text-sm text-muted-foreground">
-              Fill in your current student and contact details. Fields marked with an asterisk are required before you can proceed.
+              Personal information is now managed in your Profile page. Complete your Profile first before proceeding.
             </p>
           </div>
 
-          {stepOneMissingRequired > 0 ? (
-            <div className="break-words rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              Required fields are missing. Please complete all fields marked with <span className="font-semibold">*</span>.
+          <div className="space-y-3 rounded-xl border border-outline-variant/40 bg-surface-container-low p-4">
+            <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <UserRound className={`h-5 w-5 ${hasRequiredProfileFields ? 'text-green-600' : 'text-muted-foreground'}`} />
+                <span className="text-sm font-medium text-on-surface">Required Profile Fields</span>
+              </div>
+              <span className={`text-sm ${hasRequiredProfileFields ? 'text-green-700' : 'text-amber-700'}`}>
+                {hasRequiredProfileFields ? 'Complete' : 'Incomplete'}
+              </span>
             </div>
-          ) : null}
-
-          <div className="grid gap-x-5 gap-y-5 md:grid-cols-2 xl:grid-cols-12">
-            <div className="xl:col-span-3">
-              <Label htmlFor="studentId">Student ID *</Label>
-              <Input
-                id="studentId"
-                value={formData.studentId}
-                readOnly
-                disabled
-                className={`cursor-not-allowed opacity-80 ${requiredFieldClass(!formData.studentId)}`}
-              />
+            <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className={`h-5 w-5 ${hasProfilePhoto ? 'text-green-600' : 'text-muted-foreground'}`} />
+                <span className="text-sm font-medium text-on-surface">1x1 Student Photo</span>
+              </div>
+              <span className={`text-sm ${hasProfilePhoto ? 'text-green-700' : 'text-amber-700'}`}>
+                {hasProfilePhoto ? 'Ready' : 'Missing'}
+              </span>
             </div>
-            <div className="xl:col-span-3">
-              <Label htmlFor="department">Department *</Label>
-              <Select value={formData.department} onValueChange={(value) => onFieldChange('department', value)}>
-                <SelectTrigger id="department" className={requiredFieldClass(!formData.department)}>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DEPARTMENT_OPTIONS.map((department) => (
-                    <SelectItem key={department.value} value={department.value}>
-                      {department.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="xl:col-span-2">
-              <Label htmlFor="yearLevel">Year Level *</Label>
-              <Select value={formData.yearLevel} onValueChange={(value) => onFieldChange('yearLevel', value)} disabled>
-                <SelectTrigger id="yearLevel" disabled className={requiredFieldClass(!formData.yearLevel)}>
-                  <SelectValue placeholder="Select year level" />
-                </SelectTrigger>
-                <SelectContent>
-                  {YEAR_LEVELS.map((year) => (
-                    <SelectItem key={year.value} value={year.value}>
-                      {year.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="md:col-span-2 xl:col-span-4">
-              <Label htmlFor="course">Course / Program *</Label>
-              <Select
-                value={formData.course || undefined}
-                onValueChange={(value) => onFieldChange('course', value)}
-                disabled={!formData.department}
-              >
-                <SelectTrigger id="course" className={requiredFieldClass(!formData.course)}>
-                  <SelectValue placeholder={formData.department ? 'Select program' : 'Select department first'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {getProgramOptionsForSelect(formData.department, formData.course).map((program) => (
-                    <SelectItem key={program} value={program}>
-                      {program}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="xl:col-span-4">
-              <Label htmlFor="lastName">Last Name *</Label>
-              <Input
-                id="lastName"
-                value={formData.lastName}
-                onChange={(event) => onFieldChange('lastName', event.target.value)}
-                maxLength={30}
-                className={requiredFieldClass(!formData.lastName?.trim())}
-              />
-            </div>
-            <div className="xl:col-span-4">
-              <Label htmlFor="firstName">First Name *</Label>
-              <Input
-                id="firstName"
-                value={formData.firstName}
-                onChange={(event) => onFieldChange('firstName', event.target.value)}
-                maxLength={30}
-                className={requiredFieldClass(!formData.firstName?.trim())}
-              />
-            </div>
-            <div className="xl:col-span-1">
-              <Label htmlFor="middleInitial">M.I. *</Label>
-              <Input
-                id="middleInitial"
-                value={formData.middleInitial}
-                onChange={(event) => onFieldChange('middleInitial', event.target.value)}
-                maxLength={1}
-                className={requiredFieldClass(!formData.middleInitial?.trim())}
-              />
-            </div>
-            <div className="xl:col-span-3">
-              <Label htmlFor="birthday">Birthday *</Label>
-              <Input
-                id="birthday"
-                type="date"
-                value={formData.birthday}
-                onChange={(event) => onFieldChange('birthday', event.target.value)}
-                max={maxBirthdate}
-                className={requiredFieldClass(!formData.birthday)}
-              />
-            </div>
-            <div className="xl:col-span-3">
-              <Label htmlFor="civilStatus">Civil Status</Label>
-              <Select value={formData.civilStatus} onValueChange={(value) => onFieldChange('civilStatus', value)}>
-                <SelectTrigger id="civilStatus">
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Single">Single</SelectItem>
-                  <SelectItem value="Married">Married</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="xl:col-span-2">
-              <Label htmlFor="age">Age *</Label>
-              <Input
-                id="age"
-                type="text"
-                inputMode="numeric"
-                pattern="\d{1,2}"
-                maxLength={2}
-                value={formData.age}
-                onChange={(event) => onFieldChange('age', event.target.value)}
-                className={requiredFieldClass(!formData.age)}
-              />
-            </div>
-            <div className="xl:col-span-3">
-              <Label htmlFor="sex">Sex *</Label>
-              <RadioGroup
-                value={formData.sex}
-                onValueChange={(value) => onFieldChange('sex', value)}
-                className={`pt-3 ${requiredFieldClass(!formData.sex)}`}
-              >
-                <div className="flex gap-6">
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="female" id="female" />
-                    <Label htmlFor="female" className="font-normal">
-                      F
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="male" id="male" />
-                    <Label htmlFor="male" className="font-normal">
-                      M
-                    </Label>
-                  </div>
-                </div>
-              </RadioGroup>
-            </div>
-            <div className="xl:col-span-4">
-              <Label htmlFor="contactNumber">Tel./CP # *</Label>
-              <Input
-                id="contactNumber"
-                type="tel"
-                value={formData.contactNumber}
-                onChange={(event) => onFieldChange('contactNumber', event.target.value)}
-                inputMode="numeric"
-                placeholder="(+63) 9123456789"
-                className={requiredFieldClass(!formData.contactNumber?.trim() || !isValidPhilippinePhoneNumber(formData.contactNumber))}
-              />
-              {!isValidPhilippinePhoneNumber(formData.contactNumber) && formData.contactNumber ? (
-                <p className="mt-1 text-sm text-red-600">Use the format (+63) 9123456789.</p>
-              ) : null}
-            </div>
-            <div className="md:col-span-2 xl:col-span-8">
-              <Label htmlFor="address">Street Address *</Label>
-              <Input
-                id="address"
-                value={formData.address}
-                onChange={(event) => onFieldChange('address', event.target.value)}
-                placeholder="Enter your street address"
-                maxLength={180}
-                className={requiredFieldClass(!formData.address?.trim())}
-              />
+            <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <PenLine className={`h-5 w-5 ${hasProfileSignature ? 'text-green-600' : 'text-muted-foreground'}`} />
+                <span className="text-sm font-medium text-on-surface">Student Signature</span>
+              </div>
+              <span className={`text-sm ${hasProfileSignature ? 'text-green-700' : 'text-amber-700'}`}>
+                {hasProfileSignature ? 'Ready' : 'Missing'}
+              </span>
             </div>
           </div>
+
+          {!stepOneReady ? (
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-start gap-2 text-sm text-amber-900">
+                <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <p>Fill up the fields in Profile and upload your photo/signature to proceed.</p>
+              </div>
+              <Button type="button" variant="outline" onClick={onGoToProfile}>
+                Go to Profile
+              </Button>
+            </div>
+          ) : null}
         </div>
       );
     case 2:
@@ -513,19 +362,19 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </RadioGroup>
           </div>
 
+          {formData.labTestLocation === 'jlgh' ? (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm font-medium text-emerald-700">No file attachment required.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Since you selected James L. Gordon Hospital, laboratory files do not need to be attached here.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+
           {showLabUploads ? (
             <>
-              {formData.labTestLocation === 'jlgh' ? (
-                <Card>
-                  <CardContent className="pt-6">
-                    <p className="text-sm text-emerald-700 font-medium">Chest X-Ray upload is required.</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      You must attach your Chest X-Ray result. CBC and Urinalysis uploads are optional when tests were done at James L. Gordon Hospital.
-                    </p>
-                  </CardContent>
-                </Card>
-              ) : null}
-
               {formData.labTestLocation === 'other' ? (
                 <div>
                   <Label htmlFor="otherClinicName">Clinic/Laboratory Name *</Label>
