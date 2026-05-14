@@ -3,7 +3,7 @@ import { ArrowLeft, CheckCircle2, FileCheck2, PenLine, ShieldCheck, XCircle } fr
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
-
+import { Checkbox } from '../../components/ui/checkbox';
 import { Label } from '../../components/ui/label';
 import { getStudentProfileAssets } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -114,12 +114,11 @@ export default function StudentPrivacyWaiver() {
           </div>
 
           <div className="flex items-start gap-3 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4">
-            <input
+            <Checkbox
               id="privacyConsent"
-              type="checkbox"
               checked={accepted}
-              onChange={(event) => setAccepted(event.target.checked)}
-              className="mt-1 h-5 w-5 flex-shrink-0 cursor-pointer appearance-auto accent-primary"
+              onCheckedChange={(checked) => setAccepted(checked === true)}
+              className="mt-1"
             />
             <Label htmlFor="privacyConsent" className="cursor-pointer text-sm leading-6 font-normal text-on-surface">
               I have read and understood this Data Privacy Waiver pursuant to the Data Privacy Act of 2012 (Republic

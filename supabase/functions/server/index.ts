@@ -70,6 +70,10 @@ const SUBMISSION_LIST_COLUMNS = [
   'lab_test_location',
   'lab_test_clinic',
 ].join(',');
+const ADMIN_SYSTEM_SETTINGS_STORE_KEY = 'admin.system-settings';
+const ADMIN_SYSTEM_SETTINGS_SEMESTERS = ['First Semester', 'Second Semester', 'Summer'];
+const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = [15, 30, 45, 60, 120];
+const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = [0, 12, 24, 36];
 
 type TimedValue<T> = {
   value: T;
@@ -101,6 +105,70 @@ function isDoctorOrAdmin(requester: Requester) {
   if (requester.profile.role === 'admin') return true;
   if (requester.profile.role === 'staff' && isDoctorPosition(requester.staff?.position)) return true;
   return false;
+}
+
+function getCurrentAcademicYear() {
+  const now = new Date();
+  const startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${startYear}-${startYear + 1}`;
+}
+
+function getDefaultAdminSystemSettings() {
+  return {
+    academicYear: getCurrentAcademicYear(),
+    semester: 'Second Semester',
+    acceptingSubmissions: true,
+    requireTwoFactorAuth: true,
+    sessionTimeoutMinutes: 30,
+    auditLogging: true,
+    approvalEmailNotifications: true,
+    pendingReviewReminders: true,
+    autoArchiveAfterMonths: 12,
+  };
+}
+
+function normalizeAdminSystemSettings(input: any = {}) {
+  const defaults = getDefaultAdminSystemSettings();
+  const academicYearValue = String(input?.academicYear ?? defaults.academicYear).trim();
+  const parsedTimeout = Number(input?.sessionTimeoutMinutes);
+  const parsedAutoArchive = Number(input?.autoArchiveAfterMonths);
+
+  const academicYear =
+    /^\d{4}-\d{4}$/.test(academicYearValue) &&
+    Number(academicYearValue.slice(5, 9)) - Number(academicYearValue.slice(0, 4)) === 1
+      ? academicYearValue
+      : defaults.academicYear;
+
+  return {
+    academicYear,
+    semester: ADMIN_SYSTEM_SETTINGS_SEMESTERS.includes(input?.semester)
+      ? input.semester
+      : defaults.semester,
+    acceptingSubmissions:
+      typeof input?.acceptingSubmissions === 'boolean'
+        ? input.acceptingSubmissions
+        : defaults.acceptingSubmissions,
+    requireTwoFactorAuth:
+      typeof input?.requireTwoFactorAuth === 'boolean'
+        ? input.requireTwoFactorAuth
+        : defaults.requireTwoFactorAuth,
+    sessionTimeoutMinutes: ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS.includes(parsedTimeout)
+      ? parsedTimeout
+      : defaults.sessionTimeoutMinutes,
+    auditLogging:
+      typeof input?.auditLogging === 'boolean' ? input.auditLogging : defaults.auditLogging,
+    approvalEmailNotifications:
+      typeof input?.approvalEmailNotifications === 'boolean'
+        ? input.approvalEmailNotifications
+        : defaults.approvalEmailNotifications,
+    pendingReviewReminders:
+      typeof input?.pendingReviewReminders === 'boolean'
+        ? input.pendingReviewReminders
+        : defaults.pendingReviewReminders,
+    autoArchiveAfterMonths: ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS.includes(parsedAutoArchive)
+      ? parsedAutoArchive
+      : defaults.autoArchiveAfterMonths,
+  };
 }
 
 function normalizeEmail(email?: string | null) {
@@ -1363,6 +1431,54 @@ app.get("/user-accounts", async (c) => {
   } catch (error) {
     console.log('Error fetching user accounts:', error);
     return c.json({ error: 'Failed to fetch user accounts', details: String(error) }, 500);
+  }
+});
+
+app.get("/admin/system-settings", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  try {
+    const { data, error } = await supabase
+      .from('kv_store_2a5e1a6b')
+      .select('value')
+      .eq('key', ADMIN_SYSTEM_SETTINGS_STORE_KEY)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+
+    return c.json(normalizeAdminSystemSettings(data?.value || {}));
+  } catch (error) {
+    console.log('Error fetching admin system settings:', error);
+    return c.json({ error: 'Failed to fetch admin system settings', details: String(error) }, 500);
+  }
+});
+
+app.put("/admin/system-settings", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  try {
+    const payload = await c.req.json();
+    const settings = normalizeAdminSystemSettings(payload);
+
+    const { error } = await supabase
+      .from('kv_store_2a5e1a6b')
+      .upsert({
+        key: ADMIN_SYSTEM_SETTINGS_STORE_KEY,
+        value: settings,
+      });
+
+    if (error) throw new Error(error.message);
+
+    return c.json(settings);
+  } catch (error) {
+    console.log('Error saving admin system settings:', error);
+    return c.json({ error: 'Failed to save admin system settings', details: String(error) }, 500);
   }
 });
 
