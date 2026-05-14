@@ -69,7 +69,6 @@ type RecordForm = {
   allergyDetails: string;
   hadOperation: 'yes' | 'no';
   operationDetails: string;
-  bloodPressure: string;
   weight: string;
   height: string;
   bmi: string;
@@ -185,7 +184,6 @@ function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
     allergyDetails: submission?.allergyDetails || '',
     hadOperation: submission?.hadOperation || 'no',
     operationDetails: submission?.operationDetails || '',
-    bloodPressure: submission?.bloodPressure || '',
     weight: submission?.weight || '',
     height: submission?.height || '',
     bmi: submission?.bmi || calculateBmi(submission?.weight || '', submission?.height || ''),
@@ -430,7 +428,6 @@ export default function StaffRecordReview() {
         hadOperation: recordForm.hadOperation,
         operationDetails: recordForm.operationDetails,
         studentMeasurements: {
-          bloodPressure: recordForm.bloodPressure,
           weight: recordForm.weight,
           height: recordForm.height,
           bmi: recordForm.bmi,
@@ -492,7 +489,6 @@ export default function StaffRecordReview() {
         allergyDetails: recordForm.allergyDetails,
         hadOperation: recordForm.hadOperation,
         operationDetails: recordForm.operationDetails,
-        bloodPressure: recordForm.bloodPressure,
         weight: recordForm.weight,
         height: recordForm.height,
         bmi: recordForm.bmi,
@@ -998,15 +994,6 @@ export default function StaffRecordReview() {
                   <CardTitle>Student-Submitted Measurements</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="submittedBp">Blood Pressure</Label>
-                    <Input
-                      id="submittedBp"
-                      value={recordForm.bloodPressure}
-                      onChange={(event) => updateRecordField('bloodPressure', event.target.value)}
-                      className="mt-2"
-                    />
-                  </div>
                   <div>
                     <Label htmlFor="submittedWeight">Weight (kg)</Label>
                     <Input

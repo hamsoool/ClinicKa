@@ -141,6 +141,11 @@ function normalizeStoragePath(storagePath?: string | null, targetBucket?: string
   return path;
 }
 
+function isMissingStorageBucketError(error: any) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('bucket') && message.includes('not found');
+}
+
 function badRequest(message: string) {
   return new Response(JSON.stringify({ error: message }), {
     status: 400,
@@ -367,6 +372,54 @@ async function deleteStoredFiles(files: any[]) {
   }
 }
 
+async function listStoragePaths(bucket: string, prefix: string) {
+  const cleanedPrefix = String(prefix || '').replace(/^\/+/, '');
+  const paths: string[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase.storage.from(bucket).list(cleanedPrefix, {
+      limit: 1000,
+      offset,
+    });
+
+    if (error) {
+      if (isMissingStorageBucketError(error)) return [];
+      throw new Error(error.message);
+    }
+
+    if (!data?.length) break;
+
+    for (const item of data) {
+      if (!item?.name) continue;
+      if (!item?.id && !item?.metadata) continue;
+      const fullPath = cleanedPrefix ? `${cleanedPrefix}${item.name}` : item.name;
+      paths.push(fullPath);
+    }
+
+    if (data.length < 1000) break;
+    offset += data.length;
+  }
+
+  return paths;
+}
+
+async function deleteStoragePrefix(bucket: string, prefix: string) {
+  const paths = await listStoragePaths(bucket, prefix);
+  if (!paths.length) return;
+  const { error } = await supabase.storage.from(bucket).remove(paths);
+  if (error) throw new Error(error.message);
+}
+
+async function deleteStoragePrefixes(buckets: string[], prefixes: string[]) {
+  for (const bucket of buckets) {
+    for (const prefix of prefixes) {
+      if (!prefix) continue;
+      await deleteStoragePrefix(bucket, prefix);
+    }
+  }
+}
+
 async function setArchivedAuthState(userId: string) {
   const { error } = await supabase.auth.admin.updateUserById(userId, {
     ban_duration: '876000h',
@@ -435,7 +488,7 @@ async function authenticate(c: any): Promise<Requester | null> {
   const [{ data: student }, { data: staff }] = await Promise.all([
     supabase
       .from('students')
-      .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address')
+      .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address')
       .or(`profile_id.eq.${user.id},student_id.eq.${profile.student_id || '__none__'}`)
       .maybeSingle(),
     supabase
@@ -608,7 +661,7 @@ async function loadRelatedData(rows: any[]) {
     studentIds.length
       ? supabase
           .from('students')
-          .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address')
+          .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address')
           .in('student_id', studentIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
@@ -824,7 +877,6 @@ app.post("/submit-record", async (c) => {
       middle_initial: data.middleInitial || null,
       department: data.department || null,
       course: data.course || null,
-      year_level: data.yearLevel ? Number(data.yearLevel) : null,
       age: data.age ? Number(data.age) : null,
       sex: data.sex || null,
       birthday: data.birthday || null,
@@ -859,7 +911,6 @@ app.post("/submit-record", async (c) => {
         allergy_details: data.allergyDetails || null,
         had_operation: data.hadOperation || null,
         operation_details: data.operationDetails || null,
-        blood_pressure: data.bloodPressure || null,
         weight: data.weight || null,
         height: data.height || null,
         bmi: data.bmi || null,
@@ -1527,6 +1578,16 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
         || null;
 
       if (studentId) {
+        const { data: profileAssetFiles, error: profileAssetError } = await supabase
+          .from('files')
+          .select('*')
+          .eq('uploaded_by', userId)
+          .is('submission_id', null);
+
+        if (profileAssetError) throw new Error(profileAssetError.message);
+        await deleteStoredFiles(profileAssetFiles || []);
+        await deleteStoragePrefixes(['profile', 'student_signature'], [`profiles/${studentId}/`]);
+
         const { data: submissions, error: submissionsError } = await supabase
           .from('submissions')
           .select('id')
@@ -1545,6 +1606,10 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
           if (filesLookupError) throw new Error(filesLookupError.message);
 
           await deleteStoredFiles(files || []);
+          await deleteStoragePrefixes(
+            storageBuckets,
+            submissionIds.map((id) => `${id}/`),
+          );
 
           const deletionTables = [
             'emergency_contacts',
@@ -1562,6 +1627,14 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
             if (error) throw new Error(error.message);
           }
         }
+
+        const { error: profileAssetDeleteError } = await supabase
+          .from('files')
+          .delete()
+          .eq('uploaded_by', userId)
+          .is('submission_id', null);
+
+        if (profileAssetDeleteError) throw new Error(profileAssetDeleteError.message);
 
         const { error: submissionDeleteError } = await supabase
           .from('submissions')
@@ -1594,6 +1667,25 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
 
       const { error: staffDeleteError } = await supabase.from('staff_users').delete().eq('profile_id', userId);
       if (staffDeleteError) throw new Error(staffDeleteError.message);
+    }
+
+    if (role === 'staff') {
+      const { data: staffFiles, error: staffFilesError } = await supabase
+        .from('files')
+        .select('*')
+        .eq('uploaded_by', userId)
+        .is('submission_id', null);
+
+      if (staffFilesError) throw new Error(staffFilesError.message);
+      await deleteStoredFiles(staffFiles || []);
+
+      const { error: staffFileDeleteError } = await supabase
+        .from('files')
+        .delete()
+        .eq('uploaded_by', userId)
+        .is('submission_id', null);
+
+      if (staffFileDeleteError) throw new Error(staffFileDeleteError.message);
     }
 
     const { error: profileDeleteError } = await supabase.from('profiles').delete().eq('id', userId);
