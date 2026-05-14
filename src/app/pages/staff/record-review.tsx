@@ -275,6 +275,8 @@ export default function StaffRecordReview() {
   const navigate = useNavigate();
   const { submissionId } = useParams();
   const { me } = useAuth();
+  const staffPosition = me?.staff?.position || 'Clinic Staff';
+  const isDoctor = ['clinic doctor', 'doctor'].includes(staffPosition.trim().toLowerCase()) || me?.profile.role === 'admin';
   const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -597,7 +599,7 @@ export default function StaffRecordReview() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold text-primary">Clinic Nurse / Doctor Review</h1>
+            <h1 className="text-3xl font-bold text-primary">{isDoctor ? 'Clinic Doctor Review' : 'Clinic Staff Review'}</h1>
             {getStatusBadge(persistedStatus)}
           </div>
           <p className="text-muted-foreground">
@@ -713,8 +715,8 @@ export default function StaffRecordReview() {
           <TabsTrigger value="labs" className="w-full px-2 py-2 text-xs sm:text-sm">
             Lab Results
           </TabsTrigger>
-          <TabsTrigger value="decision" className="w-full px-2 py-2 text-xs sm:text-sm">
-            Clinic Notes
+          <TabsTrigger value="decision" className="w-full px-2 py-2 text-xs sm:text-sm" disabled={!isDoctor}>
+            Clinic Notes {!isDoctor ? '(Doctor Only)' : ''}
           </TabsTrigger>
         </TabsList>
 
@@ -1028,6 +1030,12 @@ export default function StaffRecordReview() {
               <CardTitle>Clinic Measurements and Verification</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              {!isDoctor && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  <strong>Clinic Staff view:</strong> You can verify measurements (blood pressure, weight, height, BMI, visual acuity) below.
+                  Physical examination fields and clearance actions are restricted to Clinic Doctors.
+                </div>
+              )}
               <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
                 Compare the student-submitted values with the verified clinic examination values below before saving the review.
               </div>
@@ -1106,7 +1114,7 @@ export default function StaffRecordReview() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Physical Examination Results</CardTitle>
+              <CardTitle>Physical Examination Results {!isDoctor && <span className="text-sm font-normal text-muted-foreground">(Doctor Only — Read Only)</span>}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div>
@@ -1117,6 +1125,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('skin', event.target.value)}
                   className="mt-2"
                   rows={3}
+                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1127,6 +1136,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('heent', event.target.value)}
                   className="mt-2"
                   rows={3}
+                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1137,6 +1147,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('chestLungs', event.target.value)}
                   className="mt-2"
                   rows={3}
+                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1147,6 +1158,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('heart', event.target.value)}
                   className="mt-2"
                   rows={3}
+                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1157,6 +1169,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('abdomen', event.target.value)}
                   className="mt-2"
                   rows={3}
+                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1167,6 +1180,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('extremities', event.target.value)}
                   className="mt-2"
                   rows={3}
+                  disabled={!isDoctor}
                 />
               </div>
               <div className="md:col-span-2">
@@ -1178,6 +1192,7 @@ export default function StaffRecordReview() {
                   className="mt-2"
                   rows={4}
                   placeholder="Document additional observations, recommendations, or restrictions."
+                  disabled={!isDoctor}
                 />
               </div>
               <div className="md:col-span-2">
@@ -1187,7 +1202,8 @@ export default function StaffRecordReview() {
                   value={assessmentForm.examinedBy}
                   onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
                   className="mt-2"
-                  placeholder="Nurse or doctor name"
+                  placeholder="Doctor name"
+                  disabled={!isDoctor}
                 />
               </div>
             </CardContent>
@@ -1450,7 +1466,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.examinedBy}
                     onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
                     className="mt-2"
-                    placeholder="Nurse or doctor name"
+                    placeholder="Doctor name"
                   />
                   <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical clearance.</p>
                 </div>
@@ -1508,7 +1524,9 @@ export default function StaffRecordReview() {
             <p className="text-sm text-muted-foreground">
               {isApprovedLocked
                 ? 'This submission is already approved. Actions are locked to prevent accidental changes.'
-                : 'Save draft edits at any time, then keep the case pending, mark the physical exam complete, approve, or return it.'}
+                : isDoctor
+                  ? 'Save draft edits at any time, then keep the case pending, mark the physical exam complete, approve, or return it.'
+                  : 'As Clinic Staff, you can save your data input (lab results, measurements). Clearance decisions require a Clinic Doctor.'}
             </p>
           </div>
 
@@ -1518,28 +1536,32 @@ export default function StaffRecordReview() {
               <Save className="mr-2 h-4 w-4" />
               {saving ? 'Saving...' : 'Save Review'}
             </Button>
-            <Button variant="outline" onClick={() => void persistReview('pending')} disabled={saving}>
-              <FlaskConical className="mr-2 h-4 w-4" />
-              Keep Pending
-            </Button>
-            <Button variant="outline" onClick={() => void persistReview('physical_exam_done')} disabled={saving}>
-              <ClipboardCheck className="mr-2 h-4 w-4" />
-              Physical Exam Done
-            </Button>
-            <Button variant="destructive" onClick={() => {
-              setReturnReason(staffNotes);
-              setShowReturnDialog(true);
-            }} disabled={saving}>
-              Return for Correction
-            </Button>
-            <Button
-              onClick={() => void persistReview('approved')}
-              disabled={saving}
-              className="bg-green-600 text-white hover:bg-green-700"
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Approve Clearance
-            </Button>
+            {isDoctor && (
+              <>
+                <Button variant="outline" onClick={() => void persistReview('pending')} disabled={saving}>
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  Keep Pending
+                </Button>
+                <Button variant="outline" onClick={() => void persistReview('physical_exam_done')} disabled={saving}>
+                  <ClipboardCheck className="mr-2 h-4 w-4" />
+                  Physical Exam Done
+                </Button>
+                <Button variant="destructive" onClick={() => {
+                  setReturnReason(staffNotes);
+                  setShowReturnDialog(true);
+                }} disabled={saving}>
+                  Return for Correction
+                </Button>
+                <Button
+                  onClick={() => void persistReview('approved')}
+                  disabled={saving}
+                  className="bg-green-600 text-white hover:bg-green-700"
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Approve Clearance
+                </Button>
+              </>
+            )}
           </div>
           ) : (
             <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved - Locked</Badge>

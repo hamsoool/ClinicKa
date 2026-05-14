@@ -17,6 +17,7 @@ import PortalShell, {
 } from '../../components/portal-shell';
 import { prefetchPortalRoutes } from '../../route-modules';
 import { useAuth } from '../../lib/auth';
+import { getRoleLabel } from '../../lib/api';
 
 const navItems = [
   { path: '/staff', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
@@ -41,8 +42,8 @@ export default function StaffLayout() {
       .join(' ')
       .trim() ||
     formatEmailName(me?.profile.email) ||
-    'Clinic Nurse / Doctor';
-  const position = me?.staff?.position || 'Clinic Nurse / Doctor';
+    getRoleLabel(me?.profile?.role, me?.staff?.position);
+  const position = getRoleLabel(me?.profile?.role, me?.staff?.position);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

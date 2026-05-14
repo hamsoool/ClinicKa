@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { getAnalytics, getSubmissions } from '../../lib/api';
+import { getAnalytics, getSubmissions, getRoleLabel } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { MockSubmission } from '../../lib/mock-data';
 
@@ -99,8 +99,8 @@ export default function StaffDashboard() {
       .join(' ')
       .trim() ||
     formatEmailName(me?.profile.email) ||
-    'Clinic Nurse / Doctor';
-  const position = me?.staff?.position || 'Clinic Nurse / Doctor';
+    getRoleLabel(me?.profile?.role, me?.staff?.position);
+  const position = getRoleLabel(me?.profile?.role, me?.staff?.position);
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>('desc');
   const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'returned' | 'resubmitted'>('all');
@@ -229,7 +229,7 @@ export default function StaffDashboard() {
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full bg-primary-container/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-on-primary-container">
               <Stethoscope className="h-4 w-4" />
-              Clinic Nurse / Doctor Portal
+              Clinic Operations Portal
             </div>
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-on-surface">Welcome, {displayName}</h1>

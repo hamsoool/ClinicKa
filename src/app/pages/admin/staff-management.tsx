@@ -21,6 +21,7 @@ import {
   TableRow,
 } from '../../components/ui/table';
 import { Plus, Search, Download, Printer } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import { createAdminStaff, getStaffUsers } from '../../lib/api';
 
@@ -29,6 +30,13 @@ const statusTone = (status: string) => {
     return 'bg-green-100 text-green-700';
   }
   return 'bg-yellow-100 text-yellow-700';
+};
+
+const roleTone = (role: string) => {
+  if (role === 'Clinic Doctor') {
+    return 'bg-indigo-100 text-indigo-700';
+  }
+  return 'bg-blue-100 text-blue-700';
 };
 
 export default function AdminStaffManagement() {
@@ -169,7 +177,15 @@ export default function AdminStaffManagement() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="sm-position">Position</Label>
-                <Input id="sm-position" value={form.position} onChange={(e) => setForm((prev) => ({ ...prev, position: e.target.value }))} />
+                <Select value={form.position} onValueChange={(value) => setForm((prev) => ({ ...prev, position: value }))}>
+                  <SelectTrigger id="sm-position">
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
+                    <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="sm-code">Staff Code (optional)</Label>
@@ -229,7 +245,7 @@ export default function AdminStaffManagement() {
                     <Badge className={statusTone(staff.status)}>{staff.status}</Badge>
                   </div>
                   <div className="space-y-1 text-sm">
-                    <p><span className="font-medium text-on-surface">Role:</span> {staff.role}</p>
+                    <p><span className="font-medium text-on-surface">Role:</span> <Badge className={roleTone(staff.role)}>{staff.role}</Badge></p>
                     <p className="break-all"><span className="font-medium text-on-surface">Email:</span> {staff.email || '-'}</p>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -258,7 +274,7 @@ export default function AdminStaffManagement() {
                   <TableRow key={staff.id}>
                     <TableCell className="font-medium">{staff.id}</TableCell>
                     <TableCell>{staff.name}</TableCell>
-                    <TableCell>{staff.role}</TableCell>
+                    <TableCell><Badge className={roleTone(staff.role)}>{staff.role}</Badge></TableCell>
                     <TableCell>
                       <Badge className={statusTone(staff.status)}>{staff.status}</Badge>
                     </TableCell>

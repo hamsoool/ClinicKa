@@ -90,6 +90,19 @@ type Requester = {
 
 const isStaffRole = (role?: string) => role === 'staff' || role === 'admin';
 
+const DOCTOR_POSITIONS = ['clinic doctor', 'doctor'];
+
+function isDoctorPosition(position?: string | null) {
+  if (!position) return false;
+  return DOCTOR_POSITIONS.includes(position.trim().toLowerCase());
+}
+
+function isDoctorOrAdmin(requester: Requester) {
+  if (requester.profile.role === 'admin') return true;
+  if (requester.profile.role === 'staff' && isDoctorPosition(requester.staff?.position)) return true;
+  return false;
+}
+
 function normalizeEmail(email?: string | null) {
   return String(email || '').trim().toLowerCase();
 }
@@ -107,9 +120,12 @@ function deriveStudentIdFromEmail(email?: string | null) {
   return match?.[1] || null;
 }
 
-function roleLabel(role?: string) {
+function roleLabel(role?: string, position?: string | null) {
   if (role === 'admin') return 'Administrator';
-  if (role === 'staff') return 'Clinic Staff';
+  if (role === 'staff') {
+    if (isDoctorPosition(position)) return 'Clinic Doctor';
+    return 'Clinic Staff';
+  }
   return 'Student';
 }
 
@@ -1050,6 +1066,12 @@ app.put("/submission/:id/status", async (c) => {
     const id = c.req.param('id');
     const { status, staffNotes } = await c.req.json();
 
+    // Only doctors and admins can set statuses that finalize or change clearance
+    const doctorOnlyStatuses = ['approved', 'returned', 'physical_exam_done'];
+    if (doctorOnlyStatuses.includes(status) && !isDoctorOrAdmin(requester)) {
+      return c.json({ error: 'Only Clinic Doctors can approve, return, or mark physical exam done.' }, 403);
+    }
+
     const { error } = await supabase
       .from('submissions')
       .update({
@@ -1271,7 +1293,8 @@ app.get("/staff-users", async (c) => {
           id: member.staff_code || member.id,
           userId: member.profile_id || member.id,
           name: `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.name || 'Unnamed Staff',
-          role: member.position || 'Clinic Staff',
+          role: isDoctorPosition(member.position) ? 'Clinic Doctor' : (member.position || 'Clinic Staff'),
+          position: member.position || 'Clinic Staff',
           status: member.is_active ? 'Active' : 'Inactive',
           email: member.email || '',
         })),
@@ -1328,8 +1351,9 @@ app.get("/user-accounts", async (c) => {
             id: profile.student_id || linkedStaff?.staff_code || profile.id,
             name,
             email: profile.email || linkedStaff?.email || '',
-            role: roleLabel(profile.role),
+            role: roleLabel(profile.role, linkedStaff?.position),
             roleKey: profile.role,
+            position: linkedStaff?.position || null,
             status: linkedStaff?.is_active === false ? 'Inactive' : 'Active',
             lastActive: profile.updated_at || profile.created_at,
             canArchive: profile.role === 'student' || profile.role === 'staff',
@@ -1770,6 +1794,7 @@ app.post("/admin/create-staff", async (c) => {
   try {
     const { email, password, firstName, lastName, position = 'Clinic Staff', staffCode } = await c.req.json();
     if (!email || !password || !firstName || !lastName) return badRequest('email, password, firstName, and lastName are required');
+    if (!['Clinic Staff', 'Clinic Doctor'].includes(position)) return badRequest('position must be either Clinic Staff or Clinic Doctor');
 
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
       email,
@@ -1818,6 +1843,9 @@ app.post("/issue-certificate", async (c) => {
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
   if (!isStaffRole(requester.profile.role)) return forbidden();
+  if (!isDoctorOrAdmin(requester)) {
+    return c.json({ error: 'Only Clinic Doctors can issue certificates.' }, 403);
+  }
 
   try {
     const { submissionId, findingsNormal, diagnosis, remarks, purpose, controlNo } = await c.req.json();

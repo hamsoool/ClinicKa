@@ -254,6 +254,20 @@ function resolveRoleFromEmail(email?: string | null): UserRole {
   return 'student';
 }
 
+export function isDoctorPosition(position?: string | null) {
+  if (!position) return false;
+  return ['clinic doctor', 'doctor'].includes(position.trim().toLowerCase());
+}
+
+export function getRoleLabel(role?: string | null, position?: string | null) {
+  if (role === 'admin') return 'Administrator';
+  if (role === 'staff') {
+    if (isDoctorPosition(position)) return 'Clinic Doctor';
+    return 'Clinic Staff';
+  }
+  return 'Student';
+}
+
 function deriveStudentIdFromEmail(email?: string | null) {
   const localPart = normalizeEmail(email).split('@')[0] || '';
   const match = localPart.match(/^(\d{9})/);
