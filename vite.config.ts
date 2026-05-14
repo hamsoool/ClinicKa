@@ -107,14 +107,14 @@ export default defineConfig({
     VitePWA({
       injectRegister: false,
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "icon-192.png", "icon-512.png"],
+      includeAssets: ["favicon.ico", "logo.png", "clinickalogo.png", "icon-192.png", "icon-512.png"],
       manifest: {
         id: "/",
-        name: "Gordon College Clinic",
-        short_name: "GCC Clinic",
-        description: "Gordon College Clinic health records and patient management",
+        name: "ClinicKa!",
+        short_name: "ClinicKa!",
+        description: "ClinicKa! health records and clinic management for Gordon College",
         theme_color: "#006d3c",
-        background_color: "#ffffff",
+        background_color: "#f4fcf2",
         display: "standalone",
         start_url: "/",
         scope: "/",
@@ -149,8 +149,10 @@ export default defineConfig({
       },
       workbox: {
         cleanupOutdatedCaches: true,
+        clientsClaim: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         navigateFallbackDenylist: [/^\/api\//],
+        skipWaiting: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

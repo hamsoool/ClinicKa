@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Upload } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -16,14 +16,7 @@ export default function StudentMedicalForm() {
   const [searchParams] = useSearchParams();
   const { me } = useAuth();
   const previewRef = useRef<HTMLDivElement>(null);
-  const privacyAccepted = searchParams.get('privacy') === 'accepted';
   const editSubmissionId = searchParams.get('edit');
-
-  useEffect(() => {
-    if (!year || privacyAccepted) return;
-    const editQuery = editSubmissionId ? `?edit=${encodeURIComponent(editSubmissionId)}` : '';
-    navigate(`/student/privacy-waiver/${year}${editQuery}`, { replace: true });
-  }, [editSubmissionId, navigate, privacyAccepted, year]);
 
   const {
     step,
@@ -33,7 +26,6 @@ export default function StudentMedicalForm() {
     uploading,
     submitted,
     canProceed,
-    canSubmit,
     previewRecord,
     updateField,
     updateEmergencyContact,
@@ -43,7 +35,7 @@ export default function StudentMedicalForm() {
     getBmiCategory,
     maxBirthdate,
     submit,
-  } = useStudentMedicalForm({ year, me, privacyAccepted, editSubmissionId });
+  } = useStudentMedicalForm({ year, me, editSubmissionId });
 
   const downloadPdf = useCallback(async () => {
     if (!previewRef.current) return;
@@ -188,7 +180,7 @@ export default function StudentMedicalForm() {
               ) : (
                 <Button
                   onClick={submit}
-                  disabled={!canProceed || uploading || !formData.dataPrivacyConsent || !formData.submissionConfirmed}
+                  disabled={!canProceed || uploading || !formData.submissionConfirmed}
                   className="w-full bg-primary hover:bg-primary/90 sm:w-auto"
                 >
                   {uploading ? 'Submitting...' : 'Submit Medical Record'}

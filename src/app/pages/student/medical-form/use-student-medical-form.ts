@@ -21,7 +21,6 @@ import type {
 type UseStudentMedicalFormArgs = {
   year?: string;
   me?: AuthMe | null;
-  privacyAccepted?: boolean;
   editSubmissionId?: string | null;
 };
 
@@ -84,7 +83,7 @@ function isAtLeastAge(dateValue: string, minAge: number) {
   return date <= maxBirthdate;
 }
 
-function buildInitialFormData(year: string | undefined, me?: AuthMe | null, privacyAccepted = false): MedicalFormData {
+function buildInitialFormData(year: string | undefined, me?: AuthMe | null): MedicalFormData {
   const student = me?.student;
   const department = resolveDepartmentValue(student?.department || me?.profile.department || 'CCS');
   return {
@@ -111,7 +110,7 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, priv
       phone: '',
       address: '',
     },
-    dataPrivacyConsent: privacyAccepted,
+    dataPrivacyConsent: true,
     weight: '',
     height: '',
     bmi: '',
@@ -139,7 +138,7 @@ function calculateBmi(weight: string, height: string): string {
   return '';
 }
 
-export function useStudentMedicalForm({ year, me, privacyAccepted = false, editSubmissionId = null }: UseStudentMedicalFormArgs) {
+export function useStudentMedicalForm({ year, me, editSubmissionId = null }: UseStudentMedicalFormArgs) {
   const student = me?.student;
   const [profileAssetUrls, setProfileAssetUrls] = useState<{ photoUrl: string | null; signatureUrl: string | null }>({
     photoUrl: null,
@@ -150,7 +149,7 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
   const [submitted, setSubmitted] = useState(false);
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [originalSubmissionStatus, setOriginalSubmissionStatus] = useState<string | null>(null);
-  const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, privacyAccepted));
+  const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me));
   const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_AGE), []);
   const isEditingExistingSubmission = Boolean(activeSubmissionId);
   useEffect(() => {
@@ -159,8 +158,8 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     setUploading(false);
     setActiveSubmissionId(null);
     setOriginalSubmissionStatus(null);
-    setFormData(buildInitialFormData(year, me, privacyAccepted));
-  }, [year, privacyAccepted, editSubmissionId]);
+    setFormData(buildInitialFormData(year, me));
+  }, [year, me, editSubmissionId]);
 
   useEffect(() => {
     if (!editSubmissionId) return;
@@ -270,7 +269,7 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
       civilStatus: student?.civil_status || prev.civilStatus,
       contactNumber: formatPhilippinePhoneInput(student?.contact_number || prev.contactNumber),
       address: student?.address || prev.address,
-      dataPrivacyConsent: privacyAccepted || prev.dataPrivacyConsent,
+      dataPrivacyConsent: true,
       yearLevel: year || prev.yearLevel,
       year: year || prev.year,
     }));
@@ -292,7 +291,6 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     student?.middle_initial,
     student?.sex,
     student?.student_id,
-    privacyAccepted,
     year,
   ]);
 
@@ -494,7 +492,6 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           formData.hadOperation &&
           formData.emergencyContact.name &&
           formData.emergencyContact.phone &&
-          formData.dataPrivacyConsent &&
           formData.weight &&
           formData.height &&
           formData.labTestLocation &&
@@ -560,10 +557,6 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
 
   const submit = useCallback(async () => {
     if (uploading) return;
-    if (!formData.dataPrivacyConsent) {
-      toast.error('Please accept the Data Privacy Waiver before submitting.');
-      return;
-    }
     if (!formData.submissionConfirmed) {
       toast.error('Please confirm that all details are complete before submitting.');
       return;
@@ -644,7 +637,7 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     } finally {
       setUploading(false);
     }
-  }, [formData, uploading, activeSubmissionId, canSubmit]);
+  }, [formData, uploading, activeSubmissionId, canSubmit, originalSubmissionStatus]);
 
   return {
     step,
@@ -654,7 +647,6 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     uploading,
     submitted,
     canProceed,
-    canSubmit,
     previewRecord,
     updateField,
     updateEmergencyContact,

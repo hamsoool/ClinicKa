@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CheckCircle2, FileCheck2, PenLine, ShieldCheck, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, FileCheck2, PenLine, XCircle } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
-import { Checkbox } from '../../components/ui/checkbox';
-import { Label } from '../../components/ui/label';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { getStudentProfileAssets } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -13,7 +11,6 @@ export default function StudentPrivacyWaiver() {
   const { year } = useParams();
   const [searchParams] = useSearchParams();
   const { me } = useAuth();
-  const [accepted, setAccepted] = useState(false);
   const [loadingAssets, setLoadingAssets] = useState(true);
   const [hasPhoto, setHasPhoto] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -57,7 +54,7 @@ export default function StudentPrivacyWaiver() {
   }, [profileId, studentId]);
 
   const profileReady = hasPhoto && hasSignature;
-  const canContinue = accepted && profileReady && !loadingAssets;
+  const canContinue = profileReady && !loadingAssets;
   const editSubmissionId = searchParams.get('edit');
   const yearLabel = useMemo(() => {
     switch (year) {
@@ -86,47 +83,19 @@ export default function StudentPrivacyWaiver() {
       </button>
 
       <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="h-8 w-8 text-primary" />
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-on-surface">Data Privacy Waiver</h1>
-            <p className="mt-2 text-sm text-on-surface-variant">
-              Review and accept this waiver before proceeding to the {yearLabel} medical record form.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-on-surface">Before You Continue</h1>
+          <p className="mt-2 text-sm text-on-surface-variant">
+            Make sure your profile requirements are complete before proceeding to the {yearLabel} medical record form.
+          </p>
         </div>
       </div>
 
       <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
         <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
-          <CardTitle>Privacy Consent</CardTitle>
-          <CardDescription>
-            This consent is required before you can submit your medical record.
-          </CardDescription>
+          <CardTitle>Profile Requirements</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6 pt-6">
-          <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5 text-sm leading-7 text-on-surface">
-            Under the Data Privacy Act of 2012 (Republic Act No. 10173) and its IRR, I consent to the collection, use,
-            and processing of my personal information by the Gordon College clinic for clinic record processing and
-            related health services. I understand my rights as a data subject, including the right to be informed and
-            to access or request correction of my personal data, and that the clinic will protect my information in
-            accordance with the law.
-          </div>
-
-          <div className="flex items-start gap-3 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4">
-            <Checkbox
-              id="privacyConsent"
-              checked={accepted}
-              onCheckedChange={(checked) => setAccepted(checked === true)}
-              className="mt-1"
-            />
-            <Label htmlFor="privacyConsent" className="cursor-pointer text-sm leading-6 font-normal text-on-surface">
-              I have read and understood this Data Privacy Waiver pursuant to the Data Privacy Act of 2012 (Republic
-              Act No. 10173), and I consent to the collection and use of my personal information for clinic record
-              processing.
-            </Label>
-          </div>
-
           <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5">
             <div className="mb-4 flex items-center gap-3">
               <FileCheck2 className="h-5 w-5 text-primary" />
@@ -179,9 +148,7 @@ export default function StudentPrivacyWaiver() {
             disabled={!canContinue}
             onClick={() =>
               navigate(
-                `/student/medical-form/${year}?privacy=accepted${
-                  editSubmissionId ? `&edit=${encodeURIComponent(editSubmissionId)}` : ''
-                }`,
+                `/student/medical-form/${year}${editSubmissionId ? `?edit=${encodeURIComponent(editSubmissionId)}` : ''}`,
               )
             }
           >
