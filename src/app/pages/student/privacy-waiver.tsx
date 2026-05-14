@@ -113,14 +113,14 @@ export default function StudentPrivacyWaiver() {
             accordance with the law.
           </div>
 
-          <div className="flex items-start gap-3 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4">
+          <div className="flex items-start gap-3 mt-2">
             <Checkbox
               id="privacyConsent"
               checked={accepted}
               onCheckedChange={(checked) => setAccepted(checked === true)}
               className="mt-1"
             />
-            <Label htmlFor="privacyConsent" className="text-sm leading-6 font-normal text-on-surface">
+            <Label htmlFor="privacyConsent" className="text-sm leading-6 font-normal text-on-surface cursor-pointer">
               I have read and understood this Data Privacy Waiver pursuant to the Data Privacy Act of 2012 (Republic
               Act No. 10173), and I consent to the collection and use of my personal information for clinic record
               processing.
