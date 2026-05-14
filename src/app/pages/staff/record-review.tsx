@@ -22,7 +22,7 @@ import { toast } from 'sonner';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Checkbox } from '../../components/ui/checkbox';
+
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
@@ -894,9 +894,11 @@ export default function StaffRecordReview() {
                       key={item.key}
                       className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm"
                     >
-                      <Checkbox
+                      <input
+                        type="checkbox"
                         checked={Boolean(recordForm.medicalHistory[item.key])}
-                        onCheckedChange={(checked) => toggleMedicalHistory(item.key, checked === true)}
+                        onChange={(e) => toggleMedicalHistory(item.key, e.target.checked)}
+                        className="h-4 w-4 cursor-pointer appearance-auto accent-primary"
                       />
                       <span>{item.label}</span>
                     </label>

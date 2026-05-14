@@ -5,7 +5,7 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { RadioGroup, RadioGroupItem } from '../../../components/ui/radio-group';
-import { Checkbox } from '../../../components/ui/checkbox';
+
 import { Textarea } from '../../../components/ui/textarea';
 import {
   DEPARTMENT_OPTIONS,
@@ -320,7 +320,13 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             {MEDICAL_CONDITIONS.map(({ key, label }) => (
               <div key={key} className="flex items-center space-x-2">
-                <Checkbox id={key} checked={formData.medicalHistory[key]} onCheckedChange={(checked) => onMedicalConditionChange(key, checked === true)} />
+                <input
+                  type="checkbox"
+                  id={key}
+                  checked={formData.medicalHistory[key]}
+                  onChange={(e) => onMedicalConditionChange(key, e.target.checked)}
+                  className="mt-0.5 h-4 w-4 cursor-pointer appearance-auto accent-primary"
+                />
                 <Label htmlFor={key} className="text-sm font-normal">
                   {label}
                 </Label>
@@ -750,10 +756,12 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           </Card>
           <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
             <div className="flex items-start gap-3">
-              <Checkbox
+              <input
+                type="checkbox"
                 id="dataPrivacyConsent"
                 checked={formData.dataPrivacyConsent}
-                onCheckedChange={(checked) => onFieldChange('dataPrivacyConsent', checked === true)}
+                onChange={(e) => onFieldChange('dataPrivacyConsent', e.target.checked)}
+                className="mt-1 h-5 w-5 flex-shrink-0 cursor-pointer appearance-auto accent-primary"
               />
               <Label htmlFor="dataPrivacyConsent" className="text-sm leading-6 font-normal">
                 I have read and accepted the Data Privacy Waiver, and I consent to the collection and use of my
@@ -763,10 +771,12 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           </div>
           <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
             <div className="flex items-start gap-3">
-              <Checkbox
+              <input
+                type="checkbox"
                 id="submissionConfirmed"
                 checked={formData.submissionConfirmed}
-                onCheckedChange={(checked) => onFieldChange('submissionConfirmed', checked === true)}
+                onChange={(e) => onFieldChange('submissionConfirmed', e.target.checked)}
+                className="mt-1 h-5 w-5 flex-shrink-0 cursor-pointer appearance-auto accent-primary"
               />
               <Label htmlFor="submissionConfirmed" className="text-sm leading-6 font-normal">
                 I confirm that all details and attached laboratory results are complete and true. I understand that
