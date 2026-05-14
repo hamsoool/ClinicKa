@@ -430,7 +430,6 @@ export function useStudentMedicalForm({
   const hasProfileSignature = Boolean(profileAssetUrls.signatureUrl);
 
   const canProceed = useMemo(() => {
-    const needsAllUploads = formData.labTestLocation === 'other';
     const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
     const hasAllUploads = Boolean(
       (formData.xrayFile || formData.existingXrayFileUrl) &&
@@ -460,13 +459,13 @@ export function useStudentMedicalForm({
         );
       case 5:
         if (!formData.labTestLocation) return false;
-        if (formData.labTestLocation === 'jlgh') return true;
+        if (formData.labTestLocation === 'jlgh') return hasXray;
         return Boolean(
           formData.otherClinicName.trim() &&
             formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
             COURSE_REGEX.test(formData.otherClinicName) &&
             !SQL_INJECTION_REGEX.test(formData.otherClinicName) &&
-            (needsAllUploads ? hasAllUploads : hasXray),
+            hasAllUploads,
         );
       case 6:
         return true;
@@ -477,7 +476,6 @@ export function useStudentMedicalForm({
 
   const canSubmit = useMemo(
     () => {
-      const normalizedStudentId = normalizeStudentId(formData.studentId);
       const needsAllUploads = formData.labTestLocation === 'other';
       const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
       const hasAllUploads = Boolean(
@@ -496,8 +494,8 @@ export function useStudentMedicalForm({
           formData.weight &&
           formData.height &&
           formData.labTestLocation &&
-          (formData.labTestLocation === 'jlgh' ||
-            (formData.otherClinicName.trim() && hasXray)) &&
+          hasXray &&
+          (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
           (!needsAllUploads || hasAllUploads) &&
           NAME_REGEX.test(formData.firstName) &&
           NAME_REGEX.test(formData.lastName) &&

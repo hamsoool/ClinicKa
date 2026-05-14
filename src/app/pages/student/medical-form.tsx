@@ -149,9 +149,9 @@ export default function StudentMedicalForm() {
           <Progress value={(step / totalSteps) * 100} className="h-2" />
         </div>
 
-        <Card className="border-border/70 bg-white/90 shadow-[0_20px_60px_rgba(16,24,40,0.08)] lg:min-h-[calc(100vh-15.5rem)]">
-          <CardContent className="flex h-full flex-col px-5 py-6 md:px-8 md:py-8 xl:px-10">
-            <div className="flex-1">
+        <Card className="border-border/70 bg-white/90 shadow-[0_20px_60px_rgba(16,24,40,0.08)]">
+          <CardContent className="flex flex-col px-5 py-6 md:px-8 md:py-8 xl:px-10">
+            <div>
               <MedicalFormStepContent
                 step={step}
                 formData={formData}

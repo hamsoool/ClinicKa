@@ -43,9 +43,29 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   hasProfileSignature,
   onGoToProfile,
 }: Props) {
-  const showLabUploads = formData.labTestLocation === 'other';
-  const uploadsRequired = formData.labTestLocation === 'other';
+  const showLabUploads = Boolean(formData.labTestLocation);
+  const allUploadsRequired = formData.labTestLocation === 'other';
   const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
+  const uploadedFileEntries = [
+    formData.xrayFile || formData.existingXrayFileUrl
+      ? {
+          label: 'Chest X-Ray',
+          value: formData.xrayFile?.name || getUploadedFileName(formData.existingXrayFileUrl),
+        }
+      : null,
+    formData.cbcFile || formData.existingCbcFileUrl
+      ? {
+          label: 'CBC',
+          value: formData.cbcFile?.name || getUploadedFileName(formData.existingCbcFileUrl),
+        }
+      : null,
+    formData.urinalysisFile || formData.existingUrinalysisFileUrl
+      ? {
+          label: 'Urinalysis',
+          value: formData.urinalysisFile?.name || getUploadedFileName(formData.existingUrinalysisFileUrl),
+        }
+      : null,
+  ].filter((entry): entry is { label: string; value: string } => Boolean(entry));
   const stepOneReady = hasRequiredProfileFields && hasProfilePhoto && hasProfileSignature;
   const stepThreeMissingRequired = [
     !formData.hadOperation,
@@ -362,17 +382,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </RadioGroup>
           </div>
 
-          {formData.labTestLocation === 'jlgh' ? (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm font-medium text-emerald-700">No file attachment required.</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Since you selected James L. Gordon Hospital, laboratory files do not need to be attached here.
-                </p>
-              </CardContent>
-            </Card>
-          ) : null}
-
           {showLabUploads ? (
             <>
               {formData.labTestLocation === 'other' ? (
@@ -389,120 +398,123 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 </div>
               ) : null}
 
-              <p className="mb-1 text-sm text-muted-foreground">
-                Upload your laboratory results (PDF, PNG, or JPG format, max 2MB per file)
-                {uploadsRequired ? ' *' : ''}
-              </p>
+              <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low/50 px-4 py-3 text-sm">
+                <p className="font-medium text-on-surface">Upload your laboratory results</p>
+                <p className="mt-1 text-muted-foreground">
+                  Upload PDF, PNG, or JPG files up to 2MB each. Chest X-Ray is required to continue.
+                  {allUploadsRequired ? ' CBC and Urinalysis are also required for results from another clinic/lab.' : ' CBC and Urinalysis are optional for James L. Gordon Hospital submissions.'}
+                </p>
+              </div>
               <div className="space-y-4">
-            <Card>
-              <CardContent className="pt-6">
-                <Label htmlFor="xray">Chest X-Ray *</Label>
-                <Input
-                  id="xray"
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  aria-label="Upload chest X-ray result"
-                  onChange={(event) => onFileChange('xrayFile', event.target.files?.[0] || null)}
-                  className={`mt-2 cursor-pointer ${!hasXray ? 'border-red-500 ring-1 ring-red-200' : ''}`}
-                />
-                {formData.xrayFile && (
-                  <div className="mt-2 flex items-center text-sm text-green-600">
-                    <Check className="mr-2 h-4 w-4" />
-                    {formData.xrayFile.name}
-                  </div>
-                )}
-                {!formData.xrayFile && formData.existingXrayFileUrl && (
-                  <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                    <p className="font-medium">Current file: {getUploadedFileName(formData.existingXrayFileUrl)}</p>
-                    <p className="mt-1 text-xs text-emerald-700">
-                      Choose a new file above if you want to replace this upload.
-                    </p>
-                    <a
-                      href={formData.existingXrayFileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
-                    >
-                      View current file
-                    </a>
-                    {renderExistingFilePreview(formData.existingXrayFileUrl)}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <Label htmlFor="cbc">Complete Blood Count (CBC) {uploadsRequired ? '*' : '(optional)'}</Label>
-                <Input
-                  id="cbc"
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  aria-label="Upload complete blood count result"
-                  onChange={(event) => onFileChange('cbcFile', event.target.files?.[0] || null)}
-                  className="mt-2 cursor-pointer"
-                />
-                {formData.cbcFile && (
-                  <div className="mt-2 flex items-center text-sm text-green-600">
-                    <Check className="mr-2 h-4 w-4" />
-                    {formData.cbcFile.name}
-                  </div>
-                )}
-                {!formData.cbcFile && formData.existingCbcFileUrl && (
-                  <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                    <p className="font-medium">Current file: {getUploadedFileName(formData.existingCbcFileUrl)}</p>
-                    <p className="mt-1 text-xs text-emerald-700">
-                      Choose a new file above if you want to replace this upload.
-                    </p>
-                    <a
-                      href={formData.existingCbcFileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
-                    >
-                      View current file
-                    </a>
-                    {renderExistingFilePreview(formData.existingCbcFileUrl)}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <Label htmlFor="urinalysis">Urinalysis (U/A) {uploadsRequired ? '*' : '(optional)'}</Label>
-                <Input
-                  id="urinalysis"
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  aria-label="Upload urinalysis result"
-                  onChange={(event) => onFileChange('urinalysisFile', event.target.files?.[0] || null)}
-                  className="mt-2 cursor-pointer"
-                />
-                {formData.urinalysisFile && (
-                  <div className="mt-2 flex items-center text-sm text-green-600">
-                    <Check className="mr-2 h-4 w-4" />
-                    {formData.urinalysisFile.name}
-                  </div>
-                )}
-                {!formData.urinalysisFile && formData.existingUrinalysisFileUrl && (
-                  <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                    <p className="font-medium">Current file: {getUploadedFileName(formData.existingUrinalysisFileUrl)}</p>
-                    <p className="mt-1 text-xs text-emerald-700">
-                      Choose a new file above if you want to replace this upload.
-                    </p>
-                    <a
-                      href={formData.existingUrinalysisFileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
-                    >
-                      View current file
-                    </a>
-                    {renderExistingFilePreview(formData.existingUrinalysisFileUrl)}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                <Card>
+                  <CardContent className="pt-6">
+                    <Label htmlFor="xray">Chest X-Ray *</Label>
+                    <Input
+                      id="xray"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      aria-label="Upload chest X-ray result"
+                      onChange={(event) => onFileChange('xrayFile', event.target.files?.[0] || null)}
+                      className={`mt-2 cursor-pointer ${!hasXray ? 'border-red-500 ring-1 ring-red-200' : ''}`}
+                    />
+                    {formData.xrayFile && (
+                      <div className="mt-2 flex items-center text-sm text-green-600">
+                        <Check className="mr-2 h-4 w-4" />
+                        {formData.xrayFile.name}
+                      </div>
+                    )}
+                    {!formData.xrayFile && formData.existingXrayFileUrl && (
+                      <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        <p className="font-medium">Current file: {getUploadedFileName(formData.existingXrayFileUrl)}</p>
+                        <p className="mt-1 text-xs text-emerald-700">
+                          Choose a new file above if you want to replace this upload.
+                        </p>
+                        <a
+                          href={formData.existingXrayFileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
+                        >
+                          View current file
+                        </a>
+                        {renderExistingFilePreview(formData.existingXrayFileUrl)}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <Label htmlFor="cbc">Complete Blood Count (CBC) {allUploadsRequired ? '*' : '(optional)'}</Label>
+                    <Input
+                      id="cbc"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      aria-label="Upload complete blood count result"
+                      onChange={(event) => onFileChange('cbcFile', event.target.files?.[0] || null)}
+                      className="mt-2 cursor-pointer"
+                    />
+                    {formData.cbcFile && (
+                      <div className="mt-2 flex items-center text-sm text-green-600">
+                        <Check className="mr-2 h-4 w-4" />
+                        {formData.cbcFile.name}
+                      </div>
+                    )}
+                    {!formData.cbcFile && formData.existingCbcFileUrl && (
+                      <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        <p className="font-medium">Current file: {getUploadedFileName(formData.existingCbcFileUrl)}</p>
+                        <p className="mt-1 text-xs text-emerald-700">
+                          Choose a new file above if you want to replace this upload.
+                        </p>
+                        <a
+                          href={formData.existingCbcFileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
+                        >
+                          View current file
+                        </a>
+                        {renderExistingFilePreview(formData.existingCbcFileUrl)}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <Label htmlFor="urinalysis">Urinalysis (U/A) {allUploadsRequired ? '*' : '(optional)'}</Label>
+                    <Input
+                      id="urinalysis"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      aria-label="Upload urinalysis result"
+                      onChange={(event) => onFileChange('urinalysisFile', event.target.files?.[0] || null)}
+                      className="mt-2 cursor-pointer"
+                    />
+                    {formData.urinalysisFile && (
+                      <div className="mt-2 flex items-center text-sm text-green-600">
+                        <Check className="mr-2 h-4 w-4" />
+                        {formData.urinalysisFile.name}
+                      </div>
+                    )}
+                    {!formData.urinalysisFile && formData.existingUrinalysisFileUrl && (
+                      <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        <p className="font-medium">Current file: {getUploadedFileName(formData.existingUrinalysisFileUrl)}</p>
+                        <p className="mt-1 text-xs text-emerald-700">
+                          Choose a new file above if you want to replace this upload.
+                        </p>
+                        <a
+                          href={formData.existingUrinalysisFileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
+                        >
+                          View current file
+                        </a>
+                        {renderExistingFilePreview(formData.existingUrinalysisFileUrl)}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </>
           ) : null}
         </div>
@@ -589,18 +601,14 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                     : 'Not specified'}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
-                <span className="break-words">Chest X-Ray: {formData.xrayFile?.name || (formData.existingXrayFileUrl ? 'Existing file on record' : 'Not provided')}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
-                <span className="break-words">CBC: {formData.cbcFile?.name || (formData.existingCbcFileUrl ? 'Existing file on record' : 'Not provided')}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
-                <span className="break-words">Urinalysis: {formData.urinalysisFile?.name || (formData.existingUrinalysisFileUrl ? 'Existing file on record' : 'Not provided')}</span>
-              </div>
+              {uploadedFileEntries.map((file) => (
+                <div key={file.label} className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-600" />
+                  <span className="break-words">
+                    {file.label}: {file.value}
+                  </span>
+                </div>
+              ))}
             </CardContent>
           </Card>
           <div
