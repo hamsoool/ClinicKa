@@ -3047,6 +3047,117 @@ export async function getStaffUsers() {
   );
 }
 
+export type AdminSystemSettings = {
+  academicYear: string;
+  semester: 'First Semester' | 'Second Semester' | 'Summer';
+  acceptingSubmissions: boolean;
+  requireTwoFactorAuth: boolean;
+  sessionTimeoutMinutes: number;
+  auditLogging: boolean;
+  approvalEmailNotifications: boolean;
+  pendingReviewReminders: boolean;
+  autoArchiveAfterMonths: number;
+};
+
+const ADMIN_SYSTEM_SETTINGS_STORAGE_KEY = 'admin_system_settings_v1';
+const ADMIN_SYSTEM_SETTINGS_SEMESTERS = new Set<AdminSystemSettings['semester']>([
+  'First Semester',
+  'Second Semester',
+  'Summer',
+]);
+const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = new Set([15, 30, 45, 60, 120]);
+const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = new Set([0, 12, 24, 36]);
+
+function getDefaultAcademicYear() {
+  const now = new Date();
+  const startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${startYear}-${startYear + 1}`;
+}
+
+export function createDefaultAdminSystemSettings(): AdminSystemSettings {
+  return {
+    academicYear: getDefaultAcademicYear(),
+    semester: 'Second Semester',
+    acceptingSubmissions: true,
+    requireTwoFactorAuth: true,
+    sessionTimeoutMinutes: 30,
+    auditLogging: true,
+    approvalEmailNotifications: true,
+    pendingReviewReminders: true,
+    autoArchiveAfterMonths: 12,
+  };
+}
+
+function normalizeAdminSystemSettings(
+  value?: Partial<AdminSystemSettings> | null,
+): AdminSystemSettings {
+  const defaults = createDefaultAdminSystemSettings();
+  const academicYearValue = String(value?.academicYear ?? defaults.academicYear).trim();
+  const parsedTimeout = Number(value?.sessionTimeoutMinutes);
+  const parsedAutoArchive = Number(value?.autoArchiveAfterMonths);
+
+  const academicYear =
+    /^\d{4}-\d{4}$/.test(academicYearValue) &&
+    Number(academicYearValue.slice(5, 9)) - Number(academicYearValue.slice(0, 4)) === 1
+      ? academicYearValue
+      : defaults.academicYear;
+  const semester = ADMIN_SYSTEM_SETTINGS_SEMESTERS.has(value?.semester as AdminSystemSettings['semester'])
+    ? (value?.semester as AdminSystemSettings['semester'])
+    : defaults.semester;
+
+  return {
+    academicYear,
+    semester,
+    acceptingSubmissions:
+      typeof value?.acceptingSubmissions === 'boolean'
+        ? value.acceptingSubmissions
+        : defaults.acceptingSubmissions,
+    requireTwoFactorAuth:
+      typeof value?.requireTwoFactorAuth === 'boolean'
+        ? value.requireTwoFactorAuth
+        : defaults.requireTwoFactorAuth,
+    sessionTimeoutMinutes: ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS.has(parsedTimeout)
+      ? parsedTimeout
+      : defaults.sessionTimeoutMinutes,
+    auditLogging:
+      typeof value?.auditLogging === 'boolean' ? value.auditLogging : defaults.auditLogging,
+    approvalEmailNotifications:
+      typeof value?.approvalEmailNotifications === 'boolean'
+        ? value.approvalEmailNotifications
+        : defaults.approvalEmailNotifications,
+    pendingReviewReminders:
+      typeof value?.pendingReviewReminders === 'boolean'
+        ? value.pendingReviewReminders
+        : defaults.pendingReviewReminders,
+    autoArchiveAfterMonths: ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS.has(parsedAutoArchive)
+      ? parsedAutoArchive
+      : defaults.autoArchiveAfterMonths,
+  };
+}
+
+function readStoredAdminSystemSettings() {
+  if (typeof window === 'undefined') {
+    return createDefaultAdminSystemSettings();
+  }
+
+  const raw = window.localStorage.getItem(ADMIN_SYSTEM_SETTINGS_STORAGE_KEY);
+  if (!raw) return createDefaultAdminSystemSettings();
+
+  try {
+    return normalizeAdminSystemSettings(JSON.parse(raw) as Partial<AdminSystemSettings>);
+  } catch {
+    return createDefaultAdminSystemSettings();
+  }
+}
+
+function writeStoredAdminSystemSettings(settings: AdminSystemSettings) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(
+    ADMIN_SYSTEM_SETTINGS_STORAGE_KEY,
+    JSON.stringify(normalizeAdminSystemSettings(settings)),
+  );
+}
+
 type AdminCreateAccountInput = {
   email: string;
   password: string;
@@ -3088,6 +3199,49 @@ export async function createAdminStaff(input: AdminCreateStaffInput) {
 
 export async function getUserAccounts() {
     return apiRequest<{ users: AdminUserAccount[] }>('/functions/v1/server/user-accounts');
+}
+
+export async function getAdminSystemSettings() {
+  try {
+    const settings = await apiRequest<AdminSystemSettings>('/functions/v1/server/admin/system-settings');
+    const normalized = normalizeAdminSystemSettings(settings);
+    writeStoredAdminSystemSettings(normalized);
+    return normalized;
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+    if (!missingRoute) {
+      throw error;
+    }
+
+    return readStoredAdminSystemSettings();
+  }
+}
+
+export async function updateAdminSystemSettings(input: AdminSystemSettings) {
+  const payload = normalizeAdminSystemSettings(input);
+
+  try {
+    const settings = await apiRequest<AdminSystemSettings>('/functions/v1/server/admin/system-settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const normalized = normalizeAdminSystemSettings(settings);
+    writeStoredAdminSystemSettings(normalized);
+    return normalized;
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const missingRoute = message.includes('404') || message.includes('not found');
+    if (!missingRoute) {
+      throw error;
+    }
+
+    writeStoredAdminSystemSettings(payload);
+    return payload;
+  }
 }
 
 export async function getArchivedUserAccounts() {

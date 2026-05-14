@@ -118,7 +118,7 @@ export default function PortalShell({
   const getPasswordSettingsPath = () => {
     if (location.pathname.startsWith('/student')) return '/student/profile#password';
     if (location.pathname.startsWith('/staff')) return '/staff/settings#password';
-    if (location.pathname.startsWith('/admin')) return '/admin/system-settings#password';
+    if (location.pathname.startsWith('/admin')) return '/admin/settings#password';
     return '/';
   };
 

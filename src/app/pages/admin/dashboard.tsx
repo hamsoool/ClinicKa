@@ -282,7 +282,7 @@ export default function AdminDashboard() {
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-on-surface">
                   <Settings className="h-5 w-5 text-primary" />
-                  <span className="text-sm font-semibold">Security, audit, clinic profile</span>
+                  <span className="text-sm font-semibold">Calendar, security, notifications</span>
                 </div>
                 <ArrowRight className="h-4 w-4 text-on-surface-variant" />
               </div>
