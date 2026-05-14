@@ -32,7 +32,6 @@ export type MedicalFormData = {
   operationDetails: string;
   emergencyContact: EmergencyContact;
   dataPrivacyConsent: boolean;
-  bloodPressure: string;
   weight: string;
   height: string;
   bmi: string;

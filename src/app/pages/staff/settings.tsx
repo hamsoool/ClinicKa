@@ -12,7 +12,8 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog';
 import { useAuth } from '../../lib/auth';
-import { updateStaffProfile } from '../../lib/api';
+import { updateStaffProfile, getRoleLabel } from '../../lib/api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Bell, Settings as SettingsIcon, User } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -38,7 +39,7 @@ function buildProfileFormState(me?: ReturnType<typeof useAuth>['me'] | null): St
   return {
     name,
     email: me?.staff?.email || me?.profile.email || '',
-    position: me?.staff?.position || 'Clinic Nurse / Doctor',
+    position: getRoleLabel(me?.profile?.role, me?.staff?.position),
     phone: me?.staff?.phone || '',
   };
 }
@@ -148,12 +149,18 @@ export default function StaffSettings() {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="staffPosition">Position</Label>
-                <Input
-                  id="staffPosition"
+                <Select
                   value={profile.position}
-                  onChange={(e) => updateProfileField('position', e.target.value)}
-                  placeholder="e.g., Nurse, Doctor"
-                />
+                  onValueChange={(value) => updateProfileField('position', value)}
+                >
+                  <SelectTrigger id="staffPosition">
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
+                    <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="staffPhone">Phone Number</Label>

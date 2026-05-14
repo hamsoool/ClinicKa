@@ -41,6 +41,9 @@ const roleTone = (role: string) => {
   if (role === 'Administrator') {
     return 'bg-purple-100 text-purple-700';
   }
+  if (role === 'Clinic Doctor') {
+    return 'bg-indigo-100 text-indigo-700';
+  }
   if (role === 'Clinic Staff') {
     return 'bg-blue-100 text-blue-700';
   }
@@ -798,6 +801,7 @@ export default function AdminUserAccounts() {
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="Student">Student</SelectItem>
                 <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
+                <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
                 <SelectItem value="Administrator">Administrator</SelectItem>
               </SelectContent>
             </Select>

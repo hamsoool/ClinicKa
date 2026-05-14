@@ -254,6 +254,20 @@ function resolveRoleFromEmail(email?: string | null): UserRole {
   return 'student';
 }
 
+export function isDoctorPosition(position?: string | null) {
+  if (!position) return false;
+  return ['clinic doctor', 'doctor'].includes(position.trim().toLowerCase());
+}
+
+export function getRoleLabel(role?: string | null, position?: string | null) {
+  if (role === 'admin') return 'Administrator';
+  if (role === 'staff') {
+    if (isDoctorPosition(position)) return 'Clinic Doctor';
+    return 'Clinic Staff';
+  }
+  return 'Student';
+}
+
 function deriveStudentIdFromEmail(email?: string | null) {
   const localPart = normalizeEmail(email).split('@')[0] || '';
   const match = localPart.match(/^(\d{9})/);
@@ -579,6 +593,15 @@ async function authRequest<T>(path: string, options: RequestOptions = {}, _retri
   }
 
   return payload as T;
+}
+
+function shouldFallbackToRest(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  const isMissingRoute = message.includes('404') || message.includes('not found');
+  const isSchemaCacheError = message.includes('schema cache') && message.includes('students');
+  const isYearLevelMissing = message.includes('year_level') && message.includes('students');
+  return isMissingRoute || isSchemaCacheError || isYearLevelMissing;
 }
 
 export function signInWithGoogle() {
@@ -1870,9 +1893,7 @@ export async function submitMedicalRecord(data: any) {
       body: JSON.stringify(data || {}),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : '';
-    const missingRoute = message.includes('404') || message.includes('not found');
-    if (!missingRoute) {
+    if (!shouldFallbackToRest(error)) {
       throw error;
     }
   }
@@ -1930,7 +1951,6 @@ export async function submitMedicalRecord(data: any) {
     allergy_details: data.allergyDetails || null,
     had_operation: data.hadOperation || null,
     operation_details: data.operationDetails || null,
-    blood_pressure: data.bloodPressure || null,
     weight: data.weight || null,
     height: data.height || null,
     bmi: data.bmi || null,
@@ -2090,7 +2110,6 @@ export async function updateMedicalRecord(recordId: string, data: any) {
     allergy_details: data.allergyDetails || null,
     had_operation: data.hadOperation || null,
     operation_details: data.operationDetails || null,
-    blood_pressure: data.bloodPressure || null,
     weight: data.weight || null,
     height: data.height || null,
     bmi: data.bmi || null,
@@ -2210,9 +2229,7 @@ export async function getStudentRecords(studentId?: string) {
   try {
     return await apiRequest<{ records: any[] }>(endpoint);
   } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : '';
-    const missingRoute = message.includes('404') || message.includes('not found');
-    if (!missingRoute) {
+    if (!shouldFallbackToRest(error)) {
       throw error;
     }
   }
@@ -2312,9 +2329,7 @@ export async function getSubmissions() {
   try {
     return await apiRequest<{ submissions: any[] }>('/functions/v1/server/submissions');
   } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : '';
-    const missingRoute = message.includes('404') || message.includes('not found');
-    if (!missingRoute) {
+    if (!shouldFallbackToRest(error)) {
       throw error;
     }
   }
@@ -2327,9 +2342,7 @@ export async function getSubmission(id: string) {
   try {
     return await apiRequest<{ submission: any }>(`/functions/v1/server/submission/${encodeURIComponent(id)}`);
   } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : '';
-    const missingRoute = message.includes('404') || message.includes('not found');
-    if (!missingRoute) {
+    if (!shouldFallbackToRest(error)) {
       throw error;
     }
   }
@@ -2347,6 +2360,7 @@ export async function saveSubmissionReview(id: string, review: any) {
   const emergencyContact = review.emergencyContact || {};
   const medicalHistory = review.medicalHistory || {};
   const studentMeasurements = review.studentMeasurements || {};
+  const hasStudentBloodPressure = Object.prototype.hasOwnProperty.call(studentMeasurements, 'bloodPressure');
   const staffMeasurements = review.staffMeasurements || {};
   const labResults = review.labResults || {};
   const clearanceInfo = review.clearanceInfo || {};
@@ -2381,7 +2395,7 @@ export async function saveSubmissionReview(id: string, review: any) {
           allergy_details: review.allergyDetails || null,
           had_operation: review.hadOperation || null,
           operation_details: review.operationDetails || null,
-          blood_pressure: studentMeasurements.bloodPressure || null,
+          blood_pressure: hasStudentBloodPressure ? (studentMeasurements.bloodPressure || null) : undefined,
           weight: studentMeasurements.weight || null,
           height: studentMeasurements.height || null,
           bmi: studentMeasurements.bmi || null,
@@ -3060,7 +3074,6 @@ type AdminCreateStaffInput = {
   firstName: string;
   lastName: string;
   position?: string;
-  staffCode?: string;
 };
 
 export async function createAdminStaff(input: AdminCreateStaffInput) {

@@ -22,7 +22,7 @@ type Props = {
   onFieldChange: <K extends keyof MedicalFormData>(field: K, value: MedicalFormData[K]) => void;
   onEmergencyContactChange: (field: 'name' | 'relationship' | 'phone' | 'address', value: string) => void;
   onMedicalConditionChange: (condition: MedicalConditionKey, checked: boolean) => void;
-  onMeasurementChange: (field: 'bloodPressure' | 'weight' | 'height' | 'bmi', value: string) => void;
+  onMeasurementChange: (field: 'weight' | 'height', value: string) => void;
   onFileChange: (field: 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => void;
   getBmiCategory: (bmi: string) => BmiCategory;
   maxBirthdate: string;
@@ -39,6 +39,9 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   getBmiCategory,
   maxBirthdate,
 }: Props) {
+  const showLabUploads = formData.labTestLocation === 'jlgh' || formData.labTestLocation === 'other';
+  const uploadsRequired = formData.labTestLocation === 'other';
+  const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
   const stepOneMissingRequired = [
     !formData.studentId,
     !formData.department,
@@ -61,10 +64,8 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     !formData.emergencyContact.address?.trim(),
   ].filter(Boolean).length;
   const stepFourMissingRequired = [
-    !formData.bloodPressure?.trim(),
     !formData.weight?.trim(),
     !formData.height?.trim(),
-    formData.bloodPressure ? !/^\d{2,3}\/\d{2,3}$/.test(formData.bloodPressure.trim()) : false,
     formData.weight ? !/^\d{1,3}$/.test(formData.weight.trim()) : false,
     formData.height ? !/^\d{1,3}$/.test(formData.height.trim()) : false,
   ].filter(Boolean).length;
@@ -439,18 +440,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           ) : null}
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <Label htmlFor="bp">Blood Pressure *</Label>
-              <Input
-                id="bp"
-                value={formData.bloodPressure}
-                onChange={(event) => onMeasurementChange('bloodPressure', event.target.value)}
-                placeholder="e.g., 120/80"
-                inputMode="numeric"
-                maxLength={7}
-                className={requiredFieldClass(!formData.bloodPressure?.trim() || !/^\d{2,3}\/\d{2,3}$/.test(formData.bloodPressure.trim()))}
-              />
-            </div>
-            <div>
               <Label htmlFor="weight">Weight (kg) *</Label>
               <Input
                 id="weight"
@@ -464,8 +453,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 className={requiredFieldClass(!formData.weight?.trim() || !/^\d{1,3}$/.test(formData.weight.trim()))}
               />
             </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label htmlFor="height">Height (cm) *</Label>
               <Input
@@ -520,33 +507,38 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </RadioGroup>
           </div>
 
-          {formData.labTestLocation === 'jlgh' ? (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-emerald-700 font-medium">You can skip file upload for this step.</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Since tests were done at James L. Gordon Hospital, clinic staff can verify records internally.
-                </p>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {formData.labTestLocation === 'other' ? (
+          {showLabUploads ? (
             <>
-          <div>
-            <Label htmlFor="otherClinicName">Clinic/Laboratory Name *</Label>
-            <Input
-              id="otherClinicName"
-              value={formData.otherClinicName}
-              onChange={(event) => onFieldChange('otherClinicName', event.target.value)}
-              placeholder="Enter clinic or laboratory name"
-              className="mt-2"
-              maxLength={60}
-            />
-          </div>
+              {formData.labTestLocation === 'jlgh' ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <p className="text-sm text-emerald-700 font-medium">Chest X-Ray upload is required.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      You must attach your Chest X-Ray result. CBC and Urinalysis uploads are optional when tests were done at James L. Gordon Hospital.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : null}
 
-          <p className="mb-1 text-sm text-muted-foreground">Upload your laboratory results (PDF, PNG, or JPG format, max 2MB per file)</p>
-          <div className="space-y-4">
+              {formData.labTestLocation === 'other' ? (
+                <div>
+                  <Label htmlFor="otherClinicName">Clinic/Laboratory Name *</Label>
+                  <Input
+                    id="otherClinicName"
+                    value={formData.otherClinicName}
+                    onChange={(event) => onFieldChange('otherClinicName', event.target.value)}
+                    placeholder="Enter clinic or laboratory name"
+                    className="mt-2"
+                    maxLength={60}
+                  />
+                </div>
+              ) : null}
+
+              <p className="mb-1 text-sm text-muted-foreground">
+                Upload your laboratory results (PDF, PNG, or JPG format, max 2MB per file)
+                {uploadsRequired ? ' *' : ''}
+              </p>
+              <div className="space-y-4">
             <Card>
               <CardContent className="pt-6">
                 <Label htmlFor="xray">Chest X-Ray *</Label>
@@ -556,7 +548,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   accept=".pdf,.png,.jpg,.jpeg"
                   aria-label="Upload chest X-ray result"
                   onChange={(event) => onFileChange('xrayFile', event.target.files?.[0] || null)}
-                  className="mt-2 cursor-pointer"
+                  className={`mt-2 cursor-pointer ${!hasXray ? 'border-red-500 ring-1 ring-red-200' : ''}`}
                 />
                 {formData.xrayFile && (
                   <div className="mt-2 flex items-center text-sm text-green-600">
@@ -585,7 +577,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <Label htmlFor="cbc">Complete Blood Count (CBC) *</Label>
+                <Label htmlFor="cbc">Complete Blood Count (CBC) {uploadsRequired ? '*' : '(optional)'}</Label>
                 <Input
                   id="cbc"
                   type="file"
@@ -621,7 +613,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <Label htmlFor="urinalysis">Urinalysis (U/A) *</Label>
+                <Label htmlFor="urinalysis">Urinalysis (U/A) {uploadsRequired ? '*' : '(optional)'}</Label>
                 <Input
                   id="urinalysis"
                   type="file"
@@ -717,8 +709,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <p className="text-muted-foreground">Blood Pressure:</p>
-                <p className="font-medium">{formData.bloodPressure}</p>
                 <p className="text-muted-foreground">Weight:</p>
                 <p className="font-medium">{formData.weight} kg</p>
                 <p className="text-muted-foreground">Height:</p>

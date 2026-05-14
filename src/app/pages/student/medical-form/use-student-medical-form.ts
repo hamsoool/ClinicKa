@@ -65,23 +65,6 @@ function sanitizeSafeText(value: string, maxLength: number) {
     .slice(0, maxLength);
 }
 
-function sanitizeBloodPressure(value: string) {
-  const cleaned = value.replace(/[^\d/]/g, '');
-  const [leftRaw = '', rightRaw = ''] = cleaned.split('/');
-  const left = leftRaw.slice(0, 3);
-  const right = rightRaw.slice(0, 3);
-  if (!cleaned.includes('/')) return left;
-  return `${left}/${right}`;
-}
-
-function isValidBloodPressure(value: string) {
-  const match = value.trim().match(/^(\d{2,3})\/(\d{2,3})$/);
-  if (!match) return false;
-  const first = Number(match[1]);
-  const second = Number(match[2]);
-  return first >= 40 && first <= 220 && second >= 40 && second <= 220;
-}
-
 function sanitizeDigits(value: string, maxLen?: number) {
   const digits = value.replace(/\D/g, '');
   return maxLen ? digits.slice(0, maxLen) : digits;
@@ -129,7 +112,6 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, priv
       address: '',
     },
     dataPrivacyConsent: privacyAccepted,
-    bloodPressure: '',
     weight: '',
     height: '',
     bmi: '',
@@ -219,7 +201,6 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
             ...prev.emergencyContact,
             ...(submission.emergencyContact || {}),
           },
-          bloodPressure: submission.bloodPressure || prev.bloodPressure,
           weight: submission.weight || prev.weight,
           height: submission.height || prev.height,
           bmi: submission.bmi || prev.bmi,
@@ -381,11 +362,8 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     }));
   }, []);
 
-  const updateMeasurement = useCallback((field: 'bloodPressure' | 'weight' | 'height' | 'bmi', value: string) => {
-    const nextInput =
-      field === 'bloodPressure'
-        ? sanitizeBloodPressure(value)
-        : sanitizeDigits(value, 3);
+  const updateMeasurement = useCallback((field: 'weight' | 'height', value: string) => {
+    const nextInput = sanitizeDigits(value, 3);
 
     setFormData((prev) => {
       const next = {
@@ -426,8 +404,13 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
   const canProceed = useMemo(() => {
     const normalizedStudentId = normalizeStudentId(formData.studentId);
     const normalizedMiddleInitial = normalizeMiddleInitial(formData.middleInitial);
-    const needsManualUploads = formData.labTestLocation === 'other';
-    const hasRequiredUploads = isEditingExistingSubmission || (formData.xrayFile && formData.cbcFile && formData.urinalysisFile);
+    const needsAllUploads = formData.labTestLocation === 'other';
+    const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
+    const hasAllUploads = Boolean(
+      (formData.xrayFile || formData.existingXrayFileUrl) &&
+      (formData.cbcFile || formData.existingCbcFileUrl) &&
+      (formData.urinalysisFile || formData.existingUrinalysisFileUrl),
+    );
 
     switch (step) {
       case 1:
@@ -460,22 +443,20 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
         );
       case 4:
         return (
-          formData.bloodPressure &&
           formData.weight &&
           formData.height &&
-          isValidBloodPressure(formData.bloodPressure) &&
           /^\d{1,3}$/.test(formData.weight) &&
           /^\d{1,3}$/.test(formData.height)
         );
       case 5:
         if (!formData.labTestLocation) return false;
-        if (formData.labTestLocation === 'jlgh') return true;
+        if (formData.labTestLocation === 'jlgh') return hasXray;
         return Boolean(
           formData.otherClinicName.trim() &&
             formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
             COURSE_REGEX.test(formData.otherClinicName) &&
             !SQL_INJECTION_REGEX.test(formData.otherClinicName) &&
-            (needsManualUploads ? hasRequiredUploads : true),
+            (needsAllUploads ? hasAllUploads : hasXray),
         );
       case 6:
         return true;
@@ -488,8 +469,13 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     () => {
       const normalizedStudentId = normalizeStudentId(formData.studentId);
       const normalizedMiddleInitial = normalizeMiddleInitial(formData.middleInitial);
-      const needsManualUploads = formData.labTestLocation === 'other';
-      const hasRequiredUploads = isEditingExistingSubmission || (formData.xrayFile && formData.cbcFile && formData.urinalysisFile);
+      const needsAllUploads = formData.labTestLocation === 'other';
+      const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
+      const hasAllUploads = Boolean(
+        (formData.xrayFile || formData.existingXrayFileUrl) &&
+        (formData.cbcFile || formData.existingCbcFileUrl) &&
+        (formData.urinalysisFile || formData.existingUrinalysisFileUrl),
+      );
 
       return Boolean(
         formData.firstName &&
@@ -509,12 +495,12 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           formData.emergencyContact.name &&
           formData.emergencyContact.phone &&
           formData.dataPrivacyConsent &&
-          formData.bloodPressure &&
           formData.weight &&
           formData.height &&
           formData.labTestLocation &&
           (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
-          (!needsManualUploads || hasRequiredUploads) &&
+          hasXray &&
+          (!needsAllUploads || hasAllUploads) &&
           normalizedStudentId.length === 9 &&
           formData.age.length <= 2 &&
           isAtLeastAge(formData.birthday, MIN_AGE) &&
@@ -527,7 +513,6 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
             (COURSE_REGEX.test(formData.otherClinicName) &&
               formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
               !SQL_INJECTION_REGEX.test(formData.otherClinicName))) &&
-          isValidBloodPressure(formData.bloodPressure) &&
           /^\d{1,3}$/.test(formData.weight) &&
           /^\d{1,3}$/.test(formData.height) &&
           (formData.hadOperation !== 'yes' || !SQL_INJECTION_REGEX.test(formData.operationDetails || '')),
@@ -559,12 +544,10 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
       allergyDetails: formData.allergyDetails,
       hadOperation: formData.hadOperation,
       operationDetails: formData.operationDetails,
-      bloodPressure: formData.bloodPressure,
       weight: formData.weight,
       height: formData.height,
       bmi: formData.bmi,
       staffMeasurements: {
-        bloodPressure: formData.bloodPressure,
         weight: formData.weight,
         height: formData.height,
         bmi: formData.bmi,
@@ -621,7 +604,6 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
         operationDetails: formData.operationDetails,
         emergencyContact: formData.emergencyContact,
         dataPrivacyConsent: formData.dataPrivacyConsent,
-        bloodPressure: formData.bloodPressure,
         weight: formData.weight,
         height: formData.height,
         bmi: formData.bmi,

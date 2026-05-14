@@ -90,6 +90,19 @@ type Requester = {
 
 const isStaffRole = (role?: string) => role === 'staff' || role === 'admin';
 
+const DOCTOR_POSITIONS = ['clinic doctor', 'doctor'];
+
+function isDoctorPosition(position?: string | null) {
+  if (!position) return false;
+  return DOCTOR_POSITIONS.includes(position.trim().toLowerCase());
+}
+
+function isDoctorOrAdmin(requester: Requester) {
+  if (requester.profile.role === 'admin') return true;
+  if (requester.profile.role === 'staff' && isDoctorPosition(requester.staff?.position)) return true;
+  return false;
+}
+
 function normalizeEmail(email?: string | null) {
   return String(email || '').trim().toLowerCase();
 }
@@ -107,9 +120,12 @@ function deriveStudentIdFromEmail(email?: string | null) {
   return match?.[1] || null;
 }
 
-function roleLabel(role?: string) {
+function roleLabel(role?: string, position?: string | null) {
   if (role === 'admin') return 'Administrator';
-  if (role === 'staff') return 'Clinic Staff';
+  if (role === 'staff') {
+    if (isDoctorPosition(position)) return 'Clinic Doctor';
+    return 'Clinic Staff';
+  }
   return 'Student';
 }
 
@@ -139,6 +155,11 @@ function normalizeStoragePath(storagePath?: string | null, targetBucket?: string
     return path.slice(normalizedBucket.length + 1);
   }
   return path;
+}
+
+function isMissingStorageBucketError(error: any) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('bucket') && message.includes('not found');
 }
 
 function badRequest(message: string) {
@@ -367,6 +388,54 @@ async function deleteStoredFiles(files: any[]) {
   }
 }
 
+async function listStoragePaths(bucket: string, prefix: string) {
+  const cleanedPrefix = String(prefix || '').replace(/^\/+/, '');
+  const paths: string[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase.storage.from(bucket).list(cleanedPrefix, {
+      limit: 1000,
+      offset,
+    });
+
+    if (error) {
+      if (isMissingStorageBucketError(error)) return [];
+      throw new Error(error.message);
+    }
+
+    if (!data?.length) break;
+
+    for (const item of data) {
+      if (!item?.name) continue;
+      if (!item?.id && !item?.metadata) continue;
+      const fullPath = cleanedPrefix ? `${cleanedPrefix}${item.name}` : item.name;
+      paths.push(fullPath);
+    }
+
+    if (data.length < 1000) break;
+    offset += data.length;
+  }
+
+  return paths;
+}
+
+async function deleteStoragePrefix(bucket: string, prefix: string) {
+  const paths = await listStoragePaths(bucket, prefix);
+  if (!paths.length) return;
+  const { error } = await supabase.storage.from(bucket).remove(paths);
+  if (error) throw new Error(error.message);
+}
+
+async function deleteStoragePrefixes(buckets: string[], prefixes: string[]) {
+  for (const bucket of buckets) {
+    for (const prefix of prefixes) {
+      if (!prefix) continue;
+      await deleteStoragePrefix(bucket, prefix);
+    }
+  }
+}
+
 async function setArchivedAuthState(userId: string) {
   const { error } = await supabase.auth.admin.updateUserById(userId, {
     ban_duration: '876000h',
@@ -435,7 +504,7 @@ async function authenticate(c: any): Promise<Requester | null> {
   const [{ data: student }, { data: staff }] = await Promise.all([
     supabase
       .from('students')
-      .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address')
+      .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address')
       .or(`profile_id.eq.${user.id},student_id.eq.${profile.student_id || '__none__'}`)
       .maybeSingle(),
     supabase
@@ -608,7 +677,7 @@ async function loadRelatedData(rows: any[]) {
     studentIds.length
       ? supabase
           .from('students')
-          .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address')
+          .select('student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address')
           .in('student_id', studentIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
@@ -824,7 +893,6 @@ app.post("/submit-record", async (c) => {
       middle_initial: data.middleInitial || null,
       department: data.department || null,
       course: data.course || null,
-      year_level: data.yearLevel ? Number(data.yearLevel) : null,
       age: data.age ? Number(data.age) : null,
       sex: data.sex || null,
       birthday: data.birthday || null,
@@ -859,7 +927,6 @@ app.post("/submit-record", async (c) => {
         allergy_details: data.allergyDetails || null,
         had_operation: data.hadOperation || null,
         operation_details: data.operationDetails || null,
-        blood_pressure: data.bloodPressure || null,
         weight: data.weight || null,
         height: data.height || null,
         bmi: data.bmi || null,
@@ -998,6 +1065,12 @@ app.put("/submission/:id/status", async (c) => {
   try {
     const id = c.req.param('id');
     const { status, staffNotes } = await c.req.json();
+
+    // Only doctors and admins can set statuses that finalize or change clearance
+    const doctorOnlyStatuses = ['approved', 'returned', 'physical_exam_done'];
+    if (doctorOnlyStatuses.includes(status) && !isDoctorOrAdmin(requester)) {
+      return c.json({ error: 'Only Clinic Doctors can approve, return, or mark physical exam done.' }, 403);
+    }
 
     const { error } = await supabase
       .from('submissions')
@@ -1205,7 +1278,7 @@ app.get("/staff-users", async (c) => {
     const [{ data: staff, error }, archivedState] = await Promise.all([
       supabase
         .from('staff_users')
-        .select('id,profile_id,staff_code,first_name,last_name,name,position,is_active,email')
+        .select('id,profile_id,first_name,last_name,name,position,is_active,email')
         .order('last_name', { ascending: true }),
       getArchivedUserIds(),
     ]);
@@ -1217,10 +1290,11 @@ app.get("/staff-users", async (c) => {
       staff: (staff || [])
         .filter((member) => !member.profile_id || !archivedUserIds.has(member.profile_id))
         .map((member) => ({
-          id: member.staff_code || member.id,
+          id: member.id,
           userId: member.profile_id || member.id,
           name: `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.name || 'Unnamed Staff',
-          role: member.position || 'Clinic Staff',
+          role: isDoctorPosition(member.position) ? 'Clinic Doctor' : (member.position || 'Clinic Staff'),
+          position: member.position || 'Clinic Staff',
           status: member.is_active ? 'Active' : 'Inactive',
           email: member.email || '',
         })),
@@ -1249,7 +1323,7 @@ app.get("/user-accounts", async (c) => {
         .order('created_at', { ascending: false }),
       supabase
         .from('staff_users')
-        .select('profile_id,staff_code,first_name,last_name,email,is_active'),
+        .select('profile_id,first_name,last_name,email,is_active,position'),
       getArchivedUserIds(),
     ]);
 
@@ -1274,11 +1348,12 @@ app.get("/user-accounts", async (c) => {
 
           return {
             userId: profile.id,
-            id: profile.student_id || linkedStaff?.staff_code || profile.id,
+            id: profile.student_id || profile.id,
             name,
             email: profile.email || linkedStaff?.email || '',
-            role: roleLabel(profile.role),
+            role: roleLabel(profile.role, linkedStaff?.position),
             roleKey: profile.role,
+            position: linkedStaff?.position || null,
             status: linkedStaff?.is_active === false ? 'Inactive' : 'Active',
             lastActive: profile.updated_at || profile.created_at,
             canArchive: profile.role === 'student' || profile.role === 'staff',
@@ -1379,7 +1454,7 @@ app.post("/admin/archive-account", async (c) => {
       role: profile.role,
       email: profile.email || linkedStaff?.email || null,
       display_name: displayName,
-      account_identifier: profile.student_id || linkedStaff?.staff_code || linkedStaff?.id || profile.id,
+      account_identifier: profile.student_id || linkedStaff?.id || profile.id,
       archived_by: requester.profile.id,
       archive_reason: reason?.trim() || null,
       snapshot: {
@@ -1401,7 +1476,6 @@ app.post("/admin/archive-account", async (c) => {
           : null,
         staff: linkedStaff
           ? {
-              staff_code: linkedStaff.staff_code || null,
               position: linkedStaff.position || null,
               is_active: linkedStaff.is_active ?? null,
             }
@@ -1527,6 +1601,16 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
         || null;
 
       if (studentId) {
+        const { data: profileAssetFiles, error: profileAssetError } = await supabase
+          .from('files')
+          .select('*')
+          .eq('uploaded_by', userId)
+          .is('submission_id', null);
+
+        if (profileAssetError) throw new Error(profileAssetError.message);
+        await deleteStoredFiles(profileAssetFiles || []);
+        await deleteStoragePrefixes(['profile', 'student_signature'], [`profiles/${studentId}/`]);
+
         const { data: submissions, error: submissionsError } = await supabase
           .from('submissions')
           .select('id')
@@ -1545,6 +1629,10 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
           if (filesLookupError) throw new Error(filesLookupError.message);
 
           await deleteStoredFiles(files || []);
+          await deleteStoragePrefixes(
+            storageBuckets,
+            submissionIds.map((id) => `${id}/`),
+          );
 
           const deletionTables = [
             'emergency_contacts',
@@ -1562,6 +1650,14 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
             if (error) throw new Error(error.message);
           }
         }
+
+        const { error: profileAssetDeleteError } = await supabase
+          .from('files')
+          .delete()
+          .eq('uploaded_by', userId)
+          .is('submission_id', null);
+
+        if (profileAssetDeleteError) throw new Error(profileAssetDeleteError.message);
 
         const { error: submissionDeleteError } = await supabase
           .from('submissions')
@@ -1594,6 +1690,25 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
 
       const { error: staffDeleteError } = await supabase.from('staff_users').delete().eq('profile_id', userId);
       if (staffDeleteError) throw new Error(staffDeleteError.message);
+    }
+
+    if (role === 'staff') {
+      const { data: staffFiles, error: staffFilesError } = await supabase
+        .from('files')
+        .select('*')
+        .eq('uploaded_by', userId)
+        .is('submission_id', null);
+
+      if (staffFilesError) throw new Error(staffFilesError.message);
+      await deleteStoredFiles(staffFiles || []);
+
+      const { error: staffFileDeleteError } = await supabase
+        .from('files')
+        .delete()
+        .eq('uploaded_by', userId)
+        .is('submission_id', null);
+
+      if (staffFileDeleteError) throw new Error(staffFileDeleteError.message);
     }
 
     const { error: profileDeleteError } = await supabase.from('profiles').delete().eq('id', userId);
@@ -1676,8 +1791,9 @@ app.post("/admin/create-staff", async (c) => {
   if (requester.profile.role !== 'admin') return forbidden();
 
   try {
-    const { email, password, firstName, lastName, position = 'Clinic Staff', staffCode } = await c.req.json();
+    const { email, password, firstName, lastName, position = 'Clinic Staff' } = await c.req.json();
     if (!email || !password || !firstName || !lastName) return badRequest('email, password, firstName, and lastName are required');
+    if (!['Clinic Staff', 'Clinic Doctor'].includes(position)) return badRequest('position must be either Clinic Staff or Clinic Doctor');
 
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
       email,
@@ -1706,12 +1822,12 @@ app.post("/admin/create-staff", async (c) => {
     const { error: staffError } = await supabase.from('staff_users').upsert({
       profile_id: userId,
       email: normalizedEmail,
+      name: `${firstName} ${lastName}`.trim(),
       first_name: firstName,
       last_name: lastName,
       position,
-      staff_code: staffCode || null,
       is_active: true,
-    });
+    }, { onConflict: 'profile_id' });
     if (staffError) throw new Error(staffError.message);
 
     return c.json({ success: true, userId });
@@ -1726,6 +1842,9 @@ app.post("/issue-certificate", async (c) => {
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
   if (!isStaffRole(requester.profile.role)) return forbidden();
+  if (!isDoctorOrAdmin(requester)) {
+    return c.json({ error: 'Only Clinic Doctors can issue certificates.' }, 403);
+  }
 
   try {
     const { submissionId, findingsNormal, diagnosis, remarks, purpose, controlNo } = await c.req.json();

@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Label } from '../../components/ui/label';
+import { Textarea } from '../../components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -20,9 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui/table';
-import { Plus, Search, Download, Printer } from 'lucide-react';
+import { Plus, Search, Download, Printer, Archive } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
-import { createAdminStaff, getStaffUsers } from '../../lib/api';
+import { archiveUserAccount, createAdminStaff, getStaffUsers } from '../../lib/api';
 
 const statusTone = (status: string) => {
   if (status === 'Active') {
@@ -31,18 +33,27 @@ const statusTone = (status: string) => {
   return 'bg-yellow-100 text-yellow-700';
 };
 
+const roleTone = (role: string) => {
+  if (role === 'Clinic Doctor') {
+    return 'bg-indigo-100 text-indigo-700';
+  }
+  return 'bg-blue-100 text-blue-700';
+};
+
 export default function AdminStaffManagement() {
   const [staffList, setStaffList] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [openCreate, setOpenCreate] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<any | null>(null);
+  const [archiveReason, setArchiveReason] = useState('');
+  const [isArchiving, setIsArchiving] = useState(false);
   const [form, setForm] = useState({
     email: '',
     password: '',
     firstName: '',
     lastName: '',
     position: 'Clinic Staff',
-    staffCode: '',
   });
 
   const loadStaff = () =>
@@ -70,7 +81,6 @@ export default function AdminStaffManagement() {
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         position: form.position.trim() || 'Clinic Staff',
-        staffCode: form.staffCode.trim() || undefined,
       });
       toast.success('Staff account created without email verification');
       setOpenCreate(false);
@@ -80,13 +90,31 @@ export default function AdminStaffManagement() {
         firstName: '',
         lastName: '',
         position: 'Clinic Staff',
-        staffCode: '',
       });
       await loadStaff();
     } catch (error: any) {
       toast.error(error?.message || 'Failed to add staff');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const confirmArchive = async () => {
+    if (!archiveTarget) return;
+    try {
+      setIsArchiving(true);
+      await archiveUserAccount({
+        userId: archiveTarget.userId,
+        reason: archiveReason.trim() || undefined,
+      });
+      toast.success(`${archiveTarget.name} has been archived`);
+      setArchiveTarget(null);
+      setArchiveReason('');
+      await loadStaff();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to archive staff');
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -166,20 +194,60 @@ export default function AdminStaffManagement() {
                 <Input id="sm-last" value={form.lastName} onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))} />
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="sm-position">Position</Label>
-                <Input id="sm-position" value={form.position} onChange={(e) => setForm((prev) => ({ ...prev, position: e.target.value }))} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="sm-code">Staff Code (optional)</Label>
-                <Input id="sm-code" value={form.staffCode} onChange={(e) => setForm((prev) => ({ ...prev, staffCode: e.target.value }))} />
-              </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="sm-position">Position</Label>
+              <Select value={form.position} onValueChange={(value) => setForm((prev) => ({ ...prev, position: value }))}>
+                <SelectTrigger id="sm-position">
+                  <SelectValue placeholder="Select position" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
+                  <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
             <Button variant="outline" onClick={() => setOpenCreate(false)} disabled={isSubmitting} className="w-full sm:w-auto">Cancel</Button>
             <Button onClick={submitCreate} disabled={isSubmitting} className="w-full sm:w-auto">{isSubmitting ? 'Adding...' : 'Add Staff'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(archiveTarget)} onOpenChange={(open) => {
+        if (!open) {
+          setArchiveTarget(null);
+          setArchiveReason('');
+        }
+      }}>
+        <DialogContent className="w-[calc(100%-1.5rem)] rounded-xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Archive Staff Account</DialogTitle>
+            <DialogDescription>
+              {archiveTarget
+                ? `Archive ${archiveTarget.name}? They will be removed from the active staff directory and blocked from accessing the system.`
+                : 'Archive this staff account.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              This keeps the account data in the database for review. The account can be restored later from the User Accounts archive tab.
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="staff-archive-reason">Archive note (optional)</Label>
+              <Textarea
+                id="staff-archive-reason"
+                placeholder="Add context for why this staff member is being archived"
+                value={archiveReason}
+                onChange={(e) => setArchiveReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => { setArchiveTarget(null); setArchiveReason(''); }} disabled={isArchiving} className="w-full sm:w-auto">Cancel</Button>
+            <Button variant="destructive" onClick={confirmArchive} disabled={isArchiving} className="w-full sm:w-auto">
+              {isArchiving ? 'Archiving...' : 'Archive Staff'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -229,12 +297,14 @@ export default function AdminStaffManagement() {
                     <Badge className={statusTone(staff.status)}>{staff.status}</Badge>
                   </div>
                   <div className="space-y-1 text-sm">
-                    <p><span className="font-medium text-on-surface">Role:</span> {staff.role}</p>
+                    <p><span className="font-medium text-on-surface">Role:</span> <Badge className={roleTone(staff.role)}>{staff.role}</Badge></p>
                     <p className="break-all"><span className="font-medium text-on-surface">Email:</span> {staff.email || '-'}</p>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <Button variant="outline" size="sm" className="w-full">Edit</Button>
-                    <Button variant="ghost" size="sm" className="w-full">Deactivate</Button>
+                    <Button variant="ghost" size="sm" className="w-full text-amber-700 hover:text-amber-800 hover:bg-amber-50" onClick={() => setArchiveTarget(staff)}>
+                      <Archive className="w-4 h-4 mr-2" />
+                      Archive
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -258,15 +328,17 @@ export default function AdminStaffManagement() {
                   <TableRow key={staff.id}>
                     <TableCell className="font-medium">{staff.id}</TableCell>
                     <TableCell>{staff.name}</TableCell>
-                    <TableCell>{staff.role}</TableCell>
+                    <TableCell><Badge className={roleTone(staff.role)}>{staff.role}</Badge></TableCell>
                     <TableCell>
                       <Badge className={statusTone(staff.status)}>{staff.status}</Badge>
                     </TableCell>
                     <TableCell>{staff.email}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm">Edit</Button>
-                        <Button variant="ghost" size="sm">Deactivate</Button>
+                        <Button variant="ghost" size="sm" className="text-amber-700 hover:text-amber-800 hover:bg-amber-50" onClick={() => setArchiveTarget(staff)}>
+                          <Archive className="w-4 h-4 mr-1.5" />
+                          Archive
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
