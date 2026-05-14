@@ -41,6 +41,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
 }: Props) {
   const showLabUploads = formData.labTestLocation === 'jlgh' || formData.labTestLocation === 'other';
   const uploadsRequired = formData.labTestLocation === 'other';
+  const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
   const stepOneMissingRequired = [
     !formData.studentId,
     !formData.department,
@@ -511,9 +512,9 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               {formData.labTestLocation === 'jlgh' ? (
                 <Card>
                   <CardContent className="pt-6">
-                    <p className="text-sm text-emerald-700 font-medium">Uploads are optional for this step.</p>
+                    <p className="text-sm text-emerald-700 font-medium">Chest X-Ray upload is required.</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      You may attach your results for faster verification, even if tests were done at James L. Gordon Hospital.
+                      You must attach your Chest X-Ray result. CBC and Urinalysis uploads are optional when tests were done at James L. Gordon Hospital.
                     </p>
                   </CardContent>
                 </Card>
@@ -535,19 +536,19 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
 
               <p className="mb-1 text-sm text-muted-foreground">
                 Upload your laboratory results (PDF, PNG, or JPG format, max 2MB per file)
-                {uploadsRequired ? ' *' : ' (optional)'}
+                {uploadsRequired ? ' *' : ''}
               </p>
               <div className="space-y-4">
             <Card>
               <CardContent className="pt-6">
-                <Label htmlFor="xray">Chest X-Ray {uploadsRequired ? '*' : '(optional)'}</Label>
+                <Label htmlFor="xray">Chest X-Ray *</Label>
                 <Input
                   id="xray"
                   type="file"
                   accept=".pdf,.png,.jpg,.jpeg"
                   aria-label="Upload chest X-ray result"
                   onChange={(event) => onFileChange('xrayFile', event.target.files?.[0] || null)}
-                  className="mt-2 cursor-pointer"
+                  className={`mt-2 cursor-pointer ${!hasXray ? 'border-red-500 ring-1 ring-red-200' : ''}`}
                 />
                 {formData.xrayFile && (
                   <div className="mt-2 flex items-center text-sm text-green-600">

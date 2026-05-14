@@ -3074,7 +3074,6 @@ type AdminCreateStaffInput = {
   firstName: string;
   lastName: string;
   position?: string;
-  staffCode?: string;
 };
 
 export async function createAdminStaff(input: AdminCreateStaffInput) {

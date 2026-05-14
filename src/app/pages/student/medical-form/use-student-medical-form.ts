@@ -404,8 +404,13 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
   const canProceed = useMemo(() => {
     const normalizedStudentId = normalizeStudentId(formData.studentId);
     const normalizedMiddleInitial = normalizeMiddleInitial(formData.middleInitial);
-    const needsManualUploads = formData.labTestLocation === 'other';
-    const hasRequiredUploads = isEditingExistingSubmission || (formData.xrayFile && formData.cbcFile && formData.urinalysisFile);
+    const needsAllUploads = formData.labTestLocation === 'other';
+    const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
+    const hasAllUploads = Boolean(
+      (formData.xrayFile || formData.existingXrayFileUrl) &&
+      (formData.cbcFile || formData.existingCbcFileUrl) &&
+      (formData.urinalysisFile || formData.existingUrinalysisFileUrl),
+    );
 
     switch (step) {
       case 1:
@@ -445,13 +450,13 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
         );
       case 5:
         if (!formData.labTestLocation) return false;
-        if (formData.labTestLocation === 'jlgh') return true;
+        if (formData.labTestLocation === 'jlgh') return hasXray;
         return Boolean(
           formData.otherClinicName.trim() &&
             formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
             COURSE_REGEX.test(formData.otherClinicName) &&
             !SQL_INJECTION_REGEX.test(formData.otherClinicName) &&
-            (needsManualUploads ? hasRequiredUploads : true),
+            (needsAllUploads ? hasAllUploads : hasXray),
         );
       case 6:
         return true;
@@ -464,8 +469,13 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
     () => {
       const normalizedStudentId = normalizeStudentId(formData.studentId);
       const normalizedMiddleInitial = normalizeMiddleInitial(formData.middleInitial);
-      const needsManualUploads = formData.labTestLocation === 'other';
-      const hasRequiredUploads = isEditingExistingSubmission || (formData.xrayFile && formData.cbcFile && formData.urinalysisFile);
+      const needsAllUploads = formData.labTestLocation === 'other';
+      const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
+      const hasAllUploads = Boolean(
+        (formData.xrayFile || formData.existingXrayFileUrl) &&
+        (formData.cbcFile || formData.existingCbcFileUrl) &&
+        (formData.urinalysisFile || formData.existingUrinalysisFileUrl),
+      );
 
       return Boolean(
         formData.firstName &&
@@ -489,7 +499,8 @@ export function useStudentMedicalForm({ year, me, privacyAccepted = false, editS
           formData.height &&
           formData.labTestLocation &&
           (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
-          (!needsManualUploads || hasRequiredUploads) &&
+          hasXray &&
+          (!needsAllUploads || hasAllUploads) &&
           normalizedStudentId.length === 9 &&
           formData.age.length <= 2 &&
           isAtLeastAge(formData.birthday, MIN_AGE) &&

@@ -1278,7 +1278,7 @@ app.get("/staff-users", async (c) => {
     const [{ data: staff, error }, archivedState] = await Promise.all([
       supabase
         .from('staff_users')
-        .select('id,profile_id,staff_code,first_name,last_name,name,position,is_active,email')
+        .select('id,profile_id,first_name,last_name,name,position,is_active,email')
         .order('last_name', { ascending: true }),
       getArchivedUserIds(),
     ]);
@@ -1290,7 +1290,7 @@ app.get("/staff-users", async (c) => {
       staff: (staff || [])
         .filter((member) => !member.profile_id || !archivedUserIds.has(member.profile_id))
         .map((member) => ({
-          id: member.staff_code || member.id,
+          id: member.id,
           userId: member.profile_id || member.id,
           name: `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.name || 'Unnamed Staff',
           role: isDoctorPosition(member.position) ? 'Clinic Doctor' : (member.position || 'Clinic Staff'),
@@ -1323,7 +1323,7 @@ app.get("/user-accounts", async (c) => {
         .order('created_at', { ascending: false }),
       supabase
         .from('staff_users')
-        .select('profile_id,staff_code,first_name,last_name,email,is_active'),
+        .select('profile_id,first_name,last_name,email,is_active,position'),
       getArchivedUserIds(),
     ]);
 
@@ -1348,7 +1348,7 @@ app.get("/user-accounts", async (c) => {
 
           return {
             userId: profile.id,
-            id: profile.student_id || linkedStaff?.staff_code || profile.id,
+            id: profile.student_id || profile.id,
             name,
             email: profile.email || linkedStaff?.email || '',
             role: roleLabel(profile.role, linkedStaff?.position),
@@ -1454,7 +1454,7 @@ app.post("/admin/archive-account", async (c) => {
       role: profile.role,
       email: profile.email || linkedStaff?.email || null,
       display_name: displayName,
-      account_identifier: profile.student_id || linkedStaff?.staff_code || linkedStaff?.id || profile.id,
+      account_identifier: profile.student_id || linkedStaff?.id || profile.id,
       archived_by: requester.profile.id,
       archive_reason: reason?.trim() || null,
       snapshot: {
@@ -1476,7 +1476,6 @@ app.post("/admin/archive-account", async (c) => {
           : null,
         staff: linkedStaff
           ? {
-              staff_code: linkedStaff.staff_code || null,
               position: linkedStaff.position || null,
               is_active: linkedStaff.is_active ?? null,
             }
@@ -1792,7 +1791,7 @@ app.post("/admin/create-staff", async (c) => {
   if (requester.profile.role !== 'admin') return forbidden();
 
   try {
-    const { email, password, firstName, lastName, position = 'Clinic Staff', staffCode } = await c.req.json();
+    const { email, password, firstName, lastName, position = 'Clinic Staff' } = await c.req.json();
     if (!email || !password || !firstName || !lastName) return badRequest('email, password, firstName, and lastName are required');
     if (!['Clinic Staff', 'Clinic Doctor'].includes(position)) return badRequest('position must be either Clinic Staff or Clinic Doctor');
 
@@ -1823,12 +1822,12 @@ app.post("/admin/create-staff", async (c) => {
     const { error: staffError } = await supabase.from('staff_users').upsert({
       profile_id: userId,
       email: normalizedEmail,
+      name: `${firstName} ${lastName}`.trim(),
       first_name: firstName,
       last_name: lastName,
       position,
-      staff_code: staffCode || null,
       is_active: true,
-    });
+    }, { onConflict: 'profile_id' });
     if (staffError) throw new Error(staffError.message);
 
     return c.json({ success: true, userId });
