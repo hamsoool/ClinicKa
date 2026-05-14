@@ -175,6 +175,35 @@ function normalizeEmail(email?: string | null) {
   return String(email || '').trim().toLowerCase();
 }
 
+function normalizeNamePart(value?: string | null) {
+  const normalized = String(value || '').trim();
+  return normalized || null;
+}
+
+function deriveNamePartsFromUser(user: any) {
+  const firstName = normalizeNamePart(user?.user_metadata?.first_name);
+  const lastName = normalizeNamePart(user?.user_metadata?.last_name);
+
+  if (firstName || lastName) {
+    return { firstName, lastName };
+  }
+
+  const fullName = normalizeNamePart(user?.user_metadata?.full_name);
+  if (!fullName) {
+    return { firstName: null, lastName: null };
+  }
+
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || null,
+    lastName: parts.slice(1).join(' ').trim() || null,
+  };
+}
+
+function isGCDomainEmail(email?: string | null) {
+  return normalizeEmail(email).endsWith('@gordoncollege.edu.ph');
+}
+
 function resolveRoleFromEmail(email?: string | null) {
   const normalized = normalizeEmail(email);
   if (normalized.includes('admin')) return 'admin';
@@ -186,6 +215,38 @@ function deriveStudentIdFromEmail(email?: string | null) {
   const localPart = normalizeEmail(email).split('@')[0] || '';
   const match = localPart.match(/^(\d{9})/);
   return match?.[1] || null;
+}
+
+function isGoogleAuthUser(user: any) {
+  const providers = [
+    user?.app_metadata?.provider,
+    ...(Array.isArray(user?.identities) ? user.identities.map((identity: any) => identity?.provider) : []),
+  ];
+  return providers.some((provider) => String(provider || '').trim().toLowerCase() === 'google');
+}
+
+function isRejectedGoogleUser(user: any) {
+  return isGoogleAuthUser(user) && !isGCDomainEmail(user?.email);
+}
+
+async function purgeRejectedGoogleUser(user: any) {
+  const userId = String(user?.id || '').trim();
+  if (!userId) return;
+
+  const derivedStudentId = deriveStudentIdFromEmail(user?.email);
+
+  await Promise.allSettled([
+    supabase.from('staff_users').delete().eq('profile_id', userId),
+    supabase.from('profiles').delete().eq('id', userId),
+    derivedStudentId
+      ? supabase.from('students').delete().or(`profile_id.eq.${userId},student_id.eq.${derivedStudentId}`)
+      : supabase.from('students').delete().eq('profile_id', userId),
+  ]);
+
+  const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId);
+  if (authDeleteError) {
+    throw authDeleteError;
+  }
 }
 
 function roleLabel(role?: string, position?: string | null) {
@@ -383,6 +444,7 @@ async function ensureProfile(user: any) {
   const derivedStudentId = deriveStudentIdFromEmail(user.email);
   const normalizedEmail = normalizeEmail(user.email) || null;
   const resolvedRole = resolveRoleFromEmail(user.email);
+  const { firstName, lastName } = deriveNamePartsFromUser(user);
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('profiles')
     .select('*')
@@ -396,13 +458,20 @@ async function ensureProfile(user: any) {
   if (existingProfile) {
     if (
       resolvedRole === 'student' &&
-      (existingProfile.student_id !== derivedStudentId || existingProfile.email !== normalizedEmail)
+      (
+        existingProfile.student_id !== derivedStudentId
+        || existingProfile.email !== normalizedEmail
+        || (firstName && !existingProfile.first_name)
+        || (lastName && !existingProfile.last_name)
+      )
     ) {
       const { data: updatedProfile, error: updatedProfileError } = await supabase
         .from('profiles')
         .update({
           email: normalizedEmail,
           student_id: derivedStudentId,
+          first_name: existingProfile.first_name || firstName,
+          last_name: existingProfile.last_name || lastName,
         })
         .eq('id', user.id)
         .select('*')
@@ -425,6 +494,8 @@ async function ensureProfile(user: any) {
       role: resolvedRole,
       email: normalizedEmail,
       student_id: derivedStudentId,
+      first_name: firstName,
+      last_name: lastName,
     })
     .select('*')
     .single();
@@ -536,6 +607,15 @@ async function authenticate(c: any): Promise<Requester | null> {
   }
 
   const user = authData.user;
+
+  if (isRejectedGoogleUser(user)) {
+    try {
+      await purgeRejectedGoogleUser(user);
+    } catch (error) {
+      console.log('Failed to purge rejected Google user during authentication:', error);
+    }
+    return null;
+  }
 
   let archivedAccount = null;
   const { data, error: archivedError } = await supabase
@@ -854,6 +934,31 @@ async function requireSubmissionAccess(requester: Requester, submissionId: strin
 }
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+app.post("/auth/reject-google-account", async (c) => {
+  const authHeader = c.req.header('Authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+  if (!token) return unauthorized();
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) {
+    return unauthorized();
+  }
+
+  const user = authData.user;
+  if (!isRejectedGoogleUser(user)) {
+    return c.json({ success: true, deleted: false });
+  }
+
+  try {
+    await purgeRejectedGoogleUser(user);
+    return c.json({ success: true, deleted: true });
+  } catch (error) {
+    console.log('Failed to purge rejected Google user:', error);
+    return c.json({ error: 'Failed to reject unauthorized Google account', details: String(error) }, 500);
+  }
+});
 
 app.get("/me", async (c) => {
   const requester = await authenticate(c);

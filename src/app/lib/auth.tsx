@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { authenticateWithPassword, clearStoredSession, getMe, getStoredSession, getUserByToken, hasServerPasswordSetupCompleted, markServerPasswordSetupCompleted, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
+import { authenticateWithPassword, clearStoredSession, getMe, getStoredSession, getUserByToken, hasServerPasswordSetupCompleted, markServerPasswordSetupCompleted, rejectUnauthorizedGoogleAccount, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -62,7 +62,7 @@ type AuthContextValue = {
   me: AuthMe | null;
   role: UserRole | null;
   signIn: (email: string, password: string) => Promise<AuthMe>;
-  signUp: (fullName: string, email: string, password: string) => Promise<{
+  signUp: (firstName: string, lastName: string, email: string, password: string) => Promise<{
     me: AuthMe | null;
     emailConfirmationRequired: boolean;
   }>;
@@ -214,9 +214,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const email = authUser.email || params.get('email') || undefined;
 
         if (!isGCDomain(email)) {
+          try {
+            await rejectUnauthorizedGoogleAccount(redirectAccessToken);
+          } catch {
+            // Best effort cleanup; the client still blocks access below.
+          }
           clearStoredSession();
           setSession(null);
+          setMe(null);
           setRole(null);
+          setRequiresPasswordSetup(false);
           const url = new URL(window.location.href);
           url.hash = '';
           url.searchParams.set('mode', 'signin');
@@ -326,11 +333,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    signUp: async (fullName: string, email: string, password: string) => {
+    signUp: async (firstName: string, lastName: string, email: string, password: string) => {
       setLoading(true);
       try {
         const { session: nextSession, emailConfirmationRequired } = await signUpWithPassword(
-          fullName,
+          firstName,
+          lastName,
           email,
           password,
         );

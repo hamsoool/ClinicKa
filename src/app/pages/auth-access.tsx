@@ -311,6 +311,7 @@ export default function AuthAccessPage() {
   const [mode, setMode] = useState<'signin' | 'signup'>(startsInSignInMode ? 'signin' : 'signup');
   const [showSignInPassword, setShowSignInPassword] = useState(false);
   const [showSignUpPassword, setShowSignUpPassword] = useState(false);
+  const [showSignUpConfirmPassword, setShowSignUpConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(
     verifiedFromEmail ? 'Email verified. You can now sign in with your account.' : null,
@@ -324,9 +325,11 @@ export default function AuthAccessPage() {
     remember: false,
   });
   const [signUpForm, setSignUpForm] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
+    confirmPassword: '',
   });
   const [signUpAgreementAccepted, setSignUpAgreementAccepted] = useState(false);
   const [passwordSetupForm, setPasswordSetupForm] = useState({
@@ -449,8 +452,12 @@ export default function AuthAccessPage() {
     setError(null);
     setSuccessMessage(null);
 
-    if (!signUpForm.name.trim()) {
-      setError('Please enter your name.');
+    if (!signUpForm.firstName.trim()) {
+      setError('Please enter your first name.');
+      return;
+    }
+    if (!signUpForm.lastName.trim()) {
+      setError('Please enter your last name.');
       return;
     }
     if (!signUpForm.email.trim()) {
@@ -462,11 +469,15 @@ export default function AuthAccessPage() {
       return;
     }
     if (!deriveStudentIdFromEmail(signUpForm.email)) {
-      setError(`Use your 9-digit student email, for example 202311165@${GC_DOMAIN}.`);
+      setError(`Use your 9-digit school ID email in the format yourschoolid@${GC_DOMAIN}.`);
       return;
     }
     if (signUpForm.password.length < 6) {
       setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (signUpForm.password !== signUpForm.confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
     if (!signUpAgreementAccepted) {
@@ -475,7 +486,12 @@ export default function AuthAccessPage() {
     }
 
     try {
-      const result = await signUp(signUpForm.name, signUpForm.email, signUpForm.password);
+      const result = await signUp(
+        signUpForm.firstName.trim(),
+        signUpForm.lastName.trim(),
+        signUpForm.email,
+        signUpForm.password,
+      );
       if (result.emailConfirmationRequired) {
         navigate(`/check-email?email=${encodeURIComponent(signUpForm.email)}`, { replace: true });
         return;
@@ -514,7 +530,7 @@ export default function AuthAccessPage() {
 
   const googleErrorMessage =
     googleError === 'invalid_domain'
-      ? `Only @${GC_DOMAIN} Google accounts are allowed.`
+      ? `Only @${GC_DOMAIN} Google accounts are allowed. Non-Gordon Google accounts are blocked and not registered in the system.`
       : googleError === 'invalid_token'
         ? 'Google sign-in failed. Please try again.'
         : null;
@@ -527,6 +543,11 @@ export default function AuthAccessPage() {
     `animate-in fade-in-0 duration-300 motion-reduce:animate-none ${
       panelDirection === 'right' ? 'slide-in-from-right-6' : 'slide-in-from-left-6'
     }`;
+  const authTextTransitionClassName =
+    `animate-in fade-in-0 duration-300 motion-reduce:animate-none ${
+      panelDirection === 'right' ? 'slide-in-from-right-3' : 'slide-in-from-left-3'
+    }`;
+  const authModeLayoutClassName = `${authPanelBodyClassName} flex min-h-[38rem] flex-col justify-between gap-5 pt-6`;
   const hasAcceptedPolicies = signUpAgreementAccepted;
 
   function switchMode(nextMode: 'signin' | 'signup') {
@@ -723,18 +744,20 @@ export default function AuthAccessPage() {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/80 bg-white/84 p-5 shadow-[0_30px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:min-h-[46.5rem] sm:p-8">
+          <div className="rounded-[2rem] border border-white/80 bg-white/84 p-5 shadow-[0_30px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:min-h-[48.5rem] sm:p-8">
             <div className="flex flex-col gap-4 border-b border-[#dfebea] pb-6 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Secure account access</p>
-                <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30]">
-                  {mode === 'signin' ? 'Welcome back' : 'Create your account'}
-                </h2>
-                <p className="mt-2 text-sm leading-7 text-[#4a5b68]">
-                  {mode === 'signin'
-                    ? 'Sign in to your Gordon College clinic account.'
-                    : 'Use your Gordon College email to register and start your clinic workflow.'}
-                </p>
+              <div className="min-h-[7.5rem]">
+                <div key={mode} className={authTextTransitionClassName}>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Secure account access</p>
+                  <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30]">
+                    {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+                  </h2>
+                  <p className="mt-2 text-sm leading-7 text-[#4a5b68]">
+                    {mode === 'signin'
+                      ? 'Sign in to your Gordon College clinic account.'
+                      : 'Use your Gordon College email to register and start your clinic workflow.'}
+                  </p>
+                </div>
               </div>
 
               <div className="relative grid shrink-0 grid-cols-2 rounded-full border border-[#d7e4e0] bg-[#f5f8ff] p-1">
@@ -764,8 +787,8 @@ export default function AuthAccessPage() {
             </div>
 
             {mode === 'signin' ? (
-              <div key="signin" className={`${authPanelBodyClassName} flex min-h-[35.5rem] flex-col space-y-6 pt-6`}>
-                <form className="space-y-5" onSubmit={handleSignIn}>
+              <div key="signin" className={authModeLayoutClassName}>
+                <form className="space-y-4" onSubmit={handleSignIn}>
                   <div>
                     <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
                       Gordon College email
@@ -924,54 +947,73 @@ export default function AuthAccessPage() {
                   </DialogContent>
                 </Dialog>
 
-                <div className="relative py-1">
-                  <div className="h-px bg-[#dbe5e4]" />
-                  <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-white px-3 text-xs text-[#60717e]">
-                    Or continue with
-                  </span>
-                </div>
+                <div className="space-y-5">
+                  <div className="relative py-1">
+                    <div className="h-px bg-[#dbe5e4]" />
+                    <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-white px-3 text-xs text-[#60717e]">
+                      Or continue with
+                    </span>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={handleGoogleAuth}
-                  className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-[#c9d9dd] bg-white text-sm font-semibold text-[#0b1c30] transition hover:bg-[#f7fbff]"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                  </svg>
-                  Sign in with Google
-                </button>
-
-                <p className="text-center text-sm text-[#4a5b68]">
-                  Need a new account?{' '}
                   <button
                     type="button"
-                    className="font-semibold text-[#065f46]"
-                    onClick={() => switchMode('signup')}
+                    onClick={handleGoogleAuth}
+                    className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-[#c9d9dd] bg-white text-sm font-semibold text-[#0b1c30] transition hover:bg-[#f7fbff]"
                   >
-                    Create one here
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                    </svg>
+                    Sign in with Google
                   </button>
-                </p>
+
+                  <p className="text-center text-sm text-[#4a5b68]">
+                    Need a new account?{' '}
+                    <button
+                      type="button"
+                      className="font-semibold text-[#065f46]"
+                      onClick={() => switchMode('signup')}
+                    >
+                      Create one here
+                    </button>
+                  </p>
+                </div>
               </div>
             ) : (
-              <div key="signup" className={`${authPanelBodyClassName} flex min-h-[35.5rem] flex-col space-y-6 pt-6`}>
-                <form className="space-y-5" onSubmit={handleSignUp}>
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                      Your name
-                    </label>
-                    <input
-                      required
-                      value={signUpForm.name}
-                      onChange={(event) =>
-                        setSignUpForm((prev) => ({ ...prev, name: event.target.value }))
-                      }
-                      placeholder="First Last"
-                      className={inputClassName}
-                    />
+              <div key="signup" className={authModeLayoutClassName}>
+                <form className="space-y-4" onSubmit={handleSignUp}>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
+                        First name
+                      </label>
+                      <input
+                        required
+                        value={signUpForm.firstName}
+                        onChange={(event) =>
+                          setSignUpForm((prev) => ({ ...prev, firstName: event.target.value }))
+                        }
+                        placeholder="First name"
+                        className={inputClassName}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
+                        Last name
+                      </label>
+                      <input
+                        required
+                        value={signUpForm.lastName}
+                        onChange={(event) =>
+                          setSignUpForm((prev) => ({ ...prev, lastName: event.target.value }))
+                        }
+                        placeholder="Last name"
+                        className={inputClassName}
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -985,7 +1027,7 @@ export default function AuthAccessPage() {
                       onChange={(event) =>
                         setSignUpForm((prev) => ({ ...prev, email: event.target.value }))
                       }
-                      placeholder={`202311165@${GC_DOMAIN}`}
+                      placeholder={`yourschoolid@${GC_DOMAIN}`}
                       className={inputClassName}
                     />
                   </div>
@@ -1017,7 +1059,34 @@ export default function AuthAccessPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 rounded-2xl border border-[#d7e4df] bg-[#f4faf7] p-4">
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
+                      Confirm password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#70808b]" />
+                      <input
+                        type={showSignUpConfirmPassword ? 'text' : 'password'}
+                        required
+                        value={signUpForm.confirmPassword}
+                        onChange={(event) =>
+                          setSignUpForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                        }
+                        placeholder="Re-enter password"
+                        className={`${iconInputClassName} pr-12`}
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#70808b]"
+                        onClick={() => setShowSignUpConfirmPassword((prev) => !prev)}
+                        aria-label={showSignUpConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      >
+                        {showSignUpConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-2xl border border-[#d7e4df] bg-[#f4faf7] p-3.5">
                     <input
                       id="signupPolicyAgreement"
                       type="checkbox"
@@ -1085,38 +1154,40 @@ export default function AuthAccessPage() {
                   </button>
                 </form>
 
-                <div className="relative py-1">
-                  <div className="h-px bg-[#dbe5e4]" />
-                  <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-white px-3 text-xs text-[#60717e]">
-                    Or continue with
-                  </span>
-                </div>
+                <div className="space-y-5">
+                  <div className="relative py-1">
+                    <div className="h-px bg-[#dbe5e4]" />
+                    <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-white px-3 text-xs text-[#60717e]">
+                      Or continue with
+                    </span>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={handleGoogleAuth}
-                  disabled={!hasAcceptedPolicies}
-                  className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-[#c9d9dd] bg-white text-sm font-semibold text-[#0b1c30] transition hover:bg-[#f7fbff] disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                  </svg>
-                  Continue with Google
-                </button>
-
-                <p className="text-center text-sm text-[#4a5b68]">
-                  Already registered?{' '}
                   <button
                     type="button"
-                    className="font-semibold text-[#065f46]"
-                    onClick={() => switchMode('signin')}
+                    onClick={handleGoogleAuth}
+                    disabled={!hasAcceptedPolicies}
+                    className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-[#c9d9dd] bg-white text-sm font-semibold text-[#0b1c30] transition hover:bg-[#f7fbff] disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    Sign in instead
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                    </svg>
+                    Continue with Google
                   </button>
-                </p>
+
+                  <p className="text-center text-sm text-[#4a5b68]">
+                    Already registered?{' '}
+                    <button
+                      type="button"
+                      className="font-semibold text-[#065f46]"
+                      onClick={() => switchMode('signin')}
+                    >
+                      Sign in instead
+                    </button>
+                  </p>
+                </div>
               </div>
             )}
           </div>

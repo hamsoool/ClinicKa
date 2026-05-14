@@ -5,6 +5,9 @@ const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '')
 const publicAnonKey = String(
   import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
 ).trim();
+const configuredSiteUrl = String(import.meta.env.VITE_SITE_URL || '')
+  .trim()
+  .replace(/\/+$/, '');
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
@@ -109,6 +112,11 @@ type SupabaseAuthUser = {
   id: string;
   email?: string;
   identities?: Array<{ id?: string; provider?: string }>;
+  user_metadata?: {
+    first_name?: string | null;
+    last_name?: string | null;
+    full_name?: string | null;
+  } | null;
 };
 
 export type AuthMe = {
@@ -215,6 +223,54 @@ type RequestOptions = {
 
 function normalizeEmail(email?: string | null) {
   return (email || '').trim().toLowerCase();
+}
+
+function normalizeNamePart(value?: string | null) {
+  const normalized = String(value || '').trim();
+  return normalized || null;
+}
+
+function deriveNamePartsFromUser(user?: SupabaseAuthUser | null) {
+  const firstName = normalizeNamePart(user?.user_metadata?.first_name);
+  const lastName = normalizeNamePart(user?.user_metadata?.last_name);
+
+  if (firstName || lastName) {
+    return { firstName, lastName };
+  }
+
+  const fullName = normalizeNamePart(user?.user_metadata?.full_name);
+  if (!fullName) {
+    return { firstName: null, lastName: null };
+  }
+
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || null,
+    lastName: parts.slice(1).join(' ').trim() || null,
+  };
+}
+
+function getSiteOrigin() {
+  if (configuredSiteUrl) {
+    try {
+      return new URL(configuredSiteUrl).origin;
+    } catch {
+      return configuredSiteUrl;
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+
+  return '';
+}
+
+function buildAuthRedirectUrl(path: string) {
+  const origin = getSiteOrigin();
+  if (!origin) return undefined;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${origin}${normalizedPath}`;
 }
 
 function getPasswordResetCooldownStorageKey(normalizedEmail: string) {
@@ -614,11 +670,22 @@ export function signInWithGoogle() {
     throw new Error('Missing Supabase config. Set VITE_SUPABASE_URL in your .env file.');
   }
 
-  const redirectTo = `${window.location.origin}/auth?mode=signin`;
+  const redirectTo = buildAuthRedirectUrl('/auth?mode=signin');
+  if (!redirectTo) {
+    throw new Error('Missing site URL config. Set VITE_SITE_URL in your .env file.');
+  }
   const url = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(
     redirectTo,
-  )}`;
+  )}&hd=${encodeURIComponent(GC_DOMAIN)}&prompt=select_account`;
   window.location.assign(url);
+}
+
+export async function rejectUnauthorizedGoogleAccount(token?: string | null) {
+  if (!token) return;
+  await apiRequest<{ success: boolean; deleted?: boolean }>('/functions/v1/server/auth/reject-google-account', {
+    method: 'POST',
+    token,
+  });
 }
 
 export async function getUserByToken(token: string | null) {
@@ -684,10 +751,10 @@ export async function markServerPasswordSetupCompleted(token?: string | null) {
 
 async function getCurrentAuthUser(token?: string | null) {
   const session = getStoredSession();
-  if (session?.user?.id) {
-    return session.user;
+  if (session?.user?.id && (session.user as SupabaseAuthUser)?.user_metadata) {
+    return session.user as SupabaseAuthUser;
   }
-  const payload = await authRequest<{ id: string; email?: string }>('/auth/v1/user', { token });
+  const payload = await authRequest<SupabaseAuthUser>('/auth/v1/user', { token });
   return payload;
 }
 
@@ -1242,7 +1309,12 @@ export async function signInWithPassword(email: string, password: string) {
   return session;
 }
 
-export async function signUpWithPassword(fullName: string, email: string, password: string) {
+export async function signUpWithPassword(
+  firstName: string,
+  lastName: string,
+  email: string,
+  password: string,
+) {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error(
       'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
@@ -1255,10 +1327,10 @@ export async function signUpWithPassword(fullName: string, email: string, passwo
     throw new Error(`Use your 9-digit student email, for example 202311165@${GC_DOMAIN}.`);
   }
 
-  const emailRedirectTo =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/auth?mode=signin&verified=1`
-      : undefined;
+  const normalizedFirstName = normalizeNamePart(firstName);
+  const normalizedLastName = normalizeNamePart(lastName);
+  const fullName = [normalizedFirstName, normalizedLastName].filter(Boolean).join(' ').trim();
+  const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin&verified=1');
 
   const response = await fetch(`${supabaseUrl}/auth/v1/signup`, {
     method: 'POST',
@@ -1275,6 +1347,8 @@ export async function signUpWithPassword(fullName: string, email: string, passwo
         emailRedirectTo,
         data: {
           full_name: fullName,
+          first_name: normalizedFirstName,
+          last_name: normalizedLastName,
           student_id: deriveStudentIdFromEmail(email),
         },
       },
@@ -1326,10 +1400,7 @@ export async function resendVerificationEmail(email: string) {
     throw new Error('Missing Supabase config.');
   }
 
-  const emailRedirectTo =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/auth?mode=signin&verified=1`
-      : undefined;
+  const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin&verified=1');
 
   const response = await fetch(`${supabaseUrl}/auth/v1/resend`, {
     method: 'POST',
@@ -1385,10 +1456,7 @@ export async function sendPasswordResetEmail(email: string) {
     throw new Error(`Please wait ${formatted} before requesting another password reset email.`);
   }
 
-  const emailRedirectTo =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/auth?mode=signin`
-      : undefined;
+  const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin');
 
   const response = await fetch(`${supabaseUrl}/auth/v1/recover`, {
     method: 'POST',
@@ -1473,6 +1541,7 @@ export async function getMe(token?: string | null) {
     } catch {
       const user = await getCurrentAuthUser(token);
       const derivedStudentId = deriveStudentIdFromEmail(user.email);
+      const { firstName, lastName } = deriveNamePartsFromUser(user);
       const profileRows = await restRequest<any[]>(
         'profiles',
         `id=eq.${user.id}&select=*`,
@@ -1503,13 +1572,20 @@ export async function getMe(token?: string | null) {
                 role: resolvedRole,
                 email: normalizedEmail,
                 student_id: derivedStudentId,
+                first_name: firstName,
+                last_name: lastName,
               }),
             },
           )
         )[0];
       } else if (
         resolvedRole === 'student' &&
-        (resolvedProfile.student_id !== derivedStudentId || resolvedProfile.email !== normalizedEmail)
+        (
+          resolvedProfile.student_id !== derivedStudentId
+          || resolvedProfile.email !== normalizedEmail
+          || (firstName && !resolvedProfile.first_name)
+          || (lastName && !resolvedProfile.last_name)
+        )
       ) {
         resolvedProfile = (
           await restRequest<any[]>(
@@ -1525,6 +1601,8 @@ export async function getMe(token?: string | null) {
               body: JSON.stringify({
                 email: normalizedEmail,
                 student_id: derivedStudentId,
+                first_name: resolvedProfile.first_name || firstName,
+                last_name: resolvedProfile.last_name || lastName,
               }),
             },
           )
