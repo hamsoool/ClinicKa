@@ -162,9 +162,13 @@ export type StudentProfileUpdateInput = {
   studentId?: string | null;
   firstName: string;
   lastName: string;
+  middleInitial: string;
   department: string;
   course: string;
+  age: string;
+  sex: string;
   birthday: string;
+  civilStatus: string;
   contactNumber: string;
   address: string;
 };
@@ -1660,42 +1664,16 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     studentId: data.studentId || null,
     firstName: data.firstName || '',
     lastName: data.lastName || '',
+    middleInitial: data.middleInitial || '',
     department: data.department || '',
     course: data.course || '',
+    age: data.age || '',
+    sex: data.sex || '',
     birthday: data.birthday || '',
+    civilStatus: data.civilStatus || '',
     contactNumber: data.contactNumber || '',
     address: data.address || '',
   };
-
-  try {
-    const serverResult = await apiRequest<{
-      success: boolean;
-      profile: AuthMe['profile'];
-      student: AuthMe['student'];
-    }>('/functions/v1/server/student-profile', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    // Always re-read profile data after server updates so the UI reflects committed DB state.
-    invalidateMeCache();
-    const refreshedMe = await getMe();
-    return {
-      success: Boolean(serverResult?.success),
-      profile: refreshedMe.profile || serverResult.profile,
-      student: refreshedMe.student || serverResult.student,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : '';
-    const missingRoute = message.includes('404') || message.includes('not found');
-
-    if (!missingRoute) {
-      throw error;
-    }
-  }
 
   const me = await getMe();
   const studentId = me.profile.student_id || payload.studentId;
@@ -1737,22 +1715,29 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
         profile_id: me.profile.id,
         first_name: payload.firstName || null,
         last_name: payload.lastName || null,
+        middle_initial: payload.middleInitial || null,
         department: payload.department || null,
         course: payload.course || null,
+        age: payload.age ? Number.parseInt(payload.age, 10) : null,
+        sex: payload.sex || null,
         birthday: payload.birthday || null,
+        civil_status: payload.civilStatus || null,
         contact_number: payload.contactNumber || null,
         address: payload.address || null,
       }),
     },
   );
 
-  invalidateMeCache();
-  const refreshedMe = await getMe();
+  const updatedStudentRows = await restRequest<any[]>(
+    'students',
+    `student_id=eq.${encodeURIComponent(studentId)}&select=*`,
+  );
 
+  invalidateMeCache();
   return {
     success: true as const,
-    profile: updatedProfileRows[0] || refreshedMe.profile,
-    student: refreshedMe.student,
+    profile: updatedProfileRows[0] || me.profile,
+    student: updatedStudentRows[0] || me.student,
   };
 }
 
@@ -1884,24 +1869,23 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
 }
 
 export async function submitMedicalRecord(data: any) {
-  try {
-    return await apiRequest<{ success: true; recordId: string }>('/functions/v1/server/submit-record', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data || {}),
-    });
-  } catch (error) {
-    if (!shouldFallbackToRest(error)) {
-      throw error;
-    }
-  }
-
-    const me = await getMe();
+  const me = await getMe();
   const studentId = me.profile.student_id || data.studentId;
   if (!studentId) {
     throw new Error('Student ID is required.');
+  }
+  const yearLevel = String(data.yearLevel || '').trim();
+  if (!yearLevel) {
+    throw new Error('Year level is required.');
+  }
+
+  const existingForYear = await restRequest<any[]>(
+    'submissions',
+    `select=id,status&student_id=eq.${encodeURIComponent(studentId)}&year_level=eq.${encodeURIComponent(yearLevel)}&order=submitted_at.desc&limit=1`,
+  );
+  const latestYearStatus = String(existingForYear?.[0]?.status || '').toLowerCase();
+  if (latestYearStatus && latestYearStatus !== 'returned') {
+    throw new Error(`A submission for Year ${yearLevel} already exists and is currently ${latestYearStatus}.`);
   }
 
   const studentPayload = {
@@ -1935,7 +1919,7 @@ export async function submitMedicalRecord(data: any) {
 
   const submissionInsertPayload = {
     student_id: studentId,
-    year_level: String(data.yearLevel || ''),
+    year_level: yearLevel,
     status: 'pending',
     first_name: data.firstName || null,
     last_name: data.lastName || null,
@@ -2222,18 +2206,6 @@ export async function updateMedicalRecord(recordId: string, data: any) {
 
 export async function getStudentRecords(studentId?: string) {
   const targetStudentId = String(studentId || '').trim();
-  const endpoint = targetStudentId
-    ? `/functions/v1/server/student-records/${encodeURIComponent(targetStudentId)}`
-    : '/functions/v1/server/student-records';
-
-  try {
-    return await apiRequest<{ records: any[] }>(endpoint);
-  } catch (error) {
-    if (!shouldFallbackToRest(error)) {
-      throw error;
-    }
-  }
-
   const me = await getMe();
   const fallbackStudentId = targetStudentId || me.profile.student_id;
   if (!fallbackStudentId) {

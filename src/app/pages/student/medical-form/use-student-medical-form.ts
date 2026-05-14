@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { MockSubmission } from '../../../lib/mock-data';
-import { getStudentProfileAssets, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
+import { getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import {
   DEFAULT_MEDICAL_HISTORY,
   formatPhilippinePhoneInput,
@@ -406,9 +406,30 @@ export function useStudentMedicalForm({
     return { category: 'Obese', color: 'text-red-600' };
   }, []);
 
+  const hasRequiredProfileFields = useMemo(
+    () =>
+      Boolean(
+        formData.firstName?.trim() &&
+          formData.lastName?.trim() &&
+          normalizeMiddleInitial(formData.middleInitial).length === 1 &&
+          normalizeStudentId(formData.studentId).length === 9 &&
+          formData.department &&
+          formData.course &&
+          formData.age &&
+          formData.sex &&
+          formData.birthday &&
+          formData.civilStatus &&
+          formData.contactNumber?.trim() &&
+          formData.address?.trim() &&
+          isValidPhilippinePhoneNumber(formData.contactNumber) &&
+          isAtLeastAge(formData.birthday, MIN_AGE),
+      ),
+    [formData],
+  );
+  const hasProfilePhoto = Boolean(profileAssetUrls.photoUrl);
+  const hasProfileSignature = Boolean(profileAssetUrls.signatureUrl);
+
   const canProceed = useMemo(() => {
-    const normalizedStudentId = normalizeStudentId(formData.studentId);
-    const normalizedMiddleInitial = normalizeMiddleInitial(formData.middleInitial);
     const needsAllUploads = formData.labTestLocation === 'other';
     const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
     const hasAllUploads = Boolean(
@@ -419,23 +440,7 @@ export function useStudentMedicalForm({
 
     switch (step) {
       case 1:
-        return (
-          Boolean(formData.firstName?.trim()) &&
-          Boolean(formData.lastName?.trim()) &&
-          normalizedStudentId.length === 9 &&
-          Boolean(formData.department) &&
-          Boolean(formData.course) &&
-          Boolean(formData.yearLevel) &&
-          Boolean(normalizedMiddleInitial) &&
-          Boolean(formData.age) &&
-          Boolean(formData.sex) &&
-          Boolean(formData.birthday) &&
-          Boolean(formData.contactNumber?.trim()) &&
-          Boolean(formData.address?.trim()) &&
-          formData.age.length <= 2 &&
-          isAtLeastAge(formData.birthday, MIN_AGE) &&
-          isValidPhilippinePhoneNumber(formData.contactNumber)
-        );
+        return hasRequiredProfileFields && hasProfilePhoto && hasProfileSignature;
       case 2:
         return true;
       case 3:
@@ -455,7 +460,7 @@ export function useStudentMedicalForm({
         );
       case 5:
         if (!formData.labTestLocation) return false;
-        if (formData.labTestLocation === 'jlgh') return hasXray;
+        if (formData.labTestLocation === 'jlgh') return true;
         return Boolean(
           formData.otherClinicName.trim() &&
             formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
@@ -468,12 +473,11 @@ export function useStudentMedicalForm({
       default:
         return false;
     }
-  }, [formData, step]);
+  }, [formData, hasProfilePhoto, hasProfileSignature, hasRequiredProfileFields, step]);
 
   const canSubmit = useMemo(
     () => {
       const normalizedStudentId = normalizeStudentId(formData.studentId);
-      const normalizedMiddleInitial = normalizeMiddleInitial(formData.middleInitial);
       const needsAllUploads = formData.labTestLocation === 'other';
       const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
       const hasAllUploads = Boolean(
@@ -483,34 +487,20 @@ export function useStudentMedicalForm({
       );
 
       return Boolean(
-        formData.firstName &&
-          formData.lastName &&
-          normalizedStudentId &&
-          formData.department &&
-          formData.course &&
+        hasRequiredProfileFields &&
           formData.yearLevel &&
-          normalizedMiddleInitial &&
-          formData.age &&
           formData.sex &&
-          formData.birthday &&
-          formData.contactNumber &&
-          isValidPhilippinePhoneNumber(formData.contactNumber) &&
-          formData.address &&
           formData.hadOperation &&
           formData.emergencyContact.name &&
           formData.emergencyContact.phone &&
           formData.weight &&
           formData.height &&
           formData.labTestLocation &&
-          (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
-          hasXray &&
+          (formData.labTestLocation === 'jlgh' ||
+            (formData.otherClinicName.trim() && hasXray)) &&
           (!needsAllUploads || hasAllUploads) &&
-          normalizedStudentId.length === 9 &&
-          formData.age.length <= 2 &&
-          isAtLeastAge(formData.birthday, MIN_AGE) &&
           NAME_REGEX.test(formData.firstName) &&
           NAME_REGEX.test(formData.lastName) &&
-          (!normalizedMiddleInitial || /^[A-Za-z]$/.test(normalizedMiddleInitial)) &&
           COURSE_REGEX.test(formData.course) &&
           !SQL_INJECTION_REGEX.test(formData.address || '') &&
           formData.dataPrivacyConsent &&
@@ -523,7 +513,7 @@ export function useStudentMedicalForm({
           (formData.hadOperation !== 'yes' || !SQL_INJECTION_REGEX.test(formData.operationDetails || '')),
       );
     },
-    [formData, isEditingExistingSubmission],
+    [formData, hasRequiredProfileFields, isEditingExistingSubmission],
   );
 
   const previewRecord = useMemo<MockSubmission>(
@@ -619,6 +609,23 @@ export function useStudentMedicalForm({
       let recordId = activeSubmissionId;
       const isResubmission = Boolean(recordId && originalSubmissionStatus === 'returned');
       if (!recordId) {
+        const myStudentId = formData.studentId.trim();
+        if (myStudentId && formData.yearLevel) {
+          const existing = await getStudentRecords(myStudentId);
+          const latestSameYear = (existing.records || [])
+            .filter((item: any) => String(item?.year || '') === String(formData.yearLevel))
+            .sort(
+              (a: any, b: any) =>
+                new Date(b?.updatedAt || b?.submittedAt || 0).getTime() -
+                new Date(a?.updatedAt || a?.submittedAt || 0).getTime(),
+            )[0];
+          const latestSameYearStatus = String(latestSameYear?.status || '').toLowerCase();
+          if (latestSameYearStatus && latestSameYearStatus !== 'returned') {
+            throw new Error(
+              `You already have a Year ${formData.yearLevel} submission with status "${latestSameYearStatus}".`,
+            );
+          }
+        }
         const result = await submitMedicalRecord(payload);
         recordId = result.recordId;
         setActiveSubmissionId(recordId);
@@ -659,6 +666,10 @@ export function useStudentMedicalForm({
     uploading,
     submitted,
     canProceed,
+    canSubmit,
+    hasRequiredProfileFields,
+    hasProfilePhoto,
+    hasProfileSignature,
     previewRecord,
     updateField,
     updateEmergencyContact,

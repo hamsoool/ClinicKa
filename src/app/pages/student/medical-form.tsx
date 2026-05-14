@@ -27,6 +27,10 @@ export default function StudentMedicalForm() {
     uploading,
     submitted,
     canProceed,
+    canSubmit,
+    hasRequiredProfileFields,
+    hasProfilePhoto,
+    hasProfileSignature,
     previewRecord,
     updateField,
     updateEmergencyContact,
@@ -34,7 +38,6 @@ export default function StudentMedicalForm() {
     updateMeasurement,
     handleFileChange,
     getBmiCategory,
-    maxBirthdate,
     submit,
   } = useStudentMedicalForm({ year, me, editSubmissionId, initialDataPrivacyConsent: hasDataPrivacyConsent });
 
@@ -158,7 +161,10 @@ export default function StudentMedicalForm() {
                 onMeasurementChange={updateMeasurement}
                 onFileChange={handleFileChange}
                 getBmiCategory={getBmiCategory}
-                maxBirthdate={maxBirthdate}
+                hasRequiredProfileFields={hasRequiredProfileFields}
+                hasProfilePhoto={hasProfilePhoto}
+                hasProfileSignature={hasProfileSignature}
+                onGoToProfile={() => navigate('/student/profile')}
               />
             </div>
 
@@ -181,7 +187,7 @@ export default function StudentMedicalForm() {
               ) : (
                 <Button
                   onClick={submit}
-                  disabled={!canProceed || uploading || !formData.submissionConfirmed || !formData.dataPrivacyConsent}
+                  disabled={!canProceed || !canSubmit || uploading || !formData.submissionConfirmed || !formData.dataPrivacyConsent}
                   className="w-full bg-primary hover:bg-primary/90 sm:w-auto"
                 >
                   {uploading ? 'Submitting...' : 'Submit Medical Record'}

@@ -883,9 +883,13 @@ app.put("/student-profile", async (c) => {
 
     const firstName = String(data.firstName || '').trim() || null;
     const lastName = String(data.lastName || '').trim() || null;
+    const middleInitial = String(data.middleInitial || '').trim() || null;
     const department = String(data.department || '').trim() || null;
     const course = String(data.course || '').trim() || null;
+    const age = data.age ? Number(data.age) : null;
+    const sex = String(data.sex || '').trim() || null;
     const birthday = String(data.birthday || '').trim() || null;
+    const civilStatus = String(data.civilStatus || '').trim() || null;
     const contactNumber = String(data.contactNumber || '').trim() || null;
     const address = String(data.address || '').trim() || null;
 
@@ -913,9 +917,13 @@ app.put("/student-profile", async (c) => {
         profile_id: requester.profile.id,
         first_name: firstName,
         last_name: lastName,
+        middle_initial: middleInitial,
         department,
         course,
+        age: Number.isFinite(age) ? age : null,
+        sex,
         birthday,
+        civil_status: civilStatus,
         contact_number: contactNumber,
         address,
       }, {

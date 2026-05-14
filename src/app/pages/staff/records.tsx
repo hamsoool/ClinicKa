@@ -21,6 +21,9 @@ export default function StaffRecords() {
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
+  const [courseFilter, setCourseFilter] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   const { data: queryData, isLoading: loading, isError } = useQuery({
     queryKey: ['staffRecords'],
@@ -31,6 +34,13 @@ export default function StaffRecords() {
   });
 
   const records = queryData || [];
+  const availableCourses = useMemo(
+    () =>
+      Array.from(new Set(records.map((record: any) => String(record.course || '').trim()).filter(Boolean))).sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    [records],
+  );
 
   useEffect(() => {
     if (isError) {
@@ -40,6 +50,9 @@ export default function StaffRecords() {
 
   const filteredRecords = useMemo(() => {
     const needle = searchQuery.trim().toLowerCase();
+    const fromTs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : null;
+    const toTs = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : null;
+
     return records.filter((record) => {
       if (needle) {
         const matchesSearch =
@@ -56,17 +69,28 @@ export default function StaffRecords() {
         return false;
       }
       if (yearFilter !== 'all' && String(record.year) !== yearFilter) return false;
+      if (courseFilter !== 'all' && String(record.course || '') !== courseFilter) return false;
+      if (fromTs !== null || toTs !== null) {
+        const dateValue = new Date(record.updatedAt || record.submittedAt || 0).getTime();
+        if (!Number.isFinite(dateValue)) return false;
+        if (fromTs !== null && dateValue < fromTs) return false;
+        if (toTs !== null && dateValue > toTs) return false;
+      }
       return true;
     });
-  }, [departmentFilter, records, searchQuery, yearFilter]);
+  }, [courseFilter, departmentFilter, fromDate, records, searchQuery, toDate, yearFilter]);
   
   const clearFilters = () => {
     setSearchQuery('');
     setDepartmentFilter('all');
     setYearFilter('all');
+    setCourseFilter('all');
+    setFromDate('');
+    setToDate('');
   };
 
-  const hasActiveFilters = searchQuery || departmentFilter !== 'all' || yearFilter !== 'all';
+  const hasActiveFilters =
+    searchQuery || departmentFilter !== 'all' || yearFilter !== 'all' || courseFilter !== 'all' || fromDate || toDate;
 
   // Group records by student
   const groupedRecords = useMemo(
@@ -104,7 +128,7 @@ export default function StaffRecords() {
             />
           </div>
           
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-end gap-3">
             <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="All Departments" />
@@ -128,6 +152,42 @@ export default function StaffRecords() {
                 ))}
               </SelectContent>
             </Select>
+
+            <Select value={courseFilter} onValueChange={setCourseFilter}>
+              <SelectTrigger className="w-[260px]">
+                <SelectValue placeholder="All Courses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Courses</SelectItem>
+                {availableCourses.map((course) => (
+                  <SelectItem key={course} value={course}>
+                    {course}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">From</p>
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="w-[180px]"
+                aria-label="From date"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">To</p>
+              <Input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="w-[180px]"
+                aria-label="To date"
+              />
+            </div>
           </div>
 
           {/* Active filter chips */}
@@ -139,6 +199,15 @@ export default function StaffRecords() {
               )}
               {yearFilter !== 'all' && (
                 <Badge variant="outline" className="text-xs">{YEAR_LABELS[yearFilter]}</Badge>
+              )}
+              {courseFilter !== 'all' && (
+                <Badge variant="outline" className="text-xs">{courseFilter}</Badge>
+              )}
+              {fromDate && (
+                <Badge variant="outline" className="text-xs">From: {fromDate}</Badge>
+              )}
+              {toDate && (
+                <Badge variant="outline" className="text-xs">To: {toDate}</Badge>
               )}
               <Button variant="ghost" size="sm" onClick={clearFilters} className="h-6 px-2 text-xs">
                 <X className="w-3 h-3 mr-1" /> Clear all
