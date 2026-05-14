@@ -1,5 +1,6 @@
 import { forwardRef } from 'react';
 import type { MockSubmission } from '../lib/mock-data';
+import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
 
 /* ───────── medical history: exact column layout from physical form ───────── */
 // Col1 | Col2 | Col3 | Col4
@@ -345,7 +346,7 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record }, ref)
 
       {/* ====== DATA PRIVACY ====== */}
       <div style={{ fontSize: '8px', color: '#333', marginBottom: '2px', borderTop: '1px solid #aaa', paddingTop: '3px' }}>
-        *Data Privacy Waiver: I am willing to disclose my personal information with the GC clinic. I have the right to access my personal data in a timely manner (5days request). The clinic respect patient's privacy and accountable to protect my personal information.
+        *{DATA_PRIVACY_PREVIEW_TEXT}
       </div>
       <div style={{ textAlign: 'right', fontSize: '9px', marginBottom: '6px' }}>
         <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '160px', textAlign: 'center' }}>

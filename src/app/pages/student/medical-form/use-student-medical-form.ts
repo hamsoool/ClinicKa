@@ -22,6 +22,7 @@ type UseStudentMedicalFormArgs = {
   year?: string;
   me?: AuthMe | null;
   editSubmissionId?: string | null;
+  initialDataPrivacyConsent?: boolean;
 };
 
 const TOTAL_STEPS = 6;
@@ -83,7 +84,7 @@ function isAtLeastAge(dateValue: string, minAge: number) {
   return date <= maxBirthdate;
 }
 
-function buildInitialFormData(year: string | undefined, me?: AuthMe | null): MedicalFormData {
+function buildInitialFormData(year: string | undefined, me?: AuthMe | null, initialDataPrivacyConsent = false): MedicalFormData {
   const student = me?.student;
   const department = resolveDepartmentValue(student?.department || me?.profile.department || 'CCS');
   return {
@@ -110,7 +111,7 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null): Med
       phone: '',
       address: '',
     },
-    dataPrivacyConsent: true,
+    dataPrivacyConsent: initialDataPrivacyConsent,
     weight: '',
     height: '',
     bmi: '',
@@ -138,7 +139,12 @@ function calculateBmi(weight: string, height: string): string {
   return '';
 }
 
-export function useStudentMedicalForm({ year, me, editSubmissionId = null }: UseStudentMedicalFormArgs) {
+export function useStudentMedicalForm({
+  year,
+  me,
+  editSubmissionId = null,
+  initialDataPrivacyConsent = false,
+}: UseStudentMedicalFormArgs) {
   const student = me?.student;
   const [profileAssetUrls, setProfileAssetUrls] = useState<{ photoUrl: string | null; signatureUrl: string | null }>({
     photoUrl: null,
@@ -149,7 +155,7 @@ export function useStudentMedicalForm({ year, me, editSubmissionId = null }: Use
   const [submitted, setSubmitted] = useState(false);
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [originalSubmissionStatus, setOriginalSubmissionStatus] = useState<string | null>(null);
-  const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me));
+  const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, initialDataPrivacyConsent));
   const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_AGE), []);
   const isEditingExistingSubmission = Boolean(activeSubmissionId);
   useEffect(() => {
@@ -158,8 +164,8 @@ export function useStudentMedicalForm({ year, me, editSubmissionId = null }: Use
     setUploading(false);
     setActiveSubmissionId(null);
     setOriginalSubmissionStatus(null);
-    setFormData(buildInitialFormData(year, me));
-  }, [year, me, editSubmissionId]);
+    setFormData(buildInitialFormData(year, me, initialDataPrivacyConsent));
+  }, [year, me, editSubmissionId, initialDataPrivacyConsent]);
 
   useEffect(() => {
     if (!editSubmissionId) return;
@@ -269,7 +275,7 @@ export function useStudentMedicalForm({ year, me, editSubmissionId = null }: Use
       civilStatus: student?.civil_status || prev.civilStatus,
       contactNumber: formatPhilippinePhoneInput(student?.contact_number || prev.contactNumber),
       address: student?.address || prev.address,
-      dataPrivacyConsent: true,
+      dataPrivacyConsent: initialDataPrivacyConsent,
       yearLevel: year || prev.yearLevel,
       year: year || prev.year,
     }));
@@ -292,6 +298,7 @@ export function useStudentMedicalForm({ year, me, editSubmissionId = null }: Use
     student?.sex,
     student?.student_id,
     year,
+    initialDataPrivacyConsent,
   ]);
 
   const updateField = useCallback(<K extends keyof MedicalFormData>(field: K, value: MedicalFormData[K]) => {
@@ -506,6 +513,7 @@ export function useStudentMedicalForm({ year, me, editSubmissionId = null }: Use
           (!normalizedMiddleInitial || /^[A-Za-z]$/.test(normalizedMiddleInitial)) &&
           COURSE_REGEX.test(formData.course) &&
           !SQL_INJECTION_REGEX.test(formData.address || '') &&
+          formData.dataPrivacyConsent &&
           (formData.labTestLocation !== 'other' ||
             (COURSE_REGEX.test(formData.otherClinicName) &&
               formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
@@ -559,6 +567,10 @@ export function useStudentMedicalForm({ year, me, editSubmissionId = null }: Use
     if (uploading) return;
     if (!formData.submissionConfirmed) {
       toast.error('Please confirm that all details are complete before submitting.');
+      return;
+    }
+    if (!formData.dataPrivacyConsent) {
+      toast.error('Please read and agree to the data privacy consent before submitting.');
       return;
     }
     if (!canSubmit) {

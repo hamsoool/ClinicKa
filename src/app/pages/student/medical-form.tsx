@@ -17,6 +17,7 @@ export default function StudentMedicalForm() {
   const { me } = useAuth();
   const previewRef = useRef<HTMLDivElement>(null);
   const editSubmissionId = searchParams.get('edit');
+  const hasDataPrivacyConsent = searchParams.get('consent') === '1';
 
   const {
     step,
@@ -35,7 +36,7 @@ export default function StudentMedicalForm() {
     getBmiCategory,
     maxBirthdate,
     submit,
-  } = useStudentMedicalForm({ year, me, editSubmissionId });
+  } = useStudentMedicalForm({ year, me, editSubmissionId, initialDataPrivacyConsent: hasDataPrivacyConsent });
 
   const downloadPdf = useCallback(async () => {
     if (!previewRef.current) return;
@@ -180,7 +181,7 @@ export default function StudentMedicalForm() {
               ) : (
                 <Button
                   onClick={submit}
-                  disabled={!canProceed || uploading || !formData.submissionConfirmed}
+                  disabled={!canProceed || uploading || !formData.submissionConfirmed || !formData.dataPrivacyConsent}
                   className="w-full bg-primary hover:bg-primary/90 sm:w-auto"
                 >
                   {uploading ? 'Submitting...' : 'Submit Medical Record'}

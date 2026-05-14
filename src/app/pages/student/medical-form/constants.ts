@@ -209,3 +209,15 @@ export const DEFAULT_MEDICAL_HISTORY: MedicalHistoryState = {
   covid19: false,
   uti: false,
 };
+
+export const DATA_PRIVACY_CONSENT_BODY =
+  'Under the Data Privacy Act of 2012 (Republic Act No. 10173) and its Implementing Rules and Regulations, I voluntarily consent to the collection, use, storage, and processing of my personal and health-related information by the Gordon College Clinic for medical record submission, evaluation, clinic record management, and related student health services. I understand that my information will be accessed only by authorized Gordon College personnel, may be retained in physical or electronic systems in accordance with school policy and lawful requirements, and will be protected through reasonable organizational, physical, and technical safeguards.';
+
+export const DATA_PRIVACY_RIGHTS_NOTICE =
+  'I understand that, subject to applicable law and Gordon College procedures, I may request to be informed about, access, correct, or raise concerns regarding my personal data through the appropriate Gordon College office or Data Privacy Office.';
+
+export const DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT =
+  'I have read and understood this Data Privacy Consent pursuant to Republic Act No. 10173, and I agree to the collection and processing of my personal and medical information for clinic record processing and related health services.';
+
+export const DATA_PRIVACY_PREVIEW_TEXT =
+  'Data Privacy Consent: Under Republic Act No. 10173, I consent to the collection, use, and processing of my personal and health-related information by the Gordon College Clinic for clinic record processing and related health services, subject to my rights as a data subject and the clinic’s duty to protect my information.';

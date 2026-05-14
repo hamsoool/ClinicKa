@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CheckCircle2, FileCheck2, PenLine, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, FileCheck2, PenLine, ShieldCheck, XCircle } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import { Checkbox } from '../../components/ui/checkbox';
+import { Label } from '../../components/ui/label';
 import { getStudentProfileAssets } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import {
+  DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT,
+  DATA_PRIVACY_CONSENT_BODY,
+  DATA_PRIVACY_RIGHTS_NOTICE,
+} from './medical-form/constants';
 
 export default function StudentPrivacyWaiver() {
   const navigate = useNavigate();
@@ -14,6 +21,7 @@ export default function StudentPrivacyWaiver() {
   const [loadingAssets, setLoadingAssets] = useState(true);
   const [hasPhoto, setHasPhoto] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
+  const [dataPrivacyConsent, setDataPrivacyConsent] = useState(false);
 
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const profileId = me?.student?.profile_id || me?.profile.id || '';
@@ -54,7 +62,7 @@ export default function StudentPrivacyWaiver() {
   }, [profileId, studentId]);
 
   const profileReady = hasPhoto && hasSignature;
-  const canContinue = profileReady && !loadingAssets;
+  const canContinue = profileReady && !loadingAssets && dataPrivacyConsent;
   const editSubmissionId = searchParams.get('edit');
   const yearLabel = useMemo(() => {
     switch (year) {
@@ -96,6 +104,46 @@ export default function StudentPrivacyWaiver() {
           <CardTitle>Profile Requirements</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6 pt-6">
+          <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5">
+            <div className="mb-4 flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-semibold text-on-surface">Privacy Consent</p>
+                <p className="text-sm text-on-surface-variant">
+                  This consent is required before you can continue to the medical record form.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-[1.25rem] border border-emerald-200 bg-emerald-50/70 p-5 text-sm leading-7 text-emerald-950">
+                <p>{DATA_PRIVACY_CONSENT_BODY}</p>
+              </div>
+
+              <div className="rounded-[1.25rem] border border-emerald-200 bg-emerald-50/70 p-5 text-sm leading-7 text-emerald-950">
+                <p>{DATA_PRIVACY_RIGHTS_NOTICE}</p>
+              </div>
+
+              <div
+                className={`rounded-[1.25rem] border p-4 ${
+                  dataPrivacyConsent ? 'border-emerald-200 bg-emerald-50/70' : 'border-red-200 bg-red-50'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="dataPrivacyConsent"
+                    checked={dataPrivacyConsent}
+                    onCheckedChange={(checked) => setDataPrivacyConsent(checked === true)}
+                    className="mt-1"
+                  />
+                  <Label htmlFor="dataPrivacyConsent" className="text-sm font-normal leading-6 text-on-surface">
+                    {DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT}
+                  </Label>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5">
             <div className="mb-4 flex items-center gap-3">
               <FileCheck2 className="h-5 w-5 text-primary" />
@@ -147,9 +195,7 @@ export default function StudentPrivacyWaiver() {
             type="button"
             disabled={!canContinue}
             onClick={() =>
-              navigate(
-                `/student/medical-form/${year}${editSubmissionId ? `?edit=${encodeURIComponent(editSubmissionId)}` : ''}`,
-              )
+              navigate(`/student/medical-form/${year}?consent=1${editSubmissionId ? `&edit=${encodeURIComponent(editSubmissionId)}` : ''}`)
             }
           >
             Continue to Medical Form
