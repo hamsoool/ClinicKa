@@ -18,7 +18,7 @@ ClinicKa has three role-based portals:
 2. Frontend reads/writes data in Supabase tables and storage buckets.
 3. Sensitive/admin-style operations go through Supabase Edge Function routes under:
    - `/functions/v1/server/*`
-4. Staff status changes can trigger email notifications through `/api/send-email` (Vite middleware in local dev).
+4. Staff status changes trigger email notifications through the Supabase Edge Function route `/functions/v1/server/notifications/status-email`.
 
 Core backend entrypoint:
 
@@ -79,12 +79,12 @@ Required for frontend runtime:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-Required for server-side operations used by local middleware/scripts:
+Required for server-side operations used by scripts and the Supabase Edge Function:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-Optional (for email notifications in local dev middleware):
+Optional but required if you want email notifications to send successfully:
 
 - `SMTP_HOST`
 - `SMTP_PORT`
@@ -153,7 +153,8 @@ npm run build
 ```
 
 2. Deploy `dist/` to your static host.
-3. Deploy/update Supabase edge function (`server`) for backend routes.
+3. Deploy/update Supabase edge function (`server`) for backend routes, including status-email notifications.
+4. Add the `SMTP_*` secrets to the deployed edge-function environment if email notifications should be enabled.
 
 `vercel.json` already includes SPA rewrite rules for client-side routing.
 
@@ -163,4 +164,4 @@ npm run build
 - Upload/sign URL errors: verify buckets exist and run `rls_storage_and_files_policies.sql`.
 - Archived account endpoints returning migration errors: run `archived_accounts_migration.sql`.
 - Google sign-in blocked: student accounts are restricted to `@gordoncollege.edu.ph`.
-- Email notifications not sending in local dev: verify `SMTP_*` values in `.env.local`.
+- Email notifications not sending: verify `SMTP_*` values are available to the deployed Supabase edge function (and in `.env.local` if you also use local function tooling).

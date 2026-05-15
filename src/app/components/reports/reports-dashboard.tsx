@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -32,8 +33,6 @@ const STATUS_LABELS: Record<string, string> = {
   physical_exam_done: 'Physical Exam Done',
 };
 const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', issued: 'Issued Only', not_issued: 'Not Issued' };
-const REPORTS_CACHE_KEY = 'clinic_reports_cache_v1';
-
 const STATUS_COLORS: Record<string, string> = {
   Approved: '#3b6d11',
   'Under Review': '#ba7517',
@@ -427,9 +426,8 @@ function CustomDonutTooltip({ active, payload }: any) {
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) {
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [submissions, setSubmissions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const analyticsQueryKey = mode === 'admin' ? ['adminAnalytics'] : ['staffAnalytics'];
+  const submissionsQueryKey = mode === 'admin' ? ['adminSubmissions'] : ['staffSubmissions'];
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -441,70 +439,77 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const {
+    data: analytics,
+    isLoading: analyticsLoading,
+    isError: isAnalyticsError,
+  } = useQuery({
+    queryKey: analyticsQueryKey,
+    queryFn: () => getAnalytics(),
+    staleTime: 10_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: true,
+    refetchOnMount: 'always',
+  });
+  const {
+    data: submissions = [],
+    isLoading: submissionsLoading,
+    isError: isSubmissionsError,
+  } = useQuery({
+    queryKey: submissionsQueryKey,
+    queryFn: async () => {
+      const data = await getSubmissions();
+      return data.submissions || [];
+    },
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
+    refetchOnMount: 'always',
+  });
+  const normalizedSubmissions = useMemo(
+    () =>
+      Array.isArray(submissions)
+        ? submissions
+        : Array.isArray((submissions as { submissions?: unknown[] } | undefined)?.submissions)
+          ? (submissions as { submissions: any[] }).submissions
+          : [],
+    [submissions],
+  );
+  const loading = analyticsLoading || submissionsLoading;
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cachedRaw = window.sessionStorage.getItem(REPORTS_CACHE_KEY);
-        if (cachedRaw) {
-          const cached = JSON.parse(cachedRaw) as { analytics?: any; submissions?: any[] };
-          if (cached?.analytics) setAnalytics(cached.analytics);
-          if (Array.isArray(cached?.submissions)) setSubmissions(cached.submissions);
-          if (cached?.analytics || Array.isArray(cached?.submissions)) setLoading(false);
-        }
-      } catch {
-        // ignore cache parse errors
-      }
+    if (isAnalyticsError || isSubmissionsError) {
+      toast.error('Failed to load report data');
     }
-
-    (async () => {
-      setLoading((prev) => prev && submissions.length === 0 && !analytics);
-      try {
-        const [analyticsData, submissionsData] = await Promise.all([getAnalytics(), getSubmissions()]);
-        const nextSubmissions = submissionsData.submissions || [];
-        setAnalytics(analyticsData);
-        setSubmissions(nextSubmissions);
-        if (typeof window !== 'undefined') {
-          window.sessionStorage.setItem(
-            REPORTS_CACHE_KEY,
-            JSON.stringify({ analytics: analyticsData, submissions: nextSubmissions }),
-          );
-        }
-      } catch (error) {
-        console.error('Error loading data:', error);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  }, [isAnalyticsError, isSubmissionsError]);
 
   const allCourses = useMemo(
     () =>
-      [...new Set(submissions.map((s) => String(s.course || '').trim()).filter(Boolean))].sort((a, b) =>
+      [...new Set(normalizedSubmissions.map((s) => String(s.course || '').trim()).filter(Boolean))].sort((a, b) =>
         String(a).localeCompare(String(b)),
       ),
-    [submissions],
+    [normalizedSubmissions],
   );
 
   const allConditions = useMemo(() => {
     const keys = new Set<string>();
-    submissions.forEach((s) => Object.entries(s.medicalHistory || {}).forEach(([k, v]) => v && keys.add(k)));
+    normalizedSubmissions.forEach((s) => Object.entries(s.medicalHistory || {}).forEach(([k, v]) => v && keys.add(k)));
     return [...keys].sort((a, b) => a.localeCompare(b));
-  }, [submissions]);
+  }, [normalizedSubmissions]);
 
   const studentBatches = useMemo(() => {
     const batches = new Set<string>();
-    submissions.forEach((s) => {
+    normalizedSubmissions.forEach((s) => {
       const id = String(s.studentId || '');
       const match = id.match(/^(\d{4})/);
       if (match?.[1]) batches.add(match[1]);
     });
     return [...batches].sort();
-  }, [submissions]);
+  }, [normalizedSubmissions]);
 
   const filteredSubmissions = useMemo(
     () =>
-      submissions.filter((sub) => {
+      normalizedSubmissions.filter((sub) => {
         if (departmentFilter !== 'all' && !(sub.department === departmentFilter || sub.course?.includes(departmentFilter))) return false;
         if (yearFilter !== 'all' && String(sub.year) !== yearFilter) return false;
         if (statusFilter !== 'all' && sub.status !== statusFilter) return false;
@@ -525,7 +530,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         if (toDate && subDate && subDate > new Date(`${toDate}T23:59:59`)) return false;
         return true;
       }),
-    [submissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, genderFilter, studentBatchFilter, fromDate, toDate],
+    [normalizedSubmissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, genderFilter, studentBatchFilter, fromDate, toDate],
   );
 
   const dedupedFilteredSubmissions = useMemo(() => {
@@ -549,19 +554,19 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   }, [filteredSubmissions]);
 
   const dateRange = useMemo(() => {
-    const timestamps = submissions
+    const timestamps = normalizedSubmissions
       .map((s) => (s.submittedAt ? new Date(s.submittedAt).getTime() : NaN))
       .filter((t) => Number.isFinite(t)) as number[];
     if (!timestamps.length) return { minDate: '', maxDate: today };
     const min = new Date(Math.min(...timestamps)).toISOString().split('T')[0];
     return { minDate: min, maxDate: today };
-  }, [submissions, today]);
+  }, [normalizedSubmissions, today]);
 
   useEffect(() => {
-    if (!submissions.length) return;
+    if (!normalizedSubmissions.length) return;
     if (!fromDate) setFromDate(dateRange.minDate);
     if (!toDate) setToDate(dateRange.maxDate);
-  }, [submissions, fromDate, toDate, dateRange.minDate, dateRange.maxDate]);
+  }, [normalizedSubmissions, fromDate, toDate, dateRange.minDate, dateRange.maxDate]);
 
   const hasActiveFilters =
     departmentFilter !== 'all' || yearFilter !== 'all' || statusFilter !== 'all' ||

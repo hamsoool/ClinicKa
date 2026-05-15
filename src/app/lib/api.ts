@@ -2612,24 +2612,26 @@ export async function saveSubmissionReview(id: string, review: any) {
 }
 
 async function sendStatusEmailNotification(submissionId: string, status: string, staffNotes: string) {
-  const response = await fetch('/api/send-email', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const payload = await apiRequest<{ success: boolean; skipped?: boolean; reason?: string }>(
+    '/functions/v1/server/notifications/status-email',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        submissionId,
+        status,
+        staffNotes,
+      }),
     },
-    body: JSON.stringify({
-      submissionId,
-      status,
-      staffNotes,
-    }),
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to send email (${response.status})`);
+  );
+
+  if (!payload.success && !payload.skipped) {
+    throw new Error('Failed to send email notification.');
   }
-  
-  return response.json();
+
+  return payload;
 }
 
 export async function updateSubmissionStatus(id: string, status: string, staffNotes?: string) {

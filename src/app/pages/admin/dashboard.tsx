@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import {
   Activity,
@@ -14,8 +13,8 @@ import {
   Users,
 } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
-import { getAnalytics, getStaffUsers, getSubmissions, getUserAccounts } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useAdminAnalyticsQuery, useAdminStaffUsersQuery, useAdminSubmissionsQuery, useAdminUserAccountsQuery } from './admin-workflow-query';
 
 type AnalyticsSummary = {
   totalStudents: number;
@@ -132,29 +131,21 @@ export default function AdminDashboard() {
     formatEmailName(me?.profile.email) ||
     'System Administrator';
 
-  const { data: analytics, isLoading: analyticsLoading } = useQuery({
-    queryKey: ['adminAnalytics'],
-    queryFn: getAnalytics as () => Promise<AnalyticsSummary>
-  });
-
-  const { data: staffData, isLoading: staffLoading } = useQuery({
-    queryKey: ['staffUsers'],
-    queryFn: getStaffUsers
-  });
-
-  const { data: userData, isLoading: userLoading } = useQuery({
-    queryKey: ['adminUserAccounts'],
-    queryFn: getUserAccounts
-  });
-
-  const { data: submissionData, isLoading: submissionLoading } = useQuery({
-    queryKey: ['adminSubmissions'],
-    queryFn: getSubmissions
-  });
+  const { data: analytics, isLoading: analyticsLoading } = useAdminAnalyticsQuery();
+  const { data: staffData, isLoading: staffLoading } = useAdminStaffUsersQuery();
+  const { data: userData, isLoading: userLoading } = useAdminUserAccountsQuery();
+  const { data: submissionData, isLoading: submissionLoading } = useAdminSubmissionsQuery();
+  const legacySubmissionData = submissionData as { submissions?: SubmissionSummary[] } | undefined;
 
   const staffUsers = (staffData?.staff || []) as StaffUser[];
   const userAccounts = (userData?.users || []) as UserAccount[];
-  const submissions = (submissionData?.submissions || []) as SubmissionSummary[];
+  const submissions = (
+    Array.isArray(submissionData)
+      ? submissionData
+      : Array.isArray(legacySubmissionData?.submissions)
+        ? legacySubmissionData.submissions
+        : []
+  ) as SubmissionSummary[];
 
   const loading = analyticsLoading || staffLoading || userLoading || submissionLoading;
 
