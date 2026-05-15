@@ -459,7 +459,7 @@ export function useStudentMedicalForm({
         );
       case 5:
         if (!formData.labTestLocation) return false;
-        if (formData.labTestLocation === 'jlgh') return hasXray;
+        if (formData.labTestLocation === 'jlgh') return true;
         return Boolean(
           formData.otherClinicName.trim() &&
             formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
@@ -494,7 +494,7 @@ export function useStudentMedicalForm({
           formData.weight &&
           formData.height &&
           formData.labTestLocation &&
-          hasXray &&
+          (formData.labTestLocation === 'jlgh' || hasXray) &&
           (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
           (!needsAllUploads || hasAllUploads) &&
           NAME_REGEX.test(formData.firstName) &&

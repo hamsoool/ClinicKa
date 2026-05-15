@@ -21,6 +21,7 @@ import {
   loadStaffSettings,
   loadStaffSubmissions,
   loadStudentCertificate,
+  loadStudentClearance,
   loadStudentDashboard,
   loadStudentLayout,
   loadStudentMedicalForm,
@@ -43,6 +44,7 @@ const StudentRecords = lazy(loadStudentRecords);
 const StudentRequirements = lazy(loadStudentRequirements);
 const StudentProfile = lazy(loadStudentProfile);
 const StudentCertificate = lazy(loadStudentCertificate);
+const StudentClearance = lazy(loadStudentClearance);
 const StaffLayout = lazy(loadStaffLayout);
 const StaffDashboard = lazy(loadStaffDashboard);
 const StaffSubmissions = lazy(loadStaffSubmissions);
@@ -134,6 +136,7 @@ export const router = createBrowserRouter([
       { path: "medical-form/:year", element: withSuspense(StudentMedicalForm) },
       { path: "requirements", element: withSuspense(StudentRequirements) },
       { path: "profile", element: withSuspense(StudentProfile) },
+      { path: "clearance", element: withSuspense(StudentClearance, 'portal-certificate') },
       { path: "certificate", element: withSuspense(StudentCertificate, 'portal-certificate') },
     ],
   },

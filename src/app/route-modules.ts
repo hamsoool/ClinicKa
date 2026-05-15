@@ -15,6 +15,7 @@ export const loadStudentRecords = () => import('./pages/student/records');
 export const loadStudentRequirements = () => import('./pages/student/requirements');
 export const loadStudentProfile = () => import('./pages/student/profile');
 export const loadStudentCertificate = () => import('./pages/student/certificate');
+export const loadStudentClearance = () => import('./pages/student/clearance');
 
 export const loadStaffLayout = () => import('./pages/staff/layout');
 export const loadStaffDashboard = () => import('./pages/staff/dashboard');
@@ -48,6 +49,7 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadStudentRecords,
     loadStudentYearSelection,
     loadStudentRequirements,
+    loadStudentClearance,
     loadStudentCertificate,
     loadStudentProfile,
     loadStudentPrivacyWaiver,

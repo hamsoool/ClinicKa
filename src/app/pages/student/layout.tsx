@@ -22,7 +22,7 @@ const navItems = [
   { path: '/student/records', label: 'Record History', mobileLabel: 'Records', icon: ClipboardList },
   { path: '/student/year-selection', label: 'Submit Record', mobileLabel: 'Submit', icon: FilePlus },
   { path: '/student/requirements', label: 'Requirements', mobileLabel: 'Reqs', icon: FileCheck2 },
-  { path: '/student/certificate', label: 'Certificate', mobileLabel: 'Cert', icon: Award },
+  { path: '/student/clearance', label: 'Clearance', mobileLabel: 'Clear', icon: Award },
   { path: '/student/profile', label: 'Profile', mobileLabel: 'Profile', icon: User },
 ] as const satisfies readonly PortalNavItem[];
 

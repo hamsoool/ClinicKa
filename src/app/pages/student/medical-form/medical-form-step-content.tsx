@@ -43,7 +43,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   hasProfileSignature,
   onGoToProfile,
 }: Props) {
-  const showLabUploads = Boolean(formData.labTestLocation);
+  const showLabUploads = formData.labTestLocation === 'other';
   const allUploadsRequired = formData.labTestLocation === 'other';
   const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
   const uploadedFileEntries = [
@@ -84,7 +84,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   const requiredFieldClass = (missing: boolean) =>
     missing ? 'border-red-500 ring-1 ring-red-200 focus-visible:ring-red-300' : '';
 
-  const getUploadedFileName = (url?: string) => {
+  function getUploadedFileName(url?: string) {
     if (!url) return 'Uploaded file';
     try {
       const cleaned = url.split('?')[0] || url;
@@ -93,15 +93,15 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     } catch {
       return 'Uploaded file';
     }
-  };
+  }
 
-  const getFileExtension = (url?: string) => {
+  function getFileExtension(url?: string) {
     if (!url) return '';
     const cleaned = (url.split('?')[0] || '').toLowerCase();
     return cleaned.split('.').pop() || '';
-  };
+  }
 
-  const renderExistingFilePreview = (url?: string) => {
+  function renderExistingFilePreview(url?: string) {
     if (!url) return null;
     const ext = getFileExtension(url);
 
@@ -126,7 +126,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     }
 
     return null;
-  };
+  }
 
   switch (step) {
     case 1:
