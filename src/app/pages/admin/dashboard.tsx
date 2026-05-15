@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import {
   Activity,
@@ -14,8 +13,8 @@ import {
   Users,
 } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
-import { getAnalytics, getStaffUsers, getSubmissions, getUserAccounts } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useAdminAnalyticsQuery, useAdminStaffUsersQuery, useAdminSubmissionsQuery, useAdminUserAccountsQuery } from './admin-workflow-query';
 
 type AnalyticsSummary = {
   totalStudents: number;
@@ -48,7 +47,7 @@ type SubmissionSummary = {
   studentId?: string;
   submittedAt: string;
   updatedAt?: string;
-  status: 'pending' | 'approved' | 'returned';
+  status: 'pending' | 'in_review' | 'approved' | 'returned';
   course?: string;
 };
 
@@ -99,6 +98,8 @@ function getStatusLabel(status: SubmissionSummary['status']) {
   switch (status) {
     case 'pending':
       return 'Pending review';
+    case 'in_review':
+      return 'In review';
     case 'approved':
       return 'Approved';
     case 'returned':
@@ -114,6 +115,8 @@ function getStatusStyles(status: SubmissionSummary['status']) {
       return 'bg-primary-container/20 text-on-primary-container';
     case 'pending':
       return 'bg-amber-100 text-amber-800';
+    case 'in_review':
+      return 'bg-sky-100 text-sky-800';
     case 'returned':
       return 'bg-error-container/70 text-on-error-container';
     default:
@@ -132,29 +135,21 @@ export default function AdminDashboard() {
     formatEmailName(me?.profile.email) ||
     'System Administrator';
 
-  const { data: analytics, isLoading: analyticsLoading } = useQuery({
-    queryKey: ['adminAnalytics'],
-    queryFn: getAnalytics as () => Promise<AnalyticsSummary>
-  });
-
-  const { data: staffData, isLoading: staffLoading } = useQuery({
-    queryKey: ['staffUsers'],
-    queryFn: getStaffUsers
-  });
-
-  const { data: userData, isLoading: userLoading } = useQuery({
-    queryKey: ['adminUserAccounts'],
-    queryFn: getUserAccounts
-  });
-
-  const { data: submissionData, isLoading: submissionLoading } = useQuery({
-    queryKey: ['adminSubmissions'],
-    queryFn: getSubmissions
-  });
+  const { data: analytics, isLoading: analyticsLoading } = useAdminAnalyticsQuery();
+  const { data: staffData, isLoading: staffLoading } = useAdminStaffUsersQuery();
+  const { data: userData, isLoading: userLoading } = useAdminUserAccountsQuery();
+  const { data: submissionData, isLoading: submissionLoading } = useAdminSubmissionsQuery();
+  const legacySubmissionData = submissionData as { submissions?: SubmissionSummary[] } | undefined;
 
   const staffUsers = (staffData?.staff || []) as StaffUser[];
   const userAccounts = (userData?.users || []) as UserAccount[];
-  const submissions = (submissionData?.submissions || []) as SubmissionSummary[];
+  const submissions = (
+    Array.isArray(submissionData)
+      ? submissionData
+      : Array.isArray(legacySubmissionData?.submissions)
+        ? legacySubmissionData.submissions
+        : []
+  ) as SubmissionSummary[];
 
   const loading = analyticsLoading || staffLoading || userLoading || submissionLoading;
 
@@ -175,7 +170,7 @@ export default function AdminDashboard() {
       .sort((a, b) => new Date(b.lastActive || 0).getTime() - new Date(a.lastActive || 0).getTime())
       .slice(0, 5);
     const queue = [...submissions]
-      .filter((submission) => submission.status === 'pending' || submission.status === 'returned')
+      .filter((submission) => submission.status === 'pending' || submission.status === 'in_review' || submission.status === 'returned')
       .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
       .slice(0, 5);
     return {

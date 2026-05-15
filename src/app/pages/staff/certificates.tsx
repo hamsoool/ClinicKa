@@ -10,7 +10,8 @@ import MedicalRecordPreview from '../../components/medical-record-preview';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { Download, Search, FileText, X, ClipboardList, Award } from 'lucide-react';
 import { toast } from 'sonner';
-import { getStudentProfileAssets, getSubmissions } from '../../lib/api';
+import { getStudentProfileAssets } from '../../lib/api';
+import { useStaffSubmissionsQuery } from './staff-workflow-query';
 
 type StaffSubmission = MockSubmission & {
   photoUrl?: string;
@@ -53,9 +54,7 @@ export default function StaffCertificates() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
   const STUDENTS_PER_PAGE = 10;
-  const [submissions, setSubmissions] = useState<StaffSubmission[]>([]);
   const [filteredSubmissions, setFilteredSubmissions] = useState<StaffSubmission[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -64,12 +63,18 @@ export default function StaffCertificates() {
   const [clearanceYearFilter, setClearanceYearFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
 
+  const {
+    data: submissionsData = [],
+    isLoading: loading,
+    isError,
+  } = useStaffSubmissionsQuery();
+  const submissions = useMemo(
+    () => (submissionsData.filter((r) => r.status === 'approved') as StaffSubmission[]),
+    [submissionsData],
+  );
+
   const recordPreviewRef = useRef<HTMLDivElement>(null);
   const clearancePreviewRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    void loadSubmissions();
-  }, []);
 
   useEffect(() => {
     filterSubmissions();
@@ -79,19 +84,11 @@ export default function StaffCertificates() {
     setCurrentPage(1);
   }, [searchQuery, departmentFilter, yearFilter]);
 
-  const loadSubmissions = async () => {
-    setLoading(true);
-    try {
-      const data = await getSubmissions();
-      const approvedRecords = (data.submissions || []).filter((r) => r.status === 'approved');
-      setSubmissions(approvedRecords);
-    } catch (error) {
-      console.error('Error loading submissions:', error);
+  useEffect(() => {
+    if (isError) {
       toast.error('Failed to load submissions');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [isError]);
 
   const hydrateStudentAssets = async (records: StaffSubmission[]) => {
     if (!records.length) return records;

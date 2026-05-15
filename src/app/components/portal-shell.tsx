@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { Camera, KeyRound, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/auth';
@@ -44,6 +44,7 @@ type PortalShellProps = {
   profileUploadId: string;
   profileUploadLabel: string;
   topActions?: readonly PortalTopAction[];
+  topBarSlot?: ReactNode;
 };
 
 function isRouteActive(pathname: string, path: string) {
@@ -101,6 +102,7 @@ export default function PortalShell({
   profileUploadId,
   profileUploadLabel,
   topActions = [],
+  topBarSlot,
 }: PortalShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -356,6 +358,8 @@ export default function PortalShell({
                 </button>
               );
             })}
+
+            {topBarSlot}
 
             <div ref={profileMenuRef} className="relative">
               <button

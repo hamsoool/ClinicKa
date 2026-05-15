@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { MockSubmission } from '../../../lib/mock-data';
 import { getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
+import { invalidateStudentRecordsQuery } from '../student-records-query';
 import {
   DEFAULT_MEDICAL_HISTORY,
   formatPhilippinePhoneInput,
@@ -63,6 +65,10 @@ function sanitizeSafeText(value: string, maxLength: number) {
     .replace(/[<>`]/g, '')
     .replace(/--|\/\*|\*\//g, '')
     .slice(0, maxLength);
+}
+
+function sanitizeEmergencyRelationship(value: string) {
+  return sanitizeName(value);
 }
 
 function sanitizeDigits(value: string, maxLen?: number) {
@@ -145,6 +151,7 @@ export function useStudentMedicalForm({
   editSubmissionId = null,
   initialDataPrivacyConsent = false,
 }: UseStudentMedicalFormArgs) {
+  const queryClient = useQueryClient();
   const student = me?.student;
   const [profileAssetUrls, setProfileAssetUrls] = useState<{ photoUrl: string | null; signatureUrl: string | null }>({
     photoUrl: null,
@@ -205,6 +212,8 @@ export function useStudentMedicalForm({
           emergencyContact: {
             ...prev.emergencyContact,
             ...(submission.emergencyContact || {}),
+            relationship: sanitizeEmergencyRelationship(submission.emergencyContact?.relationship || prev.emergencyContact.relationship),
+            phone: formatPhilippinePhoneInput(submission.emergencyContact?.phone || prev.emergencyContact.phone),
           },
           weight: submission.weight || prev.weight,
           height: submission.height || prev.height,
@@ -346,10 +355,12 @@ export function useStudentMedicalForm({
         emergencyContact: {
           ...prev.emergencyContact,
           [field]:
-            field === 'name' || field === 'relationship'
+            field === 'name'
               ? sanitizeName(value)
+              : field === 'relationship'
+                ? sanitizeEmergencyRelationship(value)
               : field === 'phone'
-                ? sanitizeDigits(value, 15)
+                ? formatPhilippinePhoneInput(value)
                 : sanitizeAddress(value),
         },
       }));
@@ -448,6 +459,7 @@ export function useStudentMedicalForm({
           formData.emergencyContact.name &&
           formData.emergencyContact.relationship &&
           formData.emergencyContact.phone &&
+          isValidPhilippinePhoneNumber(formData.emergencyContact.phone) &&
           formData.emergencyContact.address
         );
       case 4:
@@ -490,7 +502,10 @@ export function useStudentMedicalForm({
           formData.sex &&
           formData.hadOperation &&
           formData.emergencyContact.name &&
+          formData.emergencyContact.relationship &&
           formData.emergencyContact.phone &&
+          isValidPhilippinePhoneNumber(formData.emergencyContact.phone) &&
+          formData.emergencyContact.address &&
           formData.weight &&
           formData.height &&
           formData.labTestLocation &&
@@ -645,6 +660,7 @@ export function useStudentMedicalForm({
       ].filter(Boolean) as Promise<unknown>[];
 
       await Promise.all(uploads);
+      await invalidateStudentRecordsQuery(queryClient, formData.studentId);
       toast.success(isResubmission ? 'Medical record resubmitted successfully!' : 'Medical record submitted successfully!');
       setSubmitted(true);
       setActiveSubmissionId(null);
@@ -654,7 +670,7 @@ export function useStudentMedicalForm({
     } finally {
       setUploading(false);
     }
-  }, [formData, uploading, activeSubmissionId, canSubmit, originalSubmissionStatus]);
+  }, [activeSubmissionId, canSubmit, formData, originalSubmissionStatus, queryClient, uploading]);
 
   return {
     step,

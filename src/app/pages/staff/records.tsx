@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
@@ -7,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Search, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
-import { getSubmissions } from '../../lib/api';
+import { useStaffSubmissionsQuery } from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = {
@@ -25,15 +24,8 @@ export default function StaffRecords() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  const { data: queryData, isLoading: loading, isError } = useQuery({
-    queryKey: ['staffRecords'],
-    queryFn: async () => {
-      const data = await getSubmissions();
-      return (data.submissions || []).filter((r: any) => r.status === 'approved');
-    }
-  });
-
-  const records = queryData || [];
+  const { data: submissions = [], isLoading: loading, isError } = useStaffSubmissionsQuery();
+  const records = submissions.filter((r: any) => r.status === 'approved');
   const availableCourses = useMemo(
     () =>
       Array.from(new Set(records.map((record: any) => String(record.course || '').trim()).filter(Boolean))).sort(

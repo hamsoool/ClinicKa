@@ -13,9 +13,11 @@ import PortalShell, {
   type PortalNavItem,
   type PortalTopAction,
 } from '../../components/portal-shell';
+import StudentNotificationMenu from '../../components/student-notification-menu';
 import { prefetchPortalRoutes } from '../../route-modules';
 import { getStudentProfilePhoto } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useStudentNotifications } from './student-notifications';
 
 const navItems = [
   { path: '/student', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
@@ -46,6 +48,14 @@ export default function StudentLayout() {
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const course = me?.student?.course || me?.profile.course || '';
   const profileSubtitle = [studentId, course].filter(Boolean).join(' | ') || 'Student account';
+  const {
+    notifications,
+    unreadCount,
+    markAllAsRead,
+    markNotificationAsUnread,
+    deleteNotification,
+    clearNotifications,
+  } = useStudentNotifications(studentId);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -110,6 +120,16 @@ export default function StudentLayout() {
       profileUploadId="student-profile-upload"
       profileUploadLabel="Upload student profile picture"
       topActions={topActions}
+      topBarSlot={(
+        <StudentNotificationMenu
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onMarkAllAsRead={markAllAsRead}
+          onMarkNotificationAsUnread={markNotificationAsUnread}
+          onDeleteNotification={deleteNotification}
+          onClearNotifications={clearNotifications}
+        />
+      )}
     />
   );
 }

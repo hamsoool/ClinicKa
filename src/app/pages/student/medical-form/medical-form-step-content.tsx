@@ -6,9 +6,11 @@ import { Checkbox } from '../../../components/ui/checkbox';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../../components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 
 import { Textarea } from '../../../components/ui/textarea';
 import {
+  EMERGENCY_CONTACT_RELATIONSHIPS,
   MEDICAL_CONDITIONS,
   YEAR_LEVELS,
 } from './constants';
@@ -72,6 +74,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     !formData.emergencyContact.name?.trim(),
     !formData.emergencyContact.relationship?.trim(),
     !formData.emergencyContact.phone?.trim(),
+    formData.emergencyContact.phone ? !/^\(\+63\)\s9\d{9}$/.test(formData.emergencyContact.phone.trim()) : false,
     !formData.emergencyContact.address?.trim(),
   ].filter(Boolean).length;
   const stepFourMissingRequired = [
@@ -83,6 +86,12 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
 
   const requiredFieldClass = (missing: boolean) =>
     missing ? 'border-red-500 ring-1 ring-red-200 focus-visible:ring-red-300' : '';
+  const relationshipOptions = formData.emergencyContact.relationship &&
+    !EMERGENCY_CONTACT_RELATIONSHIPS.includes(
+      formData.emergencyContact.relationship as (typeof EMERGENCY_CONTACT_RELATIONSHIPS)[number],
+    )
+      ? [formData.emergencyContact.relationship, ...EMERGENCY_CONTACT_RELATIONSHIPS]
+      : EMERGENCY_CONTACT_RELATIONSHIPS;
 
   function getUploadedFileName(url?: string) {
     if (!url) return 'Uploaded file';
@@ -221,7 +230,8 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           <h3 className="mb-4 text-xl font-semibold">Operations & Emergency Contact</h3>
           {stepThreeMissingRequired > 0 ? (
             <div className="break-words rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              Required fields are missing. Please complete all fields marked with <span className="font-semibold">*</span>.
+              Required fields are missing or invalid. Please complete all fields marked with{' '}
+              <span className="font-semibold">*</span>.
             </div>
           ) : null}
           <div>
@@ -273,23 +283,42 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </div>
               <div>
                 <Label htmlFor="ecRelationship">Relationship *</Label>
-                <Input
-                  id="ecRelationship"
+                <Select
                   value={formData.emergencyContact.relationship}
-                  onChange={(event) => onEmergencyContactChange('relationship', event.target.value)}
-                  className={requiredFieldClass(!formData.emergencyContact.relationship?.trim())}
-                />
+                  onValueChange={(value) => onEmergencyContactChange('relationship', value)}
+                >
+                  <SelectTrigger
+                    id="ecRelationship"
+                    className={requiredFieldClass(!formData.emergencyContact.relationship?.trim())}
+                  >
+                    <SelectValue placeholder="Select relationship" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {relationshipOptions.map((relationship) => (
+                      <SelectItem key={relationship} value={relationship}>
+                        {relationship}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <Label htmlFor="ecPhone">Tel. phone No. CP *</Label>
+                <Label htmlFor="ecPhone">Cellphone Number *</Label>
                 <Input
                   id="ecPhone"
                   value={formData.emergencyContact.phone}
                   onChange={(event) => onEmergencyContactChange('phone', event.target.value)}
-                  className={requiredFieldClass(!formData.emergencyContact.phone?.trim())}
+                  placeholder="(+63) 9123456789"
+                  inputMode="numeric"
+                  maxLength={16}
+                  className={requiredFieldClass(
+                    !formData.emergencyContact.phone?.trim() ||
+                      !/^\(\+63\)\s9\d{9}$/.test(formData.emergencyContact.phone.trim()),
+                  )}
                 />
+                <p className="mt-1 text-xs text-muted-foreground">Use a valid Philippine mobile number starting with (+63).</p>
               </div>
               <div>
                 <Label htmlFor="ecAddress">Address *</Label>

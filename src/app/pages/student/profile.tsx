@@ -300,11 +300,11 @@ export default function StudentProfile() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-5 pt-6 md:grid-cols-2">
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="studentId">Student ID</Label>
               <Input id="studentId" value={formData.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="department">Department *</Label>
               <Select value={formData.department} onValueChange={(value) => updateField('department', value)}>
                 <SelectTrigger id="department" className={requiredFieldClass(!formData.department.trim())}>
@@ -319,7 +319,7 @@ export default function StudentProfile() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="firstName">First Name *</Label>
               <Input
                 id="firstName"
@@ -329,7 +329,7 @@ export default function StudentProfile() {
                 className={requiredFieldClass(!formData.firstName.trim())}
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="lastName">Last Name *</Label>
               <Input
                 id="lastName"
@@ -339,7 +339,7 @@ export default function StudentProfile() {
                 className={requiredFieldClass(!formData.lastName.trim())}
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="middleInitial">Middle Initial *</Label>
               <Input
                 id="middleInitial"
@@ -350,7 +350,7 @@ export default function StudentProfile() {
                 className={requiredFieldClass(!formData.middleInitial.trim())}
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="course">Course / Program *</Label>
               <Select
                 value={formData.course || undefined}
@@ -369,7 +369,7 @@ export default function StudentProfile() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="age">Age *</Label>
               <Input
                 id="age"
@@ -383,7 +383,7 @@ export default function StudentProfile() {
                 className={requiredFieldClass(!formData.age.trim())}
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="sex">Sex *</Label>
               <Select value={formData.sex} onValueChange={(value) => updateField('sex', value)}>
                 <SelectTrigger id="sex" className={requiredFieldClass(!formData.sex.trim())}>
@@ -395,7 +395,7 @@ export default function StudentProfile() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="birthday">Birthday *</Label>
               <Input
                 id="birthday"
@@ -405,7 +405,7 @@ export default function StudentProfile() {
                 className={requiredFieldClass(!formData.birthday.trim())}
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="civilStatus">Civil Status *</Label>
               <Select value={formData.civilStatus} onValueChange={(value) => updateField('civilStatus', value)}>
                 <SelectTrigger id="civilStatus" className={requiredFieldClass(!formData.civilStatus.trim())}>
@@ -417,7 +417,7 @@ export default function StudentProfile() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="contactNumber">Contact Number *</Label>
               <Input
                 id="contactNumber"
@@ -466,7 +466,7 @@ export default function StudentProfile() {
                 type="file"
                 accept="image/png,image/jpeg,image/jpg"
                 onChange={(event) => handleAssetChange('photo', event.target.files?.[0] || null)}
-                className="cursor-pointer"
+                className="w-full max-w-full cursor-pointer overflow-hidden text-sm file:mr-3 file:rounded-md file:bg-surface-container file:px-3 file:py-1.5"
               />
               <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border bg-white">
@@ -476,7 +476,7 @@ export default function StudentProfile() {
                     <span className="text-xs text-muted-foreground">No photo</span>
                   )}
                 </div>
-                <div className="min-w-0 w-full text-sm">
+                <div className="w-full min-w-0 text-sm">
                   {photoFile ? (
                     <div className="flex items-center gap-2 text-green-700">
                       <Check className="h-4 w-4" />
@@ -506,7 +506,7 @@ export default function StudentProfile() {
                 type="file"
                 accept="image/png,image/jpeg,image/jpg"
                 onChange={(event) => handleAssetChange('signature', event.target.files?.[0] || null)}
-                className="cursor-pointer"
+                className="w-full max-w-full cursor-pointer overflow-hidden text-sm file:mr-3 file:rounded-md file:bg-surface-container file:px-3 file:py-1.5"
               />
               <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex h-24 w-40 items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
@@ -516,7 +516,7 @@ export default function StudentProfile() {
                     <span className="text-xs text-muted-foreground">No signature</span>
                   )}
                 </div>
-                <div className="min-w-0 w-full text-sm">
+                <div className="w-full min-w-0 text-sm">
                   {signatureFile ? (
                     <div className="flex items-center gap-2 text-green-700">
                       <Check className="h-4 w-4" />

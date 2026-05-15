@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -31,11 +31,14 @@ import {
   createAdminAccount,
   deleteArchivedUserAccount,
   restoreArchivedUserAccount,
-  getArchivedUserAccounts,
-  getUserAccounts,
   type AdminUserAccount,
   type ArchivedUserAccount,
 } from '../../lib/api';
+import {
+  invalidateAdminWorkflowQueries,
+  useAdminArchivedAccountsQuery,
+  useAdminUserAccountsQuery,
+} from './admin-workflow-query';
 
 const roleTone = (role: string) => {
   if (role === 'Administrator') {
@@ -108,6 +111,7 @@ function getDisplayName(account: { name?: string; email?: string | null; id?: st
 }
 
 export default function AdminUserAccounts() {
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -134,22 +138,11 @@ export default function AdminUserAccounts() {
     course: '',
   });
 
-  const { data: activeData, refetch: refetchActive, isError: isErrorActive } = useQuery({
-    queryKey: ['adminUserAccounts'],
-    queryFn: getUserAccounts
-  });
-
-  const { data: archivedData, refetch: refetchArchived, isError: isErrorArchived } = useQuery({
-    queryKey: ['adminArchivedAccounts'],
-    queryFn: getArchivedUserAccounts
-  });
+  const { data: activeData, isError: isErrorActive } = useAdminUserAccountsQuery();
+  const { data: archivedData, isError: isErrorArchived } = useAdminArchivedAccountsQuery();
 
   const userAccounts = activeData?.users || [];
   const archivedAccounts = archivedData?.users || [];
-
-  const loadUsers = async () => {
-    await Promise.all([refetchActive(), refetchArchived()]);
-  };
 
   useEffect(() => {
     if (isErrorActive || isErrorArchived) {
@@ -289,7 +282,7 @@ export default function AdminUserAccounts() {
         department: '',
         course: '',
       });
-      await loadUsers();
+      await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to create account');
     } finally {
@@ -310,7 +303,7 @@ export default function AdminUserAccounts() {
       setArchiveTarget(null);
       setArchiveReason('');
       setTab('archive');
-      await loadUsers();
+      await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to archive account');
     } finally {
@@ -326,7 +319,7 @@ export default function AdminUserAccounts() {
       await deleteArchivedUserAccount(deleteTarget.archiveId);
       toast.success(`${deleteTarget.name} was permanently deleted`);
       setDeleteTarget(null);
-      await loadUsers();
+      await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to permanently delete account');
     } finally {
@@ -342,7 +335,7 @@ export default function AdminUserAccounts() {
       await restoreArchivedUserAccount(restoreTarget.archiveId);
       toast.success(`${restoreTarget.name} was restored to active accounts`);
       setRestoreTarget(null);
-      await loadUsers();
+      await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to restore account');
     } finally {
@@ -362,7 +355,7 @@ export default function AdminUserAccounts() {
       setSelectedUserIds(new Set());
       setArchiveReason('');
       setTab('archive');
-      await loadUsers();
+      await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to archive some accounts');
     } finally {
@@ -380,7 +373,7 @@ export default function AdminUserAccounts() {
       toast.success(`${selectedUserIds.size} accounts were permanently deleted`);
       setBulkDeleteOpen(false);
       setSelectedUserIds(new Set());
-      await loadUsers();
+      await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to permanently delete some accounts');
     } finally {
@@ -398,7 +391,7 @@ export default function AdminUserAccounts() {
       toast.success(`${selectedUserIds.size} accounts were restored to active status`);
       setBulkRestoreOpen(false);
       setSelectedUserIds(new Set());
-      await loadUsers();
+      await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to restore some accounts');
     } finally {

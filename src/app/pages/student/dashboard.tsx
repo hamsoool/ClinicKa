@@ -1,20 +1,10 @@
 import { useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { AlertCircle, ArrowRight, CheckCircle2, Clock3, FileText, Plus } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { toast } from 'sonner';
-import { getStudentRecords } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-
-type StudentRecord = {
-  id: string;
-  year?: string;
-  status?: string;
-  submittedAt?: string;
-  updatedAt?: string;
-  staffNotes?: string;
-};
+import { useStudentRecordsQuery } from './student-records-query';
 
 const yearLabels = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 const dashboardDateFormatter = new Intl.DateTimeFormat('en-US', {
@@ -40,17 +30,8 @@ export default function StudentDashboard() {
       course: me?.student?.course || me?.profile.course || '',
     };
   }, [me]);
-  const { data, isLoading: loading, isError, error } = useQuery({
-    queryKey: ['studentRecords', studentId],
-    queryFn: async () => {
-      if (!studentId) return [];
-      const response = await getStudentRecords(studentId);
-      return (Array.isArray(response?.records) ? response.records : []) as StudentRecord[];
-    },
-    enabled: !!studentId,
-  });
-
-  const records = Array.isArray(data) ? data : [];
+  const { data = [], isLoading: loading, isError, error } = useStudentRecordsQuery(studentId);
+  const records = data;
 
   useEffect(() => {
     if (isError && error) {
@@ -67,6 +48,8 @@ export default function StudentDashboard() {
     switch (status) {
       case 'pending':
         return 'Pending Review';
+      case 'in_review':
+        return 'In Review';
       case 'resubmitted':
         return 'Resubmitted';
       case 'approved':
@@ -84,6 +67,8 @@ export default function StudentDashboard() {
         return 'bg-primary-container/20 text-on-primary-container';
       case 'pending':
         return 'bg-amber-100 text-amber-800';
+      case 'in_review':
+        return 'bg-sky-100 text-sky-800';
       case 'resubmitted':
         return 'bg-orange-100 text-orange-800';
       case 'returned':
@@ -113,7 +98,7 @@ export default function StudentDashboard() {
     });
     const approved = sorted.filter((record) => record.status === 'approved').length;
     const pending = sorted.filter(
-      (record) => record.status === 'pending' || record.status === 'resubmitted',
+      (record) => record.status === 'pending' || record.status === 'in_review' || record.status === 'resubmitted',
     ).length;
     return {
       sortedRecords: sorted,

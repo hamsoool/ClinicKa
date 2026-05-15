@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 import {
   ArrowLeft,
   CheckCircle2,
   ClipboardCheck,
   FileCheck2,
-  FlaskConical,
   Save,
   ShieldCheck,
   Stethoscope,
@@ -35,10 +35,14 @@ import {
 } from '../../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Textarea } from '../../components/ui/textarea';
-import { getSubmission, saveSubmissionReview } from '../../lib/api';
+import { saveSubmissionReview, updateSubmissionStatus } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { MedicalHistory, MockSubmission } from '../../lib/mock-data';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
+import {
+  invalidateStaffWorkflowQueries,
+  useStaffSubmissionDetailQuery,
+} from './staff-workflow-query';
 
 type SubmissionDetails = MockSubmission & {
   photoUrl?: string;
@@ -256,12 +260,16 @@ function getStatusBadge(status: ReviewStatus) {
   switch (status) {
     case 'pending':
       return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending Review</Badge>;
+    case 'in_review':
+      return <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">In Review</Badge>;
     case 'physical_exam_done':
       return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Physical Exam Done</Badge>;
     case 'approved':
       return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved</Badge>;
     case 'returned':
       return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Returned</Badge>;
+    case 'resubmitted':
+      return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">Resubmitted</Badge>;
     default:
       return <Badge>{status}</Badge>;
   }
@@ -274,11 +282,11 @@ function countVerifiedConditions(history: MedicalHistory) {
 export default function StaffRecordReview() {
   const navigate = useNavigate();
   const { submissionId } = useParams();
+  const queryClient = useQueryClient();
   const { me } = useAuth();
   const staffPosition = me?.staff?.position || 'Clinic Staff';
   const isDoctor = ['clinic doctor', 'doctor'].includes(staffPosition.trim().toLowerCase()) || me?.profile.role === 'admin';
   const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [recordForm, setRecordForm] = useState<RecordForm>(() => createRecordForm());
   const [assessmentForm, setAssessmentForm] = useState<AssessmentForm>(() => createAssessmentForm());
@@ -287,6 +295,7 @@ export default function StaffRecordReview() {
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('pending');
   const [showReturnDialog, setShowReturnDialog] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const inReviewTransitionRef = useRef<string | null>(null);
   const defaultSignatoryName = [
     me?.staff?.first_name || me?.profile.first_name || '',
     me?.staff?.last_name || me?.profile.last_name || '',
@@ -294,46 +303,73 @@ export default function StaffRecordReview() {
     .filter(Boolean)
     .join(' ')
     .trim();
+  const {
+    data: submissionData,
+    isLoading: loading,
+    isError,
+  } = useStaffSubmissionDetailQuery(submissionId);
 
   useEffect(() => {
-    void loadSubmission();
-  }, [submissionId]);
+    const loadedSubmission = (submissionData || null) as SubmissionDetails | null;
 
-  async function loadSubmission() {
-    if (!submissionId) return;
-
-    setLoading(true);
-    try {
-      const data = await getSubmission(submissionId);
-      const loadedSubmission = (data.submission || null) as SubmissionDetails | null;
-
-      if (!loadedSubmission) {
-        setSubmission(null);
-        return;
-      }
-
-      setSubmission(loadedSubmission);
-      setRecordForm(createRecordForm(loadedSubmission));
-      const nextAssessmentForm = createAssessmentForm(loadedSubmission);
-      if (!nextAssessmentForm.examinedBy && defaultSignatoryName) {
-        nextAssessmentForm.examinedBy = defaultSignatoryName;
-      }
-      setAssessmentForm(nextAssessmentForm);
-      setClearanceForm(createClearanceForm(loadedSubmission));
-      setStaffNotes(loadedSubmission.staffNotes || '');
-      setReviewStatus(loadedSubmission.status);
-    } catch (error) {
-      console.error('Error loading submission:', error);
-      toast.error('Failed to load submission');
-    } finally {
-      setLoading(false);
+    if (!loadedSubmission) {
+      setSubmission(null);
+      return;
     }
-  }
+
+    setSubmission(loadedSubmission);
+    setRecordForm(createRecordForm(loadedSubmission));
+    const nextAssessmentForm = createAssessmentForm(loadedSubmission);
+    if (!nextAssessmentForm.examinedBy && defaultSignatoryName) {
+      nextAssessmentForm.examinedBy = defaultSignatoryName;
+    }
+    setAssessmentForm(nextAssessmentForm);
+    setClearanceForm(createClearanceForm(loadedSubmission));
+    setStaffNotes(loadedSubmission.staffNotes || '');
+    setReviewStatus(loadedSubmission.status);
+  }, [defaultSignatoryName, submissionData]);
+
+  useEffect(() => {
+    if (isError) {
+      toast.error('Failed to load submission');
+    }
+  }, [isError]);
 
   useEffect(() => {
     if (!defaultSignatoryName) return;
     setAssessmentForm((prev) => (prev.examinedBy ? prev : { ...prev, examinedBy: defaultSignatoryName }));
   }, [defaultSignatoryName]);
+
+  useEffect(() => {
+    if (!submissionId || !submission) return;
+
+    const normalizedStatus = String(submission.status || '').toLowerCase();
+    if (!['pending', 'resubmitted'].includes(normalizedStatus)) return;
+    if (inReviewTransitionRef.current === submission.id) return;
+
+    inReviewTransitionRef.current = submission.id;
+    let isActive = true;
+
+    void (async () => {
+      try {
+        await updateSubmissionStatus(submissionId, 'in_review', submission.staffNotes || '');
+        if (!isActive) return;
+
+        const now = new Date().toISOString();
+        setSubmission((prev) => (prev && prev.id === submission.id ? { ...prev, status: 'in_review', updatedAt: now } : prev));
+        setReviewStatus((prev) => (prev === 'pending' || prev === 'resubmitted' ? 'in_review' : prev));
+        await invalidateStaffWorkflowQueries(queryClient, submissionId);
+      } catch (error) {
+        console.warn('Failed to mark submission as in review:', error);
+        toast.error('Could not mark this record as In Review. Apply the latest database migration first.');
+        inReviewTransitionRef.current = null;
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [queryClient, submission, submissionId]);
 
   function updateRecordField<K extends keyof RecordForm>(field: K, value: RecordForm[K]) {
     setRecordForm((prev) => {
@@ -538,6 +574,7 @@ export default function StaffRecordReview() {
 
       setSubmission(updatedSubmission);
       setReviewStatus(statusToSave);
+      await invalidateStaffWorkflowQueries(queryClient, submissionId);
       toast.success(
         nextStatus === 'approved'
           ? 'Medical clearance approved and issued.'
@@ -603,7 +640,7 @@ export default function StaffRecordReview() {
             {getStatusBadge(persistedStatus)}
           </div>
           <p className="text-muted-foreground">
-            Review, verify, and update the student medical record before deciding the medical clearance status.
+            Review, verify, and update the student medical record before finalizing the clinic decision.
           </p>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">
@@ -619,6 +656,8 @@ export default function StaffRecordReview() {
           <p className="mt-1 text-muted-foreground">
             {reviewStatus === 'approved'
               ? 'Ready for clearance release'
+              : reviewStatus === 'in_review'
+                ? 'Currently being reviewed by the clinic'
               : reviewStatus === 'physical_exam_done'
                 ? 'Physical exam completed and ready for final clearance decision'
               : reviewStatus === 'returned'
@@ -704,19 +743,28 @@ export default function StaffRecordReview() {
         </Card>
       </div>
 
-      <Tabs defaultValue="record" className="space-y-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-xl bg-muted/50 p-1 md:grid-cols-4">
-          <TabsTrigger value="record" className="w-full px-2 py-2 text-xs sm:text-sm">
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="pt-5">
+          <p className="text-sm font-semibold text-foreground">Recommended workflow</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            1) Confirm student record, 2) verify labs, 3) complete assessment, {isDoctor ? '4) finalize decision.' : '4) save notes and status for doctor review.'}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue={isDoctor ? 'assessment' : 'record'} className="space-y-6">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-border/60 bg-muted/40 p-1.5 md:grid-cols-4">
+          <TabsTrigger value="record" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
             Student Record
           </TabsTrigger>
-          <TabsTrigger value="assessment" className="w-full px-2 py-2 text-xs sm:text-sm">
-            Assessment
-          </TabsTrigger>
-          <TabsTrigger value="labs" className="w-full px-2 py-2 text-xs sm:text-sm">
+          <TabsTrigger value="labs" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
             Lab Results
           </TabsTrigger>
-          <TabsTrigger value="decision" className="w-full px-2 py-2 text-xs sm:text-sm" disabled={!isDoctor}>
-            Clinic Notes {!isDoctor ? '(Doctor Only)' : ''}
+          <TabsTrigger value="assessment" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+            Assessment
+          </TabsTrigger>
+          <TabsTrigger value="decision" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+            {isDoctor ? 'Final Decision' : 'Notes & Status'}
           </TabsTrigger>
         </TabsList>
 
@@ -1026,6 +1074,177 @@ export default function StaffRecordReview() {
           </div>
         </TabsContent>
 
+        <TabsContent value="labs" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Chest X-Ray Review</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <SubmittedFilePreview title="Chest X-Ray" fileUrl={submission.xrayFileUrl} alt="Chest X-Ray" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="xrayDate">Date</Label>
+                  <Input
+                    id="xrayDate"
+                    type="date"
+                    value={assessmentForm.xrayDate}
+                    onChange={(event) => updateAssessmentField('xrayDate', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="xrayResult">Result</Label>
+                  <Select
+                    value={assessmentForm.xrayResult}
+                    onValueChange={(value) => updateAssessmentField('xrayResult', value as 'normal' | 'abnormal')}
+                  >
+                    <SelectTrigger id="xrayResult" className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="abnormal">Abnormal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="xrayFindings">Findings</Label>
+                  <Textarea
+                    id="xrayFindings"
+                    value={assessmentForm.xrayFindings}
+                    onChange={(event) => updateAssessmentField('xrayFindings', event.target.value)}
+                    className="mt-2"
+                    rows={4}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Complete Blood Count (CBC)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <SubmittedFilePreview title="CBC" fileUrl={submission.cbcFileUrl} alt="CBC" />
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div>
+                  <Label htmlFor="cbcDate">Date</Label>
+                  <Input
+                    id="cbcDate"
+                    type="date"
+                    value={assessmentForm.cbcDate}
+                    onChange={(event) => updateAssessmentField('cbcDate', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="hemoglobin">Hemoglobin</Label>
+                  <Input
+                    id="hemoglobin"
+                    value={assessmentForm.hemoglobin}
+                    onChange={(event) => updateAssessmentField('hemoglobin', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="hematocrit">Hematocrit</Label>
+                  <Input
+                    id="hematocrit"
+                    value={assessmentForm.hematocrit}
+                    onChange={(event) => updateAssessmentField('hematocrit', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="wbc">White Blood Cell Count</Label>
+                  <Input
+                    id="wbc"
+                    value={assessmentForm.wbc}
+                    onChange={(event) => updateAssessmentField('wbc', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="plateletCount">Platelet Count</Label>
+                  <Input
+                    id="plateletCount"
+                    value={assessmentForm.plateletCount}
+                    onChange={(event) => updateAssessmentField('plateletCount', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="bloodType">Blood Type</Label>
+                  <Input
+                    id="bloodType"
+                    value={assessmentForm.bloodType}
+                    onChange={(event) => updateAssessmentField('bloodType', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="glucose">Glucose</Label>
+                  <Input
+                    id="glucose"
+                    value={assessmentForm.glucose}
+                    onChange={(event) => updateAssessmentField('glucose', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="protein">Protein</Label>
+                  <Input
+                    id="protein"
+                    value={assessmentForm.protein}
+                    onChange={(event) => updateAssessmentField('protein', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Urinalysis Review</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <SubmittedFilePreview title="Urinalysis" fileUrl={submission.urinalysisFileUrl} alt="Urinalysis" />
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="urinalysisDate">Date</Label>
+                  <Input
+                    id="urinalysisDate"
+                    type="date"
+                    value={assessmentForm.urinalysisDate}
+                    onChange={(event) => updateAssessmentField('urinalysisDate', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="urinalysisGlucose">Glucose</Label>
+                  <Input
+                    id="urinalysisGlucose"
+                    value={assessmentForm.urinalysisGlucose}
+                    onChange={(event) => updateAssessmentField('urinalysisGlucose', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="urinalysisProtein">Protein</Label>
+                  <Input
+                    id="urinalysisProtein"
+                    value={assessmentForm.urinalysisProtein}
+                    onChange={(event) => updateAssessmentField('urinalysisProtein', event.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="assessment" className="space-y-6">
           <Card>
             <CardHeader>
@@ -1212,177 +1431,6 @@ export default function StaffRecordReview() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="labs" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Chest X-Ray Review</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <SubmittedFilePreview title="Chest X-Ray" fileUrl={submission.xrayFileUrl} alt="Chest X-Ray" />
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="xrayDate">Date</Label>
-                  <Input
-                    id="xrayDate"
-                    type="date"
-                    value={assessmentForm.xrayDate}
-                    onChange={(event) => updateAssessmentField('xrayDate', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="xrayResult">Result</Label>
-                  <Select
-                    value={assessmentForm.xrayResult}
-                    onValueChange={(value) => updateAssessmentField('xrayResult', value as 'normal' | 'abnormal')}
-                  >
-                    <SelectTrigger id="xrayResult" className="mt-2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="normal">Normal</SelectItem>
-                      <SelectItem value="abnormal">Abnormal</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="md:col-span-2">
-                  <Label htmlFor="xrayFindings">Findings</Label>
-                  <Textarea
-                    id="xrayFindings"
-                    value={assessmentForm.xrayFindings}
-                    onChange={(event) => updateAssessmentField('xrayFindings', event.target.value)}
-                    className="mt-2"
-                    rows={4}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Complete Blood Count (CBC)</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <SubmittedFilePreview title="CBC" fileUrl={submission.cbcFileUrl} alt="CBC" />
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <div>
-                  <Label htmlFor="cbcDate">Date</Label>
-                  <Input
-                    id="cbcDate"
-                    type="date"
-                    value={assessmentForm.cbcDate}
-                    onChange={(event) => updateAssessmentField('cbcDate', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="hemoglobin">Hemoglobin</Label>
-                  <Input
-                    id="hemoglobin"
-                    value={assessmentForm.hemoglobin}
-                    onChange={(event) => updateAssessmentField('hemoglobin', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="hematocrit">Hematocrit</Label>
-                  <Input
-                    id="hematocrit"
-                    value={assessmentForm.hematocrit}
-                    onChange={(event) => updateAssessmentField('hematocrit', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="wbc">White Blood Cell Count</Label>
-                  <Input
-                    id="wbc"
-                    value={assessmentForm.wbc}
-                    onChange={(event) => updateAssessmentField('wbc', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="plateletCount">Platelet Count</Label>
-                  <Input
-                    id="plateletCount"
-                    value={assessmentForm.plateletCount}
-                    onChange={(event) => updateAssessmentField('plateletCount', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="bloodType">Blood Type</Label>
-                  <Input
-                    id="bloodType"
-                    value={assessmentForm.bloodType}
-                    onChange={(event) => updateAssessmentField('bloodType', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="glucose">Glucose</Label>
-                  <Input
-                    id="glucose"
-                    value={assessmentForm.glucose}
-                    onChange={(event) => updateAssessmentField('glucose', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="protein">Protein</Label>
-                  <Input
-                    id="protein"
-                    value={assessmentForm.protein}
-                    onChange={(event) => updateAssessmentField('protein', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Urinalysis Review</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <SubmittedFilePreview title="Urinalysis" fileUrl={submission.urinalysisFileUrl} alt="Urinalysis" />
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <Label htmlFor="urinalysisDate">Date</Label>
-                  <Input
-                    id="urinalysisDate"
-                    type="date"
-                    value={assessmentForm.urinalysisDate}
-                    onChange={(event) => updateAssessmentField('urinalysisDate', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="urinalysisGlucose">Glucose</Label>
-                  <Input
-                    id="urinalysisGlucose"
-                    value={assessmentForm.urinalysisGlucose}
-                    onChange={(event) => updateAssessmentField('urinalysisGlucose', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="urinalysisProtein">Protein</Label>
-                  <Input
-                    id="urinalysisProtein"
-                    value={assessmentForm.urinalysisProtein}
-                    onChange={(event) => updateAssessmentField('urinalysisProtein', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="decision" className="space-y-6">
           <Card>
             <CardHeader>
@@ -1401,8 +1449,9 @@ export default function StaffRecordReview() {
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+                {!isDoctor ? (
+                <div className="xl:col-span-2">
                   <Label htmlFor="reviewStatus">Medical Clearance Status</Label>
                   <Select value={reviewStatus} onValueChange={(value) => setReviewStatus(value as ReviewStatus)} disabled={isApprovedLocked}>
                     <SelectTrigger id="reviewStatus" className="mt-2">
@@ -1410,8 +1459,8 @@ export default function StaffRecordReview() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="pending">Pending Review</SelectItem>
+                      <SelectItem value="in_review">In Review</SelectItem>
                       <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
                       <SelectItem value="returned">Returned for Correction</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1422,8 +1471,17 @@ export default function StaffRecordReview() {
                     <p className="mt-2 text-xs text-green-700">This record is approved and status changes are locked.</p>
                   ) : null}
                 </div>
+                ) : null}
+                {!isDoctor ? (
+                  <div className="md:col-span-1 xl:col-span-4">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                      Clinic Staff can update notes and status, but final clearance fields are limited to Clinic Doctors.
+                    </div>
+                  </div>
+                ) : null}
 
-                <div>
+                {isDoctor ? (
+                <div className="xl:col-span-2">
                   <Label htmlFor="clearancePurpose">Purpose</Label>
                   <Select
                     value={clearanceForm.purpose}
@@ -1439,8 +1497,10 @@ export default function StaffRecordReview() {
                     </SelectContent>
                   </Select>
                 </div>
+                ) : null}
 
-                <div>
+                {isDoctor ? (
+                <div className="xl:col-span-2">
                   <Label htmlFor="controlNo">Control Number</Label>
                   <Input
                     id="controlNo"
@@ -1449,8 +1509,10 @@ export default function StaffRecordReview() {
                     className="mt-2"
                   />
                 </div>
+                ) : null}
 
-                <div>
+                {isDoctor ? (
+                <div className="xl:col-span-2">
                   <Label htmlFor="issuedDate">Issued Date</Label>
                   <Input
                     id="issuedDate"
@@ -1460,8 +1522,10 @@ export default function StaffRecordReview() {
                     className="mt-2"
                   />
                 </div>
+                ) : null}
 
-                <div className="md:col-span-2 xl:col-span-2">
+                {isDoctor ? (
+                <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
                   <Input
                     id="clearanceSignatory"
@@ -1472,8 +1536,10 @@ export default function StaffRecordReview() {
                   />
                   <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical clearance.</p>
                 </div>
+                ) : null}
 
-                <div className="md:col-span-2">
+                {isDoctor ? (
+                <div className="md:col-span-1 xl:col-span-3">
                   <Label>General Findings</Label>
                   <RadioGroup
                     value={clearanceForm.findingsNormal ? 'normal' : 'with-findings'}
@@ -1490,8 +1556,10 @@ export default function StaffRecordReview() {
                     </label>
                   </RadioGroup>
                 </div>
+                ) : null}
 
-                <div className="md:col-span-2 xl:col-span-3">
+                {isDoctor ? (
+                <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
                   <Textarea
                     id="diagnosis"
@@ -1501,8 +1569,10 @@ export default function StaffRecordReview() {
                     rows={4}
                   />
                 </div>
+                ) : null}
 
-                <div className="md:col-span-2 xl:col-span-3">
+                {isDoctor ? (
+                <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="remarks">Clearance Remarks</Label>
                   <Textarea
                     id="remarks"
@@ -1513,6 +1583,7 @@ export default function StaffRecordReview() {
                     placeholder="State whether the student is fit, fit with recommendations, or needs follow-up."
                   />
                 </div>
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -1522,13 +1593,13 @@ export default function StaffRecordReview() {
       <Card className="border-primary/20">
         <CardContent className="flex flex-col gap-4 pt-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1">
-            <p className="font-semibold text-foreground">Finalize the clinic staff review</p>
+            <p className="font-semibold text-foreground">Finalize the clinic review</p>
             <p className="text-sm text-muted-foreground">
               {isApprovedLocked
                 ? 'This submission is already approved. Actions are locked to prevent accidental changes.'
                 : isDoctor
-                  ? 'Save draft edits at any time, then keep the case pending, mark the physical exam complete, approve, or return it.'
-                  : 'As Clinic Staff, you can save your data input (lab results, measurements). Clearance decisions require a Clinic Doctor.'}
+                  ? 'Save draft edits at any time, return the record for correction when needed, or approve the clearance once everything is complete.'
+                  : 'Save draft edits at any time or return the record for correction when updates are needed.'}
             </p>
           </div>
 
@@ -1538,32 +1609,22 @@ export default function StaffRecordReview() {
               <Save className="mr-2 h-4 w-4" />
               {saving ? 'Saving...' : 'Save Review'}
             </Button>
-            {isDoctor && (
-              <>
-                <Button variant="outline" onClick={() => void persistReview('pending')} disabled={saving}>
-                  <FlaskConical className="mr-2 h-4 w-4" />
-                  Keep Pending
-                </Button>
-                <Button variant="outline" onClick={() => void persistReview('physical_exam_done')} disabled={saving}>
-                  <ClipboardCheck className="mr-2 h-4 w-4" />
-                  Physical Exam Done
-                </Button>
-                <Button variant="destructive" onClick={() => {
-                  setReturnReason(staffNotes);
-                  setShowReturnDialog(true);
-                }} disabled={saving}>
-                  Return for Correction
-                </Button>
-                <Button
-                  onClick={() => void persistReview('approved')}
-                  disabled={saving}
-                  className="bg-green-600 text-white hover:bg-green-700"
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Approve Clearance
-                </Button>
-              </>
-            )}
+            <Button variant="destructive" onClick={() => {
+              setReturnReason(staffNotes);
+              setShowReturnDialog(true);
+            }} disabled={saving}>
+              Return for Correction
+            </Button>
+            {isDoctor ? (
+              <Button
+                onClick={() => void persistReview('approved')}
+                disabled={saving}
+                className="bg-green-600 text-white hover:bg-green-700"
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Approve Clearance
+              </Button>
+            ) : null}
           </div>
           ) : (
             <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved - Locked</Badge>

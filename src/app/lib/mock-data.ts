@@ -92,7 +92,7 @@ export type MockSubmission = {
   course: string;
   department?: string;
   year: string;
-  status: 'pending' | 'physical_exam_done' | 'approved' | 'returned' | 'resubmitted';
+  status: 'pending' | 'in_review' | 'physical_exam_done' | 'approved' | 'returned' | 'resubmitted';
   submittedAt: string;
   updatedAt?: string;
   staffNotes?: string;
@@ -787,7 +787,7 @@ export function getMockStudentRecords(studentId: string) {
 export function getMockAnalytics() {
   const uniqueStudents = new Set(mockSubmissions.map((sub) => sub.studentId)).size;
   const totalSubmissions = mockSubmissions.length;
-  const pendingRecords = mockSubmissions.filter((sub) => sub.status === 'pending').length;
+  const pendingRecords = mockSubmissions.filter((sub) => sub.status === 'pending' || sub.status === 'in_review').length;
   const approvedRecords = mockSubmissions.filter((sub) => sub.status === 'approved').length;
   const returnedRecords = mockSubmissions.filter((sub) => sub.status === 'returned').length;
 
