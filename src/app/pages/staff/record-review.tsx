@@ -640,7 +640,7 @@ export default function StaffRecordReview() {
             {getStatusBadge(persistedStatus)}
           </div>
           <p className="text-muted-foreground">
-            Review, verify, and update the student medical record before deciding the medical clearance status.
+            Review, verify, and update the student medical record before finalizing the clinic decision.
           </p>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">
@@ -1449,8 +1449,9 @@ export default function StaffRecordReview() {
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+                {!isDoctor ? (
+                <div className="xl:col-span-2">
                   <Label htmlFor="reviewStatus">Medical Clearance Status</Label>
                   <Select value={reviewStatus} onValueChange={(value) => setReviewStatus(value as ReviewStatus)} disabled={isApprovedLocked}>
                     <SelectTrigger id="reviewStatus" className="mt-2">
@@ -1460,7 +1461,6 @@ export default function StaffRecordReview() {
                       <SelectItem value="pending">Pending Review</SelectItem>
                       <SelectItem value="in_review">In Review</SelectItem>
                       <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
-                      {isDoctor ? <SelectItem value="approved">Approved</SelectItem> : null}
                       <SelectItem value="returned">Returned for Correction</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1471,8 +1471,9 @@ export default function StaffRecordReview() {
                     <p className="mt-2 text-xs text-green-700">This record is approved and status changes are locked.</p>
                   ) : null}
                 </div>
+                ) : null}
                 {!isDoctor ? (
-                  <div className="md:col-span-1 xl:col-span-2">
+                  <div className="md:col-span-1 xl:col-span-4">
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                       Clinic Staff can update notes and status, but final clearance fields are limited to Clinic Doctors.
                     </div>
@@ -1480,7 +1481,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {isDoctor ? (
-                <div>
+                <div className="xl:col-span-2">
                   <Label htmlFor="clearancePurpose">Purpose</Label>
                   <Select
                     value={clearanceForm.purpose}
@@ -1499,7 +1500,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {isDoctor ? (
-                <div>
+                <div className="xl:col-span-2">
                   <Label htmlFor="controlNo">Control Number</Label>
                   <Input
                     id="controlNo"
@@ -1511,7 +1512,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {isDoctor ? (
-                <div>
+                <div className="xl:col-span-2">
                   <Label htmlFor="issuedDate">Issued Date</Label>
                   <Input
                     id="issuedDate"
@@ -1524,7 +1525,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {isDoctor ? (
-                <div className="md:col-span-2 xl:col-span-2">
+                <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
                   <Input
                     id="clearanceSignatory"
@@ -1538,7 +1539,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {isDoctor ? (
-                <div className="md:col-span-2">
+                <div className="md:col-span-1 xl:col-span-3">
                   <Label>General Findings</Label>
                   <RadioGroup
                     value={clearanceForm.findingsNormal ? 'normal' : 'with-findings'}
@@ -1558,7 +1559,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {isDoctor ? (
-                <div className="md:col-span-2 xl:col-span-3">
+                <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
                   <Textarea
                     id="diagnosis"
@@ -1571,7 +1572,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {isDoctor ? (
-                <div className="md:col-span-2 xl:col-span-3">
+                <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="remarks">Clearance Remarks</Label>
                   <Textarea
                     id="remarks"
