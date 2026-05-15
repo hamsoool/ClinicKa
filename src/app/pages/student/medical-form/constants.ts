@@ -168,6 +168,15 @@ export const YEAR_LEVELS = [
   { value: '4', label: '4th Year' },
 ] as const;
 
+export const EMERGENCY_CONTACT_RELATIONSHIPS = [
+  'Parent',
+  'Sibling',
+  'Guardian',
+  'Grandparent',
+  'Spouse',
+  'Relative',
+] as const;
+
 export const MEDICAL_CONDITIONS = [
   { key: 'allergy', label: 'Allergy' },
   { key: 'asthma', label: 'Asthma' },

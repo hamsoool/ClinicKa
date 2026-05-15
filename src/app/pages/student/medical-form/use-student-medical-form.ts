@@ -65,6 +65,10 @@ function sanitizeSafeText(value: string, maxLength: number) {
     .slice(0, maxLength);
 }
 
+function sanitizeEmergencyRelationship(value: string) {
+  return sanitizeName(value);
+}
+
 function sanitizeDigits(value: string, maxLen?: number) {
   const digits = value.replace(/\D/g, '');
   return maxLen ? digits.slice(0, maxLen) : digits;
@@ -205,6 +209,8 @@ export function useStudentMedicalForm({
           emergencyContact: {
             ...prev.emergencyContact,
             ...(submission.emergencyContact || {}),
+            relationship: sanitizeEmergencyRelationship(submission.emergencyContact?.relationship || prev.emergencyContact.relationship),
+            phone: formatPhilippinePhoneInput(submission.emergencyContact?.phone || prev.emergencyContact.phone),
           },
           weight: submission.weight || prev.weight,
           height: submission.height || prev.height,
@@ -346,10 +352,12 @@ export function useStudentMedicalForm({
         emergencyContact: {
           ...prev.emergencyContact,
           [field]:
-            field === 'name' || field === 'relationship'
+            field === 'name'
               ? sanitizeName(value)
+              : field === 'relationship'
+                ? sanitizeEmergencyRelationship(value)
               : field === 'phone'
-                ? sanitizeDigits(value, 15)
+                ? formatPhilippinePhoneInput(value)
                 : sanitizeAddress(value),
         },
       }));
@@ -448,6 +456,7 @@ export function useStudentMedicalForm({
           formData.emergencyContact.name &&
           formData.emergencyContact.relationship &&
           formData.emergencyContact.phone &&
+          isValidPhilippinePhoneNumber(formData.emergencyContact.phone) &&
           formData.emergencyContact.address
         );
       case 4:
@@ -490,7 +499,10 @@ export function useStudentMedicalForm({
           formData.sex &&
           formData.hadOperation &&
           formData.emergencyContact.name &&
+          formData.emergencyContact.relationship &&
           formData.emergencyContact.phone &&
+          isValidPhilippinePhoneNumber(formData.emergencyContact.phone) &&
+          formData.emergencyContact.address &&
           formData.weight &&
           formData.height &&
           formData.labTestLocation &&
