@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Bell, CalendarRange, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import PasswordChangeCard from '../../components/password-change-card';
@@ -10,11 +11,15 @@ import { Switch } from '../../components/ui/switch';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import {
   createDefaultAdminSystemSettings,
-  getAdminSystemSettings,
   type AdminSystemSettings,
   updateAdminSystemSettings,
 } from '../../lib/api';
 import { toast } from 'sonner';
+import {
+  adminSystemSettingsQueryKey,
+  invalidateAdminWorkflowQueries,
+  useAdminSystemSettingsQuery,
+} from './admin-workflow-query';
 
 const semesterOptions = ['First Semester', 'Second Semester', 'Summer'] as const;
 const sessionTimeoutOptions = [15, 30, 45, 60, 120] as const;
@@ -26,37 +31,24 @@ const autoArchiveOptions = [
 ] as const;
 
 export default function AdminSystemSettings() {
+  const queryClient = useQueryClient();
   const defaults = useMemo(() => createDefaultAdminSystemSettings(), []);
   const [savedSettings, setSavedSettings] = useState<AdminSystemSettings>(defaults);
   const [draftSettings, setDraftSettings] = useState<AdminSystemSettings>(defaults);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const { data: settingsData, isLoading, isError, error } = useAdminSystemSettingsQuery();
 
   useEffect(() => {
-    let isMounted = true;
+    if (!settingsData) return;
+    setSavedSettings(settingsData);
+    setDraftSettings(settingsData);
+  }, [settingsData]);
 
-    const loadSettings = async () => {
-      try {
-        const settings = await getAdminSystemSettings();
-        if (!isMounted) return;
-        setSavedSettings(settings);
-        setDraftSettings(settings);
-      } catch (error) {
-        if (!isMounted) return;
-        toast.error(error instanceof Error ? error.message : 'Failed to load system settings.');
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadSettings();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  useEffect(() => {
+    if (isError) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load system settings.');
+    }
+  }, [error, isError]);
 
   const hasChanges = useMemo(
     () => JSON.stringify(savedSettings) !== JSON.stringify(draftSettings),
@@ -79,6 +71,8 @@ export default function AdminSystemSettings() {
       const saved = await updateAdminSystemSettings(draftSettings);
       setSavedSettings(saved);
       setDraftSettings(saved);
+      queryClient.setQueryData(adminSystemSettingsQueryKey(), saved);
+      await invalidateAdminWorkflowQueries(queryClient, { includeSettings: true });
       toast.success('System settings saved successfully.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save system settings.');

@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import PasswordChangeCard from '../../components/password-change-card';
 import { Input } from '../../components/ui/input';
@@ -110,23 +110,30 @@ export default function StaffSettings() {
   };
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-primary mb-2">Settings</h1>
-        <p className="text-muted-foreground">Manage system settings and preferences</p>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
+        <h1 className="mb-2 text-3xl font-bold tracking-tight text-on-surface">Settings</h1>
+        <p className="max-w-2xl text-sm text-on-surface-variant">
+          Manage your profile, notifications, and clinic preferences from one place.
+        </p>
       </div>
 
       <div className="space-y-6">
-        <Card>
+        <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader>
             <div className="flex items-center gap-3">
               <User className="w-5 h-5 text-primary" />
-              <CardTitle>Profile Settings</CardTitle>
+              <div>
+                <CardTitle>Profile Settings</CardTitle>
+                <CardDescription className="mt-1">
+                  Keep your staff details current so records and communications stay accurate.
+                </CardDescription>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="min-w-0">
                 <Label htmlFor="staffName">Staff Name</Label>
                 <Input
                   id="staffName"
@@ -135,7 +142,7 @@ export default function StaffSettings() {
                   placeholder="Enter your name"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="staffEmail">Email</Label>
                 <Input
                   id="staffEmail"
@@ -146,8 +153,8 @@ export default function StaffSettings() {
                 />
               </div>
             </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="min-w-0">
                 <Label htmlFor="staffPosition">Position</Label>
                 <Select
                   value={profile.position}
@@ -162,7 +169,7 @@ export default function StaffSettings() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="staffPhone">Phone Number</Label>
                 <Input
                   id="staffPhone"
@@ -172,43 +179,52 @@ export default function StaffSettings() {
                 />
               </div>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
+            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground sm:max-w-md">
                 {hasProfileChanges
                   ? 'You have unsaved profile updates.'
                   : 'Your profile details are already up to date.'}
               </p>
-              <Button onClick={requestSaveConfirmation} disabled={savingProfile || !hasProfileChanges || !isProfileValid}>
+              <Button
+                onClick={requestSaveConfirmation}
+                disabled={savingProfile || !hasProfileChanges || !isProfileValid}
+                className="w-full sm:w-auto"
+              >
                 {savingProfile ? 'Saving...' : 'Save Profile'}
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader>
             <div className="flex items-center gap-3">
               <Bell className="w-5 h-5 text-primary" />
-              <CardTitle>Notification Settings</CardTitle>
+              <div>
+                <CardTitle>Notification Settings</CardTitle>
+                <CardDescription className="mt-1">
+                  Choose which reminders and updates should reach you.
+                </CardDescription>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
+            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                   <p className="font-medium">Email Notifications</p>
                   <p className="text-sm text-muted-foreground">
                     Receive email alerts for new submissions
                   </p>
-                </div>
-                <input
-                  type="checkbox"
-                  className="w-4 h-4"
-                  checked={notifications.emailAlerts}
-                  onChange={(e) => setNotifications(prev => ({ ...prev, emailAlerts: e.target.checked }))}
-                />
+              </div>
+              <input
+                type="checkbox"
+                className="h-4 w-4 shrink-0"
+                checked={notifications.emailAlerts}
+                onChange={(e) => setNotifications((prev) => ({ ...prev, emailAlerts: e.target.checked }))}
+              />
             </div>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <p className="font-medium">Pending Review Reminders</p>
                 <p className="text-sm text-muted-foreground">
                   Daily reminder for pending submissions
@@ -216,13 +232,13 @@ export default function StaffSettings() {
               </div>
               <input
                 type="checkbox"
-                className="w-4 h-4"
+                className="h-4 w-4 shrink-0"
                 checked={notifications.pendingReminders}
-                onChange={(e) => setNotifications(prev => ({ ...prev, pendingReminders: e.target.checked }))}
+                onChange={(e) => setNotifications((prev) => ({ ...prev, pendingReminders: e.target.checked }))}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <p className="font-medium">Weekly Reports</p>
                 <p className="text-sm text-muted-foreground">
                   Receive weekly summary reports
@@ -230,22 +246,27 @@ export default function StaffSettings() {
               </div>
               <input
                 type="checkbox"
-                className="w-4 h-4"
+                className="h-4 w-4 shrink-0"
                 checked={notifications.weeklyReports}
-                onChange={(e) => setNotifications(prev => ({ ...prev, weeklyReports: e.target.checked }))}
+                onChange={(e) => setNotifications((prev) => ({ ...prev, weeklyReports: e.target.checked }))}
               />
             </div>
-            <Button>Save Notification Preferences</Button>
+            <Button className="w-full sm:w-auto">Save Notification Preferences</Button>
           </CardContent>
         </Card>
 
         <PasswordChangeCard title="Change Password" description="Update the password for your clinic staff account." />
 
-        <Card>
+        <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader>
             <div className="flex items-center gap-3">
               <SettingsIcon className="w-5 h-5 text-primary" />
-              <CardTitle>System Settings</CardTitle>
+              <div>
+                <CardTitle>System Settings</CardTitle>
+                <CardDescription className="mt-1">
+                  Review the active academic term and clinic availability settings.
+                </CardDescription>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -254,7 +275,7 @@ export default function StaffSettings() {
               <Input
                 id="academicYear"
                 value={system.academicYear}
-                onChange={(e) => setSystem(prev => ({ ...prev, academicYear: e.target.value }))}
+                onChange={(e) => setSystem((prev) => ({ ...prev, academicYear: e.target.value }))}
                 placeholder="e.g., 2023-2024"
               />
             </div>
@@ -262,17 +283,17 @@ export default function StaffSettings() {
               <Label htmlFor="semester">Current Semester</Label>
               <select
                 id="semester"
-                className="w-full px-3 py-2 border rounded-md"
+                className="w-full rounded-md border border-input bg-input-background px-3 py-2 text-sm outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 value={system.semester}
-                onChange={(e) => setSystem(prev => ({ ...prev, semester: e.target.value }))}
+                onChange={(e) => setSystem((prev) => ({ ...prev, semester: e.target.value }))}
               >
                 <option>First Semester</option>
                 <option>Second Semester</option>
                 <option>Summer</option>
               </select>
             </div>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <p className="font-medium">Maintenance Mode</p>
                 <p className="text-sm text-muted-foreground">
                   Disable student submissions temporarily
@@ -280,12 +301,12 @@ export default function StaffSettings() {
               </div>
               <input
                 type="checkbox"
-                className="w-4 h-4"
+                className="h-4 w-4 shrink-0"
                 checked={system.maintenanceMode}
-                onChange={(e) => setSystem(prev => ({ ...prev, maintenanceMode: e.target.checked }))}
+                onChange={(e) => setSystem((prev) => ({ ...prev, maintenanceMode: e.target.checked }))}
               />
             </div>
-            <Button>Save System Settings</Button>
+            <Button className="w-full sm:w-auto">Save System Settings</Button>
           </CardContent>
         </Card>
 
@@ -299,11 +320,12 @@ export default function StaffSettings() {
               Are you sure you want to save your updated profile information?
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
               onClick={() => setConfirmSaveOpen(false)}
               disabled={savingProfile}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
@@ -312,6 +334,7 @@ export default function StaffSettings() {
                 void handleProfileSave();
               }}
               disabled={savingProfile}
+              className="w-full sm:w-auto"
             >
               {savingProfile ? 'Saving...' : 'Save Profile'}
             </Button>

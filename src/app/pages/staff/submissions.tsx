@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
@@ -8,7 +7,7 @@ import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Search, Eye, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { getSubmissions } from '../../lib/api';
+import { useStaffSubmissionsQuery } from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = {
@@ -26,15 +25,7 @@ export default function StaffSubmissions() {
   const [yearFilter, setYearFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('desc');
 
-  const { data: queryData, isLoading: loading, isError } = useQuery({
-    queryKey: ['staffSubmissions'],
-    queryFn: async () => {
-      const data = await getSubmissions();
-      return data.submissions || [];
-    }
-  });
-
-  const submissions = queryData || [];
+  const { data: submissions = [], isLoading: loading, isError } = useStaffSubmissionsQuery();
 
   useEffect(() => {
     if (isError) {
@@ -88,6 +79,8 @@ export default function StaffSubmissions() {
     switch (status) {
       case 'pending':
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
+      case 'in_review':
+        return <Badge variant="secondary" className="bg-sky-100 text-sky-800">In Review</Badge>;
       case 'physical_exam_done':
         return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Physical Exam Done</Badge>;
       case 'approved':
@@ -159,6 +152,7 @@ export default function StaffSubmissions() {
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in_review">In Review</SelectItem>
                 <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="returned">Returned</SelectItem>

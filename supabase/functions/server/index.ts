@@ -1601,7 +1601,7 @@ app.get("/analytics", async (c) => {
     ] = await Promise.all([
       supabase.from('students').select('student_id', { count: 'exact', head: true }),
       supabase.from('submissions').select('id', { count: 'exact', head: true }),
-      supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('submissions').select('id', { count: 'exact', head: true }).in('status', ['pending', 'in_review']),
       supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
       supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'returned'),
     ]);

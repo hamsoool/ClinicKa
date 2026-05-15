@@ -1,10 +1,9 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, GraduationCap, Lock } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
-import { getStudentRecords } from '../../lib/api';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import { useStudentRecordsQuery } from './student-records-query';
 
 const years = [
   { level: 1, name: '1st Year', description: 'Freshman Requirements' },
@@ -30,16 +29,8 @@ export default function StudentYearSelection() {
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const studentYearLevel = me?.student?.year_level || getStudentYearLevel(studentId);
-  const { data, isLoading } = useQuery({
-    queryKey: ['studentRecords', studentId],
-    queryFn: async () => {
-      if (!studentId) return [];
-      const response = await getStudentRecords(studentId);
-      return Array.isArray(response?.records) ? response.records : [];
-    },
-    enabled: !!studentId,
-  });
-  const records = Array.isArray(data) ? data : [];
+  const { data = [], isLoading } = useStudentRecordsQuery(studentId);
+  const records = data;
   const latestByYear = useMemo(() => {
     const map = new Map<number, { status: string; updatedAt?: string; submittedAt?: string }>();
     records.forEach((record) => {
@@ -87,7 +78,8 @@ export default function StudentYearSelection() {
           const isFutureYearLocked = year.level > studentYearLevel;
           const latestYearStatus = latestByYear.get(year.level)?.status || '';
           const isApprovedLocked = latestYearStatus === 'approved';
-          const isPendingLocked = latestYearStatus === 'pending' || latestYearStatus === 'resubmitted';
+          const isPendingLocked = latestYearStatus === 'pending' || latestYearStatus === 'in_review' || latestYearStatus === 'resubmitted';
+          const isInReview = latestYearStatus === 'in_review';
           const isReturned = latestYearStatus === 'returned';
           const isLocked = isFutureYearLocked || isApprovedLocked || isPendingLocked;
           const isCurrent = year.level === studentYearLevel;
@@ -111,8 +103,8 @@ export default function StudentYearSelection() {
                   Already Approved
                 </span>
               ) : isPendingLocked ? (
-                <span className="absolute left-0 top-0 rounded-br-xl bg-amber-600 px-3 py-1 text-xs font-semibold text-white">
-                  Pending Review
+                <span className={`absolute left-0 top-0 rounded-br-xl px-3 py-1 text-xs font-semibold text-white ${isInReview ? 'bg-sky-600' : 'bg-amber-600'}`}>
+                  {isInReview ? 'In Review' : 'Pending Review'}
                 </span>
               ) : isReturned ? (
                 <span className="absolute left-0 top-0 rounded-br-xl bg-red-600 px-3 py-1 text-xs font-semibold text-white">

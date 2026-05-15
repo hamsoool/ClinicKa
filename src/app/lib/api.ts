@@ -466,21 +466,40 @@ function isSessionExpiringSoon(session: AuthSession, bufferSeconds = TOKEN_REFRE
   return expiresAt - bufferSeconds <= getNowUnixSeconds();
 }
 
+function removeLegacyStoredSession() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    // Best effort cleanup for older builds that persisted auth in localStorage.
+  }
+}
+
 export function getStoredSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
 
-  const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
-  if (!raw) return null;
+  let raw: string | null = null;
+  try {
+    raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+  } catch {
+    raw = null;
+  }
+
+  if (!raw) {
+    removeLegacyStoredSession();
+    return null;
+  }
 
   try {
     const parsed = JSON.parse(raw) as AuthSession;
     if (!parsed?.access_token) {
-      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+      clearStoredSession();
       return null;
     }
     return normalizeSessionTimestamps(parsed);
   } catch {
-    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    clearStoredSession();
     return null;
   }
 }
@@ -489,16 +508,30 @@ export function setStoredSession(session: AuthSession | null) {
   if (typeof window === 'undefined') return;
   invalidateMeCache();
   invalidateSignedUrlCache();
+  removeLegacyStoredSession();
 
   if (!session) {
-    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    try {
+      window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
     return;
   }
 
-  window.localStorage.setItem(
-    AUTH_STORAGE_KEY,
-    JSON.stringify(normalizeSessionTimestamps(session)),
-  );
+  try {
+    window.sessionStorage.setItem(
+      AUTH_STORAGE_KEY,
+      JSON.stringify(normalizeSessionTimestamps(session)),
+    );
+  } catch {
+    // If sessionStorage is unavailable, fail closed instead of persisting auth longer than intended.
+    try {
+      window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+  }
 }
 
 export function clearStoredSession() {
@@ -3038,7 +3071,7 @@ export async function getAnalytics() {
     restRequest<any[]>('submissions', 'select=status'),
   ]);
 
-  const pendingRecords = (submissionStatuses || []).filter((row) => row.status === 'pending').length;
+  const pendingRecords = (submissionStatuses || []).filter((row) => row.status === 'pending' || row.status === 'in_review').length;
   const approvedRecords = (submissionStatuses || []).filter((row) => row.status === 'approved').length;
   const returnedRecords = (submissionStatuses || []).filter((row) => row.status === 'returned').length;
 

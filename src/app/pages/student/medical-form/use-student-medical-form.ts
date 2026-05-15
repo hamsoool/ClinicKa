@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { MockSubmission } from '../../../lib/mock-data';
 import { getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
+import { invalidateStudentRecordsQuery } from '../student-records-query';
 import {
   DEFAULT_MEDICAL_HISTORY,
   formatPhilippinePhoneInput,
@@ -149,6 +151,7 @@ export function useStudentMedicalForm({
   editSubmissionId = null,
   initialDataPrivacyConsent = false,
 }: UseStudentMedicalFormArgs) {
+  const queryClient = useQueryClient();
   const student = me?.student;
   const [profileAssetUrls, setProfileAssetUrls] = useState<{ photoUrl: string | null; signatureUrl: string | null }>({
     photoUrl: null,
@@ -657,6 +660,7 @@ export function useStudentMedicalForm({
       ].filter(Boolean) as Promise<unknown>[];
 
       await Promise.all(uploads);
+      await invalidateStudentRecordsQuery(queryClient, formData.studentId);
       toast.success(isResubmission ? 'Medical record resubmitted successfully!' : 'Medical record submitted successfully!');
       setSubmitted(true);
       setActiveSubmissionId(null);
@@ -666,7 +670,7 @@ export function useStudentMedicalForm({
     } finally {
       setUploading(false);
     }
-  }, [formData, uploading, activeSubmissionId, canSubmit, originalSubmissionStatus]);
+  }, [activeSubmissionId, canSubmit, formData, originalSubmissionStatus, queryClient, uploading]);
 
   return {
     step,

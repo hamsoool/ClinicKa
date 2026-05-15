@@ -28,6 +28,7 @@ const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = { '1': '1st Year', '2': '2nd Year', '3': '3rd Year', '4': '4th Year' };
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Under Review',
+  in_review: 'In Review',
   approved: 'Approved',
   returned: 'Returned',
   physical_exam_done: 'Physical Exam Done',
@@ -36,6 +37,7 @@ const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', is
 const STATUS_COLORS: Record<string, string> = {
   Approved: '#3b6d11',
   'Under Review': '#ba7517',
+  'In Review': '#2f6fa3',
   Returned: '#a32d2d',
   'Exam Done': '#185fa5',
 };
@@ -589,11 +591,11 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const summary = useMemo<ReportsSummary>(() => {
     const total = dedupedFilteredSubmissions.length;
     const approved = dedupedFilteredSubmissions.filter((s) => s.status === 'approved').length;
-    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending').length;
+    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending' || s.status === 'in_review').length;
     const returned = dedupedFilteredSubmissions.filter((s) => s.status === 'returned').length;
     const physicalExamDone = dedupedFilteredSubmissions.filter((s) => s.status === 'physical_exam_done').length;
     const firstYears = dedupedFilteredSubmissions.filter((s) => String(s.year) === '1');
-    const firstYearUnderReview = firstYears.filter((s) => s.status === 'pending').length;
+    const firstYearUnderReview = firstYears.filter((s) => s.status === 'pending' || s.status === 'in_review').length;
     const firstYearNotUnderReview = firstYears.length - firstYearUnderReview;
     const withCertificate = dedupedFilteredSubmissions.filter((s) => Boolean(s.clearanceInfo?.issuedDate)).length;
     const approvalRate = total > 0 ? Math.round((approved / total) * 100) : 0;
@@ -873,6 +875,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               <LabeledSelect label="Status" value={statusFilter} onValueChange={setStatusFilter} placeholder="Status">
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Under Review</SelectItem>
+                <SelectItem value="in_review">In Review</SelectItem>
                 <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="returned">Returned</SelectItem>

@@ -71,7 +71,7 @@ export default function PasswordChangeCard({
       </CardHeader>
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
-          <div className="md:col-span-2">
+          <div className="min-w-0 md:col-span-2">
             <Label htmlFor="currentPassword">Current Password</Label>
             <Input
               id="currentPassword"
@@ -81,7 +81,7 @@ export default function PasswordChangeCard({
               placeholder="Enter your current password"
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="newPassword">New Password</Label>
             <Input
               id="newPassword"
@@ -91,7 +91,7 @@ export default function PasswordChangeCard({
               placeholder="At least 6 characters"
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
             <Input
               id="confirmNewPassword"
@@ -102,7 +102,7 @@ export default function PasswordChangeCard({
             />
           </div>
           <div className="md:col-span-2">
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
               {saving ? 'Changing Password...' : 'Change Password'}
             </Button>
           </div>

@@ -47,7 +47,7 @@ type SubmissionSummary = {
   studentId?: string;
   submittedAt: string;
   updatedAt?: string;
-  status: 'pending' | 'approved' | 'returned';
+  status: 'pending' | 'in_review' | 'approved' | 'returned';
   course?: string;
 };
 
@@ -98,6 +98,8 @@ function getStatusLabel(status: SubmissionSummary['status']) {
   switch (status) {
     case 'pending':
       return 'Pending review';
+    case 'in_review':
+      return 'In review';
     case 'approved':
       return 'Approved';
     case 'returned':
@@ -113,6 +115,8 @@ function getStatusStyles(status: SubmissionSummary['status']) {
       return 'bg-primary-container/20 text-on-primary-container';
     case 'pending':
       return 'bg-amber-100 text-amber-800';
+    case 'in_review':
+      return 'bg-sky-100 text-sky-800';
     case 'returned':
       return 'bg-error-container/70 text-on-error-container';
     default:
@@ -166,7 +170,7 @@ export default function AdminDashboard() {
       .sort((a, b) => new Date(b.lastActive || 0).getTime() - new Date(a.lastActive || 0).getTime())
       .slice(0, 5);
     const queue = [...submissions]
-      .filter((submission) => submission.status === 'pending' || submission.status === 'returned')
+      .filter((submission) => submission.status === 'pending' || submission.status === 'in_review' || submission.status === 'returned')
       .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
       .slice(0, 5);
     return {

@@ -2,27 +2,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { FileText, AlertCircle } from 'lucide-react';
-import { getStudentRecords } from '../../lib/api';
 import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
+import { useStudentRecordsQuery } from './student-records-query';
 
 export default function StudentRecords() {
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
-  const { data, isLoading: loading, isError } = useQuery({
-    queryKey: ['studentRecords', studentId],
-    queryFn: async () => {
-      if (!studentId) return [];
-      const response = await getStudentRecords(studentId);
-      return Array.isArray(response?.records) ? response.records : [];
-    },
-    enabled: !!studentId,
-  });
-
-  const records = Array.isArray(data) ? data : [];
+  const { data = [], isLoading: loading, isError } = useStudentRecordsQuery(studentId);
+  const records = data;
 
   useEffect(() => {
     if (isError) {
@@ -38,6 +28,8 @@ export default function StudentRecords() {
     switch (status) {
       case 'pending':
         return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending Review</Badge>;
+      case 'in_review':
+        return <Badge className="bg-sky-100 text-sky-800 border-sky-200">In Review</Badge>;
       case 'approved':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge>;
       case 'returned':

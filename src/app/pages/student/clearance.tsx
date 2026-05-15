@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -12,8 +11,8 @@ import type { MockSubmission } from '../../lib/mock-data';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import { toast } from 'sonner';
-import { getStudentRecords } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useStudentRecordsQuery } from './student-records-query';
 
 export default function StudentClearance() {
   const PREVIEW_BASE_WIDTH = 794;
@@ -28,16 +27,8 @@ export default function StudentClearance() {
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
 
-  const { data, isLoading: loading, isError } = useQuery({
-    queryKey: ['studentRecords', studentId],
-    queryFn: async () => {
-      if (!studentId) return null;
-      const response = await getStudentRecords(studentId);
-      return Array.isArray(response?.records) ? response.records : [];
-    },
-    enabled: !!studentId,
-  });
-  const records = Array.isArray(data) ? data : [];
+  const { data = [], isLoading: loading, isError } = useStudentRecordsQuery(studentId);
+  const records = data;
   const yearOptions = useMemo(
     () =>
       Array.from(new Set(records.map((entry) => String(entry.year || '')).filter(Boolean))).sort(
@@ -190,6 +181,7 @@ export default function StudentClearance() {
   const normalizedStatus = String(record?.status || '').toLowerCase();
   const isApproved = normalizedStatus === 'approved';
   const isPending = normalizedStatus === 'pending';
+  const isInReview = normalizedStatus === 'in_review';
   const isReturned = normalizedStatus === 'returned';
   const isPhysicalExamDone = normalizedStatus === 'physical_exam_done';
 
@@ -282,16 +274,18 @@ export default function StudentClearance() {
                 <Card className="mb-1 border-l-4 border-l-yellow-500 sm:mb-3">
                   <CardContent className="pt-6">
                     <div className="flex items-start gap-3">
-                      {isPending ? (
+                      {isPending || isInReview ? (
                         <>
-                          <Clock className="mt-0.5 h-5 w-5 shrink-0 text-yellow-600" />
+                          <Clock className={`mt-0.5 h-5 w-5 shrink-0 ${isInReview ? 'text-sky-600' : 'text-yellow-600'}`} />
                           <div>
-                            <p className="font-medium text-yellow-800">Clearance Not Yet Available</p>
+                            <p className={`font-medium ${isInReview ? 'text-sky-800' : 'text-yellow-800'}`}>Clearance Not Yet Available</p>
                             <p className="mt-1 text-sm text-muted-foreground">
-                              Your medical record is still under review. Once approved by the clinic staff, your medical clearance will be available for download here.
+                              {isInReview
+                                ? 'A clinic staff member is currently reviewing your medical record. Once approved, your medical clearance will be available for download here.'
+                                : 'Your medical record is waiting to be picked up for review. Once clinic staff starts processing it, your status will update here.'}
                             </p>
-                            <Badge variant="secondary" className="mt-2 bg-yellow-100 text-yellow-800">
-                              <Clock className="mr-1 h-3 w-3" /> Pending Review
+                            <Badge variant="secondary" className={`mt-2 ${isInReview ? 'bg-sky-100 text-sky-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                              <Clock className="mr-1 h-3 w-3" /> {isInReview ? 'In Review' : 'Pending Review'}
                             </Badge>
                           </div>
                         </>

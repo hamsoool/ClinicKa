@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -24,7 +25,8 @@ import {
 import { Plus, Search, Download, Printer, Archive } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
-import { archiveUserAccount, createAdminStaff, getStaffUsers } from '../../lib/api';
+import { archiveUserAccount, createAdminStaff } from '../../lib/api';
+import { invalidateAdminWorkflowQueries, useAdminStaffUsersQuery } from './admin-workflow-query';
 
 const statusTone = (status: string) => {
   if (status === 'Active') {
@@ -41,7 +43,7 @@ const roleTone = (role: string) => {
 };
 
 export default function AdminStaffManagement() {
-  const [staffList, setStaffList] = useState<any[]>([]);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [openCreate, setOpenCreate] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,18 +57,14 @@ export default function AdminStaffManagement() {
     lastName: '',
     position: 'Clinic Staff',
   });
-
-  const loadStaff = () =>
-    getStaffUsers()
-      .then((data) => setStaffList(data.staff || []))
-      .catch((error) => {
-        console.error('Error loading staff:', error);
-        toast.error('Failed to load staff directory');
-      });
+  const { data: staffData, isError } = useAdminStaffUsersQuery();
+  const staffList = staffData?.staff || [];
 
   useEffect(() => {
-    loadStaff();
-  }, []);
+    if (isError) {
+      toast.error('Failed to load staff directory');
+    }
+  }, [isError]);
 
   const submitCreate = async () => {
     if (!form.email || !form.password || !form.firstName || !form.lastName) {
@@ -91,7 +89,7 @@ export default function AdminStaffManagement() {
         lastName: '',
         position: 'Clinic Staff',
       });
-      await loadStaff();
+      await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to add staff');
     } finally {
@@ -110,7 +108,7 @@ export default function AdminStaffManagement() {
       toast.success(`${archiveTarget.name} has been archived`);
       setArchiveTarget(null);
       setArchiveReason('');
-      await loadStaff();
+      await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to archive staff');
     } finally {
