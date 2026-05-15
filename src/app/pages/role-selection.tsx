@@ -19,24 +19,27 @@ const FORM_PREVIEW_SRC = new URL('../../../exports/figma/05-student-medical-form
 const CAMPUS_PREVIEW_SRC = '/backdrop.jpg';
 
 const navLinks = [
-  { label: 'Records', target: 'features' },
-  { label: 'Health Forms', target: 'workflow' },
-  { label: 'Clearance', target: 'clearance' },
-  { label: 'Resources', target: 'resources' },
+  { label: 'Services', target: 'features' },
+  { label: 'Submissions', target: 'workflow' },
+  { label: 'Records', target: 'clearance' },
+  { label: 'Support', target: 'resources' },
 ];
 
 const workflowHighlights = [
   {
-    title: 'Instant submissions',
-    description: 'Upload records and complete medical histories without chasing physical forms.',
+    title: 'Guided student submissions',
+    description:
+      'Complete the yearly medical form, privacy waiver, health history, and required file uploads in one portal.',
   },
   {
-    title: 'Real-time tracking',
-    description: 'See clearance status updates right from your portal dashboard.',
+    title: 'Clear status tracking',
+    description:
+      'Follow records as they move through pending, in review, returned, resubmitted, physical exam done, and approved states.',
   },
   {
-    title: 'Direct clinic feedback',
-    description: 'Get secure messages from clinic staff if anything needs review.',
+    title: 'Clinic review workflow',
+    description:
+      'Clinic staff can verify submissions, save review notes, return records for correction, and prepare approved clearances.',
   },
 ];
 
@@ -200,16 +203,16 @@ export default function RoleSelection() {
             <div className="space-y-6 md:space-y-8 lg:col-span-7">
               <div className="inline-flex items-center gap-2 rounded-full border border-[#c9d9dd] bg-white/78 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_10px_35px_rgba(11,28,48,0.05)] backdrop-blur">
                 <span className="h-2 w-2 rounded-full bg-[#065f46]" />
-                Secure scholarly clinic management
+                Gordon College clinic records portal
               </div>
 
               <div className="space-y-5">
                 <h1 className="max-w-2xl text-4xl font-bold leading-[1.1] tracking-[-0.04em] text-[#0b1c30] md:text-5xl lg:text-6xl xl:text-[4.2rem]">
-                  Your Academic Health Journey, <span className="text-[#065f46]">Streamlined.</span>
+                  ClinicKa! Clinic Management Portal
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-[#4a5b68] md:text-lg md:leading-8">
-                  ClinicKa! brings Gordon College clinic services into a calmer, clearer digital workflow. Submit medical
-                  records, complete health forms, and track clearance progress without the paperwork pileup.
+                  A role-based system for Gordon College students, clinic staff, and administrators to submit medical
+                  requirements, review health records, issue clearances, and manage clinic operations online.
                 </p>
               </div>
 
@@ -218,38 +221,38 @@ export default function RoleSelection() {
                   to="/auth?mode=signin"
                   className="inline-flex h-14 items-center justify-center rounded-full bg-[#004532] px-8 text-sm font-semibold text-white transition hover:bg-[#065f46]"
                 >
-                  Student Login
+                  Sign In to Portal
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
                 <button
                   type="button"
-                  onClick={() => scrollToSection('workflow')}
+                  onClick={() => scrollToSection('features')}
                   className="inline-flex h-14 items-center justify-center rounded-full border border-[#6d8b81] bg-white/72 px-8 text-sm font-semibold text-[#0b1c30] transition hover:bg-white"
                 >
-                  View Clearance Requirements
+                  View Services
                 </button>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="rounded-[24px] border border-white/80 bg-white/74 p-5 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Submission flow</p>
-                  <p className="mt-3 text-2xl font-bold tracking-[-0.04em] text-[#0b1c30]">Digital-first</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Student service</p>
+                  <p className="mt-3 text-2xl font-bold tracking-[-0.04em] text-[#0b1c30]">Submit</p>
                   <p className="mt-2 text-sm leading-6 text-[#4a5b68]">
-                    From intake to approval, every step stays visible.
+                    Complete yearly forms and upload medical requirements.
                   </p>
                 </div>
                 <div className="rounded-[24px] border border-white/80 bg-white/74 p-5 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Access model</p>
-                  <p className="mt-3 text-2xl font-bold tracking-[-0.04em] text-[#0b1c30]">Role-based</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Clinic service</p>
+                  <p className="mt-3 text-2xl font-bold tracking-[-0.04em] text-[#0b1c30]">Review</p>
                   <p className="mt-2 text-sm leading-6 text-[#4a5b68]">
-                    Students, clinic staff, and admins get the right tools.
+                    Verify records, update statuses, and manage clearances.
                   </p>
                 </div>
                 <div className="rounded-[24px] border border-white/80 bg-white/74 p-5 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Privacy posture</p>
-                  <p className="mt-3 text-2xl font-bold tracking-[-0.04em] text-[#0b1c30]">Protected</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Admin service</p>
+                  <p className="mt-3 text-2xl font-bold tracking-[-0.04em] text-[#0b1c30]">Manage</p>
                   <p className="mt-2 text-sm leading-6 text-[#4a5b68]">
-                    Records stay within controlled clinic workflows.
+                    Maintain users, staff access, reports, and settings.
                   </p>
                 </div>
               </div>
@@ -270,9 +273,9 @@ export default function RoleSelection() {
         <section id="features" className="py-16 md:py-20">
           <div className="mx-auto max-w-[90rem] px-5 sm:px-8 lg:px-10">
             <div className="mx-auto mb-10 max-w-3xl text-center md:mb-12">
-              <h2 className="text-3xl font-semibold tracking-[-0.03em] text-[#0b1c30] md:text-4xl">Comprehensive care ecosystem</h2>
+              <h2 className="text-3xl font-semibold tracking-[-0.03em] text-[#0b1c30] md:text-4xl">Services available in ClinicKa!</h2>
               <p className="mt-3 text-base leading-7 text-[#4a5b68] md:mt-4 md:text-lg">
-                Four pillars designed to simplify clinic operations and empower student wellness.
+                The portal supports the clinic record services Gordon College users need from submission to approval.
               </p>
             </div>
 
@@ -283,9 +286,10 @@ export default function RoleSelection() {
                     <Users className="h-6 w-6" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">User management</h3>
+                    <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Student medical requirement submission</h3>
                     <p className="mt-3 text-sm leading-7 text-[#4a5b68]">
-                      Secure, role-based accounts ensure that students and clinic staff see only what they need.
+                      Students can manage their profile, complete the privacy waiver and yearly medical form, and upload
+                      required files such as chest X-ray, CBC, urinalysis, signatures, and supporting documents.
                     </p>
                   </div>
                 </div>
@@ -296,9 +300,10 @@ export default function RoleSelection() {
                   <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
                     <ShieldCheck className="h-6 w-6" />
                   </div>
-                  <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em]">Medical clearance</h3>
+                  <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em]">Medical clearance processing</h3>
                   <p className="mt-3 text-sm leading-7 text-white/85">
-                    Automated workflows for reviewing and approving health requirements before enrollment.
+                    Clinic personnel review submissions, mark physical examination completion, approve records, and
+                    prepare clearance details for eligible students.
                   </p>
                 </div>
               </div>
@@ -307,9 +312,10 @@ export default function RoleSelection() {
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#d9f3e4] text-[#065f46]">
                   <ClipboardList className="h-6 w-6" />
                 </div>
-                <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Health forms</h3>
+                <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Status updates and corrections</h3>
                 <p className="mt-3 text-sm leading-7 text-[#4a5b68]">
-                  Digital intake forms replace paper packets and capture accurate medical histories online.
+                  Students can track pending, in-review, returned, resubmitted, physical-exam-done, and approved records
+                  while clinic staff request corrections when needed.
                 </p>
               </div>
 
@@ -319,9 +325,10 @@ export default function RoleSelection() {
                     <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5ed] text-[#065f46]">
                       <FolderOpen className="h-6 w-6" />
                     </div>
-                    <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Record management</h3>
+                    <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Records, certificates, and reports</h3>
                     <p className="mt-3 text-sm leading-7 text-[#4a5b68]">
-                      Centralized record storage for quick retrieval, updates, and long-term compliance.
+                      Approved medical records can be accessed through student and staff portals, certificates can be
+                      managed by clinic staff, and reports help administrators monitor clinic activity.
                     </p>
                   </div>
                   <div className="hidden flex-1 rounded-2xl border border-[#dde7e6] bg-white/70 p-4 md:block">
@@ -359,11 +366,11 @@ export default function RoleSelection() {
 
             <div className="order-1 space-y-5 lg:order-2 md:space-y-6">
               <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30] md:text-4xl">
-                Goodbye paperwork.<br />Hello clarity.
+                From student submission<br />to clinic decision.
               </h2>
               <p className="max-w-xl text-base leading-7 text-[#4a5b68] md:text-lg md:leading-8">
-                Health requirements should not feel like guesswork. ClinicKa! turns the paper-heavy routine into a guided
-                digital process that is easier to finish and easier to review.
+                ClinicKa! guides students through medical record submission, then gives clinic staff the tools to review,
+                return, approve, and document each record with a visible status history.
               </p>
               <div className="space-y-6 pt-2">
                 {workflowHighlights.map((item) => (
@@ -392,13 +399,13 @@ export default function RoleSelection() {
                 <div>
                   <h3 className="text-xl md:text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Uncompromising security</h3>
                   <p className="mt-2 max-w-2xl text-sm leading-7 text-[#4a5b68]">
-                    Student health records are sensitive. ClinicKa! uses controlled access, school-managed workflows,
-                    and privacy-aware handling to protect data with care.
+                    ClinicKa! separates access for students, clinic staff, and administrators so medical submissions,
+                    review notes, certificates, and reports stay inside controlled Gordon College clinic workflows.
                   </p>
                 </div>
               </div>
               <span className="inline-flex items-center rounded-full bg-[#d9f3e4] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#065f46]">
-                Privacy-first
+                Role-based access
               </span>
             </div>
           </div>
@@ -407,15 +414,15 @@ export default function RoleSelection() {
         <section className="border-t border-[#e2ebe7] bg-white/60 py-16 md:py-20">
           <div className="mx-auto grid max-w-[90rem] items-center gap-10 px-5 sm:px-8 md:gap-12 lg:grid-cols-2 lg:px-10">
             <div className="space-y-4 md:space-y-5">
-              <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30] md:text-4xl">Your records, always within reach.</h2>
+              <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30] md:text-4xl">Clinic records, clearances, and reports in one system.</h2>
               <p className="text-base leading-7 text-[#4a5b68] md:text-lg md:leading-8">
-                ClinicKa! keeps medical forms, submissions, and approvals in one place so students and clinic teams can
-                work with confidence.
+                Students can revisit submitted records and approved clearances, while clinic staff and administrators can
+                monitor submissions, certificates, user accounts, and operational reports.
               </p>
               <div className="flex flex-wrap gap-3 text-sm text-[#4a5b68]">
-                <span className="rounded-full bg-white/80 px-4 py-2 shadow-sm">Role-based access</span>
-                <span className="rounded-full bg-white/80 px-4 py-2 shadow-sm">Clear audit trails</span>
-                <span className="rounded-full bg-white/80 px-4 py-2 shadow-sm">Secure storage</span>
+                <span className="rounded-full bg-white/80 px-4 py-2 shadow-sm">Student records</span>
+                <span className="rounded-full bg-white/80 px-4 py-2 shadow-sm">Staff review queue</span>
+                <span className="rounded-full bg-white/80 px-4 py-2 shadow-sm">Admin reports</span>
               </div>
             </div>
             <div className="relative">
@@ -427,7 +434,7 @@ export default function RoleSelection() {
               <div className="absolute -bottom-6 left-6 rounded-[1.5rem] border border-white/80 bg-white/90 px-4 py-3 text-sm text-[#4a5b68] shadow-[0_18px_40px_rgba(11,28,48,0.12)]">
                 <div className="flex items-center gap-3">
                   <FileText className="h-4 w-4 text-[#065f46]" />
-                  <span>Unified medical submission dashboard</span>
+                  <span>Unified clinic management dashboard</span>
                 </div>
               </div>
             </div>
