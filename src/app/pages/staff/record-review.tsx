@@ -743,19 +743,28 @@ export default function StaffRecordReview() {
         </Card>
       </div>
 
-      <Tabs defaultValue="record" className="space-y-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-xl bg-muted/50 p-1 md:grid-cols-4">
-          <TabsTrigger value="record" className="w-full px-2 py-2 text-xs sm:text-sm">
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="pt-5">
+          <p className="text-sm font-semibold text-foreground">Recommended workflow</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            1) Confirm student record, 2) verify labs, 3) complete assessment, {isDoctor ? '4) finalize decision.' : '4) save notes and status for doctor review.'}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue={isDoctor ? 'assessment' : 'record'} className="space-y-6">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-border/60 bg-muted/40 p-1.5 md:grid-cols-4">
+          <TabsTrigger value="record" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
             Student Record
           </TabsTrigger>
-          <TabsTrigger value="labs" className="w-full px-2 py-2 text-xs sm:text-sm">
+          <TabsTrigger value="labs" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
             Lab Results
           </TabsTrigger>
-          <TabsTrigger value="assessment" className="w-full px-2 py-2 text-xs sm:text-sm">
+          <TabsTrigger value="assessment" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
             Assessment
           </TabsTrigger>
-          <TabsTrigger value="decision" className="w-full px-2 py-2 text-xs sm:text-sm" disabled={!isDoctor}>
-            Clinic Notes {!isDoctor ? '(Doctor Only)' : ''}
+          <TabsTrigger value="decision" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+            {isDoctor ? 'Final Decision' : 'Notes & Status'}
           </TabsTrigger>
         </TabsList>
 
@@ -1451,7 +1460,7 @@ export default function StaffRecordReview() {
                       <SelectItem value="pending">Pending Review</SelectItem>
                       <SelectItem value="in_review">In Review</SelectItem>
                       <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
+                      {isDoctor ? <SelectItem value="approved">Approved</SelectItem> : null}
                       <SelectItem value="returned">Returned for Correction</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1462,7 +1471,15 @@ export default function StaffRecordReview() {
                     <p className="mt-2 text-xs text-green-700">This record is approved and status changes are locked.</p>
                   ) : null}
                 </div>
+                {!isDoctor ? (
+                  <div className="md:col-span-1 xl:col-span-2">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                      Clinic Staff can update notes and status, but final clearance fields are limited to Clinic Doctors.
+                    </div>
+                  </div>
+                ) : null}
 
+                {isDoctor ? (
                 <div>
                   <Label htmlFor="clearancePurpose">Purpose</Label>
                   <Select
@@ -1479,7 +1496,9 @@ export default function StaffRecordReview() {
                     </SelectContent>
                   </Select>
                 </div>
+                ) : null}
 
+                {isDoctor ? (
                 <div>
                   <Label htmlFor="controlNo">Control Number</Label>
                   <Input
@@ -1489,7 +1508,9 @@ export default function StaffRecordReview() {
                     className="mt-2"
                   />
                 </div>
+                ) : null}
 
+                {isDoctor ? (
                 <div>
                   <Label htmlFor="issuedDate">Issued Date</Label>
                   <Input
@@ -1500,7 +1521,9 @@ export default function StaffRecordReview() {
                     className="mt-2"
                   />
                 </div>
+                ) : null}
 
+                {isDoctor ? (
                 <div className="md:col-span-2 xl:col-span-2">
                   <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
                   <Input
@@ -1512,7 +1535,9 @@ export default function StaffRecordReview() {
                   />
                   <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical clearance.</p>
                 </div>
+                ) : null}
 
+                {isDoctor ? (
                 <div className="md:col-span-2">
                   <Label>General Findings</Label>
                   <RadioGroup
@@ -1530,7 +1555,9 @@ export default function StaffRecordReview() {
                     </label>
                   </RadioGroup>
                 </div>
+                ) : null}
 
+                {isDoctor ? (
                 <div className="md:col-span-2 xl:col-span-3">
                   <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
                   <Textarea
@@ -1541,7 +1568,9 @@ export default function StaffRecordReview() {
                     rows={4}
                   />
                 </div>
+                ) : null}
 
+                {isDoctor ? (
                 <div className="md:col-span-2 xl:col-span-3">
                   <Label htmlFor="remarks">Clearance Remarks</Label>
                   <Textarea
@@ -1553,6 +1582,7 @@ export default function StaffRecordReview() {
                     placeholder="State whether the student is fit, fit with recommendations, or needs follow-up."
                   />
                 </div>
+                ) : null}
               </div>
             </CardContent>
           </Card>

@@ -9,7 +9,6 @@ import {
   ClipboardCheck,
   Clock3,
   FileWarning,
-  FolderOpen,
   ShieldCheck,
   Stethoscope,
 } from 'lucide-react';
@@ -104,7 +103,7 @@ export default function StaffDashboard() {
   const position = getRoleLabel(me?.profile?.role, me?.staff?.position);
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>('all');
+  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>('pending');
   const {
     data: analytics,
     isLoading: analyticsLoading,
@@ -158,20 +157,6 @@ export default function StaffDashboard() {
       return bTime - aTime;
     });
 
-  const departments = Array.from(new Set(submissions.map((s) => s.department || 'Other'))).sort();
-  const statusByDepartment = departments.map((dept) => {
-    const deptSubmissions = submissions.filter((submission) => (submission.department || 'Other') === dept);
-    return {
-      department: dept,
-      label: dept,
-      pending: deptSubmissions.filter((submission) => submission.status === 'pending').length,
-      inReview: deptSubmissions.filter((submission) => submission.status === 'in_review').length,
-      approved: deptSubmissions.filter((submission) => submission.status === 'approved').length,
-      returned: deptSubmissions.filter((submission) => submission.status === 'returned').length,
-      resubmitted: deptSubmissions.filter((submission) => submission.status === 'resubmitted').length,
-    };
-  });
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -198,25 +183,25 @@ export default function StaffDashboard() {
 
   const summaryCards = [
     {
-      label: 'Submitted Today',
-      value: submittedToday,
-      icon: Activity,
+      label: 'Needs Action',
+      value: actionQueue.length,
+      icon: ClipboardCheck,
       tone: 'text-primary',
-      detail: 'Student submissions received today',
+      detail: 'Pending, in-review, returned, and resubmitted records',
     },
     {
-      label: 'Submitted Yesterday',
-      value: submittedYesterday,
+      label: 'In Review',
+      value: inReviewQueue.length,
       icon: Clock3,
       tone: 'text-blue-600',
-      detail: 'Student submissions received yesterday',
+      detail: 'Records currently being worked on by the clinic',
     },
     {
-      label: 'Awaiting Review',
-      value: analytics?.pendingRecords || 0,
+      label: 'Returned',
+      value: returnedQueue.length,
       icon: FileWarning,
-      tone: 'text-amber-600',
-      detail: 'Total registered students awaiting review',
+      tone: 'text-rose-600',
+      detail: 'Records waiting for student corrections',
     },
     {
       label: 'Cleared Records',
@@ -239,7 +224,7 @@ export default function StaffDashboard() {
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-on-surface">Welcome, {displayName}</h1>
               <p className="mt-2 max-w-2xl text-base text-on-surface-variant">
-                Review student submissions, release clearances, and keep the clinic workflow moving with the same streamlined experience students use.
+                Start with high-priority records first, then continue with in-review and returned submissions.
               </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-on-surface-variant">
@@ -248,6 +233,12 @@ export default function StaffDashboard() {
               </span>
               <span className="rounded-full bg-surface-container px-3 py-1.5">
                 Total submissions: <span className="font-semibold text-on-surface">{analytics?.totalSubmissions || 0}</span>
+              </span>
+              <span className="rounded-full bg-surface-container px-3 py-1.5">
+                Today: <span className="font-semibold text-on-surface">{submittedToday}</span>
+              </span>
+              <span className="rounded-full bg-surface-container px-3 py-1.5">
+                Yesterday: <span className="font-semibold text-on-surface">{submittedYesterday}</span>
               </span>
             </div>
           </div>
@@ -318,7 +309,7 @@ export default function StaffDashboard() {
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Priority Review Queue</h2>
               <p className="mt-1 text-sm text-on-surface-variant">
-                Start with the most recent records that still need clinic action.
+                By default, this view starts with pending records so staff can take action quickly.
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -375,7 +366,7 @@ export default function StaffDashboard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {visibleQueue.slice(0, 5).map((submission) => (
+              {visibleQueue.slice(0, 4).map((submission) => (
                 <button
                   key={submission.id}
                   onClick={() => navigate(`/staff/review/${submission.id}`)}
@@ -416,64 +407,33 @@ export default function StaffDashboard() {
 
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-6">
-            <h2 className="text-lg font-semibold text-on-surface">Department Status Overview</h2>
+            <h2 className="text-lg font-semibold text-on-surface">Today&apos;s Focus</h2>
             <p className="mt-1 text-sm text-on-surface-variant">
-              Track where approvals and follow-ups are concentrated.
+              Suggested order to reduce missed steps and backlogs.
             </p>
           </div>
           <div className="space-y-3">
-            {statusByDepartment.map((row) => (
-              <div key={row.department} className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm font-semibold text-on-surface">{row.label}</p>
-                  <div className="flex flex-wrap gap-2 text-xs text-on-surface-variant">
-                    <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800">{row.pending} pending</span>
-                    <span className="rounded-full bg-sky-100 px-2 py-1 text-sky-800">{row.inReview} in review</span>
-                    <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">{row.approved} approved</span>
-                    <span className="rounded-full bg-rose-100 px-2 py-1 text-rose-800">{row.returned} returned</span>
-                    <span className="rounded-full bg-orange-100 px-2 py-1 text-orange-800">{row.resubmitted} resubmitted</span>
-                  </div>
-                </div>
-                <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-surface-variant/50">
-                  {row.pending + row.inReview + row.approved + row.returned + row.resubmitted > 0 ? (
-                    <>
-                      <div
-                        className="bg-amber-400"
-                        style={{
-                          width: `${(row.pending / (row.pending + row.inReview + row.approved + row.returned + row.resubmitted)) * 100}%`,
-                        }}
-                      />
-                      <div
-                        className="bg-sky-400"
-                        style={{
-                          width: `${(row.inReview / (row.pending + row.inReview + row.approved + row.returned + row.resubmitted)) * 100}%`,
-                        }}
-                      />
-                      <div
-                        className="bg-emerald-500"
-                        style={{
-                          width: `${(row.approved / (row.pending + row.inReview + row.approved + row.returned + row.resubmitted)) * 100}%`,
-                        }}
-                      />
-                      <div
-                        className="bg-rose-400"
-                        style={{
-                          width: `${(row.returned / (row.pending + row.inReview + row.approved + row.returned + row.resubmitted)) * 100}%`,
-                        }}
-                      />
-                      <div
-                        className="bg-orange-400"
-                        style={{
-                          width: `${(row.resubmitted / (row.pending + row.inReview + row.approved + row.returned + row.resubmitted)) * 100}%`,
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <div className="w-full bg-surface-variant/50" />
-                  )}
-                </div>
-              </div>
-            ))}
+            <div className="rounded-2xl border border-amber-200/60 bg-amber-50/70 p-4">
+              <p className="text-sm font-semibold text-amber-900">1. Review pending first</p>
+              <p className="mt-1 text-sm text-amber-800">{pendingQueue.length} records are waiting for first review.</p>
+            </div>
+            <div className="rounded-2xl border border-orange-200/60 bg-orange-50/70 p-4">
+              <p className="text-sm font-semibold text-orange-900">2. Follow up returned and resubmitted</p>
+              <p className="mt-1 text-sm text-orange-800">
+                {returnedQueue.length + resubmittedQueue.length} records need correction checks.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-sky-200/60 bg-sky-50/70 p-4">
+              <p className="text-sm font-semibold text-sky-900">3. Continue active reviews</p>
+              <p className="mt-1 text-sm text-sky-800">{inReviewQueue.length} records are currently in progress.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/staff/reports')}
+              className="w-full rounded-xl border border-outline-variant/40 bg-surface-container-low px-4 py-2 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container"
+            >
+              Open full reports
+            </button>
           </div>
         </div>
       </div>
