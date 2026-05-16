@@ -103,6 +103,9 @@ export type SubmissionRecord = {
   status: SubmissionStatus;
   submittedAt: string;
   updatedAt?: string;
+  reviewedByStaffId?: string;
+  reviewedByName?: string;
+  reviewedByPosition?: string;
   staffNotes?: string;
   age?: string;
   sex?: string;
@@ -143,6 +146,9 @@ export type SubmissionSummaryRecord = {
   status: SubmissionStatus;
   submittedAt: string;
   updatedAt?: string;
+  reviewedByStaffId?: string;
+  reviewedByName?: string;
+  reviewedByPosition?: string;
 };
 
 export type ApprovedStudentRecordSummary = {

@@ -80,6 +80,25 @@ function getStatusStyles(status: SubmissionSummaryRecord['status']) {
   }
 }
 
+function getActiveReviewerMessage(
+  submission: SubmissionSummaryRecord,
+  currentStaffId?: string | null,
+) {
+  if (submission.status !== 'in_review' || !submission.reviewedByStaffId) {
+    return null;
+  }
+
+  if (submission.reviewedByStaffId === String(currentStaffId || '').trim()) {
+    return 'Assigned reviewer: You';
+  }
+
+  if (submission.reviewedByName) {
+    return `Assigned reviewer: ${submission.reviewedByName}`;
+  }
+
+  return 'Assigned reviewer: Another clinic staff member';
+}
+
 export default function StaffDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
@@ -91,12 +110,14 @@ export default function StaffDashboard() {
     formatEmailName(me?.profile.email) ||
     getRoleLabel(me?.profile?.role, me?.staff?.position);
   const position = getRoleLabel(me?.profile?.role, me?.staff?.position);
+  const currentStaffId = String(me?.staff?.id || '').trim();
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>('desc');
   const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>('pending');
   const {
     data: overview,
     isLoading: overviewLoading,
+    isFetching: overviewFetching,
     isError: isOverviewError,
   } = useStaffDashboardOverviewQuery();
 
@@ -307,6 +328,9 @@ export default function StaffDashboard() {
               >
                 Open Queue
               </button>
+              {!overviewLoading && overviewFetching ? (
+                <span className="text-xs text-on-surface-variant">Refreshing queue...</span>
+              ) : null}
             </div>
           </div>
           <Tabs
@@ -371,6 +395,11 @@ export default function StaffDashboard() {
                       <p className="mt-1 break-words text-xs text-on-surface-variant">
                         {submission.studentId} | {submission.course}
                       </p>
+                      {getActiveReviewerMessage(submission, currentStaffId) ? (
+                        <p className="mt-2 text-xs font-medium text-sky-700">
+                          {getActiveReviewerMessage(submission, currentStaffId)}
+                        </p>
+                      ) : null}
                       <p className="mt-2 text-sm text-on-surface-variant">
                         Submitted {formatDate(submission.submittedAt)}
                       </p>

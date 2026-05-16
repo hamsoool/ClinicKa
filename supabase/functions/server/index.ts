@@ -63,6 +63,7 @@ const SUBMISSION_LIST_COLUMNS = [
   'department',
   'year_level',
   'status',
+  'reviewed_by',
   'submitted_at',
   'updated_at',
   'staff_notes',
@@ -92,6 +93,7 @@ const SUBMISSION_SUMMARY_COLUMNS = [
   'department',
   'year_level',
   'status',
+  'reviewed_by',
   'submitted_at',
   'updated_at',
 ].join(',');
@@ -442,6 +444,37 @@ function deriveNamePartsFromUser(user: any) {
     firstName: parts[0] || null,
     lastName: parts.slice(1).join(' ').trim() || null,
   };
+}
+
+function formatStaffDisplayName(staff?: any) {
+  const fullName = [normalizeNamePart(staff?.first_name), normalizeNamePart(staff?.last_name)]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  if (fullName) return fullName;
+
+  return normalizeNamePart(staff?.name);
+}
+
+async function loadStaffUsersByIds(staffIds: string[]) {
+  const uniqueStaffIds = [...new Set((staffIds || []).map((value) => String(value || '').trim()).filter(Boolean))];
+  if (!uniqueStaffIds.length) {
+    return {} as Record<string, any>;
+  }
+
+  const { data, error } = await supabase
+    .from('staff_users')
+    .select('id,first_name,last_name,middle_initial,position,name')
+    .in('id', uniqueStaffIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []).reduce((acc, staff) => {
+    acc[staff.id] = staff;
+    return acc;
+  }, {} as Record<string, any>);
 }
 
 function isGCDomainEmail(email?: string | null) {
@@ -972,6 +1005,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
   const emergencyContact = related.emergencyContacts[row.id];
   const medicalHistory = related.medicalHistory[row.id];
   const staffMeasurements = related.staffMeasurements[row.id];
+  const reviewer = related.reviewers[row.reviewed_by] || null;
   const xray = related.xray[row.id];
   const cbc = related.cbc[row.id];
   const urinalysis = related.urinalysis[row.id];
@@ -990,6 +1024,9 @@ function mapSubmission(row: any, related: Record<string, any>) {
     status: row.status,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
+    reviewedByStaffId: row.reviewed_by || undefined,
+    reviewedByName: formatStaffDisplayName(reviewer) || undefined,
+    reviewedByPosition: normalizeNamePart(reviewer?.position) || undefined,
     staffNotes: row.staff_notes,
     age: row.age ? String(row.age) : student.age ? String(student.age) : '',
     sex: row.sex || student.sex || '',
@@ -1054,12 +1091,14 @@ function mapSubmission(row: any, related: Record<string, any>) {
 async function loadRelatedData(rows: any[]) {
   const submissionIds = rows.map((row) => row.id);
   const studentIds = [...new Set(rows.map((row) => row.student_id).filter(Boolean))];
+  const reviewerIds = [...new Set(rows.map((row) => row.reviewed_by).filter(Boolean))];
 
   const [
     studentsRes,
     emergencyContactsRes,
     medicalHistoryRes,
     staffMeasurementsRes,
+    reviewersRes,
     xrayRes,
     cbcRes,
     urinalysisRes,
@@ -1089,6 +1128,12 @@ async function loadRelatedData(rows: any[]) {
           .from('staff_measurements')
           .select('submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by')
           .in('submission_id', submissionIds)
+      : Promise.resolve({ data: [] as any[] }),
+    reviewerIds.length
+      ? supabase
+          .from('staff_users')
+          .select('id,first_name,last_name,middle_initial,position,name')
+          .in('id', reviewerIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
@@ -1139,6 +1184,7 @@ async function loadRelatedData(rows: any[]) {
     emergencyContacts: byKey(emergencyContactsRes.data, 'submission_id'),
     medicalHistory: byKey(medicalHistoryRes.data, 'submission_id'),
     staffMeasurements: byKey(staffMeasurementsRes.data, 'submission_id'),
+    reviewers: byKey(reviewersRes.data, 'id'),
     xray: byKey(xrayRes.data, 'submission_id'),
     cbc: byKey(cbcRes.data, 'submission_id'),
     urinalysis: byKey(urinalysisRes.data, 'submission_id'),
@@ -1161,7 +1207,8 @@ async function getMappedSubmissions(queryBuilder: any) {
 
 const ACTIONABLE_SUBMISSION_STATUSES = ['pending', 'in_review', 'returned', 'resubmitted'];
 
-function mapSubmissionSummary(row: any) {
+function mapSubmissionSummary(row: any, reviewers: Record<string, any> = {}) {
+  const reviewer = reviewers[row.reviewed_by] || null;
   return {
     id: row.id,
     studentId: row.student_id || '',
@@ -1174,7 +1221,18 @@ function mapSubmissionSummary(row: any) {
     status: row.status,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
+    reviewedByStaffId: row.reviewed_by || undefined,
+    reviewedByName: formatStaffDisplayName(reviewer) || undefined,
+    reviewedByPosition: normalizeNamePart(reviewer?.position) || undefined,
   };
+}
+
+async function mapSubmissionSummaries(rows: any[], reviewerDirectory?: Record<string, any>) {
+  const resolvedReviewerDirectory =
+    reviewerDirectory
+      || await loadStaffUsersByIds((rows || []).map((row) => row.reviewed_by).filter(Boolean));
+
+  return (rows || []).map((row) => mapSubmissionSummary(row, resolvedReviewerDirectory));
 }
 
 function normalizeIlikeValue(value: string) {
@@ -1338,6 +1396,24 @@ async function loadStaffDashboardOverview() {
   if (inReviewQueueError) throw new Error(inReviewQueueError.message);
   if (returnedQueueError) throw new Error(returnedQueueError.message);
   if (resubmittedQueueError) throw new Error(resubmittedQueueError.message);
+  const reviewerDirectory = await loadStaffUsersByIds([
+    ...(pendingQueueRows || []).map((row: any) => row.reviewed_by),
+    ...(inReviewQueueRows || []).map((row: any) => row.reviewed_by),
+    ...(returnedQueueRows || []).map((row: any) => row.reviewed_by),
+    ...(resubmittedQueueRows || []).map((row: any) => row.reviewed_by),
+  ]);
+
+  const [
+    pendingQueueItems,
+    inReviewQueueItems,
+    returnedQueueItems,
+    resubmittedQueueItems,
+  ] = await Promise.all([
+    mapSubmissionSummaries(pendingQueueRows || [], reviewerDirectory),
+    mapSubmissionSummaries(inReviewQueueRows || [], reviewerDirectory),
+    mapSubmissionSummaries(returnedQueueRows || [], reviewerDirectory),
+    mapSubmissionSummaries(resubmittedQueueRows || [], reviewerDirectory),
+  ]);
 
   return {
     totalSubmissions: totalSubmissions || 0,
@@ -1349,10 +1425,10 @@ async function loadStaffDashboardOverview() {
     actionableRecords: (pendingRecords || 0) + (inReviewRecords || 0) + (returnedRecords || 0) + (resubmittedRecords || 0),
     submittedToday: submittedToday || 0,
     submittedYesterday: submittedYesterday || 0,
-    pendingQueueItems: (pendingQueueRows || []).map(mapSubmissionSummary),
-    inReviewQueueItems: (inReviewQueueRows || []).map(mapSubmissionSummary),
-    returnedQueueItems: (returnedQueueRows || []).map(mapSubmissionSummary),
-    resubmittedQueueItems: (resubmittedQueueRows || []).map(mapSubmissionSummary),
+    pendingQueueItems,
+    inReviewQueueItems,
+    returnedQueueItems,
+    resubmittedQueueItems,
   };
 }
 
@@ -1393,9 +1469,10 @@ async function loadStaffSubmissionSummaries(options: any = {}) {
   ]);
 
   if (error) throw new Error(error.message);
+  const items = await mapSubmissionSummaries(data || []);
 
   return {
-    items: (data || []).map(mapSubmissionSummary),
+    items,
     total: count || 0,
     page,
     pageSize,
@@ -2068,25 +2145,106 @@ app.put("/submission/:id/status", async (c) => {
   try {
     const id = c.req.param('id');
     const { status, staffNotes } = await c.req.json();
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+    const now = new Date().toISOString();
 
     // Only doctors and admins can set statuses that finalize or change clearance
     const doctorOnlyStatuses = ['approved', 'returned', 'physical_exam_done'];
-    if (doctorOnlyStatuses.includes(status) && !isDoctorOrAdmin(requester)) {
+    if (doctorOnlyStatuses.includes(normalizedStatus) && !isDoctorOrAdmin(requester)) {
       return c.json({ error: 'Only Clinic Doctors can approve, return, or mark physical exam done.' }, 403);
+    }
+
+    if (normalizedStatus === 'in_review') {
+      const reviewerId = String(requester.staff?.id || '').trim();
+      if (!reviewerId) {
+        return badRequest('Staff account is not linked to this user.');
+      }
+
+      const { data: claimedRows, error: claimError } = await supabase
+        .from('submissions')
+        .update({
+          status: normalizedStatus,
+          staff_notes: staffNotes || null,
+          reviewed_by: reviewerId,
+          updated_at: now,
+        })
+        .eq('id', id)
+        .in('status', ['pending', 'resubmitted'])
+        .select('id');
+
+      if (claimError) throw new Error(claimError.message);
+
+      if ((claimedRows || []).length === 0) {
+        const { data: currentSubmission, error: currentSubmissionError } = await supabase
+          .from('submissions')
+          .select('id,status,reviewed_by')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (currentSubmissionError) throw new Error(currentSubmissionError.message);
+        if (!currentSubmission) {
+          return c.json({ error: 'Submission not found.' }, 404);
+        }
+
+        if (currentSubmission.status === 'in_review' && currentSubmission.reviewed_by === reviewerId) {
+          const { error: ownUpdateError } = await supabase
+            .from('submissions')
+            .update({
+              staff_notes: staffNotes || null,
+              updated_at: now,
+            })
+            .eq('id', id)
+            .eq('reviewed_by', reviewerId);
+
+          if (ownUpdateError) throw new Error(ownUpdateError.message);
+
+          invalidateDashboardReadCaches();
+          return c.json({ success: true });
+        }
+
+        if (currentSubmission.status === 'in_review' && currentSubmission.reviewed_by) {
+          const reviewerDirectory = await loadStaffUsersByIds([currentSubmission.reviewed_by]);
+          const reviewerName =
+            formatStaffDisplayName(reviewerDirectory[currentSubmission.reviewed_by])
+            || 'another clinic staff member';
+
+          return c.json(
+            {
+              error: 'Submission already being reviewed.',
+              details: `This submission is already being reviewed by ${reviewerName}.`,
+              reviewedBy: currentSubmission.reviewed_by,
+              reviewerName,
+            },
+            409,
+          );
+        }
+
+        return c.json(
+          {
+            error: 'Submission is no longer available to claim.',
+            details: 'This submission changed status. Refresh the review queue and try again.',
+          },
+          409,
+        );
+      }
+
+      invalidateDashboardReadCaches();
+      return c.json({ success: true });
     }
 
     const { error } = await supabase
       .from('submissions')
       .update({
-        status,
+        status: normalizedStatus,
         staff_notes: staffNotes || null,
         reviewed_by: requester.staff?.id || null,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       })
       .eq('id', id);
 
     if (error) throw new Error(error.message);
 
+    invalidateDashboardReadCaches();
     return c.json({ success: true });
   } catch (error) {
     console.log('Error updating submission status:', error);

@@ -15,8 +15,8 @@ import {
 } from '../../lib/api';
 import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
 
-const STAFF_DASHBOARD_REFRESH_INTERVAL_MS = 60_000;
-const STAFF_SUMMARIES_REFRESH_INTERVAL_MS = 60_000;
+const STAFF_DASHBOARD_REFRESH_INTERVAL_MS = 10_000;
+const STAFF_SUMMARIES_REFRESH_INTERVAL_MS = 10_000;
 const STAFF_ANALYTICS_REFRESH_INTERVAL_MS = 90_000;
 const STAFF_QUERY_STALE_TIME_MS = 45_000;
 
@@ -80,9 +80,9 @@ export function staffDashboardOverviewQueryOptions() {
     staleTime: STAFF_QUERY_STALE_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(STAFF_DASHBOARD_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: 'always',
     refetchOnReconnect: true,
-    refetchOnMount: true,
+    refetchOnMount: 'always',
   });
 }
 
@@ -95,9 +95,9 @@ export function staffSubmissionSummariesQueryOptions(filters: StaffSubmissionSum
     staleTime: STAFF_QUERY_STALE_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(STAFF_SUMMARIES_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: 'always',
     refetchOnReconnect: true,
-    refetchOnMount: true,
+    refetchOnMount: 'always',
   });
 }
 
@@ -141,7 +141,7 @@ export function staffSubmissionDetailQueryOptions(submissionId?: string | null) 
     },
     enabled: Boolean(normalizedSubmissionId),
     staleTime: 0,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: 'always',
     refetchOnReconnect: true,
     refetchOnMount: 'always',
   });

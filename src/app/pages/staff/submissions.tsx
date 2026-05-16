@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ChevronDown, ChevronUp, Eye, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { SubmissionSummaryRecord } from '../../lib/record-types';
+import { useAuth } from '../../lib/auth';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useStaffSubmissionSummariesQuery } from './staff-workflow-query';
 
@@ -27,8 +28,29 @@ function formatTimestamp(value?: string) {
   return `${date.toLocaleDateString()} at ${date.toLocaleTimeString()}`;
 }
 
+function getActiveReviewerMessage(
+  submission: SubmissionSummaryRecord,
+  currentStaffId?: string | null,
+) {
+  if (submission.status !== 'in_review' || !submission.reviewedByStaffId) {
+    return null;
+  }
+
+  if (submission.reviewedByStaffId === String(currentStaffId || '').trim()) {
+    return 'Assigned reviewer: You';
+  }
+
+  if (submission.reviewedByName) {
+    return `Assigned reviewer: ${submission.reviewedByName}`;
+  }
+
+  return 'Assigned reviewer: Another clinic staff member';
+}
+
 export default function StaffSubmissions() {
   const navigate = useNavigate();
+  const { me } = useAuth();
+  const currentStaffId = String(me?.staff?.id || '').trim();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('action_needed');
   const [departmentFilter, setDepartmentFilter] = useState('all');
@@ -336,6 +358,11 @@ export default function StaffSubmissions() {
                       <div className="text-sm text-muted-foreground space-y-0.5">
                         <p>Student ID: {submission.studentId}</p>
                         <p>{submission.department || submission.course}</p>
+                        {getActiveReviewerMessage(submission, currentStaffId) ? (
+                          <p className="font-medium text-sky-700">
+                            {getActiveReviewerMessage(submission, currentStaffId)}
+                          </p>
+                        ) : null}
                         <p>Submitted: {formatTimestamp(submission.submittedAt)}</p>
                       </div>
                     </div>
@@ -347,7 +374,11 @@ export default function StaffSubmissions() {
                       className="w-full sm:w-auto"
                     >
                       <Eye className="w-4 h-4 mr-2" />
-                      Review
+                      {submission.status === 'in_review' && submission.reviewedByStaffId && submission.reviewedByStaffId !== currentStaffId
+                        ? 'View'
+                        : submission.status === 'in_review' && submission.reviewedByStaffId === currentStaffId
+                          ? 'Continue Review'
+                          : 'Review'}
                     </Button>
                   </div>
                 </div>

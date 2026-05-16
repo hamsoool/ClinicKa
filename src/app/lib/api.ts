@@ -1052,11 +1052,22 @@ async function listStorageFilesForSubmission(submissionId: string, token?: strin
   }
 }
 
+function formatStaffDisplayName(staff?: any) {
+  const fullName = [normalizeNamePart(staff?.first_name), normalizeNamePart(staff?.last_name)]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  if (fullName) return fullName;
+
+  return normalizeNamePart(staff?.name);
+}
+
 function mapSubmission(row: any, related: Record<string, any>) {
   const student = related.students[row.student_id] || {};
   const emergencyContact = related.emergencyContacts[row.id];
   const medicalHistory = related.medicalHistory[row.id];
   const staffMeasurements = related.staffMeasurements[row.id];
+  const reviewer = related.reviewers[row.reviewed_by] || null;
   const xray = related.xray[row.id];
   const cbc = related.cbc[row.id];
   const urinalysis = related.urinalysis[row.id];
@@ -1084,6 +1095,9 @@ function mapSubmission(row: any, related: Record<string, any>) {
     status: row.status,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
+    reviewedByStaffId: row.reviewed_by || undefined,
+    reviewedByName: formatStaffDisplayName(reviewer) || undefined,
+    reviewedByPosition: normalizeNamePart(reviewer?.position) || undefined,
     staffNotes: row.staff_notes,
     age: row.age ? String(row.age) : student.age ? String(student.age) : '',
     sex: row.sex || student.sex || '',
@@ -1148,8 +1162,10 @@ function mapSubmission(row: any, related: Record<string, any>) {
 async function loadRelatedData(rows: any[]) {
   const submissionIds = rows.map((row) => row.id);
   const studentIds = [...new Set(rows.map((row) => row.student_id).filter(Boolean))];
+  const reviewerIds = [...new Set(rows.map((row) => row.reviewed_by).filter(Boolean))];
   const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
   const studentIdList = studentIds.map((id) => encodeURIComponent(id)).join(',');
+  const reviewerIdList = reviewerIds.map((id) => encodeURIComponent(id)).join(',');
 
   const token = getAccessToken();
   const [
@@ -1157,6 +1173,7 @@ async function loadRelatedData(rows: any[]) {
     emergencyContacts,
     medicalHistory,
     staffMeasurements,
+    reviewers,
     xray,
     cbc,
     urinalysis,
@@ -1174,6 +1191,12 @@ async function loadRelatedData(rows: any[]) {
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})`)
+      : Promise.resolve([]),
+    reviewerIds.length
+      ? restRequest<any[]>(
+          'staff_users',
+          `id=in.(${reviewerIdList})&select=id,first_name,last_name,middle_initial,position,name`,
+        )
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})`)
@@ -1268,6 +1291,7 @@ async function loadRelatedData(rows: any[]) {
     emergencyContacts: byKey(emergencyContacts, 'submission_id'),
     medicalHistory: byKey(medicalHistory, 'submission_id'),
     staffMeasurements: byKey(staffMeasurements, 'submission_id'),
+    reviewers: byKey(reviewers, 'id'),
     xray: byKey(xray, 'submission_id'),
     cbc: byKey(cbc, 'submission_id'),
     urinalysis: byKey(urinalysis, 'submission_id'),

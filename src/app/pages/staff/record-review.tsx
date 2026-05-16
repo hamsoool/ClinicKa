@@ -285,6 +285,7 @@ export default function StaffRecordReview() {
   const queryClient = useQueryClient();
   const { me } = useAuth();
   const staffPosition = me?.staff?.position || 'Clinic Staff';
+  const currentStaffId = String(me?.staff?.id || '').trim();
   const isDoctor = ['clinic doctor', 'doctor'].includes(staffPosition.trim().toLowerCase()) || me?.profile.role === 'admin';
   const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
   const [saving, setSaving] = useState(false);
@@ -361,7 +362,9 @@ export default function StaffRecordReview() {
         await invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId);
       } catch (error) {
         console.warn('Failed to mark submission as in review:', error);
-        toast.error('Could not mark this record as In Review. Apply the latest database migration first.');
+        await invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId);
+        const errorMessage = error instanceof Error ? error.message.trim() : '';
+        toast.error(errorMessage || 'Could not mark this record as In Review. Please refresh and try again.');
         inReviewTransitionRef.current = null;
       }
     })();
@@ -617,6 +620,11 @@ export default function StaffRecordReview() {
   const persistedStatus = submission.status;
   const hasUnsavedStatusChange = reviewStatus !== persistedStatus;
   const isApprovedLocked = persistedStatus === 'approved';
+  const isAssignedToAnotherReviewer =
+    persistedStatus === 'in_review'
+    && Boolean(submission.reviewedByStaffId)
+    && submission.reviewedByStaffId !== currentStaffId;
+  const activeReviewerName = submission.reviewedByName || 'another clinic staff member';
   const physicalExamStatus = persistedStatus === 'approved' || persistedStatus === 'physical_exam_done'
     ? 'Completed'
     : 'Pending';
@@ -661,7 +669,11 @@ export default function StaffRecordReview() {
             {reviewStatus === 'approved'
               ? 'Ready for clearance release'
               : reviewStatus === 'in_review'
-                ? 'Currently being reviewed by the clinic'
+                ? isAssignedToAnotherReviewer
+                  ? `${activeReviewerName} is currently the active reviewer for this submission.`
+                  : submission.reviewedByStaffId
+                    ? 'You are currently the active reviewer for this submission.'
+                    : 'Currently being reviewed by the clinic.'
               : reviewStatus === 'physical_exam_done'
                 ? 'Physical exam completed and ready for final clearance decision'
               : reviewStatus === 'returned'
@@ -686,6 +698,17 @@ export default function StaffRecordReview() {
           </div>
         </div>
       </div>
+
+      {isAssignedToAnotherReviewer ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="pt-5">
+            <p className="text-sm font-semibold text-amber-900">Another clinic staff member already claimed this review</p>
+            <p className="mt-1 text-sm text-amber-800">
+              {activeReviewerName} is currently assigned to this submission. You can inspect the record, but coordinate first before making edits.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
