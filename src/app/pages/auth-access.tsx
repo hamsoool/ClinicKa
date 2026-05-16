@@ -28,6 +28,11 @@ import {
   sendPasswordResetEmail,
   signInWithGoogle,
 } from '../lib/api';
+import {
+  inferRoleFromEmail,
+  prefetchLikelyPortalRoutes,
+  prefetchPortalExperience,
+} from '../lib/login-prefetch';
 import { useAuth } from '../lib/auth';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -374,23 +379,26 @@ export default function AuthAccessPage() {
     return () => window.clearInterval(timer);
   }, [resetCooldown]);
 
+  useEffect(() => {
+    if (mode !== 'signin') return;
+    prefetchLikelyPortalRoutes(signInForm.email);
+  }, [mode, signInForm.email]);
+
   async function handleSignIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
+    const fallbackRole = inferRoleFromEmail(signInForm.email);
+    prefetchLikelyPortalRoutes(signInForm.email);
+
     try {
       const me = await signIn(signInForm.email, signInForm.password);
-      const fallbackRole = signInForm.email.toLowerCase().includes('admin')
-        ? 'admin'
-        : signInForm.email.toLowerCase().includes('staff')
-          ? 'staff'
-          : 'student';
       const role = me.profile.role ?? fallbackRole;
+      prefetchPortalExperience(role, me);
       navigate(fromPath || getHomePath(role), { replace: true });
     } catch (nextError) {
-      void nextError;
-      setError('Invalid login credentials.');
+      setError(nextError instanceof Error ? nextError.message : 'Invalid login credentials.');
     }
   }
 
@@ -400,6 +408,9 @@ export default function AuthAccessPage() {
     if (mode === 'signup' && !signUpAgreementAccepted) {
       setError('Please accept the Terms & Conditions and Privacy Policy before continuing.');
       return;
+    }
+    if (mode === 'signin') {
+      prefetchLikelyPortalRoutes(signInForm.email);
     }
     signInWithGoogle();
   }
@@ -486,6 +497,7 @@ export default function AuthAccessPage() {
     }
 
     try {
+      prefetchLikelyPortalRoutes(signUpForm.email);
       const result = await signUp(
         signUpForm.firstName.trim(),
         signUpForm.lastName.trim(),
@@ -498,6 +510,7 @@ export default function AuthAccessPage() {
       }
 
       if (result.me) {
+        prefetchPortalExperience(result.me.profile.role, result.me);
         navigate(getHomePath(result.me.profile.role), { replace: true });
       }
     } catch (nextError) {
@@ -533,6 +546,8 @@ export default function AuthAccessPage() {
       ? `Only @${GC_DOMAIN} Google accounts are allowed. Non-Gordon Google accounts are blocked and not registered in the system.`
       : googleError === 'invalid_token'
         ? 'Google sign-in failed. Please try again.'
+        : googleError === 'account_load_failed'
+          ? 'Google sign-in succeeded, but your account could not be loaded from the database. Please try again.'
         : null;
 
   const inputClassName =
@@ -547,7 +562,7 @@ export default function AuthAccessPage() {
     `animate-in fade-in-0 duration-300 motion-reduce:animate-none ${
       panelDirection === 'right' ? 'slide-in-from-right-3' : 'slide-in-from-left-3'
     }`;
-  const authModeLayoutClassName = `${authPanelBodyClassName} flex min-h-[38rem] flex-col justify-between gap-5 pt-6`;
+  const authModeLayoutClassName = `${authPanelBodyClassName} flex min-h-0 flex-col justify-between gap-5 pt-5 sm:min-h-[38rem] sm:pt-6`;
   const hasAcceptedPolicies = signUpAgreementAccepted;
 
   function switchMode(nextMode: 'signin' | 'signup') {
@@ -562,17 +577,17 @@ export default function AuthAccessPage() {
   if (requiresPasswordSetup) {
     return (
       <div
-        className="min-h-screen bg-[linear-gradient(180deg,#f8f9ff_0%,#edf5ff_48%,#e3f2ec_100%)] px-6 py-10"
+        className="min-h-screen bg-[linear-gradient(180deg,#f8f9ff_0%,#edf5ff_48%,#e3f2ec_100%)] px-5 py-6 sm:px-6 sm:py-10"
         style={{ fontFamily: '"Plus Jakarta Sans", "Segoe UI", sans-serif' }}
       >
-        <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center justify-center">
-          <div className="grid w-full gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+        <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl items-center justify-center sm:min-h-[calc(100vh-5rem)]">
+          <div className="grid w-full gap-6 sm:gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
             <div className="hidden space-y-5 lg:block">
               <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/72 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
                 <Sparkles className="h-4 w-4" />
                 Complete your account setup
               </div>
-              <h1 className="max-w-xl text-5xl font-bold tracking-[-0.04em] text-[#0b1c30]">
+              <h1 className="max-w-xl text-4xl font-bold tracking-[-0.04em] text-[#0b1c30] xl:text-5xl">
                 Finish securing your ClinicKa! access.
               </h1>
               <p className="max-w-xl text-lg leading-8 text-[#425468]">
@@ -596,11 +611,11 @@ export default function AuthAccessPage() {
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-white/70 bg-white/78 p-6 shadow-[0_28px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:p-8">
+            <div className="rounded-[1.6rem] border border-white/70 bg-white/78 p-5 shadow-[0_28px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:rounded-[2rem] sm:p-8">
               <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e2f5ea] text-[#065f46]">
                 <Lock className="h-6 w-6" />
               </div>
-              <h2 className="text-3xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Set your password</h2>
+              <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30] sm:text-3xl">Set your password</h2>
               <p className="mt-2 text-sm leading-7 text-[#425468]">
                 Choose a password with at least 6 characters to complete your account setup.
               </p>
@@ -675,8 +690,8 @@ export default function AuthAccessPage() {
         <div className="absolute right-[-10rem] top-12 h-[28rem] w-[28rem] rounded-full bg-[#d4f0e2] blur-3xl" />
       </div>
 
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-8 sm:px-8 lg:py-10">
-        <div className="flex items-center justify-between">
+      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-8 sm:py-8 lg:py-10">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Link to="/" className="inline-flex items-center gap-3">
             {logoVisible ? (
               <img
@@ -698,24 +713,24 @@ export default function AuthAccessPage() {
 
           <Link
             to="/"
-            className="inline-flex h-11 items-center justify-center rounded-full border border-[#cad8d5] bg-white/74 px-5 text-sm font-semibold text-[#0b1c30] transition hover:bg-white"
+            className="inline-flex h-11 w-full items-center justify-center rounded-full border border-[#cad8d5] bg-white/74 px-5 text-sm font-semibold text-[#0b1c30] transition hover:bg-white sm:w-auto"
           >
             Back to Homepage
           </Link>
         </div>
 
-        <div className="flex flex-col-reverse gap-10 py-10 lg:grid lg:flex-none lg:grid-cols-[1fr_0.96fr] lg:items-center">
-          <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/74 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_14px_36px_rgba(11,28,48,0.05)]">
+        <div className="flex flex-col-reverse gap-8 py-8 sm:gap-10 sm:py-10 lg:grid lg:flex-none lg:grid-cols-[1fr_0.96fr] lg:items-center">
+          <div className="space-y-6 sm:space-y-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/74 px-4 py-2 text-xs font-semibold text-[#065f46] shadow-[0_14px_36px_rgba(11,28,48,0.05)] sm:text-sm">
               <CheckCircle2 className="h-4 w-4" />
               School clinic portal access
             </div>
 
-            <div className="space-y-5">
-              <h1 className="max-w-xl text-5xl font-bold tracking-[-0.05em] text-[#0b1c30] sm:text-6xl">
+            <div className="space-y-4 sm:space-y-5">
+              <h1 className="max-w-xl text-4xl font-bold tracking-[-0.05em] text-[#0b1c30] sm:text-5xl lg:text-6xl">
                 Access your clinic workflow with clarity.
               </h1>
-              <p className="max-w-xl text-lg leading-8 text-[#4a5b68]">
+              <p className="max-w-xl text-base leading-7 text-[#4a5b68] sm:text-lg sm:leading-8">
                 Sign in with your Gordon College account to submit records, complete forms, and keep track of your medical clearance progress in one secure place.
               </p>
             </div>
@@ -735,7 +750,7 @@ export default function AuthAccessPage() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/76 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.1)] backdrop-blur">
+            <div className="overflow-hidden rounded-[1.6rem] border border-white/80 bg-white/76 p-3 shadow-[0_30px_80px_rgba(11,28,48,0.1)] backdrop-blur sm:rounded-[2rem] sm:p-4">
               <img
                 src={DASHBOARD_PREVIEW_SRC}
                 alt="ClinicKa! student dashboard preview"
@@ -744,12 +759,12 @@ export default function AuthAccessPage() {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/80 bg-white/84 p-5 shadow-[0_30px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:min-h-[48.5rem] sm:p-8">
+          <div className="rounded-[1.6rem] border border-white/80 bg-white/84 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:min-h-[48.5rem] sm:rounded-[2rem] sm:p-8">
             <div className="flex flex-col gap-4 border-b border-[#dfebea] pb-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-h-[7.5rem]">
+              <div className="sm:min-h-[7.5rem]">
                 <div key={mode} className={authTextTransitionClassName}>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Secure account access</p>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30]">
+                  <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#0b1c30] sm:text-3xl">
                     {mode === 'signin' ? 'Welcome back' : 'Create your account'}
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-[#4a5b68]">
@@ -760,7 +775,7 @@ export default function AuthAccessPage() {
                 </div>
               </div>
 
-              <div className="relative grid shrink-0 grid-cols-2 rounded-full border border-[#d7e4e0] bg-[#f5f8ff] p-1">
+              <div className="relative grid w-full shrink-0 grid-cols-2 rounded-full border border-[#d7e4e0] bg-[#f5f8ff] p-1 sm:w-auto">
                 <div
                   className="absolute bottom-1 left-1 top-1 rounded-full bg-[#004532] shadow-[0_10px_30px_rgba(0,69,50,0.24)] transition-transform duration-300 ease-out"
                   style={{
@@ -772,14 +787,14 @@ export default function AuthAccessPage() {
                 <button
                   type="button"
                   onClick={() => switchMode('signin')}
-                  className={`relative z-10 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-300 ${mode === 'signin' ? 'text-white' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
+                  className={`relative z-10 flex-1 whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold transition-colors duration-300 sm:px-4 sm:text-sm ${mode === 'signin' ? 'text-white' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
                 >
                   Sign in
                 </button>
                 <button
                   type="button"
                   onClick={() => switchMode('signup')}
-                  className={`relative z-10 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-300 ${mode === 'signup' ? 'text-white' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
+                  className={`relative z-10 flex-1 whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold transition-colors duration-300 sm:px-4 sm:text-sm ${mode === 'signup' ? 'text-white' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
                 >
                   Sign up
                 </button>

@@ -3,11 +3,12 @@ import {
   useQuery,
   type QueryClient,
 } from '@tanstack/react-query';
+import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
 import { getStudentRecords } from '../../lib/api';
-import type { MockSubmission } from '../../lib/mock-data';
+import type { SubmissionRecord } from '../../lib/record-types';
 
-const STUDENT_RECORDS_REFRESH_INTERVAL_MS = 20_000;
-const STUDENT_RECORDS_STALE_TIME_MS = 10_000;
+const STUDENT_RECORDS_REFRESH_INTERVAL_MS = 60_000;
+const STUDENT_RECORDS_STALE_TIME_MS = 60_000;
 
 function normalizeStudentId(studentId?: string | null) {
   return String(studentId || '').trim();
@@ -23,15 +24,19 @@ export function studentRecordsQueryOptions(studentId?: string | null) {
   return queryOptions({
     queryKey: studentRecordsQueryKey(normalizedStudentId),
     queryFn: async () => {
-      if (!normalizedStudentId) return [] as MockSubmission[];
+      if (!normalizedStudentId) return [] as SubmissionRecord[];
       const response = await getStudentRecords(normalizedStudentId);
-      return Array.isArray(response?.records) ? (response.records as MockSubmission[]) : [];
+      return Array.isArray(response?.records) ? (response.records as SubmissionRecord[]) : [];
     },
     enabled: Boolean(normalizedStudentId),
     staleTime: STUDENT_RECORDS_STALE_TIME_MS,
-    refetchInterval: normalizedStudentId ? STUDENT_RECORDS_REFRESH_INTERVAL_MS : false,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchInterval: normalizedStudentId
+      ? () => getActiveAjaxRefetchInterval(STUDENT_RECORDS_REFRESH_INTERVAL_MS)
+      : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 }
 

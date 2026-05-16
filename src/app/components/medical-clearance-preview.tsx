@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import type { MockSubmission } from '../lib/mock-data';
+import type { SubmissionRecord } from '../lib/record-types';
 
 /* ───────── inline styles ───────── */
 const S = {
@@ -104,7 +104,7 @@ function HSULogo({ size = 36 }: { size?: number }) {
 }
 
 /* ───────── single copy ───────── */
-function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType: string }) {
+function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyType: string }) {
   const cl = record.clearanceInfo || {};
   const purpose = cl.purpose || 'enrolment';
 
@@ -313,7 +313,7 @@ function ClearanceCopy({ record, copyType }: { record: MockSubmission; copyType:
 
 /* MAIN */
 interface Props {
-  record: MockSubmission;
+  record: SubmissionRecord;
 }
 
 const MedicalClearancePreview = forwardRef<HTMLDivElement, Props>(({ record }, ref) => {

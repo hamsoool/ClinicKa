@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Activity,
   ArrowRight,
   ArrowUpDown,
   Award,
@@ -16,17 +15,8 @@ import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getRoleLabel } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import type { MockSubmission } from '../../lib/mock-data';
-import { useStaffAnalyticsQuery, useStaffSubmissionsQuery } from './staff-workflow-query';
-
-type AnalyticsSummary = {
-  totalStudents: number;
-  totalSubmissions: number;
-  pendingRecords: number;
-  approvedRecords: number;
-  returnedRecords: number;
-};
-
+import type { SubmissionSummaryRecord } from '../../lib/record-types';
+import { useStaffDashboardOverviewQuery } from './staff-workflow-query';
 
 function formatEmailName(email?: string | null) {
   if (!email) return '';
@@ -52,7 +42,7 @@ function formatDate(value?: string) {
   }).format(date);
 }
 
-function getStatusLabel(status: MockSubmission['status']) {
+function getStatusLabel(status: SubmissionSummaryRecord['status']) {
   switch (status) {
     case 'pending':
       return 'Pending review';
@@ -71,7 +61,7 @@ function getStatusLabel(status: MockSubmission['status']) {
   }
 }
 
-function getStatusStyles(status: MockSubmission['status']) {
+function getStatusStyles(status: SubmissionSummaryRecord['status']) {
   switch (status) {
     case 'approved':
       return 'bg-primary-container/20 text-on-primary-container';
@@ -90,6 +80,25 @@ function getStatusStyles(status: MockSubmission['status']) {
   }
 }
 
+function getActiveReviewerMessage(
+  submission: SubmissionSummaryRecord,
+  currentStaffId?: string | null,
+) {
+  if (submission.status !== 'in_review' || !submission.reviewedByStaffId) {
+    return null;
+  }
+
+  if (submission.reviewedByStaffId === String(currentStaffId || '').trim()) {
+    return 'Assigned reviewer: You';
+  }
+
+  if (submission.reviewedByName) {
+    return `Assigned reviewer: ${submission.reviewedByName}`;
+  }
+
+  return 'Assigned reviewer: Another clinic staff member';
+}
+
 export default function StaffDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
@@ -101,44 +110,66 @@ export default function StaffDashboard() {
     formatEmailName(me?.profile.email) ||
     getRoleLabel(me?.profile?.role, me?.staff?.position);
   const position = getRoleLabel(me?.profile?.role, me?.staff?.position);
+  const currentStaffId = String(me?.staff?.id || '').trim();
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>('desc');
   const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>('pending');
   const {
-    data: analytics,
-    isLoading: analyticsLoading,
-    isError: isAnalyticsError,
-  } = useStaffAnalyticsQuery();
-  const {
-    data: submissionsData = [],
-    isLoading: submissionsLoading,
-    isError: isSubmissionsError,
-  } = useStaffSubmissionsQuery();
-  const submissions = submissionsData as MockSubmission[];
+    data: overview,
+    isLoading: overviewLoading,
+    isFetching: overviewFetching,
+    isError: isOverviewError,
+  } = useStaffDashboardOverviewQuery();
 
   useEffect(() => {
-    if (isAnalyticsError || isSubmissionsError) {
+    if (isOverviewError) {
       console.error('Error loading clinic dashboard');
     }
-  }, [isAnalyticsError, isSubmissionsError]);
+  }, [isOverviewError]);
 
-  if (analyticsLoading || submissionsLoading) {
+  if (overviewLoading || !overview) {
     return <PortalPageSkeleton variant="dashboard" />;
   }
 
-  const sortedBySubmitted = [...submissions].sort((a, b) => {
+  const queueGroups = {
+    pending: overview.pendingQueueItems || [],
+    in_review: overview.inReviewQueueItems || [],
+    returned: overview.returnedQueueItems || [],
+    resubmitted: overview.resubmittedQueueItems || [],
+  } as const;
+
+  const actionQueue = [
+    ...queueGroups.pending,
+    ...queueGroups.in_review,
+    ...queueGroups.returned,
+    ...queueGroups.resubmitted,
+  ];
+
+  const sortedBySubmitted = [...actionQueue].sort((a, b) => {
     const timeA = new Date(a.submittedAt).getTime();
     const timeB = new Date(b.submittedAt).getTime();
     return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
   });
-  const actionQueue = sortedBySubmitted.filter(
-    (submission) =>
-      submission.status === 'pending' || submission.status === 'in_review' || submission.status === 'returned' || submission.status === 'resubmitted',
-  );
-  const pendingQueue = actionQueue.filter((submission) => submission.status === 'pending');
-  const inReviewQueue = actionQueue.filter((submission) => submission.status === 'in_review');
-  const returnedQueue = actionQueue.filter((submission) => submission.status === 'returned');
-  const resubmittedQueue = actionQueue.filter((submission) => submission.status === 'resubmitted');
+  const pendingQueue = [...queueGroups.pending].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
+  const inReviewQueue = [...queueGroups.in_review].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
+  const returnedQueue = [...queueGroups.returned].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
+  const resubmittedQueue = [...queueGroups.resubmitted].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
   const visibleQueue =
     queueTab === 'pending'
       ? pendingQueue
@@ -148,64 +179,33 @@ export default function StaffDashboard() {
       ? returnedQueue
       : queueTab === 'resubmitted'
       ? resubmittedQueue
-      : actionQueue;
-  const recentApprovals = [...submissions]
-    .filter((submission) => submission.status === 'approved')
-    .sort((a, b) => {
-      const aTime = new Date(a.updatedAt || a.submittedAt).getTime();
-      const bTime = new Date(b.updatedAt || b.submittedAt).getTime();
-      return bTime - aTime;
-    });
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const submittedToday = submissions.filter((s) => {
-    const d = new Date(s.submittedAt);
-    return d >= today;
-  }).length;
-
-  const submittedYesterday = submissions.filter((s) => {
-    const d = new Date(s.submittedAt);
-    return d >= yesterday && d < today;
-  }).length;
-
-  const getQueueNumber = (submission: MockSubmission, allSubmissions: MockSubmission[]) => {
-    const submitDate = new Date(submission.submittedAt).toDateString();
-    const sameDaySubmissions = allSubmissions.filter(s => new Date(s.submittedAt).toDateString() === submitDate);
-    sameDaySubmissions.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
-    const index = sameDaySubmissions.findIndex(s => s.id === submission.id);
-    return index + 1;
-  };
+      : sortedBySubmitted;
 
   const summaryCards = [
     {
       label: 'Needs Action',
-      value: actionQueue.length,
+      value: overview.actionableRecords || 0,
       icon: ClipboardCheck,
       tone: 'text-primary',
       detail: 'Pending, in-review, returned, and resubmitted records',
     },
     {
       label: 'In Review',
-      value: inReviewQueue.length,
+      value: overview.inReviewRecords || 0,
       icon: Clock3,
       tone: 'text-blue-600',
       detail: 'Records currently being worked on by the clinic',
     },
     {
       label: 'Returned',
-      value: returnedQueue.length,
+      value: overview.returnedRecords || 0,
       icon: FileWarning,
       tone: 'text-rose-600',
       detail: 'Records waiting for student corrections',
     },
     {
       label: 'Cleared Records',
-      value: analytics?.approvedRecords || 0,
+      value: overview.approvedRecords || 0,
       icon: ShieldCheck,
       tone: 'text-emerald-700',
       detail: 'Total students successfully cleared',
@@ -213,40 +213,42 @@ export default function StaffDashboard() {
   ] as const;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
+      <div className="rounded-[1.5rem] border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-8">
+        <div className="flex flex-col gap-5 sm:gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary-container/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-on-primary-container">
+            <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
               <Stethoscope className="h-4 w-4" />
               Clinic Operations Portal
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight text-on-surface">Welcome, {displayName}</h1>
-              <p className="mt-2 max-w-2xl text-base text-on-surface-variant">
+              <h1 className="text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
+                Welcome, {displayName}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-on-surface-variant sm:text-base">
                 Start with high-priority records first, then continue with in-review and returned submissions.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3 text-sm text-on-surface-variant">
+            <div className="flex flex-wrap gap-2 text-xs text-on-surface-variant sm:gap-3 sm:text-sm">
               <span className="rounded-full bg-surface-container px-3 py-1.5">
                 Role: <span className="font-semibold text-on-surface">{position}</span>
               </span>
               <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Total submissions: <span className="font-semibold text-on-surface">{analytics?.totalSubmissions || 0}</span>
+                Total submissions: <span className="font-semibold text-on-surface">{overview.totalSubmissions || 0}</span>
               </span>
               <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Today: <span className="font-semibold text-on-surface">{submittedToday}</span>
+                Today: <span className="font-semibold text-on-surface">{overview.submittedToday || 0}</span>
               </span>
               <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Yesterday: <span className="font-semibold text-on-surface">{submittedYesterday}</span>
+                Yesterday: <span className="font-semibold text-on-surface">{overview.submittedYesterday || 0}</span>
               </span>
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 min-[440px]:grid-cols-2 lg:min-w-[22rem]">
             <button
               onClick={() => navigate('/staff/submissions')}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
+              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 Review Queue
@@ -254,14 +256,14 @@ export default function StaffDashboard() {
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-on-surface">
                   <ClipboardCheck className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold">{actionQueue.length}</span>
+                  <span className="text-2xl font-bold">{overview.actionableRecords || 0}</span>
                 </div>
                 <ArrowRight className="h-4 w-4 text-on-surface-variant" />
               </div>
             </button>
             <button
               onClick={() => navigate('/staff/certificates')}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
+              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 Ready Certificates
@@ -269,7 +271,7 @@ export default function StaffDashboard() {
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-on-surface">
                   <Award className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold">{recentApprovals.length}</span>
+                  <span className="text-2xl font-bold">{overview.approvedRecords || 0}</span>
                 </div>
                 <ArrowRight className="h-4 w-4 text-on-surface-variant" />
               </div>
@@ -278,32 +280,32 @@ export default function StaffDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
             <div
               key={card.label}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]"
+              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-5"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
                     {card.label}
                   </p>
-                  <p className="mt-3 text-3xl font-bold text-on-surface">{card.value}</p>
+                  <p className="mt-3 text-[2rem] font-bold leading-none text-on-surface sm:text-3xl">{card.value}</p>
                 </div>
-                <div className={`rounded-2xl bg-surface-container p-3 ${card.tone}`}>
+                <div className={`rounded-2xl bg-surface-container p-2.5 sm:p-3 ${card.tone}`}>
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
-              <p className="mt-4 text-sm text-on-surface-variant">{card.detail}</p>
+              <p className="mt-4 text-[13px] text-on-surface-variant sm:text-sm">{card.detail}</p>
             </div>
           );
         })}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.25fr_0.95fr]">
+      <div className="grid gap-5 sm:gap-6 lg:grid-cols-[1.25fr_0.95fr]">
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -326,6 +328,9 @@ export default function StaffDashboard() {
               >
                 Open Queue
               </button>
+              {!overviewLoading && overviewFetching ? (
+                <span className="text-xs text-on-surface-variant">Refreshing queue...</span>
+              ) : null}
             </div>
           </div>
           <Tabs
@@ -333,22 +338,22 @@ export default function StaffDashboard() {
             onValueChange={(value) => setQueueTab(value as 'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted')}
             className="mb-5"
           >
-            <div className="-mx-1 overflow-x-auto px-1 pb-1">
-              <TabsList className="h-auto min-h-10 w-max min-w-full flex-wrap justify-start gap-2 rounded-2xl p-2 sm:max-w-xl sm:flex-nowrap sm:gap-0 sm:p-[3px]">
-                <TabsTrigger value="all" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
-                  All ({actionQueue.length})
+            <div className="pb-1">
+              <TabsList className="flex h-auto min-h-10 w-full flex-wrap justify-start gap-2 rounded-2xl p-2 sm:max-w-xl sm:flex-nowrap sm:gap-0 sm:p-[3px]">
+                <TabsTrigger value="all" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
+                  All ({overview.actionableRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="pending" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
-                  Pending ({pendingQueue.length})
+                <TabsTrigger value="pending" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
+                  Pending ({overview.pendingRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="in_review" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
-                  In Review ({inReviewQueue.length})
+                <TabsTrigger value="in_review" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
+                  In Review ({overview.inReviewRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="returned" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
-                  Returned ({returnedQueue.length})
+                <TabsTrigger value="returned" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
+                  Returned ({overview.returnedRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="resubmitted" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
-                  Resubmitted ({resubmittedQueue.length})
+                <TabsTrigger value="resubmitted" className="min-h-9 flex-1 basis-full px-3 text-xs sm:basis-0 sm:text-sm">
+                  Resubmitted ({overview.resubmittedRecords || 0})
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -370,12 +375,11 @@ export default function StaffDashboard() {
                 <button
                   key={submission.id}
                   onClick={() => navigate(`/staff/review/${submission.id}`)}
-                  className="flex w-full flex-col gap-4 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low sm:flex-row sm:items-start"
+                  className="flex w-full flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low sm:flex-row sm:items-start sm:gap-4"
                 >
-                  <div className="flex items-start gap-4 sm:flex-1">
-                    <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-surface-container text-primary">
-                      <span className="text-[9px] font-bold leading-none uppercase tracking-widest text-on-surface-variant">Queue</span>
-                      <span className="mt-1 text-lg font-black leading-none">#{getQueueNumber(submission, submissions)}</span>
+                    <div className="flex items-start gap-4 sm:flex-1">
+                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
+                      <ClipboardCheck className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -391,6 +395,11 @@ export default function StaffDashboard() {
                       <p className="mt-1 break-words text-xs text-on-surface-variant">
                         {submission.studentId} | {submission.course}
                       </p>
+                      {getActiveReviewerMessage(submission, currentStaffId) ? (
+                        <p className="mt-2 text-xs font-medium text-sky-700">
+                          {getActiveReviewerMessage(submission, currentStaffId)}
+                        </p>
+                      ) : null}
                       <p className="mt-2 text-sm text-on-surface-variant">
                         Submitted {formatDate(submission.submittedAt)}
                       </p>
@@ -420,12 +429,12 @@ export default function StaffDashboard() {
             <div className="rounded-2xl border border-orange-200/60 bg-orange-50/70 p-4">
               <p className="text-sm font-semibold text-orange-900">2. Follow up returned and resubmitted</p>
               <p className="mt-1 text-sm text-orange-800">
-                {returnedQueue.length + resubmittedQueue.length} records need correction checks.
+                {(overview.returnedRecords || 0) + (overview.resubmittedRecords || 0)} records need correction checks.
               </p>
             </div>
             <div className="rounded-2xl border border-sky-200/60 bg-sky-50/70 p-4">
               <p className="text-sm font-semibold text-sky-900">3. Continue active reviews</p>
-              <p className="mt-1 text-sm text-sky-800">{inReviewQueue.length} records are currently in progress.</p>
+              <p className="mt-1 text-sm text-sky-800">{overview.inReviewRecords || 0} records are currently in progress.</p>
             </div>
             <button
               type="button"

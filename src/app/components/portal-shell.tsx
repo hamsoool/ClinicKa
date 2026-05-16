@@ -213,15 +213,13 @@ export default function PortalShell({
   );
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#ffffff_0%,#f4fcf2_45%,#eef6ec_100%)]">
+    <div className="min-h-screen overflow-x-clip bg-[radial-gradient(circle_at_top,#ffffff_0%,#f4fcf2_45%,#eef6ec_100%)]">
       <a
         href="#portal-content"
         className="sr-only fixed left-4 top-4 z-[60] rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus:not-sr-only"
       >
         Skip to main content
       </a>
-
-
 
       <aside
         id="portal-sidebar"
@@ -233,6 +231,17 @@ export default function PortalShell({
       >
         <div className="flex h-full flex-col px-4 py-6">
           <div className="px-2 pb-6">
+            <div className="mb-4 flex items-center justify-end md:hidden">
+              <button
+                type="button"
+                onClick={() => setMenuOpen(false)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white transition-colors hover:bg-white/15"
+                aria-label="Close navigation menu"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
             <div className="rounded-lg border border-white/10 bg-white/5 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)] backdrop-blur">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-emerald-300/30 bg-emerald-50 text-primary">
@@ -325,10 +334,22 @@ export default function PortalShell({
       <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/40 bg-white/90 backdrop-blur md:left-72 md:h-16">
         <div className="flex h-full items-center justify-between gap-2 px-4 md:gap-3 md:px-8">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
-              <span className="sm:hidden">{brandSubtitle}</span>
-              <span className="hidden uppercase sm:inline">Clinic Management System</span>
-            </p>
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMenuOpen(true)}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-outline-variant/60 bg-surface-container-lowest text-on-surface shadow-sm transition-colors hover:bg-surface-container md:hidden"
+                aria-label="Open navigation menu"
+                aria-controls="portal-sidebar"
+                aria-expanded={menuOpen}
+              >
+                <Menu className="h-4 w-4" />
+              </button>
+              <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
+                <span className="sm:hidden">{brandSubtitle}</span>
+                <span className="hidden uppercase sm:inline">Clinic Management System</span>
+              </p>
+            </div>
             <div className="flex min-w-0 items-center gap-2">
               <p className="truncate text-sm font-semibold leading-tight text-on-surface sm:text-[15px]">{currentPage}</p>
               {roleBadge ? (
@@ -346,7 +367,7 @@ export default function PortalShell({
                 <button
                   key={action.label}
                   type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface sm:h-10 sm:w-10"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface sm:h-10 sm:w-10"
                   onClick={() => {
                     if (action.path) navigate(action.path);
                     action.onClick?.();
@@ -354,7 +375,7 @@ export default function PortalShell({
                   aria-label={action.label}
                   title={action.label}
                 >
-                  <Icon className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
+                  <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </button>
               );
             })}
@@ -365,7 +386,7 @@ export default function PortalShell({
               <button
                 type="button"
                 onClick={() => setProfileOpen((prev) => !prev)}
-                className="ml-0.5 flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-outline-variant/70 bg-surface-container-lowest shadow-sm sm:ml-1 sm:h-10 sm:w-10"
+                className="ml-0.5 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-outline-variant/70 bg-surface-container-lowest shadow-sm sm:ml-1 sm:h-10 sm:w-10"
                 aria-haspopup="dialog"
                 aria-expanded={profileOpen}
                 aria-label="Open profile menu"
@@ -434,7 +455,7 @@ export default function PortalShell({
       </header>
 
       <main id="portal-content" className="pt-20 outline-none md:pl-72" tabIndex={-1}>
-        <div className="px-4 pb-24 md:px-8">
+        <div className="px-4 pb-28 md:px-8 md:pb-24">
           <Outlet />
         </div>
       </main>

@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import type { MockSubmission } from '../lib/mock-data';
+import type { SubmissionRecord } from '../lib/record-types';
 import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
 
 /* ───────── medical history: exact column layout from physical form ───────── */
@@ -159,8 +159,8 @@ function HSULogo({ size = 34 }: { size?: number }) {
 
 /* ───────── component ───────── */
 interface Props {
-  record: MockSubmission;
-  yearlyRecords?: Partial<Record<1 | 2 | 3 | 4, MockSubmission>>;
+  record: SubmissionRecord;
+  yearlyRecords?: Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>;
 }
 
 const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record, yearlyRecords }, ref) => {

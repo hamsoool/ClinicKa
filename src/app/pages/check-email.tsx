@@ -61,7 +61,7 @@ export default function CheckEmailPage() {
 
   return (
     <div
-      className="min-h-screen bg-[linear-gradient(180deg,#f8f9ff_0%,#eff4ff_42%,#edf7f1_100%)] px-5 py-8 text-[#0b1c30] sm:px-8 lg:py-10"
+      className="min-h-screen bg-[linear-gradient(180deg,#f8f9ff_0%,#eff4ff_42%,#edf7f1_100%)] px-4 py-6 text-[#0b1c30] sm:px-8 sm:py-8 lg:py-10"
       style={{ fontFamily: '"Plus Jakarta Sans", "Segoe UI", sans-serif' }}
     >
       <div className="absolute inset-0 -z-10 overflow-hidden">
@@ -70,7 +70,7 @@ export default function CheckEmailPage() {
       </div>
 
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Link to="/" className="inline-flex items-center gap-3">
             {logoVisible ? (
               <img
@@ -92,24 +92,24 @@ export default function CheckEmailPage() {
 
           <Link
             to="/auth?mode=signin"
-            className="inline-flex h-11 items-center justify-center rounded-full border border-[#cad8d5] bg-white/74 px-5 text-sm font-semibold text-[#0b1c30] transition hover:bg-white"
+            className="inline-flex h-11 w-full items-center justify-center rounded-full border border-[#cad8d5] bg-white/74 px-5 text-sm font-semibold text-[#0b1c30] transition hover:bg-white sm:w-auto"
           >
             Back to sign in
           </Link>
         </div>
 
-        <div className="grid flex-1 gap-10 py-10 lg:grid-cols-[1fr_0.96fr] lg:items-center">
-          <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/74 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_14px_36px_rgba(11,28,48,0.05)]">
+        <div className="grid flex-1 gap-8 py-8 sm:gap-10 sm:py-10 lg:grid-cols-[1fr_0.96fr] lg:items-center">
+          <div className="space-y-6 sm:space-y-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/74 px-4 py-2 text-xs font-semibold text-[#065f46] shadow-[0_14px_36px_rgba(11,28,48,0.05)] sm:text-sm">
               <Sparkles className="h-4 w-4" />
               Verification email sent
             </div>
 
-            <div className="space-y-5">
-              <h1 className="max-w-xl text-5xl font-bold tracking-[-0.05em] text-[#0b1c30] sm:text-6xl">
+            <div className="space-y-4 sm:space-y-5">
+              <h1 className="max-w-xl text-4xl font-bold tracking-[-0.05em] text-[#0b1c30] sm:text-5xl lg:text-6xl">
                 Check your inbox and confirm your account.
               </h1>
-              <p className="max-w-xl text-lg leading-8 text-[#4a5b68]">
+              <p className="max-w-xl text-base leading-7 text-[#4a5b68] sm:text-lg sm:leading-8">
                 Your sign-up is almost done. Open the verification link we sent so your Gordon College account can start
                 using ClinicKa! right away.
               </p>
@@ -133,12 +133,12 @@ export default function CheckEmailPage() {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/70 bg-white/78 p-6 shadow-[0_28px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:p-8">
+          <div className="rounded-[1.6rem] border border-white/70 bg-white/78 p-5 shadow-[0_28px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:rounded-[2rem] sm:p-8">
             <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e2f5ea] text-[#065f46]">
               <MailCheck className="h-6 w-6" />
             </div>
 
-            <h2 className="text-3xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Verification in progress</h2>
+            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30] sm:text-3xl">Verification in progress</h2>
             <p className="mt-2 text-sm leading-7 text-[#425468]">
               We sent a secure confirmation link{email ? ' to this address:' : '.'}
             </p>

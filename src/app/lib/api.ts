@@ -1,5 +1,11 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type {
+  ApprovedStudentSummary,
+  StaffDashboardOverview,
+  SubmissionRecord,
+  SubmissionSummaryRecord,
+} from './record-types';
 
 const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '')
   .trim()
@@ -189,6 +195,32 @@ export type StudentProfileAssets = {
   signatureFileName?: string | null;
 };
 
+export type StudentNotificationStatePayload = {
+  items?: unknown[];
+  snapshot?: Record<string, string>;
+};
+
+export type StaffSubmissionSummaryFilters = {
+  searchQuery?: string;
+  statusFilter?: string;
+  departmentFilter?: string;
+  yearFilter?: string;
+  sortOrder?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+};
+
+export type StaffApprovedStudentFilters = {
+  searchQuery?: string;
+  departmentFilter?: string;
+  yearFilter?: string;
+  courseFilter?: string;
+  fromDate?: string;
+  toDate?: string;
+  page?: number;
+  pageSize?: number;
+};
+
 export type StudentProfileUpdateInput = {
   studentId?: string | null;
   firstName: string;
@@ -360,48 +392,6 @@ function deriveStudentIdFromEmail(email?: string | null) {
 function isValidStudentRegistrationEmail(email?: string | null) {
   return Boolean(isGCDomainEmail(email) && deriveStudentIdFromEmail(email));
 }
-
-
-const demoStaffUsers = [
-  {
-    id: 'STF-001',
-    name: 'Clinic Staff',
-    role: 'Clinic Staff',
-    status: 'Active',
-    email: 'clinic.staff@gordoncollege.edu.ph',
-  },
-  {
-    id: 'ADM-001',
-    name: 'Clinic Admin',
-    role: 'Administrator',
-    status: 'Active',
-    email: 'clinic.admin@gordoncollege.edu.ph',
-  },
-];
-
-const demoUserAccounts = [
-  {
-    id: '202310417',
-    name: 'Demo Student',
-    role: 'Student',
-    status: 'Active',
-    lastActive: new Date().toISOString(),
-  },
-  {
-    id: 'STF-001',
-    name: 'Clinic Staff',
-    role: 'Clinic Staff',
-    status: 'Active',
-    lastActive: new Date().toISOString(),
-  },
-  {
-    id: 'ADM-001',
-    name: 'Clinic Admin',
-    role: 'Administrator',
-    status: 'Active',
-    lastActive: new Date().toISOString(),
-  },
-];
 
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const ME_CACHE_TTL_MS = 15_000;
@@ -1062,11 +1052,22 @@ async function listStorageFilesForSubmission(submissionId: string, token?: strin
   }
 }
 
+function formatStaffDisplayName(staff?: any) {
+  const fullName = [normalizeNamePart(staff?.first_name), normalizeNamePart(staff?.last_name)]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  if (fullName) return fullName;
+
+  return normalizeNamePart(staff?.name);
+}
+
 function mapSubmission(row: any, related: Record<string, any>) {
   const student = related.students[row.student_id] || {};
   const emergencyContact = related.emergencyContacts[row.id];
   const medicalHistory = related.medicalHistory[row.id];
   const staffMeasurements = related.staffMeasurements[row.id];
+  const reviewer = related.reviewers[row.reviewed_by] || null;
   const xray = related.xray[row.id];
   const cbc = related.cbc[row.id];
   const urinalysis = related.urinalysis[row.id];
@@ -1094,6 +1095,9 @@ function mapSubmission(row: any, related: Record<string, any>) {
     status: row.status,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
+    reviewedByStaffId: row.reviewed_by || undefined,
+    reviewedByName: formatStaffDisplayName(reviewer) || undefined,
+    reviewedByPosition: normalizeNamePart(reviewer?.position) || undefined,
     staffNotes: row.staff_notes,
     age: row.age ? String(row.age) : student.age ? String(student.age) : '',
     sex: row.sex || student.sex || '',
@@ -1158,8 +1162,10 @@ function mapSubmission(row: any, related: Record<string, any>) {
 async function loadRelatedData(rows: any[]) {
   const submissionIds = rows.map((row) => row.id);
   const studentIds = [...new Set(rows.map((row) => row.student_id).filter(Boolean))];
+  const reviewerIds = [...new Set(rows.map((row) => row.reviewed_by).filter(Boolean))];
   const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
   const studentIdList = studentIds.map((id) => encodeURIComponent(id)).join(',');
+  const reviewerIdList = reviewerIds.map((id) => encodeURIComponent(id)).join(',');
 
   const token = getAccessToken();
   const [
@@ -1167,6 +1173,7 @@ async function loadRelatedData(rows: any[]) {
     emergencyContacts,
     medicalHistory,
     staffMeasurements,
+    reviewers,
     xray,
     cbc,
     urinalysis,
@@ -1184,6 +1191,12 @@ async function loadRelatedData(rows: any[]) {
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})`)
+      : Promise.resolve([]),
+    reviewerIds.length
+      ? restRequest<any[]>(
+          'staff_users',
+          `id=in.(${reviewerIdList})&select=id,first_name,last_name,middle_initial,position,name`,
+        )
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})`)
@@ -1278,6 +1291,7 @@ async function loadRelatedData(rows: any[]) {
     emergencyContacts: byKey(emergencyContacts, 'submission_id'),
     medicalHistory: byKey(medicalHistory, 'submission_id'),
     staffMeasurements: byKey(staffMeasurements, 'submission_id'),
+    reviewers: byKey(reviewers, 'id'),
     xray: byKey(xray, 'submission_id'),
     cbc: byKey(cbc, 'submission_id'),
     urinalysis: byKey(urinalysis, 'submission_id'),
@@ -2281,10 +2295,118 @@ export async function getStudentRecords(studentId?: string) {
     return { records: [] };
   }
 
+  try {
+    return await apiRequest<{ records: SubmissionRecord[] }>(
+      `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
+    );
+  } catch (error) {
+    if (!shouldFallbackToRest(error)) {
+      throw error;
+    }
+  }
+
   const records = await getMappedSubmissions(
     `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
   );
   return { records };
+}
+
+export async function getStaffDashboardOverview() {
+  return apiRequest<StaffDashboardOverview>('/functions/v1/server/staff/dashboard-overview');
+}
+
+export async function getStaffSubmissionSummaries(filters: StaffSubmissionSummaryFilters = {}) {
+  const params = new URLSearchParams();
+  const searchQuery = String(filters.searchQuery || '').trim();
+  const statusFilter = String(filters.statusFilter || 'action_needed').trim();
+  const departmentFilter = String(filters.departmentFilter || '').trim();
+  const yearFilter = String(filters.yearFilter || '').trim();
+  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+  const page = Math.max(1, Number(filters.page || 1) || 1);
+  const pageSize = Math.max(1, Number(filters.pageSize || 25) || 25);
+
+  if (searchQuery) params.set('search', searchQuery);
+  if (statusFilter) params.set('status', statusFilter);
+  if (departmentFilter && departmentFilter !== 'all') params.set('department', departmentFilter);
+  if (yearFilter && yearFilter !== 'all') params.set('year', yearFilter);
+  params.set('sort', sortOrder);
+  params.set('page', String(page));
+  params.set('pageSize', String(pageSize));
+
+  return apiRequest<{
+    items: SubmissionSummaryRecord[];
+    total: number;
+    page: number;
+    pageSize: number;
+    counts: {
+      pending: number;
+      inReview: number;
+      returned: number;
+      resubmitted: number;
+      actionNeeded: number;
+    };
+  }>(`/functions/v1/server/staff/submission-summaries?${params.toString()}`);
+}
+
+export async function getStaffApprovedStudents(filters: StaffApprovedStudentFilters = {}) {
+  const params = new URLSearchParams();
+  const searchQuery = String(filters.searchQuery || '').trim();
+  const departmentFilter = String(filters.departmentFilter || '').trim();
+  const yearFilter = String(filters.yearFilter || '').trim();
+  const courseFilter = String(filters.courseFilter || '').trim();
+  const fromDate = String(filters.fromDate || '').trim();
+  const toDate = String(filters.toDate || '').trim();
+  const page = Math.max(1, Number(filters.page || 1) || 1);
+  const pageSize = Math.max(1, Number(filters.pageSize || 20) || 20);
+
+  if (searchQuery) params.set('search', searchQuery);
+  if (departmentFilter && departmentFilter !== 'all') params.set('department', departmentFilter);
+  if (yearFilter && yearFilter !== 'all') params.set('year', yearFilter);
+  if (courseFilter && courseFilter !== 'all') params.set('course', courseFilter);
+  if (fromDate) params.set('fromDate', fromDate);
+  if (toDate) params.set('toDate', toDate);
+  params.set('page', String(page));
+  params.set('pageSize', String(pageSize));
+
+  return apiRequest<{
+    students: ApprovedStudentSummary[];
+    availableCourses: string[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }>(`/functions/v1/server/staff/approved-students?${params.toString()}`);
+}
+
+export async function getStudentNotificationState(studentId?: string) {
+  const targetStudentId = String(studentId || '').trim();
+  if (!targetStudentId) {
+    return { state: null as StudentNotificationStatePayload | null };
+  }
+
+  return apiRequest<{ state: StudentNotificationStatePayload | null }>(
+    `/functions/v1/server/student-notifications/state?studentId=${encodeURIComponent(targetStudentId)}`,
+  );
+}
+
+export async function saveStudentNotificationState(
+  studentId: string,
+  state: StudentNotificationStatePayload,
+) {
+  const targetStudentId = String(studentId || '').trim();
+  if (!targetStudentId) {
+    return { success: false as const };
+  }
+
+  return apiRequest<{ success: boolean }>('/functions/v1/server/student-notifications/state', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      studentId: targetStudentId,
+      state,
+    }),
+  });
 }
 
 export async function getStudentProfileAssets(studentId?: string, profileId?: string | null) {

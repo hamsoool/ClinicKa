@@ -52,6 +52,7 @@ export default function StudentLayout() {
     notifications,
     unreadCount,
     markAllAsRead,
+    markNotificationAsRead,
     markNotificationAsUnread,
     deleteNotification,
     clearNotifications,
@@ -125,6 +126,7 @@ export default function StudentLayout() {
           notifications={notifications}
           unreadCount={unreadCount}
           onMarkAllAsRead={markAllAsRead}
+          onMarkNotificationAsRead={markNotificationAsRead}
           onMarkNotificationAsUnread={markNotificationAsUnread}
           onDeleteNotification={deleteNotification}
           onClearNotifications={clearNotifications}

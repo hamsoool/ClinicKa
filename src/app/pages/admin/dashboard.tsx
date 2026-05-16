@@ -16,14 +16,6 @@ import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { useAuth } from '../../lib/auth';
 import { useAdminAnalyticsQuery, useAdminStaffUsersQuery, useAdminSubmissionsQuery, useAdminUserAccountsQuery } from './admin-workflow-query';
 
-type AnalyticsSummary = {
-  totalStudents: number;
-  totalSubmissions: number;
-  pendingRecords: number;
-  approvedRecords: number;
-  returnedRecords: number;
-};
-
 type StaffUser = {
   id: string;
   name: string;
@@ -227,21 +219,23 @@ export default function AdminDashboard() {
   const totalRoleCount = roleDistribution.reduce((sum, role) => sum + role.count, 0) || 1;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
+      <div className="rounded-[1.5rem] border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-8">
+        <div className="flex flex-col gap-5 sm:gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary-container/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-on-primary-container">
+            <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
               <ShieldCheck className="h-4 w-4" />
               Admin Control Center
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight text-on-surface">Welcome, {displayName}</h1>
-              <p className="mt-2 max-w-2xl text-base text-on-surface-variant">
+              <h1 className="text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
+                Welcome, {displayName}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-on-surface-variant sm:text-base">
                 Monitor platform health, manage user access, and keep clinic operations aligned from one shared administrative workspace.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3 text-sm text-on-surface-variant">
+            <div className="flex flex-wrap gap-2 text-xs text-on-surface-variant sm:gap-3 sm:text-sm">
               <span className="rounded-full bg-surface-container px-3 py-1.5">
                 Total submissions: <span className="font-semibold text-on-surface">{analytics?.totalSubmissions || 0}</span>
               </span>
@@ -251,10 +245,10 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 min-[440px]:grid-cols-2 lg:min-w-[24rem]">
             <button
               onClick={() => navigate('/admin/users')}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
+              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 User Accounts
@@ -269,7 +263,7 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => navigate('/admin/settings')}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
+              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 System Settings
@@ -286,34 +280,34 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
             <div
               key={card.label}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]"
+              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-5"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
                     {card.label}
                   </p>
-                  <p className="mt-3 text-3xl font-bold text-on-surface">{card.value}</p>
+                  <p className="mt-3 text-[2rem] font-bold leading-none text-on-surface sm:text-3xl">{card.value}</p>
                 </div>
-                <div className={`rounded-2xl bg-surface-container p-3 ${card.tone}`}>
+                <div className={`rounded-2xl bg-surface-container p-2.5 sm:p-3 ${card.tone}`}>
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
-              <p className="mt-4 text-sm text-on-surface-variant">{card.detail}</p>
+              <p className="mt-4 text-[13px] text-on-surface-variant sm:text-sm">{card.detail}</p>
             </div>
           );
         })}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.9fr]">
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-          <div className="mb-6 flex items-center justify-between gap-4">
+      <div className="grid gap-5 sm:gap-6 lg:grid-cols-[1.2fr_0.9fr]">
+        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Admin Action Queue</h2>
               <p className="mt-1 text-sm text-on-surface-variant">
@@ -322,7 +316,7 @@ export default function AdminDashboard() {
             </div>
             <button
               onClick={() => navigate('/admin/reports')}
-              className="text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+              className="w-full rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 hover:text-primary/80 sm:w-auto sm:border-none sm:bg-transparent sm:px-0 sm:py-0"
             >
               Open Reports
             </button>
@@ -341,9 +335,9 @@ export default function AdminDashboard() {
               {submissionsNeedingAttention.map((submission) => (
                 <div
                   key={submission.id}
-                  className="flex items-start gap-4 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+                  className="flex flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 sm:flex-row sm:items-start sm:gap-4"
                 >
-                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary">
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
                     <ShieldAlert className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -370,7 +364,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-on-surface">Role Distribution</h2>
             <p className="mt-1 text-sm text-on-surface-variant">
@@ -394,7 +388,7 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          <div className="mt-8 grid gap-3 min-[440px]:grid-cols-2">
             <button
               onClick={() => navigate('/admin/staff')}
               className="flex items-center justify-between rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-4 text-left transition-colors hover:bg-surface-container"
@@ -419,9 +413,9 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-          <div className="mb-6 flex items-center justify-between gap-4">
+      <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Recent Account Activity</h2>
               <p className="mt-1 text-sm text-on-surface-variant">
@@ -430,7 +424,7 @@ export default function AdminDashboard() {
             </div>
             <button
               onClick={() => navigate('/admin/users')}
-              className="text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+              className="w-full rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 hover:text-primary/80 sm:w-auto sm:border-none sm:bg-transparent sm:px-0 sm:py-0"
             >
               View Users
             </button>
@@ -445,7 +439,7 @@ export default function AdminDashboard() {
               {recentAccounts.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center gap-4 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 transition-colors hover:bg-surface-container-low"
+                  className="flex flex-col gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 transition-colors hover:bg-surface-container-low sm:flex-row sm:items-center sm:gap-4"
                 >
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container text-primary">
                     <Users className="h-5 w-5" />
@@ -456,7 +450,7 @@ export default function AdminDashboard() {
                       {user.role} | {user.status}
                     </p>
                   </div>
-                  <p className="text-right text-xs text-on-surface-variant">
+                  <p className="text-left text-xs text-on-surface-variant sm:text-right">
                     {formatDateTime(user.lastActive)}
                   </p>
                 </div>
@@ -465,8 +459,8 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-          <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">System Health Snapshot</h2>
               <p className="mt-1 text-sm text-on-surface-variant">
@@ -475,28 +469,28 @@ export default function AdminDashboard() {
             </div>
             <button
               onClick={() => navigate('/admin/settings')}
-              className="text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+              className="w-full rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 hover:text-primary/80 sm:w-auto sm:border-none sm:bg-transparent sm:px-0 sm:py-0"
             >
               Open Settings
             </button>
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4">
+            <div className="flex flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium text-on-surface">Platform Health</p>
                 <p className="text-sm text-on-surface-variant">Core services responding normally</p>
               </div>
               <Activity className="h-5 w-5 text-emerald-600" />
             </div>
-            <div className="flex items-center justify-between rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4">
+            <div className="flex flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium text-on-surface">Clinic Staff Coverage</p>
                 <p className="text-sm text-on-surface-variant">{activeStaffCount} active staff available</p>
               </div>
               <span className="text-sm font-semibold text-primary">{staffUsers.length} total</span>
             </div>
-            <div className="flex items-center justify-between rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4">
+            <div className="flex flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium text-on-surface">Approval Completion</p>
                 <p className="text-sm text-on-surface-variant">

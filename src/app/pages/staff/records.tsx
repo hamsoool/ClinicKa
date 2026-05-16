@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
@@ -6,7 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Search, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
-import { useStaffSubmissionsQuery } from './staff-workflow-query';
+import type { ApprovedStudentSummary } from '../../lib/record-types';
+import { useDebouncedValue } from '../../lib/use-debounced-value';
+import { useStaffApprovedStudentsQuery } from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = {
@@ -15,6 +17,14 @@ const YEAR_LABELS: Record<string, string> = {
   '3': '3rd Year',
   '4': '4th Year',
 };
+const PAGE_SIZE = 20;
+
+function formatDate(value?: string) {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleDateString();
+}
 
 export default function StaffRecords() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,15 +33,41 @@ export default function StaffRecords() {
   const [courseFilter, setCourseFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const { data: submissions = [], isLoading: loading, isError } = useStaffSubmissionsQuery();
-  const records = submissions.filter((r: any) => r.status === 'approved');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
+  const deferredSearchQuery = useDeferredValue(debouncedSearchQuery.trim());
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deferredSearchQuery, departmentFilter, yearFilter, courseFilter, fromDate, toDate]);
+
+  const {
+    data,
+    isLoading: loading,
+    isFetching,
+    isError,
+  } = useStaffApprovedStudentsQuery({
+    searchQuery: deferredSearchQuery,
+    departmentFilter,
+    yearFilter,
+    courseFilter,
+    fromDate,
+    toDate,
+    page: currentPage,
+    pageSize: PAGE_SIZE,
+  });
+
+  const students = useMemo(
+    () => ((data?.students || []) as ApprovedStudentSummary[]),
+    [data?.students],
+  );
+  const total = data?.total || 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   const availableCourses = useMemo(
-    () =>
-      Array.from(new Set(records.map((record: any) => String(record.course || '').trim()).filter(Boolean))).sort(
-        (a, b) => a.localeCompare(b),
-      ),
-    [records],
+    () => (data?.availableCourses || []).slice().sort((a, b) => a.localeCompare(b)),
+    [data?.availableCourses],
   );
 
   useEffect(() => {
@@ -40,38 +76,12 @@ export default function StaffRecords() {
     }
   }, [isError]);
 
-  const filteredRecords = useMemo(() => {
-    const needle = searchQuery.trim().toLowerCase();
-    const fromTs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : null;
-    const toTs = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : null;
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
-    return records.filter((record) => {
-      if (needle) {
-        const matchesSearch =
-          record.firstName?.toLowerCase().includes(needle) ||
-          record.lastName?.toLowerCase().includes(needle) ||
-          record.studentId?.toLowerCase().includes(needle) ||
-          record.course?.toLowerCase().includes(needle);
-        if (!matchesSearch) return false;
-      }
-      if (
-        departmentFilter !== 'all' &&
-        !(record.department === departmentFilter || record.course?.includes(departmentFilter))
-      ) {
-        return false;
-      }
-      if (yearFilter !== 'all' && String(record.year) !== yearFilter) return false;
-      if (courseFilter !== 'all' && String(record.course || '') !== courseFilter) return false;
-      if (fromTs !== null || toTs !== null) {
-        const dateValue = new Date(record.updatedAt || record.submittedAt || 0).getTime();
-        if (!Number.isFinite(dateValue)) return false;
-        if (fromTs !== null && dateValue < fromTs) return false;
-        if (toTs !== null && dateValue > toTs) return false;
-      }
-      return true;
-    });
-  }, [courseFilter, departmentFilter, fromDate, records, searchQuery, toDate, yearFilter]);
-  
   const clearFilters = () => {
     setSearchQuery('');
     setDepartmentFilter('all');
@@ -84,27 +94,10 @@ export default function StaffRecords() {
   const hasActiveFilters =
     searchQuery || departmentFilter !== 'all' || yearFilter !== 'all' || courseFilter !== 'all' || fromDate || toDate;
 
-  // Group records by student
-  const groupedRecords = useMemo(
-    () =>
-      filteredRecords.reduce((acc, record) => {
-        const studentId = record.studentId;
-        if (!acc[studentId]) {
-          acc[studentId] = {
-            student: record,
-            records: [],
-          };
-        }
-        acc[studentId].records.push(record);
-        return acc;
-      }, {} as Record<string, any>),
-    [filteredRecords],
-  );
-
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-primary mb-2">Medical Records</h1>
+        <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Medical Records</h1>
         <p className="text-muted-foreground">Approved medical clearances and records</p>
       </div>
 
@@ -116,37 +109,41 @@ export default function StaffRecords() {
               placeholder="Search by name, student ID, or course..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 max-w-md"
+              className="w-full pl-10 sm:max-w-md"
             />
           </div>
-          
-          <div className="flex flex-wrap items-end gap-3">
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Departments" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
-                {DEPARTMENTS.map(d => (
-                  <SelectItem key={d} value={d}>{d}</SelectItem>
+                {DEPARTMENTS.map((department) => (
+                  <SelectItem key={department} value={department}>
+                    {department}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
             <Select value={yearFilter} onValueChange={setYearFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Year Levels" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Year Levels</SelectItem>
-                {Object.entries(YEAR_LABELS).map(([val, label]) => (
-                  <SelectItem key={val} value={val}>{label}</SelectItem>
+                {Object.entries(YEAR_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
             <Select value={courseFilter} onValueChange={setCourseFilter}>
-              <SelectTrigger className="w-[260px]">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Courses" />
               </SelectTrigger>
               <SelectContent>
@@ -165,24 +162,28 @@ export default function StaffRecords() {
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="w-[180px]"
+                className="w-full"
                 aria-label="From date"
               />
             </div>
 
             <div className="space-y-1">
-              <p className="px-1 text-xs font-medium text-muted-foreground">To</p>
+              <div className="flex items-center justify-between gap-2 px-1">
+                <p className="text-xs font-medium text-muted-foreground">To</p>
+                {!loading && isFetching ? (
+                  <span className="text-[11px] text-muted-foreground">Refreshing...</span>
+                ) : null}
+              </div>
               <Input
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="w-[180px]"
+                className="w-full"
                 aria-label="To date"
               />
             </div>
           </div>
 
-          {/* Active filter chips */}
           {hasActiveFilters && (
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <span className="text-xs text-muted-foreground">Active filters:</span>
@@ -212,40 +213,40 @@ export default function StaffRecords() {
       <Card>
         <CardHeader>
           <CardTitle>
-            Approved Medical Records ({Object.keys(groupedRecords).length} Students)
+            Approved Medical Records ({total} Students)
           </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">Loading records...</div>
-          ) : Object.keys(groupedRecords).length === 0 ? (
+          ) : students.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No approved records found
             </div>
           ) : (
             <div className="space-y-4">
-              {Object.values(groupedRecords).map((group: any) => (
-                <Card key={group.student.studentId} className="border">
+              {students.map((student) => (
+                <Card key={student.studentId} className="border">
                   <CardContent className="pt-6">
                     <div className="mb-4">
                       <h4 className="font-semibold text-lg">
-                        {group.student.firstName} {group.student.lastName}
+                        {student.firstName} {student.lastName}
                       </h4>
                       <p className="text-sm text-muted-foreground">
-                        {group.student.studentId} • {group.student.course}
+                        {student.studentId} • {student.course}
                       </p>
                     </div>
-                    
+
                     <div className="space-y-2">
-                      {group.records.map((record: any) => (
+                      {student.records.map((record) => (
                         <div
                           key={record.id}
-                          className="flex items-center justify-between p-3 bg-muted rounded"
+                          className="flex flex-col gap-3 rounded bg-muted p-3 sm:flex-row sm:items-center sm:justify-between"
                         >
                           <div>
                             <p className="font-medium">Year {record.year} Medical Record</p>
                             <p className="text-sm text-muted-foreground">
-                              Approved on {new Date(record.updatedAt || record.submittedAt).toLocaleDateString()}
+                              Approved on {formatDate(record.updatedAt || record.submittedAt)}
                             </p>
                           </div>
                           <Badge className="bg-green-100 text-green-800">Approved</Badge>
@@ -257,6 +258,34 @@ export default function StaffRecords() {
               ))}
             </div>
           )}
+
+          {!loading && totalPages > 1 ? (
+            <div className="mt-6 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

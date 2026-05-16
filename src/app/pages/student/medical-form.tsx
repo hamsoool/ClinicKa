@@ -139,8 +139,8 @@ export default function StudentMedicalForm() {
         </Button>
 
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-primary md:text-4xl">Year {year} Medical Record Form</h1>
-          <p className="text-lg text-muted-foreground">
+          <h1 className="text-2xl font-bold text-primary sm:text-3xl md:text-4xl">Year {year} Medical Record Form</h1>
+          <p className="text-base text-muted-foreground sm:text-lg">
             Step {step} of {totalSteps}
           </p>
         </div>
@@ -150,7 +150,7 @@ export default function StudentMedicalForm() {
         </div>
 
         <Card className="border-border/70 bg-white/90 shadow-[0_20px_60px_rgba(16,24,40,0.08)]">
-          <CardContent className="flex flex-col px-5 py-6 md:px-8 md:py-8 xl:px-10">
+          <CardContent className="flex flex-col px-4 py-5 sm:px-5 sm:py-6 md:px-8 md:py-8 xl:px-10">
             <div>
               <MedicalFormStepContent
                 step={step}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
-import type { MockSubmission } from '../../../lib/mock-data';
+import type { SubmissionRecord } from '../../../lib/record-types';
 import { getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import { invalidateStudentRecordsQuery } from '../student-records-query';
 import {
@@ -181,7 +181,7 @@ export function useStudentMedicalForm({
     const loadSubmissionForEdit = async () => {
       try {
         const response = await getSubmission(editSubmissionId);
-        const submission = response?.submission as MockSubmission | undefined;
+        const submission = response?.submission as SubmissionRecord | undefined;
         if (!active || !submission) return;
 
         setActiveSubmissionId(submission.id || null);
@@ -529,7 +529,7 @@ export function useStudentMedicalForm({
     [formData, hasRequiredProfileFields, isEditingExistingSubmission],
   );
 
-  const previewRecord = useMemo<MockSubmission>(
+  const previewRecord = useMemo<SubmissionRecord>(
     () => ({
       id: 'preview',
       studentId: formData.studentId,
