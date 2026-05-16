@@ -19,9 +19,6 @@ export default function StudentClearance() {
   const navigate = useNavigate();
   const clearanceRef = useRef<HTMLDivElement>(null);
   const previewViewportRef = useRef<HTMLDivElement>(null);
-  const previewCanvasRef = useRef<HTMLDivElement>(null);
-  const [previewScale, setPreviewScale] = useState(1);
-  const [previewHeight, setPreviewHeight] = useState<number | null>(null);
   const [isCompactPreview, setIsCompactPreview] = useState(false);
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const { me } = useAuth();
@@ -79,35 +76,25 @@ export default function StudentClearance() {
   useLayoutEffect(() => {
     if (!record) return;
 
-    const updateScale = () => {
+    const updatePreviewMode = () => {
       const viewport = previewViewportRef.current;
-      const canvas = previewCanvasRef.current;
-      if (!viewport || !canvas) return;
+      if (!viewport) return;
 
-      const availableWidth = viewport.clientWidth - 4;
-      const naturalHeight = canvas.scrollHeight;
-      if (!naturalHeight) return;
-
-      const useCompact = availableWidth < PREVIEW_BASE_WIDTH;
-      const nextScale = useCompact ? availableWidth / PREVIEW_BASE_WIDTH : 1;
-      setIsCompactPreview(useCompact);
-      setPreviewScale(nextScale);
-      setPreviewHeight(naturalHeight * nextScale);
+      setIsCompactPreview(viewport.clientWidth < PREVIEW_BASE_WIDTH);
     };
 
-    updateScale();
+    updatePreviewMode();
 
     const observer = new ResizeObserver(() => {
-      updateScale();
+      updatePreviewMode();
     });
 
     if (previewViewportRef.current) observer.observe(previewViewportRef.current);
-    if (previewCanvasRef.current) observer.observe(previewCanvasRef.current);
 
-    window.addEventListener('resize', updateScale);
+    window.addEventListener('resize', updatePreviewMode);
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', updateScale);
+      window.removeEventListener('resize', updatePreviewMode);
     };
   }, [record]);
 
@@ -368,13 +355,18 @@ export default function StudentClearance() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div ref={previewViewportRef} className="overflow-hidden rounded-lg border bg-white p-1 sm:p-2">
-                      <div style={{ height: isCompactPreview ? (previewHeight ?? 'auto') : 'auto' }}>
+                    {isCompactPreview ? (
+                      <p className="mb-3 text-xs text-muted-foreground">
+                        Swipe sideways to view the full medical clearance.
+                      </p>
+                    ) : null}
+                    <div
+                      ref={previewViewportRef}
+                      className="overflow-x-auto overflow-y-hidden rounded-lg border bg-white p-1 sm:p-2"
+                    >
+                      <div className="min-w-max">
                         <div
-                          ref={previewCanvasRef}
                           style={{
-                            transform: `scale(${previewScale})`,
-                            transformOrigin: isCompactPreview ? 'top left' : 'top center',
                             width: `${PREVIEW_BASE_WIDTH}px`,
                             margin: isCompactPreview ? '0' : '0 auto',
                           }}
