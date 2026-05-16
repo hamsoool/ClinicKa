@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Activity,
   ArrowRight,
   ArrowUpDown,
   Award,
@@ -18,15 +17,6 @@ import { getRoleLabel } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { MockSubmission } from '../../lib/mock-data';
 import { useStaffAnalyticsQuery, useStaffSubmissionsQuery } from './staff-workflow-query';
-
-type AnalyticsSummary = {
-  totalStudents: number;
-  totalSubmissions: number;
-  pendingRecords: number;
-  approvedRecords: number;
-  returnedRecords: number;
-};
-
 
 function formatEmailName(email?: string | null) {
   if (!email) return '';
@@ -213,21 +203,23 @@ export default function StaffDashboard() {
   ] as const;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
+      <div className="rounded-[1.5rem] border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-8">
+        <div className="flex flex-col gap-5 sm:gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary-container/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-on-primary-container">
+            <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
               <Stethoscope className="h-4 w-4" />
               Clinic Operations Portal
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight text-on-surface">Welcome, {displayName}</h1>
-              <p className="mt-2 max-w-2xl text-base text-on-surface-variant">
+              <h1 className="text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
+                Welcome, {displayName}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-on-surface-variant sm:text-base">
                 Start with high-priority records first, then continue with in-review and returned submissions.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3 text-sm text-on-surface-variant">
+            <div className="flex flex-wrap gap-2 text-xs text-on-surface-variant sm:gap-3 sm:text-sm">
               <span className="rounded-full bg-surface-container px-3 py-1.5">
                 Role: <span className="font-semibold text-on-surface">{position}</span>
               </span>
@@ -243,10 +235,10 @@ export default function StaffDashboard() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 min-[440px]:grid-cols-2 lg:min-w-[22rem]">
             <button
               onClick={() => navigate('/staff/submissions')}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
+              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 Review Queue
@@ -261,7 +253,7 @@ export default function StaffDashboard() {
             </button>
             <button
               onClick={() => navigate('/staff/certificates')}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
+              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 Ready Certificates
@@ -278,32 +270,32 @@ export default function StaffDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
             <div
               key={card.label}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]"
+              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-5"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
                     {card.label}
                   </p>
-                  <p className="mt-3 text-3xl font-bold text-on-surface">{card.value}</p>
+                  <p className="mt-3 text-[2rem] font-bold leading-none text-on-surface sm:text-3xl">{card.value}</p>
                 </div>
-                <div className={`rounded-2xl bg-surface-container p-3 ${card.tone}`}>
+                <div className={`rounded-2xl bg-surface-container p-2.5 sm:p-3 ${card.tone}`}>
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
-              <p className="mt-4 text-sm text-on-surface-variant">{card.detail}</p>
+              <p className="mt-4 text-[13px] text-on-surface-variant sm:text-sm">{card.detail}</p>
             </div>
           );
         })}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.25fr_0.95fr]">
+      <div className="grid gap-5 sm:gap-6 lg:grid-cols-[1.25fr_0.95fr]">
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -333,21 +325,21 @@ export default function StaffDashboard() {
             onValueChange={(value) => setQueueTab(value as 'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted')}
             className="mb-5"
           >
-            <div className="-mx-1 overflow-x-auto px-1 pb-1">
-              <TabsList className="h-auto min-h-10 w-max min-w-full flex-wrap justify-start gap-2 rounded-2xl p-2 sm:max-w-xl sm:flex-nowrap sm:gap-0 sm:p-[3px]">
-                <TabsTrigger value="all" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
+            <div className="pb-1">
+              <TabsList className="flex h-auto min-h-10 w-full flex-wrap justify-start gap-2 rounded-2xl p-2 sm:max-w-xl sm:flex-nowrap sm:gap-0 sm:p-[3px]">
+                <TabsTrigger value="all" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
                   All ({actionQueue.length})
                 </TabsTrigger>
-                <TabsTrigger value="pending" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
+                <TabsTrigger value="pending" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
                   Pending ({pendingQueue.length})
                 </TabsTrigger>
-                <TabsTrigger value="in_review" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
+                <TabsTrigger value="in_review" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
                   In Review ({inReviewQueue.length})
                 </TabsTrigger>
-                <TabsTrigger value="returned" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
+                <TabsTrigger value="returned" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
                   Returned ({returnedQueue.length})
                 </TabsTrigger>
-                <TabsTrigger value="resubmitted" className="min-h-9 flex-none px-3 text-xs sm:flex-1 sm:text-sm">
+                <TabsTrigger value="resubmitted" className="min-h-9 flex-1 basis-full px-3 text-xs sm:basis-0 sm:text-sm">
                   Resubmitted ({resubmittedQueue.length})
                 </TabsTrigger>
               </TabsList>
@@ -370,10 +362,10 @@ export default function StaffDashboard() {
                 <button
                   key={submission.id}
                   onClick={() => navigate(`/staff/review/${submission.id}`)}
-                  className="flex w-full flex-col gap-4 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low sm:flex-row sm:items-start"
+                  className="flex w-full flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low sm:flex-row sm:items-start sm:gap-4"
                 >
                   <div className="flex items-start gap-4 sm:flex-1">
-                    <div className="flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-surface-container text-primary">
+                    <div className="flex h-11 w-11 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
                       <span className="text-[9px] font-bold leading-none uppercase tracking-widest text-on-surface-variant">Queue</span>
                       <span className="mt-1 text-lg font-black leading-none">#{getQueueNumber(submission, submissions)}</span>
                     </div>

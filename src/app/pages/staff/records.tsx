@@ -104,7 +104,7 @@ export default function StaffRecords() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-primary mb-2">Medical Records</h1>
+        <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Medical Records</h1>
         <p className="text-muted-foreground">Approved medical clearances and records</p>
       </div>
 
@@ -116,13 +116,13 @@ export default function StaffRecords() {
               placeholder="Search by name, student ID, or course..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 max-w-md"
+              className="w-full pl-10 sm:max-w-md"
             />
           </div>
           
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Departments" />
               </SelectTrigger>
               <SelectContent>
@@ -134,7 +134,7 @@ export default function StaffRecords() {
             </Select>
 
             <Select value={yearFilter} onValueChange={setYearFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Year Levels" />
               </SelectTrigger>
               <SelectContent>
@@ -146,7 +146,7 @@ export default function StaffRecords() {
             </Select>
 
             <Select value={courseFilter} onValueChange={setCourseFilter}>
-              <SelectTrigger className="w-[260px]">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Courses" />
               </SelectTrigger>
               <SelectContent>
@@ -165,7 +165,7 @@ export default function StaffRecords() {
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="w-[180px]"
+                className="w-full"
                 aria-label="From date"
               />
             </div>
@@ -176,7 +176,7 @@ export default function StaffRecords() {
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="w-[180px]"
+                className="w-full"
                 aria-label="To date"
               />
             </div>
@@ -240,7 +240,7 @@ export default function StaffRecords() {
                       {group.records.map((record: any) => (
                         <div
                           key={record.id}
-                          className="flex items-center justify-between p-3 bg-muted rounded"
+                          className="flex flex-col gap-3 rounded bg-muted p-3 sm:flex-row sm:items-center sm:justify-between"
                         >
                           <div>
                             <p className="font-medium">Year {record.year} Medical Record</p>

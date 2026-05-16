@@ -88,7 +88,7 @@ export default function AdminSystemSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-primary mb-2">System Settings</h1>
+        <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">System Settings</h1>
         <p className="text-muted-foreground">Manage academic cycle, portal access, and clinic operations preferences</p>
       </div>
 
@@ -133,7 +133,7 @@ export default function AdminSystemSettings() {
               </Select>
             </div>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium">Accept Student Submissions</p>
               <p className="text-sm text-muted-foreground">Turn this off when the clinic needs to pause intake or maintenance.</p>
@@ -157,7 +157,7 @@ export default function AdminSystemSettings() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium">Require Two-Factor Authentication</p>
               <p className="text-sm text-muted-foreground">Keep elevated accounts protected with an extra sign-in step.</p>
@@ -167,7 +167,7 @@ export default function AdminSystemSettings() {
               onCheckedChange={(checked) => updateField('requireTwoFactorAuth', checked)}
             />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium">Session Timeout</p>
               <p className="text-sm text-muted-foreground">Automatically sign out inactive users after the selected period.</p>
@@ -176,7 +176,7 @@ export default function AdminSystemSettings() {
               value={String(draftSettings.sessionTimeoutMinutes)}
               onValueChange={(value) => updateField('sessionTimeoutMinutes', Number(value))}
             >
-              <SelectTrigger className="w-[170px]">
+              <SelectTrigger className="w-full sm:w-[170px]">
                 <SelectValue placeholder="Select timeout" />
               </SelectTrigger>
               <SelectContent>
@@ -188,7 +188,7 @@ export default function AdminSystemSettings() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium">Audit Logging</p>
               <p className="text-sm text-muted-foreground">Keep a record of administrator actions and access events.</p>
@@ -214,7 +214,7 @@ export default function AdminSystemSettings() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium">Approval Email Notifications</p>
               <p className="text-sm text-muted-foreground">Send alerts when submissions are approved or sent back for revision.</p>
@@ -224,7 +224,7 @@ export default function AdminSystemSettings() {
               onCheckedChange={(checked) => updateField('approvalEmailNotifications', checked)}
             />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium">Pending Review Reminders</p>
               <p className="text-sm text-muted-foreground">Keep the clinic team aware of submissions that still need attention.</p>
@@ -234,7 +234,7 @@ export default function AdminSystemSettings() {
               onCheckedChange={(checked) => updateField('pendingReviewReminders', checked)}
             />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium">Auto-Archive Graduated Records</p>
               <p className="text-sm text-muted-foreground">Move older records out of the active workspace after the selected period.</p>
@@ -243,7 +243,7 @@ export default function AdminSystemSettings() {
               value={String(draftSettings.autoArchiveAfterMonths)}
               onValueChange={(value) => updateField('autoArchiveAfterMonths', Number(value))}
             >
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Select archive timing" />
               </SelectTrigger>
               <SelectContent>
