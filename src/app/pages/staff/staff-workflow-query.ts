@@ -5,9 +5,9 @@ import {
 } from '@tanstack/react-query';
 import { getAnalytics, getSubmission, getSubmissions } from '../../lib/api';
 
-const STAFF_SUBMISSIONS_REFRESH_INTERVAL_MS = 15_000;
-const STAFF_ANALYTICS_REFRESH_INTERVAL_MS = 20_000;
-const STAFF_QUERY_STALE_TIME_MS = 10_000;
+const STAFF_SUBMISSIONS_REFRESH_INTERVAL_MS = 60_000;
+const STAFF_ANALYTICS_REFRESH_INTERVAL_MS = 90_000;
+const STAFF_QUERY_STALE_TIME_MS = 60_000;
 
 function normalizeSubmissionId(submissionId?: string | null) {
   return String(submissionId || '').trim();
@@ -34,8 +34,8 @@ export function staffSubmissionsQueryOptions() {
     },
     staleTime: STAFF_QUERY_STALE_TIME_MS,
     refetchInterval: STAFF_SUBMISSIONS_REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
   });
 }
 
@@ -45,8 +45,8 @@ export function staffAnalyticsQueryOptions() {
     queryFn: () => getAnalytics(),
     staleTime: STAFF_QUERY_STALE_TIME_MS,
     refetchInterval: STAFF_ANALYTICS_REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
   });
 }
 

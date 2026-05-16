@@ -42,6 +42,9 @@ const storageBuckets = [
 ];
 const ARCHIVE_TABLE_STATE_TTL_MS = 60_000;
 const ARCHIVED_USER_IDS_TTL_MS = 30_000;
+const ANALYTICS_CACHE_TTL_MS = 30_000;
+const SUBMISSIONS_CACHE_TTL_MS = 15_000;
+const STUDENT_RECORDS_CACHE_TTL_MS = 20_000;
 const SUBMISSION_LIST_COLUMNS = [
   'id',
   'student_id',
@@ -86,6 +89,12 @@ type TimedValue<T> = {
 let archivedTableStateCache: TimedValue<{ available: boolean; rows: any[] }> | null = null;
 let archivedTableStatePromise: Promise<{ available: boolean; rows: any[] }> | null = null;
 let archivedUserIdsCache: TimedValue<{ available: boolean; userIds: Set<string> }> | null = null;
+let analyticsReadCache: TimedValue<Record<string, number>> | null = null;
+let analyticsReadPromise: Promise<Record<string, number>> | null = null;
+let submissionsReadCache: TimedValue<any[]> | null = null;
+let submissionsReadPromise: Promise<any[]> | null = null;
+const studentRecordsReadCache = new Map<string, TimedValue<any[]>>();
+const studentRecordsReadPromises = new Map<string, Promise<any[]>>();
 
 type Requester = {
   user: any;
@@ -231,6 +240,27 @@ function normalizeStudentNotificationState(input: any = {}) {
     items,
     snapshot: Object.fromEntries(snapshotEntries),
   };
+}
+
+function getValidCachedValue<T>(cached: TimedValue<T> | null | undefined) {
+  if (!cached) return null;
+  return cached.expiresAt > Date.now() ? cached.value : null;
+}
+
+function createTimedValue<T>(value: T, ttlMs: number): TimedValue<T> {
+  return {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  };
+}
+
+function invalidateDashboardReadCaches() {
+  analyticsReadCache = null;
+  analyticsReadPromise = null;
+  submissionsReadCache = null;
+  submissionsReadPromise = null;
+  studentRecordsReadCache.clear();
+  studentRecordsReadPromises.clear();
 }
 
 function getStatusEmailContent(status: string, studentName: string, yearLabel: string, staffNotes?: string | null) {
@@ -1096,6 +1126,92 @@ async function getMappedSubmissions(queryBuilder: any) {
   return rows.map((row: any) => mapSubmission(row, related));
 }
 
+async function loadAnalyticsSummary() {
+  const [
+    { count: totalStudents, error: totalStudentsError },
+    { count: totalSubmissions, error: totalSubmissionsError },
+    { count: pendingRecords, error: pendingError },
+    { count: approvedRecords, error: approvedError },
+    { count: returnedRecords, error: returnedError },
+  ] = await Promise.all([
+    supabase.from('students').select('student_id', { count: 'exact', head: true }),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).in('status', ['pending', 'in_review']),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'returned'),
+  ]);
+
+  if (totalStudentsError) throw new Error(totalStudentsError.message);
+  if (totalSubmissionsError) throw new Error(totalSubmissionsError.message);
+  if (pendingError) throw new Error(pendingError.message);
+  if (approvedError) throw new Error(approvedError.message);
+  if (returnedError) throw new Error(returnedError.message);
+
+  return {
+    totalStudents: totalStudents || 0,
+    pendingRecords: pendingRecords || 0,
+    approvedRecords: approvedRecords || 0,
+    returnedRecords: returnedRecords || 0,
+    totalSubmissions: totalSubmissions || 0,
+  };
+}
+
+async function getCachedAnalyticsSummary() {
+  const cached = getValidCachedValue(analyticsReadCache);
+  if (cached) return cached;
+  if (analyticsReadPromise) return analyticsReadPromise;
+
+  analyticsReadPromise = (async () => {
+    const analytics = await loadAnalyticsSummary();
+    analyticsReadCache = createTimedValue(analytics, ANALYTICS_CACHE_TTL_MS);
+    return analytics;
+  })().finally(() => {
+    analyticsReadPromise = null;
+  });
+
+  return analyticsReadPromise;
+}
+
+async function getCachedSubmissionsList() {
+  const cached = getValidCachedValue(submissionsReadCache);
+  if (cached) return cached;
+  if (submissionsReadPromise) return submissionsReadPromise;
+
+  submissionsReadPromise = (async () => {
+    const submissions = await getMappedSubmissions(
+      supabase.from('submissions').select(SUBMISSION_LIST_COLUMNS),
+    );
+    submissionsReadCache = createTimedValue(submissions, SUBMISSIONS_CACHE_TTL_MS);
+    return submissions;
+  })().finally(() => {
+    submissionsReadPromise = null;
+  });
+
+  return submissionsReadPromise;
+}
+
+async function getCachedStudentRecords(studentId: string) {
+  const cacheKey = String(studentId || '').trim();
+  const cached = getValidCachedValue(studentRecordsReadCache.get(cacheKey));
+  if (cached) return cached;
+
+  const inFlight = studentRecordsReadPromises.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const nextPromise = (async () => {
+    const records = await getMappedSubmissions(
+      supabase.from('submissions').select(SUBMISSION_LIST_COLUMNS).eq('student_id', cacheKey),
+    );
+    studentRecordsReadCache.set(cacheKey, createTimedValue(records, STUDENT_RECORDS_CACHE_TTL_MS));
+    return records;
+  })().finally(() => {
+    studentRecordsReadPromises.delete(cacheKey);
+  });
+
+  studentRecordsReadPromises.set(cacheKey, nextPromise);
+  return nextPromise;
+}
+
 async function requireSubmissionAccess(requester: Requester, submissionId: string) {
   const { data: submission, error } = await supabase
     .from('submissions')
@@ -1334,6 +1450,7 @@ app.post("/submit-record", async (c) => {
       }),
     ]);
 
+    invalidateDashboardReadCaches();
     return c.json({ success: true, recordId: submissionId });
   } catch (error) {
     console.log('Error submitting medical record:', error);
@@ -1351,9 +1468,7 @@ app.get("/student-records", async (c) => {
       return badRequest('Student ID not found in profile');
     }
 
-    const records = await getMappedSubmissions(
-      supabase.from('submissions').select(SUBMISSION_LIST_COLUMNS).eq('student_id', requester.profile.student_id),
-    );
+    const records = await getCachedStudentRecords(requester.profile.student_id);
 
     return c.json({ records });
   } catch (error) {
@@ -1371,9 +1486,7 @@ app.get("/student-records/:studentId", async (c) => {
     const studentId = c.req.param('studentId');
     const targetStudentId = isStaffRole(requester.profile.role) ? studentId : requester.profile.student_id;
 
-    const records = await getMappedSubmissions(
-      supabase.from('submissions').select(SUBMISSION_LIST_COLUMNS).eq('student_id', targetStudentId),
-    );
+    const records = await getCachedStudentRecords(targetStudentId);
 
     return c.json({ records });
   } catch (error) {
@@ -1389,7 +1502,7 @@ app.get("/submissions", async (c) => {
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
-    const submissions = await getMappedSubmissions(supabase.from('submissions').select(SUBMISSION_LIST_COLUMNS));
+    const submissions = await getCachedSubmissionsList();
     return c.json({ submissions });
   } catch (error) {
     console.log('Error fetching submissions:', error);
@@ -1532,6 +1645,7 @@ app.put("/student-notifications/state", async (c) => {
 
     if (error) throw new Error(error.message);
 
+    invalidateDashboardReadCaches();
     return c.json({ success: true });
   } catch (error) {
     console.log('Error saving student notification state:', error);
@@ -1588,6 +1702,7 @@ app.put("/submission/:id/measurements", async (c) => {
       }).eq('id', id),
     ]);
 
+    invalidateDashboardReadCaches();
     return c.json({ success: true });
   } catch (error) {
     console.log('Error updating measurements:', error);
@@ -1665,6 +1780,7 @@ app.post("/upload-file", async (c) => {
       await supabase.from('lab_urinalysis').upsert({ submission_id: recordId, file_id: insertedFile.id });
     }
 
+    invalidateDashboardReadCaches();
     return c.json({
       success: true,
       url: signedUrlData?.signedUrl,
@@ -1683,33 +1799,8 @@ app.get("/analytics", async (c) => {
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
-    const [
-      { count: totalStudents, error: totalStudentsError },
-      { count: totalSubmissions, error: totalSubmissionsError },
-      { count: pendingRecords, error: pendingError },
-      { count: approvedRecords, error: approvedError },
-      { count: returnedRecords, error: returnedError },
-    ] = await Promise.all([
-      supabase.from('students').select('student_id', { count: 'exact', head: true }),
-      supabase.from('submissions').select('id', { count: 'exact', head: true }),
-      supabase.from('submissions').select('id', { count: 'exact', head: true }).in('status', ['pending', 'in_review']),
-      supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
-      supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'returned'),
-    ]);
-
-    if (totalStudentsError) throw new Error(totalStudentsError.message);
-    if (totalSubmissionsError) throw new Error(totalSubmissionsError.message);
-    if (pendingError) throw new Error(pendingError.message);
-    if (approvedError) throw new Error(approvedError.message);
-    if (returnedError) throw new Error(returnedError.message);
-
-    return c.json({
-      totalStudents: totalStudents || 0,
-      pendingRecords: pendingRecords || 0,
-      approvedRecords: approvedRecords || 0,
-      returnedRecords: returnedRecords || 0,
-      totalSubmissions: totalSubmissions || 0,
-    });
+    const analytics = await getCachedAnalyticsSummary();
+    return c.json(analytics);
   } catch (error) {
     console.log('Error fetching analytics:', error);
     return c.json({ error: 'Failed to fetch analytics', details: String(error) }, 500);

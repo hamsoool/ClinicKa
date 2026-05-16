@@ -6,8 +6,8 @@ import {
 import { getStudentRecords } from '../../lib/api';
 import type { SubmissionRecord } from '../../lib/record-types';
 
-const STUDENT_RECORDS_REFRESH_INTERVAL_MS = 20_000;
-const STUDENT_RECORDS_STALE_TIME_MS = 10_000;
+const STUDENT_RECORDS_REFRESH_INTERVAL_MS = 60_000;
+const STUDENT_RECORDS_STALE_TIME_MS = 60_000;
 
 function normalizeStudentId(studentId?: string | null) {
   return String(studentId || '').trim();
@@ -30,8 +30,8 @@ export function studentRecordsQueryOptions(studentId?: string | null) {
     enabled: Boolean(normalizedStudentId),
     staleTime: STUDENT_RECORDS_STALE_TIME_MS,
     refetchInterval: normalizedStudentId ? STUDENT_RECORDS_REFRESH_INTERVAL_MS : false,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
   });
 }
 

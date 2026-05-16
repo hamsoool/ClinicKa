@@ -1,5 +1,6 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SubmissionRecord } from './record-types';
 
 const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '')
   .trim()
@@ -2242,6 +2243,16 @@ export async function getStudentRecords(studentId?: string) {
   const fallbackStudentId = targetStudentId || me.profile.student_id;
   if (!fallbackStudentId) {
     return { records: [] };
+  }
+
+  try {
+    return await apiRequest<{ records: SubmissionRecord[] }>(
+      `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
+    );
+  } catch (error) {
+    if (!shouldFallbackToRest(error)) {
+      throw error;
+    }
   }
 
   const records = await getMappedSubmissions(

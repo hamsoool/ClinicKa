@@ -12,11 +12,11 @@ import {
   getUserAccounts,
 } from '../../lib/api';
 
-const ADMIN_QUERY_STALE_TIME_MS = 10_000;
-const ADMIN_ANALYTICS_REFRESH_INTERVAL_MS = 20_000;
-const ADMIN_SUBMISSIONS_REFRESH_INTERVAL_MS = 15_000;
-const ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS = 20_000;
-const ADMIN_SETTINGS_REFRESH_INTERVAL_MS = 30_000;
+const ADMIN_QUERY_STALE_TIME_MS = 60_000;
+const ADMIN_ANALYTICS_REFRESH_INTERVAL_MS = 90_000;
+const ADMIN_SUBMISSIONS_REFRESH_INTERVAL_MS = 60_000;
+const ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS = 120_000;
+const ADMIN_SETTINGS_REFRESH_INTERVAL_MS = 180_000;
 
 export function adminAnalyticsQueryKey() {
   return ['adminAnalytics'] as const;
@@ -48,8 +48,8 @@ export function adminAnalyticsQueryOptions() {
     queryFn: getAnalytics,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
     refetchInterval: ADMIN_ANALYTICS_REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
   });
 }
 
@@ -62,8 +62,8 @@ export function adminSubmissionsQueryOptions() {
     },
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
     refetchInterval: ADMIN_SUBMISSIONS_REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
   });
 }
 
@@ -73,8 +73,8 @@ export function adminStaffUsersQueryOptions() {
     queryFn: getStaffUsers,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
     refetchInterval: ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
   });
 }
 
@@ -84,8 +84,8 @@ export function adminUserAccountsQueryOptions() {
     queryFn: getUserAccounts,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
     refetchInterval: ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
   });
 }
 
@@ -95,8 +95,8 @@ export function adminArchivedAccountsQueryOptions() {
     queryFn: getArchivedUserAccounts,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
     refetchInterval: ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
   });
 }
 
@@ -106,8 +106,8 @@ export function adminSystemSettingsQueryOptions() {
     queryFn: getAdminSystemSettings,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
     refetchInterval: ADMIN_SETTINGS_REFRESH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
-    refetchOnMount: 'always',
+    refetchIntervalInBackground: false,
+    refetchOnMount: true,
   });
 }
 
