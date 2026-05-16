@@ -75,6 +75,8 @@ const ADMIN_SYSTEM_SETTINGS_STORE_KEY = 'admin.system-settings';
 const ADMIN_SYSTEM_SETTINGS_SEMESTERS = ['First Semester', 'Second Semester', 'Summer'];
 const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = [15, 30, 45, 60, 120];
 const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = [0, 12, 24, 36];
+const STUDENT_NOTIFICATION_STATE_KEY_PREFIX = 'student.notification-state';
+const MAX_STUDENT_NOTIFICATION_ITEMS = 20;
 
 type TimedValue<T> = {
   value: T;
@@ -201,6 +203,34 @@ function getYearLevelLabel(yearLevel: unknown) {
   if (value === 3) return '3rd Year';
   if (value === 4) return '4th Year';
   return 'your current year level';
+}
+
+function getRequesterStudentId(requester: Requester) {
+  return String(requester.student?.student_id || requester.profile?.student_id || '').trim();
+}
+
+function getStudentNotificationStateKey(requester: Requester, studentId: string) {
+  return `${STUDENT_NOTIFICATION_STATE_KEY_PREFIX}:${requester.profile.id}:${studentId}`;
+}
+
+function normalizeStudentNotificationState(input: any = {}) {
+  const rawItems = Array.isArray(input?.items) ? input.items : [];
+  const items = rawItems
+    .filter((item: any) => item && typeof item === 'object' && typeof item.id === 'string' && typeof item.submissionId === 'string')
+    .slice(0, MAX_STUDENT_NOTIFICATION_ITEMS)
+    .map((item: any) => ({
+      ...item,
+      read: Boolean(item.read),
+    }));
+
+  const snapshotEntries = input?.snapshot && typeof input.snapshot === 'object' && !Array.isArray(input.snapshot)
+    ? Object.entries(input.snapshot).filter(([key, value]) => Boolean(key) && typeof value === 'string')
+    : [];
+
+  return {
+    items,
+    snapshot: Object.fromEntries(snapshotEntries),
+  };
 }
 
 function getStatusEmailContent(status: string, studentName: string, yearLabel: string, staffNotes?: string | null) {
@@ -1445,6 +1475,67 @@ app.post("/notifications/status-email", async (c) => {
   } catch (error) {
     console.log('Error sending status email notification:', error);
     return c.json({ error: 'Failed to send status email notification', details: String(error) }, 500);
+  }
+});
+
+app.get("/student-notifications/state", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const requestedStudentId = String(c.req.query('studentId') || '').trim();
+    const requesterStudentId = getRequesterStudentId(requester);
+    const studentId = requestedStudentId || requesterStudentId;
+    if (!studentId) return badRequest('studentId is required');
+    if (studentId !== requesterStudentId) return forbidden();
+
+    const { data, error } = await supabase
+      .from('kv_store_2a5e1a6b')
+      .select('value')
+      .eq('key', getStudentNotificationStateKey(requester, studentId))
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+
+    return c.json({
+      state: normalizeStudentNotificationState(data?.value || {}),
+    });
+  } catch (error) {
+    console.log('Error fetching student notification state:', error);
+    return c.json({ error: 'Failed to fetch notification state', details: String(error) }, 500);
+  }
+});
+
+app.put("/student-notifications/state", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const payload = await c.req.json();
+    const requestedStudentId = String(payload?.studentId || '').trim();
+    const requesterStudentId = getRequesterStudentId(requester);
+    const studentId = requestedStudentId || requesterStudentId;
+    if (!studentId) return badRequest('studentId is required');
+    if (studentId !== requesterStudentId) return forbidden();
+
+    const state = normalizeStudentNotificationState(payload?.state || {});
+    const { error } = await supabase
+      .from('kv_store_2a5e1a6b')
+      .upsert({
+        key: getStudentNotificationStateKey(requester, studentId),
+        value: state,
+      });
+
+    if (error) throw new Error(error.message);
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error saving student notification state:', error);
+    return c.json({ error: 'Failed to save notification state', details: String(error) }, 500);
   }
 });
 

@@ -189,6 +189,11 @@ export type StudentProfileAssets = {
   signatureFileName?: string | null;
 };
 
+export type StudentNotificationStatePayload = {
+  items?: unknown[];
+  snapshot?: Record<string, string>;
+};
+
 export type StudentProfileUpdateInput = {
   studentId?: string | null;
   firstName: string;
@@ -2285,6 +2290,38 @@ export async function getStudentRecords(studentId?: string) {
     `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
   );
   return { records };
+}
+
+export async function getStudentNotificationState(studentId?: string) {
+  const targetStudentId = String(studentId || '').trim();
+  if (!targetStudentId) {
+    return { state: null as StudentNotificationStatePayload | null };
+  }
+
+  return apiRequest<{ state: StudentNotificationStatePayload | null }>(
+    `/functions/v1/server/student-notifications/state?studentId=${encodeURIComponent(targetStudentId)}`,
+  );
+}
+
+export async function saveStudentNotificationState(
+  studentId: string,
+  state: StudentNotificationStatePayload,
+) {
+  const targetStudentId = String(studentId || '').trim();
+  if (!targetStudentId) {
+    return { success: false as const };
+  }
+
+  return apiRequest<{ success: boolean }>('/functions/v1/server/student-notifications/state', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      studentId: targetStudentId,
+      state,
+    }),
+  });
 }
 
 export async function getStudentProfileAssets(studentId?: string, profileId?: string | null) {

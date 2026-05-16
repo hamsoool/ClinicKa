@@ -26,6 +26,7 @@ type StudentNotificationMenuProps = {
   notifications: StudentNotificationItem[];
   unreadCount: number;
   onMarkAllAsRead: () => void;
+  onMarkNotificationAsRead: (notificationId: string) => void;
   onMarkNotificationAsUnread: (notificationId: string) => void;
   onDeleteNotification: (notificationId: string) => void;
   onClearNotifications: () => void;
@@ -49,6 +50,7 @@ export default function StudentNotificationMenu({
   notifications,
   unreadCount,
   onMarkAllAsRead,
+  onMarkNotificationAsRead,
   onMarkNotificationAsUnread,
   onDeleteNotification,
   onClearNotifications,
@@ -260,7 +262,7 @@ export default function StudentNotificationMenu({
                             )}
                             onClick={() => {
                               if (!notification.read) {
-                                onMarkAllAsRead();
+                                onMarkNotificationAsRead(notification.id);
                               }
                               setOpen(false);
                               navigate(notification.actionPath);

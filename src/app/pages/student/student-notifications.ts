@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MockSubmission } from '../../lib/mock-data';
+import {
+  getStudentNotificationState,
+  saveStudentNotificationState,
+  type StudentNotificationStatePayload,
+} from '../../lib/api';
 import { useStudentRecordsQuery } from './student-records-query';
 
 type NotifiableStatus = 'approved' | 'returned';
@@ -40,6 +45,29 @@ function createEmptyState(): StoredNotificationState {
   };
 }
 
+function normalizeStoredState(value?: Partial<StudentNotificationStatePayload> | null): StoredNotificationState {
+  const rawItems = Array.isArray(value?.items) ? value.items : [];
+  const items = rawItems
+    .filter((item): item is StoredNotificationItem => {
+      if (!item || typeof item !== 'object') return false;
+      const candidate = item as Partial<StudentNotificationItem>;
+      return typeof candidate.id === 'string' && typeof candidate.submissionId === 'string';
+    })
+    .slice(0, MAX_NOTIFICATION_ITEMS);
+  const snapshot =
+    value?.snapshot && typeof value.snapshot === 'object' && !Array.isArray(value.snapshot)
+      ? Object.fromEntries(
+          Object.entries(value.snapshot)
+            .filter(([key, entryValue]) => key && typeof entryValue === 'string'),
+        )
+      : {};
+
+  return {
+    items: sortNotifications(items),
+    snapshot,
+  };
+}
+
 function loadStoredState(studentId?: string | null): StoredNotificationState {
   if (typeof window === 'undefined' || !studentId) return createEmptyState();
 
@@ -47,20 +75,21 @@ function loadStoredState(studentId?: string | null): StoredNotificationState {
     const raw = window.localStorage.getItem(getStorageKey(studentId));
     if (!raw) return createEmptyState();
 
-    const parsed = JSON.parse(raw) as Partial<StoredNotificationState> | null;
-    return {
-      items: Array.isArray(parsed?.items) ? parsed.items.filter(Boolean) as StoredNotificationItem[] : [],
-      snapshot: parsed?.snapshot && typeof parsed.snapshot === 'object' ? parsed.snapshot as Record<string, string> : {},
-    };
+    return normalizeStoredState(JSON.parse(raw) as Partial<StoredNotificationState> | null);
   } catch {
     return createEmptyState();
   }
 }
 
-function persistState(studentId: string, state: StoredNotificationState) {
+function persistLocalState(studentId: string, state: StoredNotificationState) {
   if (typeof window === 'undefined') return;
 
   window.localStorage.setItem(getStorageKey(studentId), JSON.stringify(state));
+}
+
+function persistState(studentId: string, state: StoredNotificationState) {
+  persistLocalState(studentId, state);
+  void saveStudentNotificationState(studentId, state).catch(() => undefined);
 }
 
 function getRecordTimestamp(record: MockSubmission) {
@@ -120,6 +149,26 @@ function sortNotifications(items: StoredNotificationItem[]) {
   return [...items].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
+function mergeStoredStates(localState: StoredNotificationState, remoteState: StoredNotificationState) {
+  const itemsById = new Map<string, StoredNotificationItem>();
+  for (const item of remoteState.items) {
+    itemsById.set(item.id, item);
+  }
+  for (const item of localState.items) {
+    if (!itemsById.has(item.id)) {
+      itemsById.set(item.id, item);
+    }
+  }
+
+  return {
+    items: sortNotifications([...itemsById.values()]).slice(0, MAX_NOTIFICATION_ITEMS),
+    snapshot: {
+      ...localState.snapshot,
+      ...remoteState.snapshot,
+    },
+  };
+}
+
 function haveSnapshotsChanged(previous: Record<string, string>, next: Record<string, string>) {
   const previousKeys = Object.keys(previous);
   const nextKeys = Object.keys(next);
@@ -133,13 +182,47 @@ export function useStudentNotifications(studentId?: string | null) {
   const { data = [] } = useStudentRecordsQuery(normalizedStudentId);
   const records = data;
   const [state, setState] = useState<StoredNotificationState>(() => loadStoredState(normalizedStudentId));
+  const [notificationStateLoaded, setNotificationStateLoaded] = useState(() => !normalizedStudentId);
 
   useEffect(() => {
-    setState(loadStoredState(normalizedStudentId));
+    const localState = loadStoredState(normalizedStudentId);
+    setState(localState);
+
+    if (!normalizedStudentId) {
+      setNotificationStateLoaded(true);
+      return;
+    }
+
+    let cancelled = false;
+    setNotificationStateLoaded(false);
+    void getStudentNotificationState(normalizedStudentId)
+      .then((response) => {
+        if (cancelled || !response?.state) return;
+
+        const remoteState = normalizeStoredState(response.state);
+        setState((previousState) => {
+          const mergedState = mergeStoredStates(previousState, remoteState);
+          persistLocalState(normalizedStudentId, mergedState);
+          if (remoteState.items.length !== mergedState.items.length) {
+            void saveStudentNotificationState(normalizedStudentId, mergedState).catch(() => undefined);
+          }
+          return mergedState;
+        });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) {
+          setNotificationStateLoaded(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [normalizedStudentId]);
 
   useEffect(() => {
-    if (!normalizedStudentId) return;
+    if (!normalizedStudentId || !notificationStateLoaded) return;
 
     setState((previousState) => {
       const nextSnapshot: Record<string, string> = {};
@@ -175,7 +258,7 @@ export function useStudentNotifications(studentId?: string | null) {
       persistState(normalizedStudentId, mergedState);
       return mergedState;
     });
-  }, [records, normalizedStudentId]);
+  }, [notificationStateLoaded, records, normalizedStudentId]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !normalizedStudentId) return;
@@ -203,6 +286,24 @@ export function useStudentNotifications(studentId?: string | null) {
       const nextState = {
         ...previousState,
         items: previousState.items.map((item) => (item.read ? item : { ...item, read: true })),
+      };
+      persistState(normalizedStudentId, nextState);
+      return nextState;
+    });
+  };
+
+  const markNotificationAsRead = (notificationId: string) => {
+    if (!normalizedStudentId) return;
+
+    setState((previousState) => {
+      const targetNotification = previousState.items.find((item) => item.id === notificationId);
+      if (!targetNotification || targetNotification.read) return previousState;
+
+      const nextState = {
+        ...previousState,
+        items: previousState.items.map((item) => (
+          item.id === notificationId ? { ...item, read: true } : item
+        )),
       };
       persistState(normalizedStudentId, nextState);
       return nextState;
@@ -262,6 +363,7 @@ export function useStudentNotifications(studentId?: string | null) {
     notifications: state.items,
     unreadCount,
     markAllAsRead,
+    markNotificationAsRead,
     markNotificationAsUnread,
     deleteNotification,
     clearNotifications,
