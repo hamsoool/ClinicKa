@@ -6,7 +6,10 @@ import {
   adminSubmissionsQueryOptions,
   adminUserAccountsQueryOptions,
 } from '../pages/admin/admin-workflow-query';
-import { staffAnalyticsQueryOptions, staffSubmissionsQueryOptions } from '../pages/staff/staff-workflow-query';
+import {
+  staffDashboardOverviewQueryOptions,
+  staffSubmissionSummariesQueryOptions,
+} from '../pages/staff/staff-workflow-query';
 import { studentRecordsQueryOptions } from '../pages/student/student-records-query';
 import { prefetchPortalRoutes } from '../route-modules';
 
@@ -44,8 +47,17 @@ export function prefetchPortalExperience(role: UserRole, me?: AuthMe | null) {
   }
 
   if (role === 'staff') {
-    warmQuery(appQueryClient.prefetchQuery(staffAnalyticsQueryOptions()));
-    warmQuery(appQueryClient.prefetchQuery(staffSubmissionsQueryOptions()));
+    warmQuery(appQueryClient.prefetchQuery(staffDashboardOverviewQueryOptions()));
+    warmQuery(
+      appQueryClient.prefetchQuery(
+        staffSubmissionSummariesQueryOptions({
+          statusFilter: 'action_needed',
+          page: 1,
+          pageSize: 25,
+          sortOrder: 'desc',
+        }),
+      ),
+    );
     return;
   }
 

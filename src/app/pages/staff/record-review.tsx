@@ -358,7 +358,7 @@ export default function StaffRecordReview() {
         const now = new Date().toISOString();
         setSubmission((prev) => (prev && prev.id === submission.id ? { ...prev, status: 'in_review', updatedAt: now } : prev));
         setReviewStatus((prev) => (prev === 'pending' || prev === 'resubmitted' ? 'in_review' : prev));
-        await invalidateStaffWorkflowQueries(queryClient, submissionId);
+        await invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId);
       } catch (error) {
         console.warn('Failed to mark submission as in review:', error);
         toast.error('Could not mark this record as In Review. Apply the latest database migration first.');
@@ -574,7 +574,11 @@ export default function StaffRecordReview() {
 
       setSubmission(updatedSubmission);
       setReviewStatus(statusToSave);
-      await invalidateStaffWorkflowQueries(queryClient, submissionId);
+      await invalidateStaffWorkflowQueries(
+        queryClient,
+        submissionId,
+        recordForm.studentId || submission.studentId,
+      );
       toast.success(
         nextStatus === 'approved'
           ? 'Medical clearance approved and issued.'

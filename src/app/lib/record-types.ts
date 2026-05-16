@@ -130,3 +130,53 @@ export type SubmissionRecord = {
   labTestLocation?: 'jlgh' | 'other' | '';
   otherClinicName?: string;
 };
+
+export type SubmissionSummaryRecord = {
+  id: string;
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  middleInitial?: string;
+  course: string;
+  department?: string;
+  year: string;
+  status: SubmissionStatus;
+  submittedAt: string;
+  updatedAt?: string;
+};
+
+export type ApprovedStudentRecordSummary = {
+  id: string;
+  year: string;
+  submittedAt: string;
+  updatedAt?: string;
+};
+
+export type ApprovedStudentSummary = {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  middleInitial?: string;
+  course: string;
+  department?: string;
+  latestSubmittedAt?: string;
+  latestUpdatedAt?: string;
+  approvedCount: number;
+  records: ApprovedStudentRecordSummary[];
+};
+
+export type StaffDashboardOverview = {
+  totalSubmissions: number;
+  approvedRecords: number;
+  pendingRecords: number;
+  inReviewRecords: number;
+  returnedRecords: number;
+  resubmittedRecords: number;
+  actionableRecords: number;
+  submittedToday: number;
+  submittedYesterday: number;
+  pendingQueueItems: SubmissionSummaryRecord[];
+  inReviewQueueItems: SubmissionSummaryRecord[];
+  returnedQueueItems: SubmissionSummaryRecord[];
+  resubmittedQueueItems: SubmissionSummaryRecord[];
+};

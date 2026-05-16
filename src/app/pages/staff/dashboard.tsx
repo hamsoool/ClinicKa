@@ -15,8 +15,8 @@ import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getRoleLabel } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import type { SubmissionRecord } from '../../lib/record-types';
-import { useStaffAnalyticsQuery, useStaffSubmissionsQuery } from './staff-workflow-query';
+import type { SubmissionSummaryRecord } from '../../lib/record-types';
+import { useStaffDashboardOverviewQuery } from './staff-workflow-query';
 
 function formatEmailName(email?: string | null) {
   if (!email) return '';
@@ -42,7 +42,7 @@ function formatDate(value?: string) {
   }).format(date);
 }
 
-function getStatusLabel(status: SubmissionRecord['status']) {
+function getStatusLabel(status: SubmissionSummaryRecord['status']) {
   switch (status) {
     case 'pending':
       return 'Pending review';
@@ -61,7 +61,7 @@ function getStatusLabel(status: SubmissionRecord['status']) {
   }
 }
 
-function getStatusStyles(status: SubmissionRecord['status']) {
+function getStatusStyles(status: SubmissionSummaryRecord['status']) {
   switch (status) {
     case 'approved':
       return 'bg-primary-container/20 text-on-primary-container';
@@ -95,40 +95,60 @@ export default function StaffDashboard() {
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>('desc');
   const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>('pending');
   const {
-    data: analytics,
-    isLoading: analyticsLoading,
-    isError: isAnalyticsError,
-  } = useStaffAnalyticsQuery();
-  const {
-    data: submissionsData = [],
-    isLoading: submissionsLoading,
-    isError: isSubmissionsError,
-  } = useStaffSubmissionsQuery();
-  const submissions = submissionsData as SubmissionRecord[];
+    data: overview,
+    isLoading: overviewLoading,
+    isError: isOverviewError,
+  } = useStaffDashboardOverviewQuery();
 
   useEffect(() => {
-    if (isAnalyticsError || isSubmissionsError) {
+    if (isOverviewError) {
       console.error('Error loading clinic dashboard');
     }
-  }, [isAnalyticsError, isSubmissionsError]);
+  }, [isOverviewError]);
 
-  if (analyticsLoading || submissionsLoading) {
+  if (overviewLoading || !overview) {
     return <PortalPageSkeleton variant="dashboard" />;
   }
 
-  const sortedBySubmitted = [...submissions].sort((a, b) => {
+  const queueGroups = {
+    pending: overview.pendingQueueItems || [],
+    in_review: overview.inReviewQueueItems || [],
+    returned: overview.returnedQueueItems || [],
+    resubmitted: overview.resubmittedQueueItems || [],
+  } as const;
+
+  const actionQueue = [
+    ...queueGroups.pending,
+    ...queueGroups.in_review,
+    ...queueGroups.returned,
+    ...queueGroups.resubmitted,
+  ];
+
+  const sortedBySubmitted = [...actionQueue].sort((a, b) => {
     const timeA = new Date(a.submittedAt).getTime();
     const timeB = new Date(b.submittedAt).getTime();
     return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
   });
-  const actionQueue = sortedBySubmitted.filter(
-    (submission) =>
-      submission.status === 'pending' || submission.status === 'in_review' || submission.status === 'returned' || submission.status === 'resubmitted',
-  );
-  const pendingQueue = actionQueue.filter((submission) => submission.status === 'pending');
-  const inReviewQueue = actionQueue.filter((submission) => submission.status === 'in_review');
-  const returnedQueue = actionQueue.filter((submission) => submission.status === 'returned');
-  const resubmittedQueue = actionQueue.filter((submission) => submission.status === 'resubmitted');
+  const pendingQueue = [...queueGroups.pending].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
+  const inReviewQueue = [...queueGroups.in_review].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
+  const returnedQueue = [...queueGroups.returned].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
+  const resubmittedQueue = [...queueGroups.resubmitted].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
   const visibleQueue =
     queueTab === 'pending'
       ? pendingQueue
@@ -138,64 +158,33 @@ export default function StaffDashboard() {
       ? returnedQueue
       : queueTab === 'resubmitted'
       ? resubmittedQueue
-      : actionQueue;
-  const recentApprovals = [...submissions]
-    .filter((submission) => submission.status === 'approved')
-    .sort((a, b) => {
-      const aTime = new Date(a.updatedAt || a.submittedAt).getTime();
-      const bTime = new Date(b.updatedAt || b.submittedAt).getTime();
-      return bTime - aTime;
-    });
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const submittedToday = submissions.filter((s) => {
-    const d = new Date(s.submittedAt);
-    return d >= today;
-  }).length;
-
-  const submittedYesterday = submissions.filter((s) => {
-    const d = new Date(s.submittedAt);
-    return d >= yesterday && d < today;
-  }).length;
-
-  const getQueueNumber = (submission: SubmissionRecord, allSubmissions: SubmissionRecord[]) => {
-    const submitDate = new Date(submission.submittedAt).toDateString();
-    const sameDaySubmissions = allSubmissions.filter(s => new Date(s.submittedAt).toDateString() === submitDate);
-    sameDaySubmissions.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
-    const index = sameDaySubmissions.findIndex(s => s.id === submission.id);
-    return index + 1;
-  };
+      : sortedBySubmitted;
 
   const summaryCards = [
     {
       label: 'Needs Action',
-      value: actionQueue.length,
+      value: overview.actionableRecords || 0,
       icon: ClipboardCheck,
       tone: 'text-primary',
       detail: 'Pending, in-review, returned, and resubmitted records',
     },
     {
       label: 'In Review',
-      value: inReviewQueue.length,
+      value: overview.inReviewRecords || 0,
       icon: Clock3,
       tone: 'text-blue-600',
       detail: 'Records currently being worked on by the clinic',
     },
     {
       label: 'Returned',
-      value: returnedQueue.length,
+      value: overview.returnedRecords || 0,
       icon: FileWarning,
       tone: 'text-rose-600',
       detail: 'Records waiting for student corrections',
     },
     {
       label: 'Cleared Records',
-      value: analytics?.approvedRecords || 0,
+      value: overview.approvedRecords || 0,
       icon: ShieldCheck,
       tone: 'text-emerald-700',
       detail: 'Total students successfully cleared',
@@ -224,13 +213,13 @@ export default function StaffDashboard() {
                 Role: <span className="font-semibold text-on-surface">{position}</span>
               </span>
               <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Total submissions: <span className="font-semibold text-on-surface">{analytics?.totalSubmissions || 0}</span>
+                Total submissions: <span className="font-semibold text-on-surface">{overview.totalSubmissions || 0}</span>
               </span>
               <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Today: <span className="font-semibold text-on-surface">{submittedToday}</span>
+                Today: <span className="font-semibold text-on-surface">{overview.submittedToday || 0}</span>
               </span>
               <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Yesterday: <span className="font-semibold text-on-surface">{submittedYesterday}</span>
+                Yesterday: <span className="font-semibold text-on-surface">{overview.submittedYesterday || 0}</span>
               </span>
             </div>
           </div>
@@ -246,7 +235,7 @@ export default function StaffDashboard() {
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-on-surface">
                   <ClipboardCheck className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold">{actionQueue.length}</span>
+                  <span className="text-2xl font-bold">{overview.actionableRecords || 0}</span>
                 </div>
                 <ArrowRight className="h-4 w-4 text-on-surface-variant" />
               </div>
@@ -261,7 +250,7 @@ export default function StaffDashboard() {
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-on-surface">
                   <Award className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold">{recentApprovals.length}</span>
+                  <span className="text-2xl font-bold">{overview.approvedRecords || 0}</span>
                 </div>
                 <ArrowRight className="h-4 w-4 text-on-surface-variant" />
               </div>
@@ -328,19 +317,19 @@ export default function StaffDashboard() {
             <div className="pb-1">
               <TabsList className="flex h-auto min-h-10 w-full flex-wrap justify-start gap-2 rounded-2xl p-2 sm:max-w-xl sm:flex-nowrap sm:gap-0 sm:p-[3px]">
                 <TabsTrigger value="all" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
-                  All ({actionQueue.length})
+                  All ({overview.actionableRecords || 0})
                 </TabsTrigger>
                 <TabsTrigger value="pending" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
-                  Pending ({pendingQueue.length})
+                  Pending ({overview.pendingRecords || 0})
                 </TabsTrigger>
                 <TabsTrigger value="in_review" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
-                  In Review ({inReviewQueue.length})
+                  In Review ({overview.inReviewRecords || 0})
                 </TabsTrigger>
                 <TabsTrigger value="returned" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
-                  Returned ({returnedQueue.length})
+                  Returned ({overview.returnedRecords || 0})
                 </TabsTrigger>
                 <TabsTrigger value="resubmitted" className="min-h-9 flex-1 basis-full px-3 text-xs sm:basis-0 sm:text-sm">
-                  Resubmitted ({resubmittedQueue.length})
+                  Resubmitted ({overview.resubmittedRecords || 0})
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -364,10 +353,9 @@ export default function StaffDashboard() {
                   onClick={() => navigate(`/staff/review/${submission.id}`)}
                   className="flex w-full flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low sm:flex-row sm:items-start sm:gap-4"
                 >
-                  <div className="flex items-start gap-4 sm:flex-1">
-                    <div className="flex h-11 w-11 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
-                      <span className="text-[9px] font-bold leading-none uppercase tracking-widest text-on-surface-variant">Queue</span>
-                      <span className="mt-1 text-lg font-black leading-none">#{getQueueNumber(submission, submissions)}</span>
+                    <div className="flex items-start gap-4 sm:flex-1">
+                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
+                      <ClipboardCheck className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -412,12 +400,12 @@ export default function StaffDashboard() {
             <div className="rounded-2xl border border-orange-200/60 bg-orange-50/70 p-4">
               <p className="text-sm font-semibold text-orange-900">2. Follow up returned and resubmitted</p>
               <p className="mt-1 text-sm text-orange-800">
-                {returnedQueue.length + resubmittedQueue.length} records need correction checks.
+                {(overview.returnedRecords || 0) + (overview.resubmittedRecords || 0)} records need correction checks.
               </p>
             </div>
             <div className="rounded-2xl border border-sky-200/60 bg-sky-50/70 p-4">
               <p className="text-sm font-semibold text-sky-900">3. Continue active reviews</p>
-              <p className="mt-1 text-sm text-sky-800">{inReviewQueue.length} records are currently in progress.</p>
+              <p className="mt-1 text-sm text-sky-800">{overview.inReviewRecords || 0} records are currently in progress.</p>
             </div>
             <button
               type="button"

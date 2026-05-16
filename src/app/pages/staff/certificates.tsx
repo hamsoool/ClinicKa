@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -11,7 +11,11 @@ import MedicalClearancePreview from '../../components/medical-clearance-preview'
 import { Download, Search, FileText, X, ClipboardList, Award } from 'lucide-react';
 import { toast } from 'sonner';
 import { getStudentProfileAssets } from '../../lib/api';
-import { useStaffSubmissionsQuery } from './staff-workflow-query';
+import { useDebouncedValue } from '../../lib/use-debounced-value';
+import {
+  useStaffApprovedStudentsQuery,
+  useStaffStudentRecordsQuery,
+} from './staff-workflow-query';
 
 type StaffSubmission = SubmissionRecord & {
   photoUrl?: string;
@@ -54,7 +58,6 @@ export default function StaffCertificates() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
   const STUDENTS_PER_PAGE = 10;
-  const [filteredSubmissions, setFilteredSubmissions] = useState<StaffSubmission[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -62,33 +65,48 @@ export default function StaffCertificates() {
   const [activeTab, setActiveTab] = useState<'form' | 'medical-clearance'>('form');
   const [clearanceYearFilter, setClearanceYearFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
-
-  const {
-    data: submissionsData = [],
-    isLoading: loading,
-    isError,
-  } = useStaffSubmissionsQuery();
-  const submissions = useMemo(
-    () => (submissionsData.filter((r) => r.status === 'approved') as StaffSubmission[]),
-    [submissionsData],
-  );
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
+  const deferredSearchQuery = useDeferredValue(debouncedSearchQuery.trim());
 
   const recordPreviewRef = useRef<HTMLDivElement>(null);
   const clearancePreviewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    filterSubmissions();
-  }, [searchQuery, departmentFilter, yearFilter, submissions]);
-
-  useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, departmentFilter, yearFilter]);
+  }, [deferredSearchQuery, departmentFilter, yearFilter]);
+
+  const {
+    data: approvedStudentsData,
+    isLoading: loading,
+    isFetching: approvedStudentsFetching,
+    isError,
+  } = useStaffApprovedStudentsQuery({
+    searchQuery: deferredSearchQuery,
+    departmentFilter,
+    yearFilter,
+    page: currentPage,
+    pageSize: STUDENTS_PER_PAGE,
+  });
 
   useEffect(() => {
     if (isError) {
       toast.error('Failed to load submissions');
     }
   }, [isError]);
+
+  const studentRows = useMemo(
+    () => approvedStudentsData?.students || [],
+    [approvedStudentsData?.students],
+  );
+  const totalStudents = approvedStudentsData?.total || 0;
+  const totalPages = Math.max(1, Math.ceil(totalStudents / STUDENTS_PER_PAGE));
+  const clampedPage = Math.min(currentPage, totalPages);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const hydrateStudentAssets = async (records: StaffSubmission[]) => {
     if (!records.length) return records;
@@ -111,52 +129,11 @@ export default function StaffCertificates() {
     }
   };
 
-  const filterSubmissions = () => {
-    let filtered = submissions;
-
-    if (searchQuery) {
-      filtered = filtered.filter((sub) =>
-        sub.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sub.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sub.studentId?.toLowerCase().includes(searchQuery.toLowerCase()),
-      );
-    }
-
-    if (departmentFilter !== 'all') {
-      filtered = filtered.filter((sub) => sub.department === departmentFilter || sub.course?.includes(departmentFilter));
-    }
-
-    if (yearFilter !== 'all') {
-      filtered = filtered.filter((sub) => String(sub.year) === yearFilter);
-    }
-
-    setFilteredSubmissions(filtered);
-  };
-
   const clearFilters = () => {
     setSearchQuery('');
     setDepartmentFilter('all');
     setYearFilter('all');
   };
-
-  const studentRows = useMemo(() => {
-    const grouped = filteredSubmissions.reduce((acc, item) => {
-      const key = String(item.studentId || '');
-      if (!key) return acc;
-      const existing = acc.get(key);
-      if (!existing) {
-        acc.set(key, item);
-        return acc;
-      }
-      const existingTs = new Date(existing.updatedAt || existing.submittedAt || 0).getTime();
-      const nextTs = new Date(item.updatedAt || item.submittedAt || 0).getTime();
-      if (nextTs >= existingTs) acc.set(key, item);
-      return acc;
-    }, new Map<string, SubmissionRecord>());
-    return Array.from(grouped.values()).sort(
-      (a, b) => new Date(b.updatedAt || b.submittedAt || 0).getTime() - new Date(a.updatedAt || a.submittedAt || 0).getTime(),
-    );
-  }, [filteredSubmissions]);
 
   useEffect(() => {
     if (studentRows.length && !selectedStudentId) {
@@ -168,9 +145,17 @@ export default function StaffCertificates() {
     }
   }, [studentRows, selectedStudentId]);
 
+  const {
+    data: selectedStudentRecordsData = [],
+    isFetching: selectedStudentRecordsFetching,
+  } = useStaffStudentRecordsQuery(selectedStudentId);
+
   const selectedStudentRecords = useMemo(
-    () => submissions.filter((item) => String(item.studentId || '') === String(selectedStudentId || '')),
-    [submissions, selectedStudentId],
+    () =>
+      (Array.isArray(selectedStudentRecordsData) ? selectedStudentRecordsData : []).filter(
+        (item) => item.status === 'approved',
+      ) as StaffSubmission[],
+    [selectedStudentRecordsData],
   );
 
   const [hydratedSelectedRecords, setHydratedSelectedRecords] = useState<StaffSubmission[]>([]);
@@ -183,7 +168,7 @@ export default function StaffCertificates() {
     return () => {
       active = false;
     };
-  }, [selectedStudentId, submissions]);
+  }, [selectedStudentId, selectedStudentRecords]);
 
   const selectedRecordsSorted = useMemo(
     () =>
@@ -222,11 +207,6 @@ export default function StaffCertificates() {
   }, [selectedRecordsSorted, clearanceYearFilter]);
 
   const hasActiveFilters = searchQuery || departmentFilter !== 'all' || yearFilter !== 'all';
-  const totalPages = Math.max(1, Math.ceil(studentRows.length / STUDENTS_PER_PAGE));
-  const clampedPage = Math.min(currentPage, totalPages);
-  const pageStartIndex = (clampedPage - 1) * STUDENTS_PER_PAGE;
-  const paginatedStudents = studentRows.slice(pageStartIndex, pageStartIndex + STUDENTS_PER_PAGE);
-  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   const downloadRecordPDF = async () => {
     if (!recordPreviewRef.current || !combinedRecord) return;
@@ -373,9 +353,14 @@ export default function StaffCertificates() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Approved Students</CardTitle>
+            <Card>
+              <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-base">Approved Students</CardTitle>
+                {!loading && approvedStudentsFetching ? (
+                  <span className="text-xs text-muted-foreground">Refreshing...</span>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -430,7 +415,7 @@ export default function StaffCertificates() {
                   <div className="py-4 text-center text-muted-foreground">No approved records found</div>
                 ) : (
                   <div className="max-h-[500px] space-y-2 overflow-y-auto">
-                    {paginatedStudents.map((student) => (
+                    {studentRows.map((student) => (
                       <div
                         key={student.studentId}
                         className={`cursor-pointer rounded border p-3 transition-colors ${
@@ -446,16 +431,11 @@ export default function StaffCertificates() {
                   </div>
                 )}
 
-                {!loading && studentRows.length > STUDENTS_PER_PAGE ? (
+                {!loading && totalPages > 1 ? (
                   <div className="flex items-center justify-between gap-2 pt-2">
                     <p className="text-xs text-muted-foreground">Page {clampedPage} of {totalPages}</p>
                     <div className="flex items-center gap-1">
-                      <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={clampedPage <= 1} onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}>Prev</Button>
-                      {pageNumbers.map((page) => (
-                        <Button key={page} type="button" size="sm" variant={page === clampedPage ? 'default' : 'outline'} className="h-7 min-w-7 px-2 text-xs" onClick={() => setCurrentPage(page)}>
-                          {page}
-                        </Button>
-                      ))}
+                      <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={clampedPage <= 1} onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}>Previous</Button>
                       <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={clampedPage >= totalPages} onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}>Next</Button>
                     </div>
                   </div>
@@ -494,6 +474,9 @@ export default function StaffCertificates() {
                         <CardTitle>Medical Record Form (Combined Year 1-4)</CardTitle>
                         <p className="mt-1 text-sm text-muted-foreground">{combinedRecord.lastName}, {combinedRecord.firstName} | {combinedRecord.studentId}</p>
                       </div>
+                      {selectedStudentRecordsFetching ? (
+                        <span className="text-xs text-muted-foreground">Refreshing selected student...</span>
+                      ) : null}
                       <Button onClick={downloadRecordPDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
                         <Download className="mr-2 h-4 w-4" />
                         Download PDF (Long Bond)

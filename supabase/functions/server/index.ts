@@ -45,6 +45,14 @@ const ARCHIVED_USER_IDS_TTL_MS = 30_000;
 const ANALYTICS_CACHE_TTL_MS = 30_000;
 const SUBMISSIONS_CACHE_TTL_MS = 15_000;
 const STUDENT_RECORDS_CACHE_TTL_MS = 20_000;
+const STAFF_DASHBOARD_OVERVIEW_TTL_MS = 15_000;
+const STAFF_SUBMISSION_SUMMARIES_TTL_MS = 20_000;
+const STAFF_APPROVED_STUDENTS_TTL_MS = 30_000;
+const STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS = 20;
+const STAFF_SUBMISSION_SUMMARIES_DEFAULT_PAGE_SIZE = 25;
+const STAFF_SUBMISSION_SUMMARIES_MAX_PAGE_SIZE = 100;
+const STAFF_APPROVED_STUDENTS_DEFAULT_PAGE_SIZE = 20;
+const STAFF_APPROVED_STUDENTS_MAX_PAGE_SIZE = 50;
 const SUBMISSION_LIST_COLUMNS = [
   'id',
   'student_id',
@@ -74,6 +82,19 @@ const SUBMISSION_LIST_COLUMNS = [
   'lab_test_location',
   'lab_test_clinic',
 ].join(',');
+const SUBMISSION_SUMMARY_COLUMNS = [
+  'id',
+  'student_id',
+  'first_name',
+  'last_name',
+  'middle_initial',
+  'course',
+  'department',
+  'year_level',
+  'status',
+  'submitted_at',
+  'updated_at',
+].join(',');
 const ADMIN_SYSTEM_SETTINGS_STORE_KEY = 'admin.system-settings';
 const ADMIN_SYSTEM_SETTINGS_SEMESTERS = ['First Semester', 'Second Semester', 'Summer'];
 const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = [15, 30, 45, 60, 120];
@@ -95,6 +116,12 @@ let submissionsReadCache: TimedValue<any[]> | null = null;
 let submissionsReadPromise: Promise<any[]> | null = null;
 const studentRecordsReadCache = new Map<string, TimedValue<any[]>>();
 const studentRecordsReadPromises = new Map<string, Promise<any[]>>();
+let staffDashboardOverviewCache: TimedValue<any> | null = null;
+let staffDashboardOverviewPromise: Promise<any> | null = null;
+const staffSubmissionSummariesCache = new Map<string, TimedValue<any>>();
+const staffSubmissionSummariesPromises = new Map<string, Promise<any>>();
+const staffApprovedStudentsCache = new Map<string, TimedValue<any>>();
+const staffApprovedStudentsPromises = new Map<string, Promise<any>>();
 
 type Requester = {
   user: any;
@@ -261,6 +288,12 @@ function invalidateDashboardReadCaches() {
   submissionsReadPromise = null;
   studentRecordsReadCache.clear();
   studentRecordsReadPromises.clear();
+  staffDashboardOverviewCache = null;
+  staffDashboardOverviewPromise = null;
+  staffSubmissionSummariesCache.clear();
+  staffSubmissionSummariesPromises.clear();
+  staffApprovedStudentsCache.clear();
+  staffApprovedStudentsPromises.clear();
 }
 
 function getStatusEmailContent(status: string, studentName: string, yearLabel: string, staffNotes?: string | null) {
@@ -1126,6 +1159,421 @@ async function getMappedSubmissions(queryBuilder: any) {
   return rows.map((row: any) => mapSubmission(row, related));
 }
 
+const ACTIONABLE_SUBMISSION_STATUSES = ['pending', 'in_review', 'returned', 'resubmitted'];
+
+function mapSubmissionSummary(row: any) {
+  return {
+    id: row.id,
+    studentId: row.student_id || '',
+    firstName: row.first_name || '',
+    lastName: row.last_name || '',
+    middleInitial: row.middle_initial || '',
+    course: row.course || '',
+    department: row.department || '',
+    year: String(row.year_level || ''),
+    status: row.status,
+    submittedAt: row.submitted_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function normalizeIlikeValue(value: string) {
+  return String(value || '').trim().replace(/[%_,]/g, ' ');
+}
+
+function normalizePositiveInteger(value: unknown, fallback: number, maxValue: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.floor(parsed), maxValue);
+}
+
+function normalizePage(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return Math.floor(parsed);
+}
+
+function normalizeSortOrder(value: unknown) {
+  return String(value || '').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
+}
+
+function normalizeSubmissionStatusFilter(value: unknown) {
+  const normalized = String(value || 'action_needed').trim().toLowerCase();
+  if (normalized === 'all' || normalized === 'action_needed') return normalized;
+  return ACTIONABLE_SUBMISSION_STATUSES.includes(normalized) || normalized === 'approved' || normalized === 'physical_exam_done'
+    ? normalized
+    : 'action_needed';
+}
+
+function normalizeYearFilter(value: unknown) {
+  const normalized = String(value || '').trim();
+  return ['1', '2', '3', '4'].includes(normalized) ? normalized : '';
+}
+
+function normalizeDateFilter(value: unknown) {
+  const normalized = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : '';
+}
+
+function buildSubmissionSummaryCacheKey(input: Record<string, unknown>) {
+  return JSON.stringify(input);
+}
+
+function applySubmissionSummaryFilters(queryBuilder: any, options: any = {}) {
+  let query = queryBuilder;
+  const statusFilter = normalizeSubmissionStatusFilter(options.statusFilter);
+  const searchQuery = normalizeIlikeValue(options.searchQuery || '');
+  const departmentFilter = String(options.departmentFilter || '').trim();
+  const yearFilter = normalizeYearFilter(options.yearFilter);
+
+  if (statusFilter === 'action_needed') {
+    query = query.in('status', ACTIONABLE_SUBMISSION_STATUSES);
+  } else if (statusFilter !== 'all') {
+    query = query.eq('status', statusFilter);
+  }
+
+  if (searchQuery) {
+    query = query.or(
+      `first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,student_id.ilike.%${searchQuery}%`,
+    );
+  }
+
+  if (departmentFilter && departmentFilter !== 'all') {
+    query = query.or(
+      `department.eq.${departmentFilter},course.ilike.%${normalizeIlikeValue(departmentFilter)}%`,
+    );
+  }
+
+  if (yearFilter) {
+    query = query.eq('year_level', Number(yearFilter));
+  }
+
+  return query;
+}
+
+function applyApprovedStudentFilters(queryBuilder: any, options: any = {}) {
+  let query = queryBuilder.eq('status', 'approved');
+  const searchQuery = normalizeIlikeValue(options.searchQuery || '');
+  const departmentFilter = String(options.departmentFilter || '').trim();
+  const yearFilter = normalizeYearFilter(options.yearFilter);
+  const courseFilter = String(options.courseFilter || '').trim();
+  const fromDate = normalizeDateFilter(options.fromDate);
+  const toDate = normalizeDateFilter(options.toDate);
+
+  if (searchQuery) {
+    query = query.or(
+      `first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,student_id.ilike.%${searchQuery}%,course.ilike.%${searchQuery}%`,
+    );
+  }
+
+  if (departmentFilter && departmentFilter !== 'all') {
+    query = query.or(
+      `department.eq.${departmentFilter},course.ilike.%${normalizeIlikeValue(departmentFilter)}%`,
+    );
+  }
+
+  if (yearFilter) {
+    query = query.eq('year_level', Number(yearFilter));
+  }
+
+  if (courseFilter && courseFilter !== 'all') {
+    query = query.eq('course', courseFilter);
+  }
+
+  if (fromDate) {
+    query = query.gte('updated_at', `${fromDate}T00:00:00.000Z`);
+  }
+
+  if (toDate) {
+    query = query.lte('updated_at', `${toDate}T23:59:59.999Z`);
+  }
+
+  return query;
+}
+
+async function loadStaffDashboardOverview() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const [
+    { count: totalSubmissions, error: totalSubmissionsError },
+    { count: approvedRecords, error: approvedError },
+    { count: pendingRecords, error: pendingError },
+    { count: inReviewRecords, error: inReviewError },
+    { count: returnedRecords, error: returnedError },
+    { count: resubmittedRecords, error: resubmittedError },
+    { count: submittedToday, error: todayError },
+    { count: submittedYesterday, error: yesterdayError },
+    { data: pendingQueueRows, error: pendingQueueError },
+    { data: inReviewQueueRows, error: inReviewQueueError },
+    { data: returnedQueueRows, error: returnedQueueError },
+    { data: resubmittedQueueRows, error: resubmittedQueueError },
+  ] = await Promise.all([
+    supabase.from('submissions').select('id', { count: 'exact', head: true }),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'in_review'),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'returned'),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'resubmitted'),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).gte('submitted_at', today.toISOString()),
+    supabase.from('submissions').select('id', { count: 'exact', head: true }).gte('submitted_at', yesterday.toISOString()).lt('submitted_at', today.toISOString()),
+    supabase.from('submissions').select(SUBMISSION_SUMMARY_COLUMNS).eq('status', 'pending').order('submitted_at', { ascending: false }).limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+    supabase.from('submissions').select(SUBMISSION_SUMMARY_COLUMNS).eq('status', 'in_review').order('submitted_at', { ascending: false }).limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+    supabase.from('submissions').select(SUBMISSION_SUMMARY_COLUMNS).eq('status', 'returned').order('submitted_at', { ascending: false }).limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+    supabase.from('submissions').select(SUBMISSION_SUMMARY_COLUMNS).eq('status', 'resubmitted').order('submitted_at', { ascending: false }).limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+  ]);
+
+  if (totalSubmissionsError) throw new Error(totalSubmissionsError.message);
+  if (approvedError) throw new Error(approvedError.message);
+  if (pendingError) throw new Error(pendingError.message);
+  if (inReviewError) throw new Error(inReviewError.message);
+  if (returnedError) throw new Error(returnedError.message);
+  if (resubmittedError) throw new Error(resubmittedError.message);
+  if (todayError) throw new Error(todayError.message);
+  if (yesterdayError) throw new Error(yesterdayError.message);
+  if (pendingQueueError) throw new Error(pendingQueueError.message);
+  if (inReviewQueueError) throw new Error(inReviewQueueError.message);
+  if (returnedQueueError) throw new Error(returnedQueueError.message);
+  if (resubmittedQueueError) throw new Error(resubmittedQueueError.message);
+
+  return {
+    totalSubmissions: totalSubmissions || 0,
+    approvedRecords: approvedRecords || 0,
+    pendingRecords: pendingRecords || 0,
+    inReviewRecords: inReviewRecords || 0,
+    returnedRecords: returnedRecords || 0,
+    resubmittedRecords: resubmittedRecords || 0,
+    actionableRecords: (pendingRecords || 0) + (inReviewRecords || 0) + (returnedRecords || 0) + (resubmittedRecords || 0),
+    submittedToday: submittedToday || 0,
+    submittedYesterday: submittedYesterday || 0,
+    pendingQueueItems: (pendingQueueRows || []).map(mapSubmissionSummary),
+    inReviewQueueItems: (inReviewQueueRows || []).map(mapSubmissionSummary),
+    returnedQueueItems: (returnedQueueRows || []).map(mapSubmissionSummary),
+    resubmittedQueueItems: (resubmittedQueueRows || []).map(mapSubmissionSummary),
+  };
+}
+
+async function getCachedStaffDashboardOverview() {
+  const cached = getValidCachedValue(staffDashboardOverviewCache);
+  if (cached) return cached;
+  if (staffDashboardOverviewPromise) return staffDashboardOverviewPromise;
+
+  staffDashboardOverviewPromise = (async () => {
+    const overview = await loadStaffDashboardOverview();
+    staffDashboardOverviewCache = createTimedValue(overview, STAFF_DASHBOARD_OVERVIEW_TTL_MS);
+    return overview;
+  })().finally(() => {
+    staffDashboardOverviewPromise = null;
+  });
+
+  return staffDashboardOverviewPromise;
+}
+
+async function loadStaffSubmissionSummaries(options: any = {}) {
+  const page = normalizePage(options.page);
+  const pageSize = normalizePositiveInteger(
+    options.pageSize,
+    STAFF_SUBMISSION_SUMMARIES_DEFAULT_PAGE_SIZE,
+    STAFF_SUBMISSION_SUMMARIES_MAX_PAGE_SIZE,
+  );
+  const sortOrder = normalizeSortOrder(options.sortOrder);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = supabase.from('submissions').select(SUBMISSION_SUMMARY_COLUMNS, { count: 'exact' });
+  query = applySubmissionSummaryFilters(query, options);
+  query = query.order('submitted_at', { ascending: sortOrder === 'asc' }).range(from, to);
+
+  const [{ data, error, count }, overview] = await Promise.all([
+    query,
+    getCachedStaffDashboardOverview(),
+  ]);
+
+  if (error) throw new Error(error.message);
+
+  return {
+    items: (data || []).map(mapSubmissionSummary),
+    total: count || 0,
+    page,
+    pageSize,
+    counts: {
+      pending: overview.pendingRecords,
+      inReview: overview.inReviewRecords,
+      returned: overview.returnedRecords,
+      resubmitted: overview.resubmittedRecords,
+      actionNeeded: overview.actionableRecords,
+    },
+  };
+}
+
+async function getCachedStaffSubmissionSummaries(options: any = {}) {
+  const normalized = {
+    searchQuery: String(options.searchQuery || '').trim(),
+    statusFilter: normalizeSubmissionStatusFilter(options.statusFilter),
+    departmentFilter: String(options.departmentFilter || '').trim(),
+    yearFilter: normalizeYearFilter(options.yearFilter),
+    sortOrder: normalizeSortOrder(options.sortOrder),
+    page: normalizePage(options.page),
+    pageSize: normalizePositiveInteger(
+      options.pageSize,
+      STAFF_SUBMISSION_SUMMARIES_DEFAULT_PAGE_SIZE,
+      STAFF_SUBMISSION_SUMMARIES_MAX_PAGE_SIZE,
+    ),
+  };
+  const cacheKey = buildSubmissionSummaryCacheKey(normalized);
+  const cached = getValidCachedValue(staffSubmissionSummariesCache.get(cacheKey));
+  if (cached) return cached;
+
+  const inFlight = staffSubmissionSummariesPromises.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const nextPromise = (async () => {
+    const result = await loadStaffSubmissionSummaries(normalized);
+    staffSubmissionSummariesCache.set(cacheKey, createTimedValue(result, STAFF_SUBMISSION_SUMMARIES_TTL_MS));
+    return result;
+  })().finally(() => {
+    staffSubmissionSummariesPromises.delete(cacheKey);
+  });
+
+  staffSubmissionSummariesPromises.set(cacheKey, nextPromise);
+  return nextPromise;
+}
+
+async function loadApprovedStudents(options: any = {}) {
+  const page = normalizePage(options.page);
+  const pageSize = normalizePositiveInteger(
+    options.pageSize,
+    STAFF_APPROVED_STUDENTS_DEFAULT_PAGE_SIZE,
+    STAFF_APPROVED_STUDENTS_MAX_PAGE_SIZE,
+  );
+
+  let query = supabase.from('submissions').select(SUBMISSION_SUMMARY_COLUMNS);
+  query = applyApprovedStudentFilters(query, options);
+  query = query.order('updated_at', { ascending: false });
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const groups = new Map<string, any>();
+
+  for (const row of data || []) {
+    const summary = mapSubmissionSummary(row);
+    if (!summary.studentId) continue;
+
+    const existing = groups.get(summary.studentId);
+    const currentTimestamp = new Date(summary.updatedAt || summary.submittedAt || 0).getTime();
+
+    if (!existing) {
+      groups.set(summary.studentId, {
+        studentId: summary.studentId,
+        firstName: summary.firstName,
+        lastName: summary.lastName,
+        middleInitial: summary.middleInitial || '',
+        course: summary.course,
+        department: summary.department || '',
+        latestSubmittedAt: summary.submittedAt,
+        latestUpdatedAt: summary.updatedAt,
+        approvedCount: 1,
+        records: [
+          {
+            id: summary.id,
+            year: summary.year,
+            submittedAt: summary.submittedAt,
+            updatedAt: summary.updatedAt,
+          },
+        ],
+      });
+      continue;
+    }
+
+    existing.approvedCount += 1;
+    existing.records.push({
+      id: summary.id,
+      year: summary.year,
+      submittedAt: summary.submittedAt,
+      updatedAt: summary.updatedAt,
+    });
+
+    const existingTimestamp = new Date(existing.latestUpdatedAt || existing.latestSubmittedAt || 0).getTime();
+    if (currentTimestamp >= existingTimestamp) {
+      existing.firstName = summary.firstName;
+      existing.lastName = summary.lastName;
+      existing.middleInitial = summary.middleInitial || '';
+      existing.course = summary.course;
+      existing.department = summary.department || '';
+      existing.latestSubmittedAt = summary.submittedAt;
+      existing.latestUpdatedAt = summary.updatedAt;
+    }
+  }
+
+  const students = Array.from(groups.values())
+    .map((student) => ({
+      ...student,
+      records: student.records.sort((a: any, b: any) => {
+        const yearDifference = Number.parseInt(a.year || '0', 10) - Number.parseInt(b.year || '0', 10);
+        if (yearDifference !== 0) return yearDifference;
+        return new Date((b.updatedAt || b.submittedAt || 0)).getTime() - new Date((a.updatedAt || a.submittedAt || 0)).getTime();
+      }),
+    }))
+    .sort((a, b) => new Date(b.latestUpdatedAt || b.latestSubmittedAt || 0).getTime() - new Date(a.latestUpdatedAt || a.latestSubmittedAt || 0).getTime());
+
+  const availableCourses = Array.from(
+    new Set(
+      students
+        .map((student) => String(student.course || '').trim())
+        .filter(Boolean),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+  const total = students.length;
+  const from = (page - 1) * pageSize;
+  const paginatedStudents = students.slice(from, from + pageSize);
+
+  return {
+    students: paginatedStudents,
+    availableCourses,
+    total,
+    page,
+    pageSize,
+  };
+}
+
+async function getCachedApprovedStudents(options: any = {}) {
+  const normalized = {
+    searchQuery: String(options.searchQuery || '').trim(),
+    departmentFilter: String(options.departmentFilter || '').trim(),
+    yearFilter: normalizeYearFilter(options.yearFilter),
+    courseFilter: String(options.courseFilter || '').trim(),
+    fromDate: normalizeDateFilter(options.fromDate),
+    toDate: normalizeDateFilter(options.toDate),
+    page: normalizePage(options.page),
+    pageSize: normalizePositiveInteger(
+      options.pageSize,
+      STAFF_APPROVED_STUDENTS_DEFAULT_PAGE_SIZE,
+      STAFF_APPROVED_STUDENTS_MAX_PAGE_SIZE,
+    ),
+  };
+  const cacheKey = buildSubmissionSummaryCacheKey(normalized);
+  const cached = getValidCachedValue(staffApprovedStudentsCache.get(cacheKey));
+  if (cached) return cached;
+
+  const inFlight = staffApprovedStudentsPromises.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const nextPromise = (async () => {
+    const result = await loadApprovedStudents(normalized);
+    staffApprovedStudentsCache.set(cacheKey, createTimedValue(result, STAFF_APPROVED_STUDENTS_TTL_MS));
+    return result;
+  })().finally(() => {
+    staffApprovedStudentsPromises.delete(cacheKey);
+  });
+
+  staffApprovedStudentsPromises.set(cacheKey, nextPromise);
+  return nextPromise;
+}
+
 async function loadAnalyticsSummary() {
   const [
     { count: totalStudents, error: totalStudentsError },
@@ -1507,6 +1955,86 @@ app.get("/submissions", async (c) => {
   } catch (error) {
     console.log('Error fetching submissions:', error);
     return c.json({ error: 'Failed to fetch submissions', details: String(error) }, 500);
+  }
+});
+
+app.get("/staff/dashboard-overview", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    return c.json(await getCachedStaffDashboardOverview());
+  } catch (error) {
+    console.log('Error fetching staff dashboard overview:', error);
+    return c.json({ error: 'Failed to fetch staff dashboard overview', details: String(error) }, 500);
+  }
+});
+
+app.get("/staff/submission-summaries", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const searchQuery = String(c.req.query('search') || '').trim();
+    const statusFilter = String(c.req.query('status') || 'action_needed').trim();
+    const departmentFilter = String(c.req.query('department') || '').trim();
+    const yearFilter = String(c.req.query('year') || '').trim();
+    const sortOrder = String(c.req.query('sort') || 'desc').trim();
+    const page = c.req.query('page');
+    const pageSize = c.req.query('pageSize');
+
+    return c.json(
+      await getCachedStaffSubmissionSummaries({
+        searchQuery,
+        statusFilter,
+        departmentFilter,
+        yearFilter,
+        sortOrder,
+        page,
+        pageSize,
+      }),
+    );
+  } catch (error) {
+    console.log('Error fetching staff submission summaries:', error);
+    return c.json({ error: 'Failed to fetch staff submission summaries', details: String(error) }, 500);
+  }
+});
+
+app.get("/staff/approved-students", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const searchQuery = String(c.req.query('search') || '').trim();
+    const departmentFilter = String(c.req.query('department') || '').trim();
+    const yearFilter = String(c.req.query('year') || '').trim();
+    const courseFilter = String(c.req.query('course') || '').trim();
+    const fromDate = String(c.req.query('fromDate') || '').trim();
+    const toDate = String(c.req.query('toDate') || '').trim();
+    const page = c.req.query('page');
+    const pageSize = c.req.query('pageSize');
+
+    return c.json(
+      await getCachedApprovedStudents({
+        searchQuery,
+        departmentFilter,
+        yearFilter,
+        courseFilter,
+        fromDate,
+        toDate,
+        page,
+        pageSize,
+      }),
+    );
+  } catch (error) {
+    console.log('Error fetching approved student summaries:', error);
+    return c.json({ error: 'Failed to fetch approved student summaries', details: String(error) }, 500);
   }
 });
 
@@ -2088,6 +2616,7 @@ app.post("/admin/archive-account", async (c) => {
 
     await setArchivedAuthState(userId);
     invalidateArchivedCaches();
+    invalidateDashboardReadCaches();
 
     return c.json({ success: true });
   } catch (error) {
@@ -2134,6 +2663,7 @@ app.post("/admin/restore-account/:archiveId", async (c) => {
 
     await clearArchivedAuthState(userId);
     invalidateArchivedCaches();
+    invalidateDashboardReadCaches();
 
     return c.json({ success: true });
   } catch (error) {
@@ -2299,6 +2829,7 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
     const { error: archiveDeleteError } = await supabase.from('archived_accounts').delete().eq('id', archiveId);
     if (archiveDeleteError) throw new Error(archiveDeleteError.message);
     invalidateArchivedCaches();
+    invalidateDashboardReadCaches();
 
     return c.json({ success: true });
   } catch (error) {
@@ -2356,6 +2887,7 @@ app.post("/admin/create-account", async (c) => {
       if (studentError) throw new Error(studentError.message);
     }
 
+    invalidateDashboardReadCaches();
     return c.json({ success: true, userId });
   } catch (error) {
     console.log('Error creating account:', error);
@@ -2409,6 +2941,7 @@ app.post("/admin/create-staff", async (c) => {
     }, { onConflict: 'profile_id' });
     if (staffError) throw new Error(staffError.message);
 
+    invalidateDashboardReadCaches();
     return c.json({ success: true, userId });
   } catch (error) {
     console.log('Error creating staff:', error);

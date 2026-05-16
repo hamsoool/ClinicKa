@@ -1,6 +1,11 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { SubmissionRecord } from './record-types';
+import type {
+  ApprovedStudentSummary,
+  StaffDashboardOverview,
+  SubmissionRecord,
+  SubmissionSummaryRecord,
+} from './record-types';
 
 const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '')
   .trim()
@@ -193,6 +198,27 @@ export type StudentProfileAssets = {
 export type StudentNotificationStatePayload = {
   items?: unknown[];
   snapshot?: Record<string, string>;
+};
+
+export type StaffSubmissionSummaryFilters = {
+  searchQuery?: string;
+  statusFilter?: string;
+  departmentFilter?: string;
+  yearFilter?: string;
+  sortOrder?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+};
+
+export type StaffApprovedStudentFilters = {
+  searchQuery?: string;
+  departmentFilter?: string;
+  yearFilter?: string;
+  courseFilter?: string;
+  fromDate?: string;
+  toDate?: string;
+  page?: number;
+  pageSize?: number;
 };
 
 export type StudentProfileUpdateInput = {
@@ -2259,6 +2285,72 @@ export async function getStudentRecords(studentId?: string) {
     `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
   );
   return { records };
+}
+
+export async function getStaffDashboardOverview() {
+  return apiRequest<StaffDashboardOverview>('/functions/v1/server/staff/dashboard-overview');
+}
+
+export async function getStaffSubmissionSummaries(filters: StaffSubmissionSummaryFilters = {}) {
+  const params = new URLSearchParams();
+  const searchQuery = String(filters.searchQuery || '').trim();
+  const statusFilter = String(filters.statusFilter || 'action_needed').trim();
+  const departmentFilter = String(filters.departmentFilter || '').trim();
+  const yearFilter = String(filters.yearFilter || '').trim();
+  const sortOrder = filters.sortOrder === 'asc' ? 'asc' : 'desc';
+  const page = Math.max(1, Number(filters.page || 1) || 1);
+  const pageSize = Math.max(1, Number(filters.pageSize || 25) || 25);
+
+  if (searchQuery) params.set('search', searchQuery);
+  if (statusFilter) params.set('status', statusFilter);
+  if (departmentFilter && departmentFilter !== 'all') params.set('department', departmentFilter);
+  if (yearFilter && yearFilter !== 'all') params.set('year', yearFilter);
+  params.set('sort', sortOrder);
+  params.set('page', String(page));
+  params.set('pageSize', String(pageSize));
+
+  return apiRequest<{
+    items: SubmissionSummaryRecord[];
+    total: number;
+    page: number;
+    pageSize: number;
+    counts: {
+      pending: number;
+      inReview: number;
+      returned: number;
+      resubmitted: number;
+      actionNeeded: number;
+    };
+  }>(`/functions/v1/server/staff/submission-summaries?${params.toString()}`);
+}
+
+export async function getStaffApprovedStudents(filters: StaffApprovedStudentFilters = {}) {
+  const params = new URLSearchParams();
+  const searchQuery = String(filters.searchQuery || '').trim();
+  const departmentFilter = String(filters.departmentFilter || '').trim();
+  const yearFilter = String(filters.yearFilter || '').trim();
+  const courseFilter = String(filters.courseFilter || '').trim();
+  const fromDate = String(filters.fromDate || '').trim();
+  const toDate = String(filters.toDate || '').trim();
+  const page = Math.max(1, Number(filters.page || 1) || 1);
+  const pageSize = Math.max(1, Number(filters.pageSize || 20) || 20);
+
+  if (searchQuery) params.set('search', searchQuery);
+  if (departmentFilter && departmentFilter !== 'all') params.set('department', departmentFilter);
+  if (yearFilter && yearFilter !== 'all') params.set('year', yearFilter);
+  if (courseFilter && courseFilter !== 'all') params.set('course', courseFilter);
+  if (fromDate) params.set('fromDate', fromDate);
+  if (toDate) params.set('toDate', toDate);
+  params.set('page', String(page));
+  params.set('pageSize', String(pageSize));
+
+  return apiRequest<{
+    students: ApprovedStudentSummary[];
+    availableCourses: string[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }>(`/functions/v1/server/staff/approved-students?${params.toString()}`);
 }
 
 export async function getStudentNotificationState(studentId?: string) {

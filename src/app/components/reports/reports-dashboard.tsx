@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Skeleton } from '../ui/skeleton';
 import { Download, TrendingUp, Clock, Award, Users, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
 import {
   BarChart,
   Bar,
@@ -449,8 +450,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     queryKey: analyticsQueryKey,
     queryFn: () => getAnalytics(),
     staleTime: 60_000,
-    refetchInterval: 90_000,
+    refetchInterval: () => getActiveAjaxRefetchInterval(90_000),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: true,
   });
   const {
@@ -464,8 +467,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       return data.submissions || [];
     },
     staleTime: 60_000,
-    refetchInterval: 60_000,
+    refetchInterval: () => getActiveAjaxRefetchInterval(60_000),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: true,
   });
   const normalizedSubmissions = useMemo(

@@ -3,6 +3,7 @@ import {
   useQuery,
   type QueryClient,
 } from '@tanstack/react-query';
+import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
 import { getStudentRecords } from '../../lib/api';
 import type { SubmissionRecord } from '../../lib/record-types';
 
@@ -29,8 +30,12 @@ export function studentRecordsQueryOptions(studentId?: string | null) {
     },
     enabled: Boolean(normalizedStudentId),
     staleTime: STUDENT_RECORDS_STALE_TIME_MS,
-    refetchInterval: normalizedStudentId ? STUDENT_RECORDS_REFRESH_INTERVAL_MS : false,
+    refetchInterval: normalizedStudentId
+      ? () => getActiveAjaxRefetchInterval(STUDENT_RECORDS_REFRESH_INTERVAL_MS)
+      : false,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: true,
   });
 }

@@ -3,6 +3,7 @@ import {
   useQuery,
   type QueryClient,
 } from '@tanstack/react-query';
+import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
 import {
   getAdminSystemSettings,
   getAnalytics,
@@ -47,8 +48,10 @@ export function adminAnalyticsQueryOptions() {
     queryKey: adminAnalyticsQueryKey(),
     queryFn: getAnalytics,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
-    refetchInterval: ADMIN_ANALYTICS_REFRESH_INTERVAL_MS,
+    refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_ANALYTICS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: true,
   });
 }
@@ -61,8 +64,10 @@ export function adminSubmissionsQueryOptions() {
       return data.submissions || [];
     },
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
-    refetchInterval: ADMIN_SUBMISSIONS_REFRESH_INTERVAL_MS,
+    refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_SUBMISSIONS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: true,
   });
 }
@@ -72,8 +77,10 @@ export function adminStaffUsersQueryOptions() {
     queryKey: adminStaffUsersQueryKey(),
     queryFn: getStaffUsers,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
-    refetchInterval: ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS,
+    refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: true,
   });
 }
@@ -83,8 +90,10 @@ export function adminUserAccountsQueryOptions() {
     queryKey: adminUserAccountsQueryKey(),
     queryFn: getUserAccounts,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
-    refetchInterval: ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS,
+    refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: true,
   });
 }
@@ -94,8 +103,10 @@ export function adminArchivedAccountsQueryOptions() {
     queryKey: adminArchivedAccountsQueryKey(),
     queryFn: getArchivedUserAccounts,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
-    refetchInterval: ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS,
+    refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: true,
   });
 }
@@ -105,8 +116,10 @@ export function adminSystemSettingsQueryOptions() {
     queryKey: adminSystemSettingsQueryKey(),
     queryFn: getAdminSystemSettings,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
-    refetchInterval: ADMIN_SETTINGS_REFRESH_INTERVAL_MS,
+    refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_SETTINGS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchOnMount: true,
   });
 }
