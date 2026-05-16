@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { MockSubmission } from '../../lib/mock-data';
+import type { SubmissionRecord } from '../../lib/record-types';
 import {
   getStudentNotificationState,
   saveStudentNotificationState,
@@ -92,7 +92,7 @@ function persistState(studentId: string, state: StoredNotificationState) {
   void saveStudentNotificationState(studentId, state).catch(() => undefined);
 }
 
-function getRecordTimestamp(record: MockSubmission) {
+function getRecordTimestamp(record: SubmissionRecord) {
   return record.updatedAt || record.submittedAt || new Date().toISOString();
 }
 
@@ -104,11 +104,11 @@ function getYearLabel(year?: string) {
   return YEAR_LABELS[yearNumber - 1];
 }
 
-function createSnapshotValue(record: MockSubmission) {
+function createSnapshotValue(record: SubmissionRecord) {
   return `${record.id}:${record.status}:${getRecordTimestamp(record)}`;
 }
 
-function buildNotificationItem(record: MockSubmission, isRead: boolean): StudentNotificationItem | null {
+function buildNotificationItem(record: SubmissionRecord, isRead: boolean): StudentNotificationItem | null {
   const status = String(record.status || '').toLowerCase();
   if (status !== 'approved' && status !== 'returned') return null;
 

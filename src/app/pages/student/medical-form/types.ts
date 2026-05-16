@@ -1,4 +1,4 @@
-import type { MockSubmission } from '../../../lib/mock-data';
+import type { SubmissionRecord } from '../../../lib/record-types';
 import type { MEDICAL_CONDITIONS } from './constants';
 
 export type MedicalConditionKey = (typeof MEDICAL_CONDITIONS)[number]['key'];
@@ -52,4 +52,4 @@ export type BmiCategory = {
   color: string;
 };
 
-export type SubmissionPreviewRecord = MockSubmission;
+export type SubmissionPreviewRecord = SubmissionRecord;

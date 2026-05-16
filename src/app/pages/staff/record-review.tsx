@@ -37,14 +37,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Textarea } from '../../components/ui/textarea';
 import { saveSubmissionReview, updateSubmissionStatus } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import type { MedicalHistory, MockSubmission } from '../../lib/mock-data';
+import type { MedicalHistory, SubmissionRecord } from '../../lib/record-types';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
 import {
   invalidateStaffWorkflowQueries,
   useStaffSubmissionDetailQuery,
 } from './staff-workflow-query';
 
-type SubmissionDetails = MockSubmission & {
+type SubmissionDetails = SubmissionRecord & {
   photoUrl?: string;
   xrayFileUrl?: string;
   cbcFileUrl?: string;
@@ -54,7 +54,7 @@ type SubmissionDetails = MockSubmission & {
   otherClinicName?: string;
 };
 
-type ReviewStatus = MockSubmission['status'];
+type ReviewStatus = SubmissionRecord['status'];
 
 type RecordForm = {
   studentId: string;

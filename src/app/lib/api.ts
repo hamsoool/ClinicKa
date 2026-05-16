@@ -366,48 +366,6 @@ function isValidStudentRegistrationEmail(email?: string | null) {
   return Boolean(isGCDomainEmail(email) && deriveStudentIdFromEmail(email));
 }
 
-
-const demoStaffUsers = [
-  {
-    id: 'STF-001',
-    name: 'Clinic Staff',
-    role: 'Clinic Staff',
-    status: 'Active',
-    email: 'clinic.staff@gordoncollege.edu.ph',
-  },
-  {
-    id: 'ADM-001',
-    name: 'Clinic Admin',
-    role: 'Administrator',
-    status: 'Active',
-    email: 'clinic.admin@gordoncollege.edu.ph',
-  },
-];
-
-const demoUserAccounts = [
-  {
-    id: '202310417',
-    name: 'Demo Student',
-    role: 'Student',
-    status: 'Active',
-    lastActive: new Date().toISOString(),
-  },
-  {
-    id: 'STF-001',
-    name: 'Clinic Staff',
-    role: 'Clinic Staff',
-    status: 'Active',
-    lastActive: new Date().toISOString(),
-  },
-  {
-    id: 'ADM-001',
-    name: 'Clinic Admin',
-    role: 'Administrator',
-    status: 'Active',
-    lastActive: new Date().toISOString(),
-  },
-];
-
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const ME_CACHE_TTL_MS = 15_000;
 const SIGNED_URL_CACHE_TTL_MS = 5 * 60 * 1000;

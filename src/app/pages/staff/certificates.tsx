@@ -5,7 +5,7 @@ import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import type { MockSubmission } from '../../lib/mock-data';
+import type { SubmissionRecord } from '../../lib/record-types';
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { Download, Search, FileText, X, ClipboardList, Award } from 'lucide-react';
@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { getStudentProfileAssets } from '../../lib/api';
 import { useStaffSubmissionsQuery } from './staff-workflow-query';
 
-type StaffSubmission = MockSubmission & {
+type StaffSubmission = SubmissionRecord & {
   photoUrl?: string;
   signatureUrl?: string;
 };
@@ -34,8 +34,8 @@ async function loadPdfDependencies() {
   return { html2canvas, jsPDF };
 }
 
-function buildLatestPerYear(records: MockSubmission[]) {
-  return records.reduce<Partial<Record<1 | 2 | 3 | 4, MockSubmission>>>((acc, item) => {
+function buildLatestPerYear(records: SubmissionRecord[]) {
+  return records.reduce<Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>>((acc, item) => {
     const yearNum = Number.parseInt(String(item.year || ''), 10) as 1 | 2 | 3 | 4;
     if (![1, 2, 3, 4].includes(yearNum)) return acc;
     const current = acc[yearNum];
@@ -152,7 +152,7 @@ export default function StaffCertificates() {
       const nextTs = new Date(item.updatedAt || item.submittedAt || 0).getTime();
       if (nextTs >= existingTs) acc.set(key, item);
       return acc;
-    }, new Map<string, MockSubmission>());
+    }, new Map<string, SubmissionRecord>());
     return Array.from(grouped.values()).sort(
       (a, b) => new Date(b.updatedAt || b.submittedAt || 0).getTime() - new Date(a.updatedAt || a.submittedAt || 0).getTime(),
     );

@@ -45,6 +45,7 @@ function preloadLoader(loader: RouteLoader) {
 
 const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
   student: [
+    loadStudentLayout,
     loadStudentDashboard,
     loadStudentRecords,
     loadStudentYearSelection,
@@ -56,6 +57,7 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadStudentMedicalForm,
   ],
   staff: [
+    loadStaffLayout,
     loadStaffDashboard,
     loadStaffSubmissions,
     loadStaffRecords,
@@ -65,6 +67,7 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadStaffRecordReview,
   ],
   admin: [
+    loadAdminLayout,
     loadAdminDashboard,
     loadAdminSystemSettings,
     loadAdminStaffManagement,

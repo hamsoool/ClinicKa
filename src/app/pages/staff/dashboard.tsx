@@ -15,7 +15,7 @@ import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getRoleLabel } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import type { MockSubmission } from '../../lib/mock-data';
+import type { SubmissionRecord } from '../../lib/record-types';
 import { useStaffAnalyticsQuery, useStaffSubmissionsQuery } from './staff-workflow-query';
 
 function formatEmailName(email?: string | null) {
@@ -42,7 +42,7 @@ function formatDate(value?: string) {
   }).format(date);
 }
 
-function getStatusLabel(status: MockSubmission['status']) {
+function getStatusLabel(status: SubmissionRecord['status']) {
   switch (status) {
     case 'pending':
       return 'Pending review';
@@ -61,7 +61,7 @@ function getStatusLabel(status: MockSubmission['status']) {
   }
 }
 
-function getStatusStyles(status: MockSubmission['status']) {
+function getStatusStyles(status: SubmissionRecord['status']) {
   switch (status) {
     case 'approved':
       return 'bg-primary-container/20 text-on-primary-container';
@@ -104,7 +104,7 @@ export default function StaffDashboard() {
     isLoading: submissionsLoading,
     isError: isSubmissionsError,
   } = useStaffSubmissionsQuery();
-  const submissions = submissionsData as MockSubmission[];
+  const submissions = submissionsData as SubmissionRecord[];
 
   useEffect(() => {
     if (isAnalyticsError || isSubmissionsError) {
@@ -163,7 +163,7 @@ export default function StaffDashboard() {
     return d >= yesterday && d < today;
   }).length;
 
-  const getQueueNumber = (submission: MockSubmission, allSubmissions: MockSubmission[]) => {
+  const getQueueNumber = (submission: SubmissionRecord, allSubmissions: SubmissionRecord[]) => {
     const submitDate = new Date(submission.submittedAt).toDateString();
     const sameDaySubmissions = allSubmissions.filter(s => new Date(s.submittedAt).toDateString() === submitDate);
     sameDaySubmissions.sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());

@@ -28,6 +28,11 @@ import {
   sendPasswordResetEmail,
   signInWithGoogle,
 } from '../lib/api';
+import {
+  inferRoleFromEmail,
+  prefetchLikelyPortalRoutes,
+  prefetchPortalExperience,
+} from '../lib/login-prefetch';
 import { useAuth } from '../lib/auth';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -374,23 +379,26 @@ export default function AuthAccessPage() {
     return () => window.clearInterval(timer);
   }, [resetCooldown]);
 
+  useEffect(() => {
+    if (mode !== 'signin') return;
+    prefetchLikelyPortalRoutes(signInForm.email);
+  }, [mode, signInForm.email]);
+
   async function handleSignIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
+    const fallbackRole = inferRoleFromEmail(signInForm.email);
+    prefetchLikelyPortalRoutes(signInForm.email);
+
     try {
       const me = await signIn(signInForm.email, signInForm.password);
-      const fallbackRole = signInForm.email.toLowerCase().includes('admin')
-        ? 'admin'
-        : signInForm.email.toLowerCase().includes('staff')
-          ? 'staff'
-          : 'student';
       const role = me.profile.role ?? fallbackRole;
+      prefetchPortalExperience(role, me);
       navigate(fromPath || getHomePath(role), { replace: true });
     } catch (nextError) {
-      void nextError;
-      setError('Invalid login credentials.');
+      setError(nextError instanceof Error ? nextError.message : 'Invalid login credentials.');
     }
   }
 
@@ -400,6 +408,9 @@ export default function AuthAccessPage() {
     if (mode === 'signup' && !signUpAgreementAccepted) {
       setError('Please accept the Terms & Conditions and Privacy Policy before continuing.');
       return;
+    }
+    if (mode === 'signin') {
+      prefetchLikelyPortalRoutes(signInForm.email);
     }
     signInWithGoogle();
   }
@@ -486,6 +497,7 @@ export default function AuthAccessPage() {
     }
 
     try {
+      prefetchLikelyPortalRoutes(signUpForm.email);
       const result = await signUp(
         signUpForm.firstName.trim(),
         signUpForm.lastName.trim(),
@@ -498,6 +510,7 @@ export default function AuthAccessPage() {
       }
 
       if (result.me) {
+        prefetchPortalExperience(result.me.profile.role, result.me);
         navigate(getHomePath(result.me.profile.role), { replace: true });
       }
     } catch (nextError) {
@@ -533,6 +546,8 @@ export default function AuthAccessPage() {
       ? `Only @${GC_DOMAIN} Google accounts are allowed. Non-Gordon Google accounts are blocked and not registered in the system.`
       : googleError === 'invalid_token'
         ? 'Google sign-in failed. Please try again.'
+        : googleError === 'account_load_failed'
+          ? 'Google sign-in succeeded, but your account could not be loaded from the database. Please try again.'
         : null;
 
   const inputClassName =

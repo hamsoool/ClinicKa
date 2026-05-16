@@ -4,7 +4,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import { getStudentRecords } from '../../lib/api';
-import type { MockSubmission } from '../../lib/mock-data';
+import type { SubmissionRecord } from '../../lib/record-types';
 
 const STUDENT_RECORDS_REFRESH_INTERVAL_MS = 20_000;
 const STUDENT_RECORDS_STALE_TIME_MS = 10_000;
@@ -23,9 +23,9 @@ export function studentRecordsQueryOptions(studentId?: string | null) {
   return queryOptions({
     queryKey: studentRecordsQueryKey(normalizedStudentId),
     queryFn: async () => {
-      if (!normalizedStudentId) return [] as MockSubmission[];
+      if (!normalizedStudentId) return [] as SubmissionRecord[];
       const response = await getStudentRecords(normalizedStudentId);
-      return Array.isArray(response?.records) ? (response.records as MockSubmission[]) : [];
+      return Array.isArray(response?.records) ? (response.records as SubmissionRecord[]) : [];
     },
     enabled: Boolean(normalizedStudentId),
     staleTime: STUDENT_RECORDS_STALE_TIME_MS,

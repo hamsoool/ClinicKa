@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Download, FileText, ShieldCheck, Clock, AlertCircle } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
-import type { MockSubmission } from '../../lib/mock-data';
+import type { SubmissionRecord } from '../../lib/record-types';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import { toast } from 'sonner';
@@ -53,7 +53,7 @@ export default function StudentClearance() {
     (a, b) => new Date(b.updatedAt || b.submittedAt).getTime() - new Date(a.updatedAt || a.submittedAt).getTime(),
   );
   const profileRecord = sortedRecords[0] || null;
-  const latestRecordPerYear = records.reduce<Partial<Record<1 | 2 | 3 | 4, MockSubmission>>>((acc, item) => {
+  const latestRecordPerYear = records.reduce<Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>>((acc, item) => {
     const yearNum = Number.parseInt(String(item.year || ''), 10) as 1 | 2 | 3 | 4;
     if (![1, 2, 3, 4].includes(yearNum)) return acc;
     const current = acc[yearNum];
