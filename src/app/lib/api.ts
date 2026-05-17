@@ -1302,6 +1302,150 @@ async function loadRelatedData(rows: any[]) {
   };
 }
 
+async function loadCertificatePreviewRelatedData(rows: any[]) {
+  const submissionIds = rows.map((row) => row.id).filter(Boolean);
+  const studentIds = [...new Set(rows.map((row) => row.student_id).filter(Boolean))];
+  const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
+  const studentIdList = studentIds.map((id) => encodeURIComponent(id)).join(',');
+  const token = getAccessToken();
+
+  const [
+    students,
+    emergencyContacts,
+    medicalHistory,
+    staffMeasurements,
+    xray,
+    cbc,
+    urinalysis,
+    certificates,
+    submissionAssetFilesRaw,
+  ] = await Promise.all([
+    studentIds.length
+      ? restRequest<any[]>(
+          'students',
+          `student_id=in.(${studentIdList})&select=student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address`,
+        )
+      : Promise.resolve([]),
+    submissionIds.length
+      ? restRequest<any[]>('emergency_contacts', `submission_id=in.(${idList})`)
+      : Promise.resolve([]),
+    submissionIds.length
+      ? restRequest<any[]>('medical_history', `submission_id=in.(${idList})`)
+      : Promise.resolve([]),
+    submissionIds.length
+      ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})`)
+      : Promise.resolve([]),
+    submissionIds.length
+      ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})`)
+      : Promise.resolve([]),
+    submissionIds.length
+      ? restRequest<any[]>('lab_cbc', `submission_id=in.(${idList})`)
+      : Promise.resolve([]),
+    submissionIds.length
+      ? restRequest<any[]>('lab_urinalysis', `submission_id=in.(${idList})`)
+      : Promise.resolve([]),
+    submissionIds.length
+      ? restRequest<any[]>('certificates', `submission_id=in.(${idList})`)
+      : Promise.resolve([]),
+    submissionIds.length
+      ? restRequest<any[]>(
+          'files',
+          `submission_id=in.(${idList})&type=in.(photo,signature)&order=uploaded_at.desc`,
+        ).catch(() => [])
+      : Promise.resolve([]),
+  ]);
+
+  const normalizedSubmissionAssetFiles = await normalizeFileRows(submissionAssetFilesRaw, token);
+  const studentRows = students || [];
+  const studentProfileIds = [
+    ...new Set(studentRows.map((student) => student?.profile_id).filter(Boolean)),
+  ];
+  const studentProfileIdList = studentProfileIds
+    .map((id) => encodeURIComponent(id))
+    .join(',');
+  const profileAssetFilesRaw = studentProfileIds.length
+    ? await restRequest<any[]>(
+        'files',
+        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc`,
+      ).catch(() => [])
+    : [];
+  const normalizedProfileAssetFiles = await normalizeFileRows(profileAssetFilesRaw, token);
+  const profileAssetsByUploadedBy = normalizedProfileAssetFiles.reduce((acc, file) => {
+    if (!file?.uploaded_by) return acc;
+    acc[file.uploaded_by] = acc[file.uploaded_by] || [];
+    acc[file.uploaded_by].push(file);
+    return acc;
+  }, {} as Record<string, any[]>);
+  const shouldRunProfileAssetFallback =
+    studentRows.length <= PROFILE_ASSET_FALLBACK_MAX_STUDENTS;
+  const missingProfileAssetStudents = shouldRunProfileAssetFallback
+    ? studentRows.filter((student) => {
+        const latest = latestFilesByType(
+          profileAssetsByUploadedBy[student?.profile_id] || [],
+        );
+        return !latest.photo || !latest.signature;
+      })
+    : [];
+  const fallbackProfileAssets = await Promise.all(
+    missingProfileAssetStudents.map(async (student) => ({
+      profileId: student.profile_id,
+      files: await listProfileAssetsFromStorage(student.student_id, token),
+    })),
+  );
+  const profileAssetsByProfileId = studentRows.reduce((acc, student) => {
+    if (!student?.profile_id) return acc;
+    const metadataFiles = profileAssetsByUploadedBy[student.profile_id] || [];
+    const storageFallbackFiles =
+      fallbackProfileAssets.find((entry) => entry.profileId === student.profile_id)?.files || [];
+    acc[student.profile_id] = latestFilesByType([
+      ...metadataFiles,
+      ...storageFallbackFiles,
+    ]);
+    return acc;
+  }, {} as Record<string, Record<string, any>>);
+
+  const byKey = (rowsData: any[] | null | undefined, key: string) =>
+    (rowsData || []).reduce((acc, item) => {
+      acc[item[key]] = item;
+      return acc;
+    }, {} as Record<string, any>);
+
+  const filesBySubmission = normalizedSubmissionAssetFiles.reduce((acc, file) => {
+    acc[file.submission_id] = acc[file.submission_id] || [];
+    acc[file.submission_id].push(file);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  return {
+    students: byKey(students, 'student_id'),
+    emergencyContacts: byKey(emergencyContacts, 'submission_id'),
+    medicalHistory: byKey(medicalHistory, 'submission_id'),
+    staffMeasurements: byKey(staffMeasurements, 'submission_id'),
+    reviewers: {} as Record<string, any>,
+    xray: byKey(xray, 'submission_id'),
+    cbc: byKey(cbc, 'submission_id'),
+    urinalysis: byKey(urinalysis, 'submission_id'),
+    certificates: byKey(certificates, 'submission_id'),
+    profileAssetsByProfileId,
+    files: filesBySubmission,
+    filesById: {} as Record<string, any>,
+  };
+}
+
+async function getMappedCertificatePreviewSubmissions(studentId: string) {
+  const normalizedStudentId = String(studentId || '').trim();
+  if (!normalizedStudentId) return [] as SubmissionRecord[];
+
+  const rows = await restRequest<any[]>(
+    'submissions',
+    `student_id=eq.${encodeURIComponent(normalizedStudentId)}&status=eq.approved&order=submitted_at.desc`,
+  );
+  if (!rows.length) return [] as SubmissionRecord[];
+
+  const related = await loadCertificatePreviewRelatedData(rows);
+  return rows.map((row: any) => mapSubmission(row, related)) as SubmissionRecord[];
+}
+
 async function getMappedSubmissions(query: string) {
   const rows = await restRequest<any[]>('submissions', query);
   const related = await loadRelatedData(rows || []);
@@ -2289,8 +2433,7 @@ export async function updateMedicalRecord(recordId: string, data: any) {
 
 export async function getStudentRecords(studentId?: string) {
   const targetStudentId = String(studentId || '').trim();
-  const me = await getMe();
-  const fallbackStudentId = targetStudentId || me.profile.student_id;
+  const fallbackStudentId = targetStudentId || (await getMe()).profile.student_id;
   if (!fallbackStudentId) {
     return { records: [] };
   }
@@ -2348,33 +2491,217 @@ export async function getStaffSubmissionSummaries(filters: StaffSubmissionSummar
   }>(`/functions/v1/server/staff/submission-summaries?${params.toString()}`);
 }
 
-export async function getStaffApprovedStudents(filters: StaffApprovedStudentFilters = {}) {
-  const params = new URLSearchParams();
-  const searchQuery = String(filters.searchQuery || '').trim();
+async function loadActiveStudentDirectory(studentIds: string[]) {
+  const uniqueStudentIds = [
+    ...new Set((studentIds || []).map((value) => String(value || '').trim()).filter(Boolean)),
+  ];
+  if (!uniqueStudentIds.length) {
+    return {} as Record<string, any>;
+  }
+
+  const studentIdList = uniqueStudentIds
+    .map((id) => encodeURIComponent(id))
+    .join(',');
+  const [students, archivedAccounts] = await Promise.all([
+    restRequest<any[]>(
+      'students',
+      `student_id=in.(${studentIdList})&select=student_id,profile_id,first_name,last_name,middle_initial,department,course`,
+    ).catch(() => []),
+    restRequest<any[]>('archived_accounts', 'select=user_id').catch(() => []),
+  ]);
+
+  const archivedProfileIds = new Set(
+    (archivedAccounts || []).map((row) => String(row?.user_id || '').trim()).filter(Boolean),
+  );
+
+  return (students || []).reduce((acc, student) => {
+    const studentId = String(student?.student_id || '').trim();
+    const profileId = String(student?.profile_id || '').trim();
+    if (!studentId || !profileId || archivedProfileIds.has(profileId)) {
+      return acc;
+    }
+    acc[studentId] = student;
+    return acc;
+  }, {} as Record<string, any>);
+}
+
+function normalizeApprovedStudentsDate(value?: string | null, endOfDay = false) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const iso = endOfDay ? `${raw}T23:59:59.999Z` : `${raw}T00:00:00.000Z`;
+  const timestamp = new Date(iso).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+async function loadApprovedStudentsFromDatabase(
+  filters: StaffApprovedStudentFilters = {},
+) {
+  const searchQuery = String(filters.searchQuery || '').trim().toLowerCase();
   const departmentFilter = String(filters.departmentFilter || '').trim();
   const yearFilter = String(filters.yearFilter || '').trim();
   const courseFilter = String(filters.courseFilter || '').trim();
-  const fromDate = String(filters.fromDate || '').trim();
-  const toDate = String(filters.toDate || '').trim();
   const page = Math.max(1, Number(filters.page || 1) || 1);
   const pageSize = Math.max(1, Number(filters.pageSize || 20) || 20);
+  const fromDate = normalizeApprovedStudentsDate(filters.fromDate);
+  const toDate = normalizeApprovedStudentsDate(filters.toDate, true);
 
-  if (searchQuery) params.set('search', searchQuery);
-  if (departmentFilter && departmentFilter !== 'all') params.set('department', departmentFilter);
-  if (yearFilter && yearFilter !== 'all') params.set('year', yearFilter);
-  if (courseFilter && courseFilter !== 'all') params.set('course', courseFilter);
-  if (fromDate) params.set('fromDate', fromDate);
-  if (toDate) params.set('toDate', toDate);
-  params.set('page', String(page));
-  params.set('pageSize', String(pageSize));
+  const approvedRows = await restRequest<any[]>(
+    'submissions',
+    'select=id,student_id,first_name,last_name,middle_initial,course,department,year_level,status,submitted_at,updated_at&status=eq.approved&order=updated_at.desc',
+  );
 
-  return apiRequest<{
-    students: ApprovedStudentSummary[];
-    availableCourses: string[];
-    total: number;
-    page: number;
-    pageSize: number;
-  }>(`/functions/v1/server/staff/approved-students?${params.toString()}`);
+  const activeStudentsById = await loadActiveStudentDirectory(
+    (approvedRows || []).map((row) => row.student_id),
+  );
+  const groups = new Map<string, any>();
+
+  for (const row of approvedRows || []) {
+    const studentId = String(row?.student_id || '').trim();
+    const activeStudent = activeStudentsById[studentId];
+    if (!studentId || !activeStudent) continue;
+
+    const updatedTimestamp = new Date(row.updated_at || row.submitted_at || 0).getTime();
+    if (fromDate && updatedTimestamp < fromDate) continue;
+    if (toDate && updatedTimestamp > toDate) continue;
+
+    const rowYear = String(row.year_level || '').trim();
+    if (yearFilter && yearFilter !== 'all' && rowYear !== yearFilter) continue;
+
+    const rowCourse = String(row.course || activeStudent.course || '').trim();
+    if (courseFilter && courseFilter !== 'all' && rowCourse !== courseFilter) continue;
+
+    const rowDepartment = String(row.department || activeStudent.department || '').trim();
+    if (
+      departmentFilter
+      && departmentFilter !== 'all'
+      && rowDepartment !== departmentFilter
+      && !rowCourse.toLowerCase().includes(departmentFilter.toLowerCase())
+    ) {
+      continue;
+    }
+
+    if (searchQuery) {
+      const haystack = [
+        row.first_name,
+        activeStudent.first_name,
+        row.last_name,
+        activeStudent.last_name,
+        row.middle_initial,
+        activeStudent.middle_initial,
+        row.student_id,
+        row.course,
+        activeStudent.course,
+      ]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+        .join(' ');
+      if (!haystack.includes(searchQuery)) continue;
+    }
+
+    const firstName = String(row.first_name || activeStudent.first_name || '').trim();
+    const lastName = String(row.last_name || activeStudent.last_name || '').trim();
+    const middleInitial = String(
+      row.middle_initial || activeStudent.middle_initial || '',
+    ).trim();
+    const existing = groups.get(studentId);
+
+    if (!existing) {
+      groups.set(studentId, {
+        studentId,
+        firstName,
+        lastName,
+        middleInitial,
+        course: rowCourse,
+        department: rowDepartment,
+        latestSubmittedAt: row.submitted_at,
+        latestUpdatedAt: row.updated_at,
+        approvedCount: 1,
+        records: [
+          {
+            id: row.id,
+            year: rowYear,
+            submittedAt: row.submitted_at,
+            updatedAt: row.updated_at,
+          },
+        ],
+      });
+      continue;
+    }
+
+    existing.approvedCount += 1;
+    existing.records.push({
+      id: row.id,
+      year: rowYear,
+      submittedAt: row.submitted_at,
+      updatedAt: row.updated_at,
+    });
+
+    const existingTimestamp = new Date(
+      existing.latestUpdatedAt || existing.latestSubmittedAt || 0,
+    ).getTime();
+    if (updatedTimestamp >= existingTimestamp) {
+      existing.firstName = firstName;
+      existing.lastName = lastName;
+      existing.middleInitial = middleInitial;
+      existing.course = rowCourse;
+      existing.department = rowDepartment;
+      existing.latestSubmittedAt = row.submitted_at;
+      existing.latestUpdatedAt = row.updated_at;
+    }
+  }
+
+  const students = Array.from(groups.values())
+    .map((student) => ({
+      ...student,
+      records: student.records.sort((a: any, b: any) => {
+        const yearDifference =
+          Number.parseInt(a.year || '0', 10) - Number.parseInt(b.year || '0', 10);
+        if (yearDifference !== 0) return yearDifference;
+        return (
+          new Date(b.updatedAt || b.submittedAt || 0).getTime()
+          - new Date(a.updatedAt || a.submittedAt || 0).getTime()
+        );
+      }),
+    }))
+    .sort(
+      (a, b) =>
+        new Date(b.latestUpdatedAt || b.latestSubmittedAt || 0).getTime()
+        - new Date(a.latestUpdatedAt || a.latestSubmittedAt || 0).getTime(),
+    );
+
+  const availableCourses = Array.from(
+    new Set(
+      students
+        .map((student) => String(student.course || '').trim())
+        .filter(Boolean),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+  const total = students.length;
+  const from = (page - 1) * pageSize;
+  const paginatedStudents = students.slice(from, from + pageSize);
+
+  return {
+    students: paginatedStudents,
+    availableCourses,
+    total,
+    page,
+    pageSize,
+  };
+}
+
+export async function getStaffApprovedStudents(filters: StaffApprovedStudentFilters = {}) {
+  return loadApprovedStudentsFromDatabase(filters);
+}
+
+export async function getStaffCertificateRecords(studentId?: string) {
+  const targetStudentId = String(studentId || '').trim();
+  if (!targetStudentId) {
+    return { records: [] as SubmissionRecord[] };
+  }
+
+  const records = await getMappedCertificatePreviewSubmissions(targetStudentId);
+  return { records };
 }
 
 export async function getStudentNotificationState(studentId?: string) {

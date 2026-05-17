@@ -1519,6 +1519,39 @@ async function getCachedStaffSubmissionSummaries(options: any = {}) {
   return nextPromise;
 }
 
+async function loadActiveStudentsByIds(studentIds: string[]) {
+  const uniqueStudentIds = [
+    ...new Set((studentIds || []).map((value) => String(value || '').trim()).filter(Boolean)),
+  ];
+  if (!uniqueStudentIds.length) {
+    return {} as Record<string, any>;
+  }
+
+  const [{ data, error }, archivedUsers] = await Promise.all([
+    supabase
+      .from('students')
+      .select('student_id,profile_id,first_name,last_name,middle_initial,department,course')
+      .in('student_id', uniqueStudentIds),
+    getArchivedUserIds().catch(() => ({ available: false, userIds: new Set<string>() })),
+  ]);
+
+  if (error) throw new Error(error.message);
+
+  return (data || []).reduce((acc, student) => {
+    const studentId = String(student?.student_id || '').trim();
+    const profileId = String(student?.profile_id || '').trim();
+    const isArchived =
+      archivedUsers.available && profileId
+        ? archivedUsers.userIds.has(profileId)
+        : false;
+    if (!studentId || !profileId || isArchived) {
+      return acc;
+    }
+    acc[studentId] = student;
+    return acc;
+  }, {} as Record<string, any>);
+}
+
 async function loadApprovedStudents(options: any = {}) {
   const page = normalizePage(options.page);
   const pageSize = normalizePositiveInteger(
@@ -1533,24 +1566,33 @@ async function loadApprovedStudents(options: any = {}) {
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
+  const activeStudentsById = await loadActiveStudentsByIds(
+    (data || []).map((row: any) => row.student_id),
+  );
 
   const groups = new Map<string, any>();
 
   for (const row of data || []) {
     const summary = mapSubmissionSummary(row);
-    if (!summary.studentId) continue;
+    const activeStudent = activeStudentsById[summary.studentId];
+    if (!summary.studentId || !activeStudent) continue;
 
     const existing = groups.get(summary.studentId);
     const currentTimestamp = new Date(summary.updatedAt || summary.submittedAt || 0).getTime();
+    const resolvedFirstName = summary.firstName || activeStudent.first_name || '';
+    const resolvedLastName = summary.lastName || activeStudent.last_name || '';
+    const resolvedMiddleInitial = summary.middleInitial || activeStudent.middle_initial || '';
+    const resolvedCourse = summary.course || activeStudent.course || '';
+    const resolvedDepartment = summary.department || activeStudent.department || '';
 
     if (!existing) {
       groups.set(summary.studentId, {
         studentId: summary.studentId,
-        firstName: summary.firstName,
-        lastName: summary.lastName,
-        middleInitial: summary.middleInitial || '',
-        course: summary.course,
-        department: summary.department || '',
+        firstName: resolvedFirstName,
+        lastName: resolvedLastName,
+        middleInitial: resolvedMiddleInitial,
+        course: resolvedCourse,
+        department: resolvedDepartment,
         latestSubmittedAt: summary.submittedAt,
         latestUpdatedAt: summary.updatedAt,
         approvedCount: 1,
@@ -1576,11 +1618,11 @@ async function loadApprovedStudents(options: any = {}) {
 
     const existingTimestamp = new Date(existing.latestUpdatedAt || existing.latestSubmittedAt || 0).getTime();
     if (currentTimestamp >= existingTimestamp) {
-      existing.firstName = summary.firstName;
-      existing.lastName = summary.lastName;
-      existing.middleInitial = summary.middleInitial || '';
-      existing.course = summary.course;
-      existing.department = summary.department || '';
+      existing.firstName = resolvedFirstName;
+      existing.lastName = resolvedLastName;
+      existing.middleInitial = resolvedMiddleInitial;
+      existing.course = resolvedCourse;
+      existing.department = resolvedDepartment;
       existing.latestSubmittedAt = summary.submittedAt;
       existing.latestUpdatedAt = summary.updatedAt;
     }

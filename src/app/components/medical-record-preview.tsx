@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, memo } from 'react';
 import type { SubmissionRecord } from '../lib/record-types';
 import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
 
@@ -163,7 +163,7 @@ interface Props {
   yearlyRecords?: Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>;
 }
 
-const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record, yearlyRecords }, ref) => {
+const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, yearlyRecords }, ref) => {
   const exam = record.staffMeasurements || {};
   const lab = record.labResults || {};
   const history = record.medicalHistory || {};
@@ -521,6 +521,8 @@ const MedicalRecordPreview = forwardRef<HTMLDivElement, Props>(({ record, yearly
   );
 });
 
+MedicalRecordPreviewBase.displayName = 'MedicalRecordPreviewBase';
+const MedicalRecordPreview = memo(MedicalRecordPreviewBase);
 MedicalRecordPreview.displayName = 'MedicalRecordPreview';
 export default MedicalRecordPreview;
 

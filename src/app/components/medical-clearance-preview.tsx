@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, memo } from 'react';
 import type { SubmissionRecord } from '../lib/record-types';
 
 /* ───────── inline styles ───────── */
@@ -316,7 +316,7 @@ interface Props {
   record: SubmissionRecord;
 }
 
-const MedicalClearancePreview = forwardRef<HTMLDivElement, Props>(({ record }, ref) => {
+const MedicalClearancePreviewBase = forwardRef<HTMLDivElement, Props>(({ record }, ref) => {
   return (
     <div ref={ref} style={S.page}>
       {COPY_TYPES.map((copyType) => (
@@ -326,5 +326,7 @@ const MedicalClearancePreview = forwardRef<HTMLDivElement, Props>(({ record }, r
   );
 });
 
+MedicalClearancePreviewBase.displayName = 'MedicalClearancePreviewBase';
+const MedicalClearancePreview = memo(MedicalClearancePreviewBase);
 MedicalClearancePreview.displayName = 'MedicalClearancePreview';
 export default MedicalClearancePreview;
