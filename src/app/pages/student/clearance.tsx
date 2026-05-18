@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -15,11 +15,11 @@ import { useAuth } from '../../lib/auth';
 import { useStudentRecordsQuery } from './student-records-query';
 
 export default function StudentClearance() {
-  const PREVIEW_BASE_WIDTH = 794;
+  const RECORD_PREVIEW_BASE_WIDTH = 816;
+  const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
   const navigate = useNavigate();
   const clearanceRef = useRef<HTMLDivElement>(null);
-  const previewViewportRef = useRef<HTMLDivElement>(null);
-  const [isCompactPreview, setIsCompactPreview] = useState(false);
+  const [activeTab, setActiveTab] = useState<'form' | 'medical-clearance'>('form');
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
@@ -73,31 +73,6 @@ export default function StudentClearance() {
     }
   }, [isError]);
 
-  useLayoutEffect(() => {
-    if (!record) return;
-
-    const updatePreviewMode = () => {
-      const viewport = previewViewportRef.current;
-      if (!viewport) return;
-
-      setIsCompactPreview(viewport.clientWidth < PREVIEW_BASE_WIDTH);
-    };
-
-    updatePreviewMode();
-
-    const observer = new ResizeObserver(() => {
-      updatePreviewMode();
-    });
-
-    if (previewViewportRef.current) observer.observe(previewViewportRef.current);
-
-    window.addEventListener('resize', updatePreviewMode);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updatePreviewMode);
-    };
-  }, [record]);
-
   const downloadClearancePDF = async () => {
     if (!clearanceRef.current || !record) return;
     try {
@@ -109,14 +84,14 @@ export default function StudentClearance() {
       exportRoot.style.position = 'fixed';
       exportRoot.style.left = '-10000px';
       exportRoot.style.top = '0';
-      exportRoot.style.width = `${PREVIEW_BASE_WIDTH}px`;
+      exportRoot.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
       exportRoot.style.background = '#fff';
       exportRoot.style.padding = '0';
       exportRoot.style.margin = '0';
 
       const clone = clearanceRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.width = `${PREVIEW_BASE_WIDTH}px`;
-      clone.style.maxWidth = `${PREVIEW_BASE_WIDTH}px`;
+      clone.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
+      clone.style.maxWidth = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
       clone.style.margin = '0';
       clone.style.padding = '0';
       clone.style.transform = 'none';
@@ -128,8 +103,8 @@ export default function StudentClearance() {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
-        width: PREVIEW_BASE_WIDTH,
-        windowWidth: PREVIEW_BASE_WIDTH,
+        width: CLEARANCE_PREVIEW_BASE_WIDTH,
+        windowWidth: CLEARANCE_PREVIEW_BASE_WIDTH,
       });
       document.body.removeChild(exportRoot);
 
@@ -179,13 +154,13 @@ export default function StudentClearance() {
         <p className="text-muted-foreground">Manage your medical form and medical clearance in one place.</p>
       </div>
 
-      <Tabs defaultValue="form">
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="form">Form</TabsTrigger>
-          <TabsTrigger value="medical-clearance">Medical Clearance</TabsTrigger>
+      <Tabs className="min-w-0" value={activeTab} onValueChange={(value) => setActiveTab(value as 'form' | 'medical-clearance')}>
+        <TabsList className="h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-2">
+          <TabsTrigger value="form" className="min-h-11 justify-center px-3 text-center whitespace-normal">Form</TabsTrigger>
+          <TabsTrigger value="medical-clearance" className="min-h-11 justify-center px-3 text-center whitespace-normal">Medical Clearance</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="form" className="space-y-4">
+        <TabsContent value="form" className="min-w-0 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Medical Record Form</CardTitle>
@@ -207,13 +182,27 @@ export default function StudentClearance() {
             <CardHeader>
               <CardTitle>Medical Record Preview (Combined Year 1-4)</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               {profileRecord ? (
-                <div className="max-h-[68vh] overflow-auto rounded-lg border bg-muted/30 p-2 sm:p-4 md:p-8">
-                  <div className="mx-auto max-w-[816px] overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5">
-                    <MedicalRecordPreview record={profileRecord} yearlyRecords={latestRecordPerYear} />
+                <>
+                  <p className="text-xs text-muted-foreground lg:hidden">
+                    Swipe sideways on mobile to view the full medical record.
+                  </p>
+                  <div className="overflow-hidden rounded-lg border bg-muted/30">
+                    <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
+                      <div className="overflow-x-auto overscroll-x-contain">
+                        <div className="mx-auto w-max min-w-full">
+                          <div
+                            className="overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5"
+                            style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
+                          >
+                            <MedicalRecordPreview record={profileRecord} yearlyRecords={latestRecordPerYear} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Medical form preview will appear here once you have at least one submitted record.
@@ -223,7 +212,7 @@ export default function StudentClearance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="medical-clearance" className="space-y-4">
+        <TabsContent value="medical-clearance" className="min-w-0 space-y-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col gap-2 sm:max-w-xs">
@@ -354,24 +343,18 @@ export default function StudentClearance() {
                       </Button>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    {isCompactPreview ? (
-                      <p className="mb-3 text-xs text-muted-foreground">
-                        Swipe sideways to view the full medical clearance.
-                      </p>
-                    ) : null}
-                    <div
-                      ref={previewViewportRef}
-                      className="overflow-x-auto overflow-y-hidden rounded-lg border bg-white p-1 sm:p-2"
-                    >
-                      <div className="min-w-max">
-                        <div
-                          style={{
-                            width: `${PREVIEW_BASE_WIDTH}px`,
-                            margin: isCompactPreview ? '0' : '0 auto',
-                          }}
-                        >
-                          <MedicalClearancePreview ref={clearanceRef} record={record} />
+                  <CardContent className="space-y-3">
+                    <p className="text-xs text-muted-foreground lg:hidden">
+                      Swipe sideways on mobile to view the full medical clearance.
+                    </p>
+                    <div className="overflow-hidden rounded-lg border bg-white">
+                      <div className="px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
+                        <div className="overflow-x-auto overscroll-x-contain">
+                          <div className="mx-auto w-max min-w-full">
+                            <div style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
+                              <MedicalClearancePreview ref={clearanceRef} record={record} />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -6,9 +6,9 @@ import {
 import {
   getAnalytics,
   getStaffApprovedStudents,
+  getStaffCertificateRecords,
   getStaffDashboardOverview,
   getStaffSubmissionSummaries,
-  getStudentRecords,
   getSubmission,
   type StaffApprovedStudentFilters,
   type StaffSubmissionSummaryFilters,
@@ -69,8 +69,8 @@ export function staffSubmissionDetailQueryKey(submissionId?: string | null) {
   return ['staffSubmission', normalizeSubmissionId(submissionId)] as const;
 }
 
-export function staffStudentRecordsQueryKey(studentId?: string | null) {
-  return ['staffStudentRecords', normalizeSubmissionId(studentId)] as const;
+export function staffStudentCertificateRecordsQueryKey(studentId?: string | null) {
+  return ['staffStudentCertificateRecords', normalizeSubmissionId(studentId)] as const;
 }
 
 export function staffDashboardOverviewQueryOptions() {
@@ -147,14 +147,14 @@ export function staffSubmissionDetailQueryOptions(submissionId?: string | null) 
   });
 }
 
-export function staffStudentRecordsQueryOptions(studentId?: string | null) {
+export function staffStudentCertificateRecordsQueryOptions(studentId?: string | null) {
   const normalizedStudentId = normalizeSubmissionId(studentId);
 
   return queryOptions({
-    queryKey: staffStudentRecordsQueryKey(normalizedStudentId),
+    queryKey: staffStudentCertificateRecordsQueryKey(normalizedStudentId),
     queryFn: async () => {
       if (!normalizedStudentId) return [];
-      const response = await getStudentRecords(normalizedStudentId);
+      const response = await getStaffCertificateRecords(normalizedStudentId);
       return Array.isArray(response?.records) ? response.records : [];
     },
     enabled: Boolean(normalizedStudentId),
@@ -185,8 +185,8 @@ export function useStaffSubmissionDetailQuery(submissionId?: string | null) {
   return useQuery(staffSubmissionDetailQueryOptions(submissionId));
 }
 
-export function useStaffStudentRecordsQuery(studentId?: string | null) {
-  return useQuery(staffStudentRecordsQueryOptions(studentId));
+export function useStaffStudentCertificateRecordsQuery(studentId?: string | null) {
+  return useQuery(staffStudentCertificateRecordsQueryOptions(studentId));
 }
 
 export async function invalidateStaffWorkflowQueries(
@@ -209,7 +209,7 @@ export async function invalidateStaffWorkflowQueries(
       : Promise.resolve(),
     normalizedStudentId
       ? queryClient.invalidateQueries({
-          queryKey: staffStudentRecordsQueryKey(normalizedStudentId),
+          queryKey: staffStudentCertificateRecordsQueryKey(normalizedStudentId),
         })
       : Promise.resolve(),
   ]);

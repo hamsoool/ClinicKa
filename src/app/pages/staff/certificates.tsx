@@ -10,11 +10,10 @@ import MedicalRecordPreview from '../../components/medical-record-preview';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { Download, Search, FileText, X, ClipboardList, Award } from 'lucide-react';
 import { toast } from 'sonner';
-import { getStudentProfileAssets } from '../../lib/api';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
 import {
   useStaffApprovedStudentsQuery,
-  useStaffStudentRecordsQuery,
+  useStaffStudentCertificateRecordsQuery,
 } from './staff-workflow-query';
 
 type StaffSubmission = SubmissionRecord & {
@@ -108,27 +107,6 @@ export default function StaffCertificates() {
     }
   }, [currentPage, totalPages]);
 
-  const hydrateStudentAssets = async (records: StaffSubmission[]) => {
-    if (!records.length) return records;
-    const needAssets = records.some((record) => !record.photoUrl || !record.signatureUrl);
-    if (!needAssets) return records;
-
-    const studentId = String(records[0].studentId || '').trim();
-    if (!studentId) return records;
-
-    try {
-      const { photoUrl, signatureUrl } = await getStudentProfileAssets(studentId);
-      if (!photoUrl && !signatureUrl) return records;
-      return records.map((record) => ({
-        ...record,
-        photoUrl: record.photoUrl || photoUrl || undefined,
-        signatureUrl: record.signatureUrl || signatureUrl || undefined,
-      }));
-    } catch {
-      return records;
-    }
-  };
-
   const clearFilters = () => {
     setSearchQuery('');
     setDepartmentFilter('all');
@@ -148,34 +126,19 @@ export default function StaffCertificates() {
   const {
     data: selectedStudentRecordsData = [],
     isFetching: selectedStudentRecordsFetching,
-  } = useStaffStudentRecordsQuery(selectedStudentId);
+  } = useStaffStudentCertificateRecordsQuery(selectedStudentId);
 
   const selectedStudentRecords = useMemo(
-    () =>
-      (Array.isArray(selectedStudentRecordsData) ? selectedStudentRecordsData : []).filter(
-        (item) => item.status === 'approved',
-      ) as StaffSubmission[],
+    () => (Array.isArray(selectedStudentRecordsData) ? selectedStudentRecordsData : []) as StaffSubmission[],
     [selectedStudentRecordsData],
   );
 
-  const [hydratedSelectedRecords, setHydratedSelectedRecords] = useState<StaffSubmission[]>([]);
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const hydrated = await hydrateStudentAssets(selectedStudentRecords);
-      if (active) setHydratedSelectedRecords(hydrated);
-    })();
-    return () => {
-      active = false;
-    };
-  }, [selectedStudentId, selectedStudentRecords]);
-
   const selectedRecordsSorted = useMemo(
     () =>
-      [...hydratedSelectedRecords].sort(
+      [...selectedStudentRecords].sort(
         (a, b) => new Date(b.updatedAt || b.submittedAt || 0).getTime() - new Date(a.updatedAt || a.submittedAt || 0).getTime(),
       ),
-    [hydratedSelectedRecords],
+    [selectedStudentRecords],
   );
   const combinedRecord = selectedRecordsSorted[0] || null;
   const latestRecordPerYear = useMemo(() => buildLatestPerYear(selectedRecordsSorted), [selectedRecordsSorted]);
@@ -207,6 +170,12 @@ export default function StaffCertificates() {
   }, [selectedRecordsSorted, clearanceYearFilter]);
 
   const hasActiveFilters = searchQuery || departmentFilter !== 'all' || yearFilter !== 'all';
+
+  const handleStudentSelect = (studentId: string) => {
+    if (!studentId || studentId === selectedStudentId) return;
+    setSelectedStudentId(studentId);
+    setClearanceYearFilter('all');
+  };
 
   const downloadRecordPDF = async () => {
     if (!recordPreviewRef.current || !combinedRecord) return;
@@ -345,14 +314,14 @@ export default function StaffCertificates() {
   };
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="mb-8">
         <h1 className="mb-2 text-3xl font-bold text-primary">Certificates & Records</h1>
         <p className="text-muted-foreground">Combined student form and medical clearance preview in one workspace.</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-1">
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+        <div className="min-w-0 lg:col-span-1">
             <Card>
               <CardHeader>
               <div className="flex items-center justify-between gap-3">
@@ -416,17 +385,18 @@ export default function StaffCertificates() {
                 ) : (
                   <div className="max-h-[500px] space-y-2 overflow-y-auto">
                     {studentRows.map((student) => (
-                      <div
+                      <button
+                        type="button"
                         key={student.studentId}
-                        className={`cursor-pointer rounded border p-3 transition-colors ${
+                        className={`w-full cursor-pointer rounded border p-3 text-left transition-colors ${
                           selectedStudentId === student.studentId ? 'border-primary bg-primary/5' : 'hover:bg-accent'
                         }`}
-                        onClick={() => setSelectedStudentId(student.studentId || '')}
+                        onClick={() => handleStudentSelect(student.studentId || '')}
                       >
                         <p className="text-sm font-medium">{student.lastName}, {student.firstName} {student.middleInitial || ''}</p>
                         <p className="text-xs text-muted-foreground">{student.studentId}</p>
                         <p className="text-xs text-muted-foreground">{student.course}</p>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -445,7 +415,7 @@ export default function StaffCertificates() {
           </Card>
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           {!combinedRecord ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16">
@@ -454,46 +424,62 @@ export default function StaffCertificates() {
               </CardContent>
             </Card>
           ) : (
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'form' | 'medical-clearance')}>
-              <TabsList className="mb-4 grid w-full grid-cols-2">
-                <TabsTrigger value="form" className="flex items-center gap-2">
+            <Tabs className="min-w-0" value={activeTab} onValueChange={(value) => setActiveTab(value as 'form' | 'medical-clearance')}>
+              <TabsList className="mb-4 h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-2">
+                <TabsTrigger value="form" className="min-h-11 justify-center gap-2 px-3 text-center whitespace-normal">
                   <ClipboardList className="h-4 w-4" />
                   Form
                 </TabsTrigger>
-                <TabsTrigger value="medical-clearance" className="flex items-center gap-2">
+                <TabsTrigger value="medical-clearance" className="min-h-11 justify-center gap-2 px-3 text-center whitespace-normal">
                   <Award className="h-4 w-4" />
                   Medical Clearance
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="form">
+              <TabsContent value="form" className="min-w-0">
                 <Card>
                   <CardHeader>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <CardTitle>Medical Record Form (Combined Year 1-4)</CardTitle>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="leading-snug">Medical Record Form (Combined Year 1-4)</CardTitle>
                         <p className="mt-1 text-sm text-muted-foreground">{combinedRecord.lastName}, {combinedRecord.firstName} | {combinedRecord.studentId}</p>
+                        {selectedStudentRecordsFetching ? (
+                          <span className="mt-2 block text-xs text-muted-foreground">Refreshing selected student...</span>
+                        ) : null}
                       </div>
-                      {selectedStudentRecordsFetching ? (
-                        <span className="text-xs text-muted-foreground">Refreshing selected student...</span>
-                      ) : null}
-                      <Button onClick={downloadRecordPDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
+                      <Button onClick={downloadRecordPDF} className="w-full shrink-0 bg-primary text-white hover:bg-primary/90 sm:w-auto">
                         <Download className="mr-2 h-4 w-4" />
                         Download PDF (Long Bond)
                       </Button>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="max-h-[68vh] overflow-auto rounded-lg border bg-muted/30 p-2 sm:p-4 md:p-8">
-                      <div className="mx-auto max-w-[816px] overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5">
-                        <MedicalRecordPreview ref={recordPreviewRef} record={combinedRecord} yearlyRecords={latestRecordPerYear} />
+                  <CardContent className="space-y-3">
+                    <p className="text-xs text-muted-foreground lg:hidden">
+                      Swipe sideways on mobile to view the full medical record.
+                    </p>
+                    <div className="overflow-hidden rounded-lg border bg-muted/30">
+                      <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
+                        <div className="overflow-x-auto overscroll-x-contain">
+                          <div className="mx-auto w-max min-w-full">
+                            <div
+                              className="overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5"
+                              style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
+                            >
+                              <MedicalRecordPreview
+                                ref={recordPreviewRef}
+                                record={combinedRecord}
+                                yearlyRecords={latestRecordPerYear}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               </TabsContent>
 
-              <TabsContent value="medical-clearance">
+              <TabsContent value="medical-clearance" className="min-w-0">
                 <Card className="mb-4">
                   <CardContent className="pt-6">
                     <div className="flex max-w-xs flex-col gap-2">
@@ -518,21 +504,30 @@ export default function StaffCertificates() {
                 {clearanceRecord ? (
                   <Card>
                     <CardHeader>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <CardTitle>Medical Clearance Certificate</CardTitle>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <CardTitle className="leading-snug">Medical Clearance Certificate</CardTitle>
                           <p className="mt-1 text-sm text-muted-foreground">3 copies (Student, Coordinator, Registrar) | A4 bond paper</p>
                         </div>
-                        <Button onClick={downloadClearancePDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
+                        <Button onClick={downloadClearancePDF} className="w-full shrink-0 bg-primary text-white hover:bg-primary/90 sm:w-auto">
                           <Download className="mr-2 h-4 w-4" />
                           Download PDF (A4)
                         </Button>
                       </div>
                     </CardHeader>
-                    <CardContent>
-                      <div className="overflow-hidden rounded-lg border bg-white p-1 sm:p-2">
-                        <div className="mx-auto w-full max-w-[794px]">
-                          <MedicalClearancePreview ref={clearancePreviewRef} record={clearanceRecord} />
+                    <CardContent className="space-y-3">
+                      <p className="text-xs text-muted-foreground lg:hidden">
+                        Swipe sideways on mobile to view the full medical clearance.
+                      </p>
+                      <div className="overflow-hidden rounded-lg border bg-white">
+                        <div className="px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
+                          <div className="overflow-x-auto overscroll-x-contain">
+                            <div className="mx-auto w-max min-w-full">
+                              <div style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
+                                <MedicalClearancePreview ref={clearancePreviewRef} record={clearanceRecord} />
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </CardContent>

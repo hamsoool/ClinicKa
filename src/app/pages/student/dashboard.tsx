@@ -1,9 +1,11 @@
 import { useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
-import { AlertCircle, ArrowRight, CheckCircle2, Clock3, FileText, Plus } from 'lucide-react';
+import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, Megaphone, Plus } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
+import { getStudentAnnouncements, getStudentProfileAssets } from '../../lib/api';
 import { useStudentRecordsQuery } from './student-records-query';
 
 const yearLabels = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
@@ -13,10 +15,26 @@ const dashboardDateFormatter = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
 });
 
+type CompletionReminder = {
+  title: string;
+  detail: string;
+  actionLabel: string;
+  actionPath: string;
+};
+
+function hasValue(value?: string | number | null) {
+  return String(value ?? '').trim().length > 0;
+}
+
+function joinMissingItems(items: string[]) {
+  if (items.length <= 3) return items.join(', ');
+  return `${items.slice(0, 3).join(', ')} and ${items.length - 3} more`;
+}
+
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
-  const { displayName, studentId, course } = useMemo(() => {
+  const { displayName, studentId, profileId } = useMemo(() => {
     const name = [
       me?.student?.first_name || me?.profile.first_name || '',
       me?.student?.last_name || me?.profile.last_name || '',
@@ -27,11 +45,34 @@ export default function StudentDashboard() {
     return {
       displayName: name || 'Student',
       studentId: me?.student?.student_id || me?.profile.student_id || '',
-      course: me?.student?.course || me?.profile.course || '',
+      profileId: me?.student?.profile_id || me?.profile.id || '',
     };
   }, [me]);
   const { data = [], isLoading: loading, isError, error } = useStudentRecordsQuery(studentId);
   const records = data;
+  const {
+    data: profileAssets,
+    isLoading: profileAssetsLoading,
+    isError: profileAssetsError,
+  } = useQuery({
+    queryKey: ['studentProfileAssets', studentId, profileId],
+    queryFn: () => getStudentProfileAssets(studentId, profileId),
+    enabled: Boolean(studentId && profileId),
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  const {
+    data: announcementsData,
+    isLoading: announcementsLoading,
+    isError: announcementsError,
+  } = useQuery({
+    queryKey: ['studentAnnouncements'],
+    queryFn: getStudentAnnouncements,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  const announcements = useMemo(() => announcementsData?.announcements || [], [announcementsData?.announcements]);
+  const featuredAnnouncements = useMemo(() => announcements.slice(0, 2), [announcements]);
 
   useEffect(() => {
     if (isError && error) {
@@ -84,7 +125,7 @@ export default function StudentDashboard() {
     if (Number.isNaN(date.getTime())) return '--';
     return dashboardDateFormatter.format(date);
   };
-  const { sortedRecords, latestRecord, yearlyRecords, approvedCount, pendingCount } = useMemo(() => {
+  const { latestRecord, yearlyRecords } = useMemo(() => {
     const sorted = [...records].sort((a, b) => {
       const aTime = new Date(a.updatedAt || a.submittedAt || 0).getTime();
       const bTime = new Date(b.updatedAt || b.submittedAt || 0).getTime();
@@ -96,69 +137,194 @@ export default function StudentDashboard() {
       const record = sorted.find((item) => Number.parseInt(item.year || '', 10) === year);
       return { label, record };
     });
-    const approved = sorted.filter((record) => record.status === 'approved').length;
-    const pending = sorted.filter(
-      (record) => record.status === 'pending' || record.status === 'in_review' || record.status === 'resubmitted',
-    ).length;
     return {
-      sortedRecords: sorted,
       latestRecord: latest,
       yearlyRecords: yearly,
-      approvedCount: approved,
-      pendingCount: pending,
     };
   }, [records]);
+  const completionReminders = useMemo<CompletionReminder[]>(() => {
+    const reminders: CompletionReminder[] = [];
+    const student = me?.student;
+    const profile = me?.profile;
+    const missingProfileFields = [
+      !hasValue(student?.student_id || profile?.student_id) ? 'student ID' : '',
+      !hasValue(student?.first_name || profile?.first_name) ? 'first name' : '',
+      !hasValue(student?.last_name || profile?.last_name) ? 'last name' : '',
+      !hasValue(student?.middle_initial) ? 'middle initial' : '',
+      !hasValue(student?.department || profile?.department) ? 'department' : '',
+      !hasValue(student?.course || profile?.course) ? 'course' : '',
+      !hasValue(student?.age) ? 'age' : '',
+      !hasValue(student?.sex) ? 'sex' : '',
+      !hasValue(student?.birthday) ? 'birthday' : '',
+      !hasValue(student?.civil_status) ? 'civil status' : '',
+      !hasValue(student?.contact_number) ? 'contact number' : '',
+      !hasValue(student?.address) ? 'address' : '',
+    ].filter(Boolean);
+
+    if (missingProfileFields.length > 0) {
+      reminders.push({
+        title: 'Complete student profile',
+        detail: `Missing ${joinMissingItems(missingProfileFields)}.`,
+        actionLabel: 'Update profile',
+        actionPath: '/student/profile',
+      });
+    }
+
+    if (studentId && profileId && !profileAssetsLoading && !profileAssetsError) {
+      const missingAssets = [
+        !profileAssets?.photoUrl ? '1x1 photo' : '',
+        !profileAssets?.signatureUrl ? 'signature' : '',
+      ].filter(Boolean);
+
+      if (missingAssets.length > 0) {
+        reminders.push({
+          title: 'Upload profile assets',
+          detail: `Missing ${joinMissingItems(missingAssets)}.`,
+          actionLabel: 'Upload assets',
+          actionPath: '/student/profile',
+        });
+      }
+    }
+
+    if (!latestRecord) {
+      reminders.push({
+        title: 'Submit medical record',
+        detail: 'No medical record has been started yet.',
+        actionLabel: 'Start submission',
+        actionPath: '/student/year-selection',
+      });
+      return reminders;
+    }
+
+    const latestRecordDetails = latestRecord as typeof latestRecord & {
+      xrayFileUrl?: string | null;
+      cbcFileUrl?: string | null;
+      urinalysisFileUrl?: string | null;
+    };
+    const editPath = `/student/privacy-waiver/${latestRecord.year || '1'}?edit=${encodeURIComponent(latestRecord.id)}`;
+    const missingSubmissionInfo = [
+      !hasValue(latestRecord.hadOperation) ? 'operation history' : '',
+      !hasValue(latestRecord.emergencyContact?.name) ||
+      !hasValue(latestRecord.emergencyContact?.relationship) ||
+      !hasValue(latestRecord.emergencyContact?.phone) ||
+      !hasValue(latestRecord.emergencyContact?.address)
+        ? 'emergency contact'
+        : '',
+      !hasValue(latestRecord.weight) || !hasValue(latestRecord.height) ? 'height and weight' : '',
+      !hasValue(latestRecord.labTestLocation) ? 'lab test location' : '',
+      latestRecord.labTestLocation === 'other' && !hasValue(latestRecord.otherClinicName) ? 'clinic name' : '',
+    ].filter(Boolean);
+
+    if (missingSubmissionInfo.length > 0) {
+      reminders.push({
+        title: 'Complete latest submission',
+        detail: `Missing ${joinMissingItems(missingSubmissionInfo)}.`,
+        actionLabel: 'Continue record',
+        actionPath: editPath,
+      });
+    }
+
+    if (latestRecord.labTestLocation === 'other') {
+      const missingDocuments = [
+        !latestRecordDetails.xrayFileUrl ? 'Chest X-Ray' : '',
+        !latestRecordDetails.cbcFileUrl ? 'CBC' : '',
+        !latestRecordDetails.urinalysisFileUrl ? 'Urinalysis' : '',
+      ].filter(Boolean);
+
+      if (missingDocuments.length > 0) {
+        reminders.push({
+          title: 'Upload required lab documents',
+          detail: `Missing ${joinMissingItems(missingDocuments)}.`,
+          actionLabel: 'Upload documents',
+          actionPath: editPath,
+        });
+      }
+    }
+
+    return reminders;
+  }, [latestRecord, me, profileAssets, profileAssetsError, profileAssetsLoading, profileId, studentId]);
+  const isCheckingCompletion = Boolean(studentId && profileId && profileAssetsLoading);
 
   if (loading && records.length === 0) {
     return <PortalPageSkeleton variant="dashboard" />;
   }
 
   return (
-    <div className="-mx-4 w-[calc(100%+2rem)] space-y-1 min-[340px]:-mx-5 min-[340px]:w-[calc(100%+2.5rem)] sm:mx-auto sm:w-full sm:max-w-6xl sm:space-y-8">
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-3 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-6 lg:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div>
-              <h2 className="text-[1.75rem] font-bold tracking-tight text-on-surface sm:text-3xl max-[382px]:text-[1.5rem]">Welcome, {displayName}</h2>
-              <p className="mt-1 text-sm text-on-surface-variant sm:text-base">
-                Here is your current medical clearance status.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs text-on-surface-variant sm:gap-3 sm:text-sm">
-              {studentId ? (
-                <span className="rounded-full bg-surface-container px-3 py-1.5">
-                  Student ID: <span className="font-semibold text-on-surface">{studentId}</span>
-                </span>
-              ) : null}
-              {course ? (
-                <span className="rounded-full bg-surface-container px-3 py-1.5">
-                  Course: <span className="font-semibold text-on-surface">{course}</span>
-                </span>
-              ) : null}
-            </div>
-          </div>
+    <div className="mx-auto w-full max-w-6xl space-y-4 sm:space-y-6 lg:space-y-8">
+      <div>
+        <h2 className="text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
+          Welcome, {displayName}
+        </h2>
+      </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
-            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2.5 shadow-sm sm:px-4 sm:py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
-                Approved Records
-              </p>
-              <div className="mt-2 flex items-center gap-2 text-on-surface">
-                <CheckCircle2 className="h-5 w-5 text-primary" />
-                <span className="text-2xl font-bold">{approvedCount}</span>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2.5 shadow-sm sm:px-4 sm:py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
-                Under Review
-              </p>
-              <div className="mt-2 flex items-center gap-2 text-on-surface">
-                <Clock3 className="h-5 w-5 text-amber-600" />
-                <span className="text-2xl font-bold">{pendingCount}</span>
-              </div>
-            </div>
+      <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-6 lg:p-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+              Clearance Checklist
+            </p>
+            <p className="mt-1 text-sm font-semibold text-on-surface">
+              {completionReminders.length > 0
+                ? `${completionReminders.length} item${completionReminders.length === 1 ? '' : 's'} need attention`
+                : isCheckingCompletion
+                ? 'Checking saved requirements'
+                : 'Requirements look complete'}
+            </p>
           </div>
         </div>
+
+        {completionReminders.length > 0 ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {completionReminders.slice(0, 4).map((item) => (
+              <button
+                key={`${item.title}-${item.actionPath}`}
+                type="button"
+                onClick={() => navigate(item.actionPath)}
+                className="flex min-h-[5.25rem] w-full items-start gap-3 rounded-xl border border-amber-200/70 bg-amber-50/80 p-3 text-left transition-colors hover:bg-amber-100/80"
+              >
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                  <AlertCircle className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-amber-950">{item.title}</span>
+                  <span className="mt-0.5 line-clamp-2 block text-xs leading-5 text-amber-800">{item.detail}</span>
+                  <span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">
+                    {item.actionLabel}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : isCheckingCompletion ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {[0, 1].map((item) => (
+              <div
+                key={item}
+                className="flex min-h-[5.25rem] items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3"
+              >
+                <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-surface-container" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-4 w-32 animate-pulse rounded bg-surface-container" />
+                  <div className="h-3 w-full animate-pulse rounded bg-surface-container" />
+                  <div className="h-3 w-24 animate-pulse rounded bg-surface-container" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-primary/15 bg-primary-container/10 p-3">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-container/30 text-primary">
+              <CheckCircle2 className="h-4 w-4" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-on-surface">No missing profile information or required uploads found.</p>
+              <p className="mt-0.5 text-xs leading-5 text-on-surface-variant">
+                Keep an eye on clinic updates if your submission is still under review.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
       
       {latestRecord?.status === 'returned' && (
@@ -262,14 +428,22 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-2 sm:gap-6 md:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
-          <div className="mb-6 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-on-surface">Submission Status</h3>
+          <div className="mb-4 flex items-center justify-between gap-3 sm:mb-6">
+            <h3 className="text-lg font-semibold text-on-surface">Current Submission</h3>
+            {records.length > 0 ? (
+              <button
+                className="shrink-0 text-xs font-semibold text-primary transition-colors hover:text-primary/80 sm:text-sm"
+                onClick={() => navigate('/student/records')}
+              >
+                View records
+              </button>
+            ) : null}
           </div>
 
           {records.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="flex flex-col items-center justify-center py-8 text-center sm:py-10">
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-container text-outline">
                 <AlertCircle className="h-7 w-7" />
               </div>
@@ -323,42 +497,77 @@ export default function StudentDashboard() {
         </div>
 
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
-          <div className="mb-6 flex items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-on-surface">Recent Medical Record History</h3>
+          <div className="mb-4 flex items-center justify-between gap-3 sm:mb-6">
+            <h3 className="text-lg font-semibold text-on-surface">Announcements</h3>
             <button
               className="shrink-0 text-xs font-semibold text-primary transition-colors hover:text-primary/80 sm:text-sm"
-              onClick={() => navigate('/student/records')}
+              onClick={() => navigate('/student/announcements')}
             >
               View All
             </button>
           </div>
 
-          {records.length === 0 ? (
-            <div className="py-10 text-center text-sm text-on-surface-variant">No medical records found.</div>
+          {announcementsLoading ? (
+            <div className="space-y-3">
+              {[0, 1].map((item) => (
+                <div
+                  key={item}
+                  className="flex items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3"
+                >
+                  <div className="h-12 w-12 shrink-0 animate-pulse rounded-lg bg-surface-container" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="h-3 w-24 animate-pulse rounded bg-surface-container" />
+                    <div className="h-4 w-3/4 animate-pulse rounded bg-surface-container" />
+                    <div className="h-3 w-full animate-pulse rounded bg-surface-container" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : announcementsError ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-10 text-center">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-container text-outline">
+                <Megaphone className="h-5 w-5" />
+              </div>
+              <p className="text-sm text-on-surface-variant">Announcements could not be loaded right now.</p>
+            </div>
+          ) : featuredAnnouncements.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-10 text-center">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-container text-outline">
+                <Megaphone className="h-5 w-5" />
+              </div>
+              <p className="text-sm text-on-surface-variant">No announcements posted yet.</p>
+            </div>
           ) : (
             <div className="space-y-3">
-              {sortedRecords.slice(0, 3).map((record) => (
-                <div
-                  key={record.id}
-                  className="flex items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 transition-colors hover:bg-surface-container-low sm:items-center sm:gap-4"
+              {featuredAnnouncements.map((announcement) => (
+                <button
+                  key={announcement.id}
+                  type="button"
+                  onClick={() => navigate('/student/announcements')}
+                  className="flex w-full items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 text-left transition-colors hover:bg-surface-container-low sm:gap-4"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container text-primary">
-                    <FileText className="h-5 w-5" />
-                  </div>
+                  {announcement.imageUrl ? (
+                    <img
+                      src={announcement.imageUrl}
+                      alt=""
+                      className="h-14 w-14 shrink-0 rounded-lg border border-outline-variant/20 object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-surface-container text-primary">
+                      <Megaphone className="h-5 w-5" />
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-on-surface">
-                      Year {record.year || '--'} Medical Record
+                    <p className="flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant">
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      {formatDate(announcement.datePosted)}
                     </p>
-                    <p className="text-xs text-on-surface-variant">
-                      Submitted: {formatDate(record.submittedAt)}
+                    <p className="mt-1 line-clamp-1 text-sm font-semibold text-on-surface">{announcement.title}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-on-surface-variant">
+                      {announcement.description}
                     </p>
                   </div>
-                  <span
-                    className={`inline-flex w-fit items-center rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] sm:tracking-[0.2em] ${getStatusStyles(record.status)}`}
-                  >
-                    {getStatusBadge(record.status)}
-                  </span>
-                </div>
+                </button>
               ))}
             </div>
           )}

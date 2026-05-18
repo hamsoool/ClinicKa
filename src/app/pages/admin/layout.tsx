@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import {
   BarChart3,
   Home,
+  Megaphone,
   Settings,
   ShieldCheck,
   ShieldPlus,
@@ -22,6 +23,7 @@ const navItems = [
   { path: '/admin/settings', label: 'System Settings', mobileLabel: 'Settings', icon: Settings },
   { path: '/admin/staff', label: 'Clinic Staff', mobileLabel: 'Staff', icon: UserCog },
   { path: '/admin/users', label: 'User Accounts', mobileLabel: 'Users', icon: Users },
+  { path: '/admin/announcements', label: 'Announcements', mobileLabel: 'Posts', icon: Megaphone },
   { path: '/admin/reports', label: 'Reports', mobileLabel: 'Reports', icon: BarChart3 },
 ] as const satisfies readonly PortalNavItem[];
 

@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   FileText,
   Home,
+  Megaphone,
   Settings,
   ShieldPlus,
   Stethoscope,
@@ -25,6 +26,7 @@ const navItems = [
   { path: '/staff/records', label: 'Records Archive', mobileLabel: 'Records', icon: FileText },
   { path: '/staff/reports', label: 'Reports', mobileLabel: 'Reports', icon: Activity },
   { path: '/staff/certificates', label: 'Certificates', mobileLabel: 'Certs', icon: Award },
+  { path: '/staff/announcements', label: 'Announcements', mobileLabel: 'Posts', icon: Megaphone },
   { path: '/staff/settings', label: 'Settings', mobileLabel: 'Settings', icon: Settings },
 ] as const satisfies readonly PortalNavItem[];
 

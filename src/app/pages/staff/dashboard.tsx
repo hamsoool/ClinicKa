@@ -3,13 +3,11 @@ import { useNavigate } from 'react-router';
 import {
   ArrowRight,
   ArrowUpDown,
-  Award,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
   FileWarning,
   ShieldCheck,
-  Stethoscope,
 } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
@@ -109,7 +107,6 @@ export default function StaffDashboard() {
       .trim() ||
     formatEmailName(me?.profile.email) ||
     getRoleLabel(me?.profile?.role, me?.staff?.position);
-  const position = getRoleLabel(me?.profile?.role, me?.staff?.position);
   const currentStaffId = String(me?.staff?.id || '').trim();
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>('desc');
@@ -187,120 +184,76 @@ export default function StaffDashboard() {
       value: overview.actionableRecords || 0,
       icon: ClipboardCheck,
       tone: 'text-primary',
-      detail: 'Pending, in-review, returned, and resubmitted records',
+      href: '/staff/submissions',
     },
     {
       label: 'In Review',
       value: overview.inReviewRecords || 0,
       icon: Clock3,
       tone: 'text-blue-600',
-      detail: 'Records currently being worked on by the clinic',
+      href: '/staff/submissions?status=in_review',
     },
     {
       label: 'Returned',
       value: overview.returnedRecords || 0,
       icon: FileWarning,
       tone: 'text-rose-600',
-      detail: 'Records waiting for student corrections',
+      href: '/staff/submissions?status=returned',
     },
     {
       label: 'Cleared Records',
       value: overview.approvedRecords || 0,
       icon: ShieldCheck,
       tone: 'text-emerald-700',
-      detail: 'Total students successfully cleared',
+      href: '/staff/records',
     },
   ] as const;
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
       <div className="rounded-[1.5rem] border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-8">
-        <div className="flex flex-col gap-5 sm:gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-4">
-            <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
-              <Stethoscope className="h-4 w-4" />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
               Clinic Operations Portal
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
-                Welcome, {displayName}
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm text-on-surface-variant sm:text-base">
-                Start with high-priority records first, then continue with in-review and returned submissions.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs text-on-surface-variant sm:gap-3 sm:text-sm">
-              <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Role: <span className="font-semibold text-on-surface">{position}</span>
-              </span>
-              <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Total submissions: <span className="font-semibold text-on-surface">{overview.totalSubmissions || 0}</span>
-              </span>
-              <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Today: <span className="font-semibold text-on-surface">{overview.submittedToday || 0}</span>
-              </span>
-              <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Yesterday: <span className="font-semibold text-on-surface">{overview.submittedYesterday || 0}</span>
-              </span>
-            </div>
+            </p>
+            <h1 className="mt-2 text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
+              Welcome, {displayName}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-on-surface-variant sm:text-base">
+              Review records by status below, then open the queue for full filtering.
+            </p>
           </div>
-
-          <div className="grid gap-3 min-[440px]:grid-cols-2 lg:min-w-[22rem]">
-            <button
-              onClick={() => navigate('/staff/submissions')}
-              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
-                Review Queue
-              </p>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-on-surface">
-                  <ClipboardCheck className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold">{overview.actionableRecords || 0}</span>
-                </div>
-                <ArrowRight className="h-4 w-4 text-on-surface-variant" />
-              </div>
-            </button>
-            <button
-              onClick={() => navigate('/staff/certificates')}
-              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
-                Ready Certificates
-              </p>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-on-surface">
-                  <Award className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-bold">{overview.approvedRecords || 0}</span>
-                </div>
-                <ArrowRight className="h-4 w-4 text-on-surface-variant" />
-              </div>
-            </button>
-          </div>
+          {!overviewLoading && overviewFetching ? (
+            <span className="text-xs text-on-surface-variant">Refreshing queue...</span>
+          ) : null}
         </div>
       </div>
 
-      <div className="grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
-            <div
+            <button
+              type="button"
               key={card.label}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-5"
+              onClick={() => navigate(card.href)}
+              className="flex min-h-[8.5rem] w-full flex-col justify-between rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest p-3.5 text-left shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] transition-colors hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:rounded-2xl sm:p-5"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-2 sm:gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+                  <p className="min-h-[2rem] text-[11px] font-semibold uppercase leading-4 tracking-[0.16em] text-on-surface-variant sm:min-h-0 sm:text-xs">
                     {card.label}
                   </p>
-                  <p className="mt-3 text-[2rem] font-bold leading-none text-on-surface sm:text-3xl">{card.value}</p>
+                  <p className="mt-2 text-[1.9rem] font-bold leading-none text-on-surface sm:mt-3 sm:text-3xl">
+                    {card.value}
+                  </p>
                 </div>
-                <div className={`rounded-2xl bg-surface-container p-2.5 sm:p-3 ${card.tone}`}>
-                  <Icon className="h-5 w-5" />
+                <div className={`rounded-[1rem] bg-surface-container p-2 sm:rounded-2xl sm:p-3 ${card.tone}`}>
+                  <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
               </div>
-              <p className="mt-4 text-[13px] text-on-surface-variant sm:text-sm">{card.detail}</p>
-            </div>
+            </button>
           );
         })}
       </div>

@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
@@ -20,6 +20,21 @@ const YEAR_LABELS: Record<string, string> = {
   '4': '4th Year',
 };
 const PAGE_SIZE = 25;
+const STATUS_FILTER_VALUES = new Set([
+  'action_needed',
+  'all',
+  'pending',
+  'in_review',
+  'physical_exam_done',
+  'approved',
+  'returned',
+  'resubmitted',
+]);
+
+function parseStatusFilter(value: string | null) {
+  if (!value) return 'action_needed';
+  return STATUS_FILTER_VALUES.has(value) ? value : 'action_needed';
+}
 
 function formatTimestamp(value?: string) {
   if (!value) return '--';
@@ -49,10 +64,11 @@ function getActiveReviewerMessage(
 
 export default function StaffSubmissions() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { me } = useAuth();
   const currentStaffId = String(me?.staff?.id || '').trim();
+  const statusFilter = parseStatusFilter(searchParams.get('status'));
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('action_needed');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
@@ -65,6 +81,17 @@ export default function StaffSubmissions() {
   useEffect(() => {
     setCurrentPage(1);
   }, [deferredSearchQuery, statusFilter, departmentFilter, yearFilter, sortOrder]);
+
+  const updateStatusFilter = (nextStatus: string) => {
+    const normalizedStatus = parseStatusFilter(nextStatus);
+    const nextParams = new URLSearchParams(searchParams);
+    if (normalizedStatus === 'action_needed') {
+      nextParams.delete('status');
+    } else {
+      nextParams.set('status', normalizedStatus);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
 
   const {
     data,
@@ -109,7 +136,7 @@ export default function StaffSubmissions() {
 
   const clearFilters = () => {
     setSearchQuery('');
-    setStatusFilter('action_needed');
+    updateStatusFilter('action_needed');
     setDepartmentFilter('all');
     setYearFilter('all');
     setSortOrder('desc');
@@ -156,7 +183,7 @@ export default function StaffSubmissions() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <button
               type="button"
-              onClick={() => setStatusFilter('pending')}
+              onClick={() => updateStatusFilter('pending')}
               className={`rounded-xl border px-3 py-3 text-left transition-colors ${
                 statusFilter === 'pending' ? 'border-amber-300 bg-amber-50' : 'border-border hover:bg-accent/50'
               }`}
@@ -166,7 +193,7 @@ export default function StaffSubmissions() {
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('in_review')}
+              onClick={() => updateStatusFilter('in_review')}
               className={`rounded-xl border px-3 py-3 text-left transition-colors ${
                 statusFilter === 'in_review' ? 'border-sky-300 bg-sky-50' : 'border-border hover:bg-accent/50'
               }`}
@@ -176,7 +203,7 @@ export default function StaffSubmissions() {
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('returned')}
+              onClick={() => updateStatusFilter('returned')}
               className={`rounded-xl border px-3 py-3 text-left transition-colors ${
                 statusFilter === 'returned' ? 'border-red-300 bg-red-50' : 'border-border hover:bg-accent/50'
               }`}
@@ -186,7 +213,7 @@ export default function StaffSubmissions() {
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('resubmitted')}
+              onClick={() => updateStatusFilter('resubmitted')}
               className={`rounded-xl border px-3 py-3 text-left transition-colors ${
                 statusFilter === 'resubmitted' ? 'border-orange-300 bg-orange-50' : 'border-border hover:bg-accent/50'
               }`}
@@ -210,14 +237,14 @@ export default function StaffSubmissions() {
             <Button
               variant={statusFilter === 'action_needed' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setStatusFilter('action_needed')}
+              onClick={() => updateStatusFilter('action_needed')}
             >
               Needs Action
             </Button>
             <Button
               variant={statusFilter === 'all' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setStatusFilter('all')}
+              onClick={() => updateStatusFilter('all')}
             >
               All Records
             </Button>
@@ -248,7 +275,7 @@ export default function StaffSubmissions() {
                 </SelectContent>
               </Select>
 
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={updateStatusFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
