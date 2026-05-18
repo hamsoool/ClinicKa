@@ -1,0 +1,1 @@
+function n(e){return!Number.isFinite(e)||e<=0||typeof window>"u"||typeof document>"u"||typeof navigator<"u"&&"onLine"in navigator&&!navigator.onLine||document.visibilityState!=="visible"||typeof document.hasFocus=="function"&&!document.hasFocus()?!1:e}export{n as g};

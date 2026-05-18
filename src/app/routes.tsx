@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router';
 import { PortalPageSkeleton, PortalShellSkeleton, PublicPageSkeleton } from './components/project-skeletons';
 import { RedirectIfAuthenticated, RequireAuth } from './lib/auth';
 import {
+  loadAdminAnnouncements,
   loadAdminDashboard,
   loadAdminLayout,
   loadAdminReports,
@@ -13,6 +14,7 @@ import {
   loadCheckEmailPage,
   loadRoleSelection,
   loadStaffCertificates,
+  loadStaffAnnouncements,
   loadStaffDashboard,
   loadStaffLayout,
   loadStaffRecordReview,
@@ -29,6 +31,7 @@ import {
   loadStudentProfile,
   loadStudentRecords,
   loadStudentRequirements,
+  loadStudentAnnouncements,
   loadStudentYearSelection,
 } from './route-modules';
 
@@ -42,6 +45,7 @@ const StudentMedicalForm = lazy(loadStudentMedicalForm);
 const StudentLayout = lazy(loadStudentLayout);
 const StudentRecords = lazy(loadStudentRecords);
 const StudentRequirements = lazy(loadStudentRequirements);
+const StudentAnnouncements = lazy(loadStudentAnnouncements);
 const StudentProfile = lazy(loadStudentProfile);
 const StudentCertificate = lazy(loadStudentCertificate);
 const StudentClearance = lazy(loadStudentClearance);
@@ -52,6 +56,7 @@ const StaffRecordReview = lazy(loadStaffRecordReview);
 const StaffRecords = lazy(loadStaffRecords);
 const StaffReports = lazy(loadStaffReports);
 const StaffCertificates = lazy(loadStaffCertificates);
+const StaffAnnouncements = lazy(loadStaffAnnouncements);
 const StaffSettings = lazy(loadStaffSettings);
 const AdminLayout = lazy(loadAdminLayout);
 const AdminDashboard = lazy(loadAdminDashboard);
@@ -59,6 +64,7 @@ const AdminSystemSettings = lazy(loadAdminSystemSettings);
 const AdminStaffManagement = lazy(loadAdminStaffManagement);
 const AdminUserAccounts = lazy(loadAdminUserAccounts);
 const AdminReports = lazy(loadAdminReports);
+const AdminAnnouncements = lazy(loadAdminAnnouncements);
 
 type RouteSkeletonVariant =
   | 'marketing'
@@ -135,6 +141,7 @@ export const router = createBrowserRouter([
       { path: "privacy-waiver/:year", element: withSuspense(StudentPrivacyWaiver) },
       { path: "medical-form/:year", element: withSuspense(StudentMedicalForm) },
       { path: "requirements", element: withSuspense(StudentRequirements) },
+      { path: "announcements", element: withSuspense(StudentAnnouncements) },
       { path: "profile", element: withSuspense(StudentProfile) },
       { path: "clearance", element: withSuspense(StudentClearance, 'portal-certificate') },
       { path: "certificate", element: withSuspense(StudentCertificate, 'portal-certificate') },
@@ -154,6 +161,7 @@ export const router = createBrowserRouter([
       { path: "review/:submissionId", element: withSuspense(StaffRecordReview) },
       { path: "reports", element: withSuspense(StaffReports) },
       { path: "certificates", element: withSuspense(StaffCertificates) },
+      { path: "announcements", element: withSuspense(StaffAnnouncements) },
       { path: "settings", element: withSuspense(StaffSettings) },
     ],
   },
@@ -170,6 +178,7 @@ export const router = createBrowserRouter([
       { path: "staff", element: withSuspense(AdminStaffManagement) },
       { path: "users", element: withSuspense(AdminUserAccounts) },
       { path: "reports", element: withSuspense(AdminReports) },
+      { path: "announcements", element: withSuspense(AdminAnnouncements) },
     ],
   },
 ]);
