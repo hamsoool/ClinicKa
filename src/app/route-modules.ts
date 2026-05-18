@@ -16,6 +16,7 @@ export const loadStudentRequirements = () => import('./pages/student/requirement
 export const loadStudentProfile = () => import('./pages/student/profile');
 export const loadStudentCertificate = () => import('./pages/student/certificate');
 export const loadStudentClearance = () => import('./pages/student/clearance');
+export const loadStudentAnnouncements = () => import('./pages/student/announcements');
 
 export const loadStaffLayout = () => import('./pages/staff/layout');
 export const loadStaffDashboard = () => import('./pages/staff/dashboard');
@@ -25,6 +26,7 @@ export const loadStaffRecords = () => import('./pages/staff/records');
 export const loadStaffReports = () => import('./pages/staff/reports');
 export const loadStaffCertificates = () => import('./pages/staff/certificates');
 export const loadStaffSettings = () => import('./pages/staff/settings');
+export const loadStaffAnnouncements = () => import('./pages/staff/announcements');
 
 export const loadAdminLayout = () => import('./pages/admin/layout');
 export const loadAdminDashboard = () => import('./pages/admin/dashboard');
@@ -32,6 +34,7 @@ export const loadAdminSystemSettings = () => import('./pages/admin/system-settin
 export const loadAdminStaffManagement = () => import('./pages/admin/staff-management');
 export const loadAdminUserAccounts = () => import('./pages/admin/user-accounts');
 export const loadAdminReports = () => import('./pages/admin/reports');
+export const loadAdminAnnouncements = () => import('./pages/admin/announcements');
 
 const preloadedLoaders = new Set<RouteLoader>();
 
@@ -53,6 +56,7 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadStudentClearance,
     loadStudentCertificate,
     loadStudentProfile,
+    loadStudentAnnouncements,
     loadStudentPrivacyWaiver,
     loadStudentMedicalForm,
   ],
@@ -64,6 +68,7 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadStaffReports,
     loadStaffCertificates,
     loadStaffSettings,
+    loadStaffAnnouncements,
     loadStaffRecordReview,
   ],
   admin: [
@@ -73,6 +78,7 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadAdminStaffManagement,
     loadAdminUserAccounts,
     loadAdminReports,
+    loadAdminAnnouncements,
   ],
 };
 

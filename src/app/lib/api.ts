@@ -200,6 +200,24 @@ export type StudentNotificationStatePayload = {
   snapshot?: Record<string, string>;
 };
 
+export type StudentAnnouncement = {
+  id: string;
+  title: string;
+  description: string;
+  datePosted: string;
+  imageUrl?: string | null;
+  imagePath?: string | null;
+  createdAt?: string | null;
+};
+
+export type AnnouncementUpsertInput = {
+  title: string;
+  description: string;
+  datePosted?: string | null;
+  isPublished?: boolean;
+  imagePath?: string | null;
+};
+
 export type StaffSubmissionSummaryFilters = {
   searchQuery?: string;
   statusFilter?: string;
@@ -2309,6 +2327,177 @@ export async function getStudentRecords(studentId?: string) {
     `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
   );
   return { records };
+}
+
+export async function getStudentAnnouncements() {
+  const rows = await restRequest<any[]>(
+    'announcements',
+    'select=id,title,description,date_posted,image_path,created_at&is_published=eq.true&order=date_posted.desc.nullslast,created_at.desc',
+  );
+
+  const announcements = await Promise.all(
+    (rows || []).map(async (row) => {
+      const rawPath = String(row?.image_path || '').trim();
+      const normalizedPath = rawPath.replace(/^announcements\//, '');
+      const signedUrl = normalizedPath
+        ? await createSignedStorageUrlWithBucketFallbacks(normalizedPath, getAccessToken(), 'announcements')
+        : null;
+
+      return {
+        id: String(row?.id || ''),
+        title: String(row?.title || '').trim(),
+        description: String(row?.description || '').trim(),
+        datePosted: String(row?.date_posted || row?.created_at || ''),
+        imageUrl: normalizeStorageFileUrl(signedUrl) || null,
+        imagePath: rawPath || null,
+        createdAt: row?.created_at ? String(row.created_at) : null,
+      } satisfies StudentAnnouncement;
+    }),
+  );
+
+  return {
+    announcements: announcements.filter((item) => item.id && item.title),
+  };
+}
+
+export async function getManagedAnnouncements() {
+  const rows = await restRequest<any[]>(
+    'announcements',
+    'select=id,title,description,date_posted,image_path,is_published,created_by,created_at,updated_at&order=date_posted.desc.nullslast,created_at.desc',
+  );
+
+  const announcements = await Promise.all(
+    (rows || []).map(async (row) => {
+      const rawPath = String(row?.image_path || '').trim();
+      const normalizedPath = rawPath.replace(/^announcements\//, '');
+      const signedUrl = normalizedPath
+        ? await createSignedStorageUrlWithBucketFallbacks(normalizedPath, getAccessToken(), 'announcements')
+        : null;
+
+      return {
+        id: String(row?.id || ''),
+        title: String(row?.title || '').trim(),
+        description: String(row?.description || '').trim(),
+        datePosted: String(row?.date_posted || row?.created_at || ''),
+        imageUrl: normalizeStorageFileUrl(signedUrl) || null,
+        imagePath: rawPath || null,
+        createdBy: String(row?.created_by || ''),
+        isPublished: Boolean(row?.is_published),
+      };
+    }),
+  );
+
+  return {
+    announcements: announcements.filter((item) => item.id),
+  };
+}
+
+export async function createAnnouncement(payload: AnnouncementUpsertInput) {
+  const authUser = await getCurrentAuthUser();
+  const rows = await restRequest<any[]>(
+    'announcements',
+    'select=*',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        title: payload.title,
+        description: payload.description,
+        date_posted: payload.datePosted || new Date().toISOString().slice(0, 10),
+        is_published: payload.isPublished ?? true,
+        image_path: payload.imagePath || null,
+        created_by: authUser.id,
+      }),
+    },
+  );
+  return rows?.[0] || null;
+}
+
+export async function updateAnnouncement(id: string, payload: AnnouncementUpsertInput) {
+  const targetId = String(id || '').trim();
+  if (!targetId) throw new Error('Announcement ID is required.');
+
+  const rows = await restRequest<any[]>(
+    'announcements',
+    `id=eq.${encodeURIComponent(targetId)}&select=*`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        title: payload.title,
+        description: payload.description,
+        date_posted: payload.datePosted || new Date().toISOString().slice(0, 10),
+        is_published: payload.isPublished ?? true,
+        image_path: payload.imagePath || null,
+      }),
+    },
+  );
+
+  return rows?.[0] || null;
+}
+
+export async function deleteAnnouncement(id: string) {
+  const targetId = String(id || '').trim();
+  if (!targetId) throw new Error('Announcement ID is required.');
+
+  await restRequest(
+    'announcements',
+    `id=eq.${encodeURIComponent(targetId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Prefer: 'return=minimal',
+      },
+    },
+  );
+  return { success: true as const };
+}
+
+export async function uploadAnnouncementImage(file: File, ownerId: string) {
+  const token = getAccessToken();
+  const cleanedOwnerId = String(ownerId || '').trim();
+  if (!token || !supabaseUrl || !publicAnonKey || !cleanedOwnerId) {
+    throw new Error('You must be signed in to upload announcement images.');
+  }
+
+  const safeName = buildStorageObjectName('announcement', file);
+  const storagePath = `${cleanedOwnerId}/${safeName}`;
+  const uploadResponse = await fetch(
+    `${supabaseUrl}/storage/v1/object/announcements/${storagePath}`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: publicAnonKey,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': file.type || 'application/octet-stream',
+      },
+      body: file,
+    },
+  );
+
+  if (!uploadResponse.ok) {
+    const raw = await uploadResponse.text().catch(() => '');
+    let message = raw || `Failed to upload file (${uploadResponse.status})`;
+    try {
+      const parsed = raw ? JSON.parse(raw) : null;
+      message =
+        parsed?.message ||
+        parsed?.error ||
+        parsed?.details ||
+        message;
+    } catch {
+      // Keep raw message fallback
+    }
+    throw new Error(message);
+  }
+
+  return { imagePath: storagePath };
 }
 
 export async function getStaffDashboardOverview() {
