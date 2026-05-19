@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import PortalPageIntro from '../portal-page-intro';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -796,18 +797,12 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-
       {/* ── Page Header ───────────────────────────────────────────────── */}
-      <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">
-            {mode === 'admin' ? 'Admin' : 'Staff'} Reports &amp; Analytics
-          </h1>
-          <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Filter submissions and export professional PDF summaries.
-          </p>
-        </div>
-      </div>
+      <PortalPageIntro
+        title={`${mode === 'admin' ? 'Admin' : 'Staff'} Reports & Analytics`}
+        description="Filter submissions and export professional PDF summaries."
+        className="mb-8"
+      />
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">

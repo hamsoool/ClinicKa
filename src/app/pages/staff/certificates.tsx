@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Skeleton } from '../../components/ui/skeleton';
@@ -747,12 +748,11 @@ export default function StaffRecordsAndCertificates() {
 
   return (
     <div className="min-w-0">
-      <div className="mb-8">
-        <h1 className="mb-2 text-3xl font-bold text-primary">Records & Certificates</h1>
-        <p className="text-muted-foreground">
-          Review approved records and generate medical forms or clearance certificates from one workspace.
-        </p>
-      </div>
+      <PortalPageIntro
+        className="mb-8"
+        title="Records & Certificates"
+        description="Review approved records and generate medical forms or clearance certificates from one workspace."
+      />
 
       <Tabs className="min-w-0" value={activeWorkspaceTab} onValueChange={handleWorkspaceTabChange}>
         <TabsList className="mb-4 h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-2">

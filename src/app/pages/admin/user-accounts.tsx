@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Label } from '../../components/ui/label';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { Textarea } from '../../components/ui/textarea';
 import {
   Dialog,
@@ -415,18 +416,16 @@ export default function AdminUserAccounts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">User Accounts</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Archive student and clinic staff accounts first, then permanently delete them from the archive when they should be removed from the system.
-          </p>
-        </div>
-        <Button className="w-full sm:w-fit md:self-auto" onClick={() => setOpenCreate(true)}>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Create Account
-        </Button>
-      </div>
+      <PortalPageIntro
+        title="User Accounts"
+        description="Archive student and clinic staff accounts first, then permanently delete them from the archive when they should be removed from the system. Administrator account deletion stays reserved for the super admin console."
+        actions={(
+          <Button className="w-full sm:w-fit md:self-auto" onClick={() => setOpenCreate(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Create Account
+          </Button>
+        )}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <AccountSummaryButton

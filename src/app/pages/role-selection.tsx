@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '../components/ui/accordion';
+import {
   ArrowRight,
   ClipboardList,
   FileText,
@@ -11,18 +17,19 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import studentMedicalFormPreview from '../../assets/previews/student-medical-form-preview.png';
 import { useAuth } from '../lib/auth';
 
 const LOGO_SRC = '/logo.png';
 const LANDING_PREVIEW_SRC = '/clinickalogo.png';
-const FORM_PREVIEW_SRC = new URL('../../../exports/figma/05-student-medical-form.png', import.meta.url).href;
+const FORM_PREVIEW_SRC = studentMedicalFormPreview;
 const CAMPUS_PREVIEW_SRC = '/backdrop.jpg';
 
 const navLinks = [
   { label: 'Services', target: 'features' },
   { label: 'Submissions', target: 'workflow' },
   { label: 'Records', target: 'clearance' },
-  { label: 'Support', target: 'resources' },
+  { label: 'FAQ', target: 'faq' },
 ];
 
 const workflowHighlights = [
@@ -40,6 +47,45 @@ const workflowHighlights = [
     title: 'Clinic review workflow',
     description:
       'Clinic staff can verify submissions, save review notes, return records for correction, and prepare approved clearances.',
+  },
+];
+
+const studentFaqs = [
+  {
+    value: 'faq-get-started',
+    question: 'How do I start my yearly medical submission in ClinicKa!?',
+    answer:
+      'Sign in to the portal, choose your school year, complete the privacy waiver, then fill out the medical form and upload the required files before submitting.',
+  },
+  {
+    value: 'faq-requirements',
+    question: 'What should I prepare before I fill out the form?',
+    answer:
+      'Have your updated student details ready along with the clinic requirements for your intake, such as your signed waiver, medical history information, and any requested lab results or supporting documents.',
+  },
+  {
+    value: 'faq-statuses',
+    question: 'What do the submission statuses mean?',
+    answer:
+      'Pending means your submission was received, in review means clinic staff are checking it, returned means corrections are needed, resubmitted means you sent an updated version, physical exam done means your exam was recorded, and approved means your record is cleared for the current workflow.',
+  },
+  {
+    value: 'faq-returned',
+    question: 'What should I do if my record is returned for correction?',
+    answer:
+      'Open your submission, review the clinic notes, update the answers or files they flagged, and resubmit through the same portal so the staff can continue the review without starting over.',
+  },
+  {
+    value: 'faq-clearance',
+    question: 'When can I view my medical clearance or certificate?',
+    answer:
+      'Once the clinic finishes reviewing your submission and marks it approved, you can return to your student record and clearance pages to view the latest cleared information available to you.',
+  },
+  {
+    value: 'faq-privacy',
+    question: 'Who can view my medical information?',
+    answer:
+      'ClinicKa! uses role-based access, so students, clinic staff, and administrators only see the parts of the system needed for their responsibilities inside the Gordon College clinic workflow.',
   },
 ];
 
@@ -437,6 +483,65 @@ export default function RoleSelection() {
                   <span>Unified clinic management dashboard</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="faq" className="border-t border-[#e2ebe7] py-16 md:py-20">
+          <div className="mx-auto grid max-w-[90rem] gap-10 px-5 sm:px-8 md:gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:px-10">
+            <div className="space-y-6">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#c9d9dd] bg-white/78 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_10px_35px_rgba(11,28,48,0.05)] backdrop-blur">
+                <span className="h-2 w-2 rounded-full bg-[#065f46]" />
+                Student FAQ
+              </div>
+              <div className="space-y-4">
+                <h2 className="max-w-xl text-3xl font-semibold tracking-[-0.04em] text-[#0b1c30] md:text-4xl">
+                  Questions students usually ask before they submit.
+                </h2>
+                <p className="max-w-xl text-base leading-7 text-[#4a5b68] md:text-lg md:leading-8">
+                  These quick answers cover the most common student concerns about starting a submission, preparing
+                  requirements, tracking status updates, and checking approved records in ClinicKa!.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-[28px] border border-white/80 bg-white/78 p-6 shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8f5ed] text-[#065f46]">
+                    <ClipboardList className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-5 text-xl font-semibold tracking-[-0.03em] text-[#0b1c30]">Before you begin</h3>
+                  <p className="mt-3 text-sm leading-7 text-[#4a5b68]">
+                    Prepare your school year selection, medical history details, and the files required by the clinic
+                    so your submission is easier to complete in one sitting.
+                  </p>
+                </div>
+
+                <div className="rounded-[28px] bg-[#004532] p-6 text-white shadow-[0_18px_45px_rgba(11,28,48,0.12)]">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/18">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-5 text-xl font-semibold tracking-[-0.03em]">Need more help?</h3>
+                  <p className="mt-3 text-sm leading-7 text-white/85">
+                    Students can sign in to check submission updates, review returned notes, and revisit approved
+                    clearance details from one secure portal.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-white/80 bg-white/82 p-5 shadow-[0_20px_60px_rgba(11,28,48,0.08)] backdrop-blur md:p-7">
+              <Accordion type="single" collapsible defaultValue={studentFaqs[0]?.value}>
+                {studentFaqs.map((item) => (
+                  <AccordionItem key={item.value} value={item.value} className="border-[#dfe9e6]">
+                    <AccordionTrigger className="py-5 text-base font-semibold text-[#0b1c30] hover:no-underline md:text-lg">
+                      {item.question}
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-5 pr-6 text-sm leading-7 text-[#4a5b68] md:pr-10 md:text-base">
+                      {item.answer}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             </div>
           </div>
         </section>

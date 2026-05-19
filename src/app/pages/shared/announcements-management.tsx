@@ -8,6 +8,7 @@ import {
   uploadAnnouncementImage,
   type AnnouncementUpsertInput,
 } from '../../lib/api';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { useAuth } from '../../lib/auth';
 
 type ManagementMode = 'staff' | 'admin';
@@ -247,16 +248,15 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
   return (
     <div className="min-h-screen bg-gradient-to-br from-surface-container via-surface-container-lowest to-surface-container-lowest">
       <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-        <section className="mb-8 space-y-3">
-          <h1 className="text-3xl font-bold text-on-surface">
-            {isAdmin ? 'Announcement Hub' : 'My Announcements'}
-          </h1>
-          <p className="text-on-surface-variant">
-            {isAdmin
+        <PortalPageIntro
+          className="mb-8"
+          title={isAdmin ? 'Announcement Hub' : 'My Announcements'}
+          description={
+            isAdmin
               ? 'Manage all announcements across the platform. Create, edit, and delete posts to keep everyone informed.'
-              : 'Create and manage your own announcements. Share important updates and information with your audience.'}
-          </p>
-        </section>
+              : 'Create and manage your own announcements. Share important updates and information with your audience.'
+          }
+        />
 
         <section className="grid gap-6 lg:grid-cols-[1fr_1.35fr]">
           {/* Form Section */}

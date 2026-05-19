@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Progress } from '../../components/ui/progress';
+import StudentPageIntro from '../../components/student-page-intro';
 import { useAuth } from '../../lib/auth';
 import { MedicalFormStepContent } from './medical-form/medical-form-step-content';
 import { MedicalFormSubmittedView } from './medical-form/medical-form-submitted-view';
@@ -138,14 +139,17 @@ export default function StudentMedicalForm() {
           Back to Year Selection
         </Button>
 
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold text-primary sm:text-3xl md:text-4xl">Year {year} Medical Record Form</h1>
-          <p className="text-base text-muted-foreground sm:text-lg">
-            Step {step} of {totalSteps}
-          </p>
-        </div>
+        <StudentPageIntro
+          title={`Year ${year} Medical Record Form`}
+          description="Complete each section carefully. Your progress is saved automatically while you work."
+          className="max-w-4xl"
+        />
 
-        <div>
+        <div className="space-y-2">
+          <div className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant sm:flex-row sm:items-center sm:justify-between">
+            <span>Submission progress</span>
+            <span>Step {step} of {totalSteps}</span>
+          </div>
           <Progress value={(step / totalSteps) * 100} className="h-2" />
         </div>
 

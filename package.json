@@ -1,5 +1,6 @@
 {
-  "name": "@figma/my-make-file",
+  "name": "clinicka",
+  "description": "Clinic management portal for Gordon College",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -86,8 +87,6 @@
     "@types/node": "^22.15.3",
     "@types/react": "18.3.1",
     "@types/react-dom": "18.3.1",
-    "playwright": "^1.58.2",
-    "supabase": "^2.96.0",
     "tailwindcss": "4.1.12",
     "typescript": "^5.8.3",
     "vite": "6.3.5",

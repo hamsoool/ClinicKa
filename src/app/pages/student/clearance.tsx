@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Download, FileText, ShieldCheck, Clock, AlertCircle } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import StudentPageIntro from '../../components/student-page-intro';
 import type { SubmissionRecord } from '../../lib/record-types';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import MedicalRecordPreview from '../../components/medical-record-preview';
@@ -190,13 +191,11 @@ export default function StudentClearance() {
   const isPhysicalExamDone = normalizedStatus === 'physical_exam_done';
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <div className="mb-2 sm:mb-4">
-        <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Records & Clearance</h1>
-        <p className="text-muted-foreground">
-          Track your submissions, open your medical form, and download your clearance when approved.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-6">
+      <StudentPageIntro
+        title="Records & Clearance"
+        description="Track your submissions, open your medical form, and download your clearance when approved."
+      />
 
       <Tabs className="min-w-0" value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-3">

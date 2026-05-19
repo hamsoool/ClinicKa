@@ -9,6 +9,7 @@ import {
   FileWarning,
   ShieldCheck,
 } from 'lucide-react';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getRoleLabel } from '../../lib/api';
@@ -225,24 +226,20 @@ export default function StaffDashboard() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
-      <div className="rounded-[1.5rem] border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
-              Clinic Operations Portal
-            </p>
-            <h1 className="mt-2 text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
-              Welcome, {displayName}
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm text-on-surface-variant sm:text-base">
-              Review records by status below, then open the queue for full filtering.
-            </p>
-          </div>
-          {!overviewLoading && overviewFetching ? (
+      <PortalPageIntro
+        eyebrow={(
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+            Clinic Operations Portal
+          </span>
+        )}
+        title={`Welcome, ${displayName}`}
+        description="Review records by status below, then open the queue for full filtering."
+        actions={
+          !overviewLoading && overviewFetching ? (
             <span className="text-xs text-on-surface-variant">Refreshing queue...</span>
-          ) : null}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
         {summaryCards.map((card) => {

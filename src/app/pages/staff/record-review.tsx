@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../components/ui/dialog';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { toast } from 'sonner';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -645,59 +646,57 @@ export default function StaffRecordReview() {
         Back to Submissions
       </Button>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold text-primary">{isDoctor ? 'Clinic Doctor Review' : 'Clinic Staff Review'}</h1>
-            {getStatusBadge(persistedStatus)}
+      <PortalPageIntro
+        title={isDoctor ? 'Clinic Doctor Review' : 'Clinic Staff Review'}
+        description="Review, verify, and update the student medical record before finalizing the clinic decision."
+        actions={(
+          <div className="rounded-xl border bg-card px-4 py-3 text-sm shadow-sm">
+            <p className="font-medium text-foreground">Current recommendation</p>
+            <p className="mt-1 text-muted-foreground">
+              {reviewStatus === 'approved'
+                ? 'Ready for clearance release'
+                : reviewStatus === 'in_review'
+                  ? isAssignedToAnotherReviewer
+                    ? `${activeReviewerName} is currently the active reviewer for this submission.`
+                    : submission.reviewedByStaffId
+                      ? 'You are currently the active reviewer for this submission.'
+                      : 'Currently being reviewed by the clinic.'
+                : reviewStatus === 'physical_exam_done'
+                  ? 'Physical exam completed and ready for final clearance decision'
+                : reviewStatus === 'returned'
+                  ? 'Needs student correction'
+                  : 'Still under clinical review'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Badge className={physicalExamStatus === 'Completed' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
+                Physical Exam: {physicalExamStatus}
+              </Badge>
+              <Badge className={clearanceStatus === 'Approved' ? 'bg-green-100 text-green-800 hover:bg-green-100' : clearanceStatus === 'Returned' ? 'bg-red-100 text-red-800 hover:bg-red-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
+                Clearance: {clearanceStatus}
+              </Badge>
+              <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
+                Lab Source:{' '}
+                {submission.labTestLocation === 'jlgh'
+                  ? 'James L. Gordon Hospital'
+                  : submission.labTestLocation === 'other'
+                  ? submission.otherClinicName || 'External Clinic/Lab'
+                  : 'Not specified'}
+              </Badge>
+            </div>
           </div>
-          <p className="text-muted-foreground">
-            Review, verify, and update the student medical record before finalizing the clinic decision.
-          </p>
-          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {recordForm.firstName} {recordForm.lastName}
-            </span>
-            <span>{recordForm.studentId}</span>
-            <span>{recordForm.course || 'Course not set'}</span>
-          </div>
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          {getStatusBadge(persistedStatus)}
         </div>
-
-        <div className="rounded-xl border bg-card px-4 py-3 text-sm shadow-sm">
-          <p className="font-medium text-foreground">Current recommendation</p>
-          <p className="mt-1 text-muted-foreground">
-            {reviewStatus === 'approved'
-              ? 'Ready for clearance release'
-              : reviewStatus === 'in_review'
-                ? isAssignedToAnotherReviewer
-                  ? `${activeReviewerName} is currently the active reviewer for this submission.`
-                  : submission.reviewedByStaffId
-                    ? 'You are currently the active reviewer for this submission.'
-                    : 'Currently being reviewed by the clinic.'
-              : reviewStatus === 'physical_exam_done'
-                ? 'Physical exam completed and ready for final clearance decision'
-              : reviewStatus === 'returned'
-                ? 'Needs student correction'
-                : 'Still under clinical review'}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Badge className={physicalExamStatus === 'Completed' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
-              Physical Exam: {physicalExamStatus}
-            </Badge>
-            <Badge className={clearanceStatus === 'Approved' ? 'bg-green-100 text-green-800 hover:bg-green-100' : clearanceStatus === 'Returned' ? 'bg-red-100 text-red-800 hover:bg-red-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
-              Clearance: {clearanceStatus}
-            </Badge>
-            <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
-              Lab Source:{' '}
-              {submission.labTestLocation === 'jlgh'
-                ? 'James L. Gordon Hospital'
-                : submission.labTestLocation === 'other'
-                ? submission.otherClinicName || 'External Clinic/Lab'
-                : 'Not specified'}
-            </Badge>
-          </div>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {recordForm.firstName} {recordForm.lastName}
+          </span>
+          <span>{recordForm.studentId}</span>
+          <span>{recordForm.course || 'Course not set'}</span>
         </div>
-      </div>
+      </PortalPageIntro>
 
       {isAssignedToAnotherReviewer ? (
         <Card className="border-amber-200 bg-amber-50">

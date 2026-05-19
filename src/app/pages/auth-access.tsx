@@ -36,13 +36,14 @@ import {
   isPasswordLongEnough,
   MIN_PASSWORD_LENGTH,
 } from '../lib/password-policy';
+import studentDashboardPreview from '../../assets/previews/student-dashboard-preview.png';
 import { useAuth } from '../lib/auth';
 import { LegalDialog } from './auth/legal-dialog';
 import { CONTACT_EMAIL, POLICY_UPDATED_AT, privacySections, termsSections } from './auth/legal-content';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 const AUTH_LOGO_SRC = '/logo.png';
-const DASHBOARD_PREVIEW_SRC = new URL('../../../exports/figma/02-student-dashboard.png', import.meta.url).href;
+const DASHBOARD_PREVIEW_SRC = studentDashboardPreview;
 
 function deriveStudentIdFromEmail(email?: string | null) {
   const localPart = (email || '').trim().toLowerCase().split('@')[0] || '';

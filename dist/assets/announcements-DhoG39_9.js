@@ -1,1 +1,0 @@
-import{j as t}from"./vendor-react-CWIi4Oxr.js";import{A as n}from"./announcements-management-B7CLIT37.js";import"./useQuery-BjEdNDqr.js";import"./index-DTtACSS4.js";import"./vendor-charts-DkPmYEJI.js";import"./vendor-radix-CzMZUR1_.js";function f(){return t.jsx(n,{mode:"staff"})}export{f as default};

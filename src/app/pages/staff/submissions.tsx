@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { ChevronDown, ChevronUp, Eye, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -210,12 +211,11 @@ export default function StaffSubmissions() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-primary mb-2">Student Submissions</h1>
-        <p className="text-muted-foreground">
-          Staff queue data is loaded in smaller server-filtered batches so the clinic dashboard stays responsive during heavy submission days.
-        </p>
-      </div>
+      <PortalPageIntro
+        className="mb-8"
+        title="Student Submissions"
+        description="Staff queue data is loaded in smaller server-filtered batches so the clinic dashboard stays responsive during heavy submission days."
+      />
 
       <Card className="mb-6">
         <CardContent className="pt-6 space-y-4">

@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Checkbox } from '../../components/ui/checkbox';
+import StudentPageIntro from '../../components/student-page-intro';
 import { Label } from '../../components/ui/label';
 import {
   DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT,
@@ -44,14 +45,10 @@ export default function StudentPrivacyWaiver() {
         Back to Year Selection
       </button>
 
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-on-surface">Before You Continue</h1>
-          <p className="mt-2 text-sm text-on-surface-variant">
-            Make sure your profile requirements are complete before proceeding to the {yearLabel} medical record form.
-          </p>
-        </div>
-      </div>
+      <StudentPageIntro
+        title="Before You Continue"
+        description={`Make sure your profile requirements are complete before proceeding to the ${yearLabel} medical record form.`}
+      />
 
       <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
         <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
