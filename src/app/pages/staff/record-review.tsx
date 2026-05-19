@@ -171,6 +171,25 @@ function calculateBmi(weight: string, height: string) {
   return (weightValue / (meters * meters)).toFixed(2);
 }
 
+function normalizeDateInputValue(value?: string | null) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  // Accept full ISO values by truncating to date part first.
+  const candidate = raw.includes('T') ? raw.slice(0, 10) : raw;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return '';
+
+  const [year, month, day] = candidate.split('-').map((part) => Number(part));
+  if (!year || !month || !day) return '';
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const isSameDate =
+    date.getUTCFullYear() === year
+    && date.getUTCMonth() + 1 === month
+    && date.getUTCDate() === day;
+
+  return isSameDate ? candidate : '';
+}
+
 function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
   return {
     studentId: submission?.studentId || '',
@@ -182,7 +201,7 @@ function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
     year: submission?.year || '',
     age: submission?.age || '',
     sex: submission?.sex || '',
-    birthday: submission?.birthday || '',
+    birthday: normalizeDateInputValue(submission?.birthday),
     civilStatus: submission?.civilStatus || '',
     contactNumber: submission?.contactNumber || '',
     address: submission?.address || '',
@@ -229,10 +248,10 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
     extremities: submission?.staffMeasurements?.extremities || '',
     others: submission?.staffMeasurements?.others || '',
     examinedBy: submission?.staffMeasurements?.examinedBy || '',
-    xrayDate: submission?.labResults?.xrayDate || '',
+    xrayDate: normalizeDateInputValue(submission?.labResults?.xrayDate),
     xrayResult: submission?.labResults?.xrayResult || 'normal',
     xrayFindings: submission?.labResults?.xrayFindings || '',
-    cbcDate: submission?.labResults?.cbcDate || '',
+    cbcDate: normalizeDateInputValue(submission?.labResults?.cbcDate),
     hemoglobin: submission?.labResults?.hemoglobin || '',
     hematocrit: submission?.labResults?.hematocrit || '',
     wbc: submission?.labResults?.wbc || '',
@@ -240,7 +259,7 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
     bloodType: submission?.labResults?.bloodType || '',
     glucose: submission?.labResults?.glucose || '',
     protein: submission?.labResults?.protein || '',
-    urinalysisDate: submission?.labResults?.urinalysisDate || '',
+    urinalysisDate: normalizeDateInputValue(submission?.labResults?.urinalysisDate),
     urinalysisGlucose: submission?.labResults?.urinalysisGlucose || '',
     urinalysisProtein: submission?.labResults?.urinalysisProtein || '',
   };
@@ -253,7 +272,7 @@ function createClearanceForm(submission?: SubmissionDetails | null): ClearanceFo
     remarks: submission?.clearanceInfo?.remarks || '',
     purpose: submission?.clearanceInfo?.purpose || 'enrolment',
     controlNo: submission?.clearanceInfo?.controlNo || '',
-    issuedDate: submission?.clearanceInfo?.issuedDate || '',
+    issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate),
   };
 }
 
@@ -377,7 +396,11 @@ export default function StaffRecordReview() {
 
   function updateRecordField<K extends keyof RecordForm>(field: K, value: RecordForm[K]) {
     setRecordForm((prev) => {
-      const next = { ...prev, [field]: value };
+      const normalizedValue =
+        field === 'birthday'
+          ? (normalizeDateInputValue(String(value)) as RecordForm[K])
+          : value;
+      const next = { ...prev, [field]: normalizedValue };
 
       if (field === 'weight' || field === 'height') {
         next.bmi = calculateBmi(
@@ -420,7 +443,11 @@ export default function StaffRecordReview() {
 
   function updateAssessmentField<K extends keyof AssessmentForm>(field: K, value: AssessmentForm[K]) {
     setAssessmentForm((prev) => {
-      const next = { ...prev, [field]: value };
+      const normalizedValue =
+        field === 'xrayDate' || field === 'cbcDate' || field === 'urinalysisDate'
+          ? (normalizeDateInputValue(String(value)) as AssessmentForm[K])
+          : value;
+      const next = { ...prev, [field]: normalizedValue };
 
       if (field === 'weight' || field === 'height') {
         next.bmi = calculateBmi(
@@ -436,7 +463,10 @@ export default function StaffRecordReview() {
   function updateClearanceField<K extends keyof ClearanceForm>(field: K, value: ClearanceForm[K]) {
     setClearanceForm((prev) => ({
       ...prev,
-      [field]: value,
+      [field]:
+        field === 'issuedDate'
+          ? normalizeDateInputValue(String(value))
+          : value,
     }));
   }
 
@@ -447,6 +477,43 @@ export default function StaffRecordReview() {
     try {
       const statusToSave = nextStatus || reviewStatus;
       const notesToSave = customNotes !== undefined ? customNotes : staffNotes;
+      const preserveDoctorField = (
+        field:
+          | 'skin'
+          | 'heent'
+          | 'chestLungs'
+          | 'heart'
+          | 'abdomen'
+          | 'extremities'
+          | 'others'
+          | 'examinedBy',
+        incoming: string,
+      ) => {
+        if (isDoctor) return incoming;
+        const trimmedIncoming = String(incoming || '').trim();
+        if (trimmedIncoming) return incoming;
+        return (submission.staffMeasurements as any)?.[field] || '';
+      };
+
+      const staffMeasurementsPayload = {
+        bloodPressure: assessmentForm.bloodPressure,
+        cardiacRate: assessmentForm.cardiacRate,
+        respiratoryRate: assessmentForm.respiratoryRate,
+        temperature: assessmentForm.temperature,
+        weight: assessmentForm.weight,
+        height: assessmentForm.height,
+        bmi: assessmentForm.bmi,
+        visualAcuity: assessmentForm.visualAcuity,
+        skin: preserveDoctorField('skin', assessmentForm.skin),
+        heent: preserveDoctorField('heent', assessmentForm.heent),
+        chestLungs: preserveDoctorField('chestLungs', assessmentForm.chestLungs),
+        heart: preserveDoctorField('heart', assessmentForm.heart),
+        abdomen: preserveDoctorField('abdomen', assessmentForm.abdomen),
+        extremities: preserveDoctorField('extremities', assessmentForm.extremities),
+        others: preserveDoctorField('others', assessmentForm.others),
+        examinedBy: preserveDoctorField('examinedBy', assessmentForm.examinedBy),
+        staff_notes: notesToSave,
+      };
 
       await saveSubmissionReview(submissionId, {
         personalInfo: {
@@ -474,25 +541,7 @@ export default function StaffRecordReview() {
           height: recordForm.height,
           bmi: recordForm.bmi,
         },
-        staffMeasurements: {
-          bloodPressure: assessmentForm.bloodPressure,
-          cardiacRate: assessmentForm.cardiacRate,
-          respiratoryRate: assessmentForm.respiratoryRate,
-          temperature: assessmentForm.temperature,
-          weight: assessmentForm.weight,
-          height: assessmentForm.height,
-          bmi: assessmentForm.bmi,
-          visualAcuity: assessmentForm.visualAcuity,
-          skin: assessmentForm.skin,
-          heent: assessmentForm.heent,
-          chestLungs: assessmentForm.chestLungs,
-          heart: assessmentForm.heart,
-          abdomen: assessmentForm.abdomen,
-          extremities: assessmentForm.extremities,
-          others: assessmentForm.others,
-          examinedBy: assessmentForm.examinedBy,
-          staff_notes: notesToSave,
-        },
+        staffMeasurements: staffMeasurementsPayload,
         labResults: {
           xrayDate: assessmentForm.xrayDate,
           xrayResult: assessmentForm.xrayResult,
@@ -536,24 +585,7 @@ export default function StaffRecordReview() {
         bmi: recordForm.bmi,
         emergencyContact: recordForm.emergencyContact,
         medicalHistory: recordForm.medicalHistory,
-        staffMeasurements: {
-          bloodPressure: assessmentForm.bloodPressure,
-          cardiacRate: assessmentForm.cardiacRate,
-          respiratoryRate: assessmentForm.respiratoryRate,
-          temperature: assessmentForm.temperature,
-          weight: assessmentForm.weight,
-          height: assessmentForm.height,
-          bmi: assessmentForm.bmi,
-          visualAcuity: assessmentForm.visualAcuity,
-          skin: assessmentForm.skin,
-          heent: assessmentForm.heent,
-          chestLungs: assessmentForm.chestLungs,
-          heart: assessmentForm.heart,
-          abdomen: assessmentForm.abdomen,
-          extremities: assessmentForm.extremities,
-          others: assessmentForm.others,
-          examinedBy: assessmentForm.examinedBy,
-        },
+        staffMeasurements: staffMeasurementsPayload,
         labResults: {
           xrayDate: assessmentForm.xrayDate,
           xrayResult: assessmentForm.xrayResult,

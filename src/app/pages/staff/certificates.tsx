@@ -79,6 +79,34 @@ async function loadPdfDependencies() {
 }
 
 function buildLatestPerYear(records: SubmissionRecord[]) {
+  const examCompletenessScore = (record: SubmissionRecord) => {
+    const exam = record.staffMeasurements || {};
+    const values = [
+      exam.bloodPressure,
+      exam.cardiacRate,
+      exam.respiratoryRate,
+      exam.temperature,
+      exam.weight,
+      exam.height,
+      exam.bmi,
+      exam.visualAcuity,
+      exam.skin,
+      exam.heent,
+      exam.chestLungs,
+      exam.heart,
+      exam.abdomen,
+      exam.extremities,
+      exam.others,
+      exam.examinedBy,
+      record.bloodPressure,
+      record.weight,
+      record.height,
+      record.bmi,
+    ];
+
+    return values.filter((value) => String(value || '').trim().length > 0).length;
+  };
+
   return records.reduce<Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>>((acc, item) => {
     const yearNum = Number.parseInt(String(item.year || ''), 10) as 1 | 2 | 3 | 4;
     if (![1, 2, 3, 4].includes(yearNum)) return acc;
@@ -87,6 +115,17 @@ function buildLatestPerYear(records: SubmissionRecord[]) {
       acc[yearNum] = item;
       return acc;
     }
+
+    const currentScore = examCompletenessScore(current);
+    const nextScore = examCompletenessScore(item);
+    if (nextScore > currentScore) {
+      acc[yearNum] = item;
+      return acc;
+    }
+    if (currentScore > nextScore) {
+      return acc;
+    }
+
     const currentTs = new Date(current.updatedAt || current.submittedAt || 0).getTime();
     const nextTs = new Date(item.updatedAt || item.submittedAt || 0).getTime();
     if (nextTs >= currentTs) acc[yearNum] = item;
@@ -703,7 +742,7 @@ function StaffCertificatesWorkspace() {
                       <div className="overflow-hidden rounded-lg border bg-white">
                         <div className="px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
                           <div className="overflow-x-auto overscroll-x-contain">
-                            <div className="mx-auto w-max min-w-full">
+                            <div className="mx-auto w-max">
                               <div style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
                                 <MedicalClearancePreview ref={clearancePreviewRef} record={clearanceRecord} />
                               </div>

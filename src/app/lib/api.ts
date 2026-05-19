@@ -2467,10 +2467,47 @@ export async function getStudentRecords(studentId?: string) {
     return { records: [] };
   }
 
+  const attachProfileAssetsFallback = async (records: SubmissionRecord[]) => {
+    if (!Array.isArray(records) || records.length === 0) {
+      return records;
+    }
+
+    const hasMissingAssets = records.some(
+      (record) => !String(record?.photoUrl || '').trim() || !String(record?.signatureUrl || '').trim(),
+    );
+    if (!hasMissingAssets) {
+      return records;
+    }
+
+    try {
+      const me = await getMe();
+      const assets = await getStudentProfileAssets(
+        fallbackStudentId,
+        me?.student?.profile_id || me?.profile?.id || null,
+      );
+      const photoUrl = String(assets?.photoUrl || '').trim();
+      const signatureUrl = String(assets?.signatureUrl || '').trim();
+
+      if (!photoUrl && !signatureUrl) return records;
+
+      return records.map((record) => ({
+        ...record,
+        photoUrl: String(record?.photoUrl || '').trim() || photoUrl || undefined,
+        signatureUrl: String(record?.signatureUrl || '').trim() || signatureUrl || undefined,
+      }));
+    } catch {
+      return records;
+    }
+  };
+
   try {
-    return await apiRequest<{ records: SubmissionRecord[] }>(
+    const response = await apiRequest<{ records: SubmissionRecord[] }>(
       `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
     );
+    const enriched = await attachProfileAssetsFallback(
+      Array.isArray(response?.records) ? response.records : [],
+    );
+    return { records: enriched };
   } catch (error) {
     if (!shouldFallbackToRest(error)) {
       throw error;
@@ -2480,7 +2517,7 @@ export async function getStudentRecords(studentId?: string) {
   const records = await getMappedSubmissions(
     `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
   );
-  return { records };
+  return { records: await attachProfileAssetsFallback(records as SubmissionRecord[]) };
 }
 
 export async function getStudentAnnouncements() {
@@ -3059,6 +3096,20 @@ export async function saveSubmissionReview(id: string, review: any) {
 
     const me = await getMe();
   const reviewedBy = me.staff?.id || null;
+  const requestedControlNo = String(clearanceInfo.controlNo || '').trim();
+
+  // Guard early against duplicate control numbers so we can return a clear error
+  // instead of surfacing a generic DB unique-constraint failure from the certificates upsert.
+  if (requestedControlNo) {
+    const existingControlNoRows = await restRequest<any[]>(
+      'certificates',
+      `control_no=eq.${encodeURIComponent(requestedControlNo)}&select=submission_id,control_no&limit=1`,
+    ).catch(() => []);
+    const existing = (existingControlNoRows || [])[0];
+    if (existing?.submission_id && String(existing.submission_id) !== String(id)) {
+      throw new Error(`Control number "${requestedControlNo}" is already used in another certificate. Please use a unique control number.`);
+    }
+  }
 
   await Promise.all([
     restRequest(
