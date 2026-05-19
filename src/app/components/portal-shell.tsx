@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { Camera, KeyRound, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
+import { Camera, KeyRound, LogOut, X, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { cn } from './ui/utils';
 import {
@@ -17,8 +17,10 @@ import {
 export type PortalNavItem = {
   path: string;
   label: string;
+  subLabel?: string;
   mobileLabel: string;
   icon: LucideIcon;
+  mobileEmphasis?: boolean;
 };
 
 export type PortalTopAction = {
@@ -292,7 +294,19 @@ export default function PortalShell({
                       )}
                     >
                       <Icon className="h-5 w-5 shrink-0" />
-                      <span className="truncate">{item.label}</span>
+                      <span className="min-w-0 text-left">
+                        <span className="block truncate">{item.label}</span>
+                        {item.subLabel ? (
+                          <span
+                            className={cn(
+                              'mt-0.5 block truncate text-[11px] font-semibold leading-tight',
+                              active ? 'text-emerald-100/90' : 'text-emerald-100/55',
+                            )}
+                          >
+                            {item.subLabel}
+                          </span>
+                        ) : null}
+                      </span>
                     </button>
                   </li>
                 );
@@ -302,13 +316,6 @@ export default function PortalShell({
 
           <div className="mt-auto px-2 pt-4">
             <div className="space-y-1.5 border-t border-white/10 pt-4">
-              <button
-                type="button"
-                className="flex min-h-12 w-full items-center gap-3 rounded-md px-4 py-3 text-sm font-medium text-emerald-100/70 transition-colors hover:bg-emerald-800/50 hover:text-white"
-              >
-                <BrandIcon className="h-5 w-5 shrink-0" />
-                <span>Clinic Support</span>
-              </button>
               <button
                 type="button"
                 className="flex min-h-12 w-full items-center gap-3 rounded-md px-4 py-3 text-sm font-medium text-emerald-100/70 transition-colors hover:bg-emerald-800/50 hover:text-white"
@@ -335,16 +342,6 @@ export default function PortalShell({
         <div className="flex h-full items-center justify-between gap-2 px-4 md:gap-3 md:px-8">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMenuOpen(true)}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-outline-variant/60 bg-surface-container-lowest text-on-surface shadow-sm transition-colors hover:bg-surface-container md:hidden"
-                aria-label="Open navigation menu"
-                aria-controls="portal-sidebar"
-                aria-expanded={menuOpen}
-              >
-                <Menu className="h-4 w-4" />
-              </button>
               <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
                 <span className="sm:hidden">{brandSubtitle}</span>
                 <span className="hidden uppercase sm:inline">Clinic Management System</span>
@@ -474,6 +471,7 @@ export default function PortalShell({
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = isRouteActive(location.pathname, item.path);
+            const emphasized = item.mobileEmphasis;
 
             return (
               <button
@@ -483,7 +481,11 @@ export default function PortalShell({
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] leading-tight transition-colors sm:text-xs',
-                  active ? 'bg-primary-container/25 text-primary' : 'text-on-surface-variant hover:bg-surface-container-low',
+                  emphasized
+                    ? 'bg-primary text-white shadow-sm hover:bg-primary/90'
+                    : active
+                      ? 'bg-primary-container/25 text-primary'
+                      : 'text-on-surface-variant hover:bg-surface-container-low',
                 )}
               >
                 <Icon className="h-5 w-5 shrink-0" />

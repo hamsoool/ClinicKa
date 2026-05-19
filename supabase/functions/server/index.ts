@@ -212,6 +212,16 @@ function normalizeAdminSystemSettings(input: any = {}) {
   };
 }
 
+function isMissingKvStoreError(error: any) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    message.includes('kv_store_2a5e1a6b') ||
+    message.includes('schema cache') ||
+    message.includes('could not find the table') ||
+    (message.includes('relation') && message.includes('does not exist'))
+  );
+}
+
 async function getAdminSystemSettings() {
   const { data, error } = await supabase
     .from('kv_store_2a5e1a6b')
@@ -220,6 +230,9 @@ async function getAdminSystemSettings() {
     .maybeSingle();
 
   if (error) {
+    if (isMissingKvStoreError(error)) {
+      return getDefaultAdminSystemSettings();
+    }
     throw new Error(error.message);
   }
 
@@ -2338,7 +2351,14 @@ app.get("/student-notifications/state", async (c) => {
       .eq('key', getStudentNotificationStateKey(requester, studentId))
       .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (isMissingKvStoreError(error)) {
+        return c.json({
+          state: normalizeStudentNotificationState({}),
+        });
+      }
+      throw new Error(error.message);
+    }
 
     return c.json({
       state: normalizeStudentNotificationState(data?.value || {}),
@@ -2371,7 +2391,12 @@ app.put("/student-notifications/state", async (c) => {
         value: state,
       });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (isMissingKvStoreError(error)) {
+        return c.json({ success: true, persisted: false });
+      }
+      throw new Error(error.message);
+    }
 
     invalidateDashboardReadCaches();
     return c.json({ success: true });
@@ -2664,7 +2689,12 @@ app.put("/admin/system-settings", async (c) => {
         value: settings,
       });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (isMissingKvStoreError(error)) {
+        return c.json(settings);
+      }
+      throw new Error(error.message);
+    }
 
     return c.json(settings);
   } catch (error) {

@@ -6,7 +6,6 @@ import {
   Settings,
   ShieldCheck,
   ShieldPlus,
-  UserCog,
   Users,
 } from 'lucide-react';
 import PortalShell, {
@@ -20,11 +19,10 @@ import { useAuth } from '../../lib/auth';
 
 const navItems = [
   { path: '/admin', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
-  { path: '/admin/settings', label: 'System Settings', mobileLabel: 'Settings', icon: Settings },
-  { path: '/admin/staff', label: 'Clinic Staff', mobileLabel: 'Staff', icon: UserCog },
-  { path: '/admin/users', label: 'User Accounts', mobileLabel: 'Users', icon: Users },
-  { path: '/admin/announcements', label: 'Announcements', mobileLabel: 'Posts', icon: Megaphone },
   { path: '/admin/reports', label: 'Reports', mobileLabel: 'Reports', icon: BarChart3 },
+  { path: '/admin/users', label: 'User Accounts', subLabel: 'Clinic Staff included', mobileLabel: 'Users', icon: Users },
+  { path: '/admin/announcements', label: 'Announcements', mobileLabel: 'Posts', icon: Megaphone },
+  { path: '/admin/settings', label: 'System Settings', mobileLabel: 'Settings', icon: Settings },
 ] as const satisfies readonly PortalNavItem[];
 
 const topActions = [

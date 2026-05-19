@@ -3749,6 +3749,21 @@ const ADMIN_SYSTEM_SETTINGS_SEMESTERS = new Set<AdminSystemSettings['semester']>
 const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = new Set([15, 30, 45, 60, 120]);
 const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = new Set([0, 12, 24, 36]);
 
+function isMissingKvStoreError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
+  return (
+    message.includes('kv_store_2a5e1a6b') ||
+    message.includes('schema cache') ||
+    message.includes('could not find the table') ||
+    (message.includes('relation') && message.includes('does not exist'))
+  );
+}
+
+function isMissingRouteError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
+  return message.includes('404') || message.includes('not found');
+}
+
 function getDefaultAcademicYear() {
   const now = new Date();
   const startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
@@ -3889,9 +3904,7 @@ export async function getAdminSystemSettings() {
     writeStoredAdminSystemSettings(normalized);
     return normalized;
   } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : '';
-    const missingRoute = message.includes('404') || message.includes('not found');
-    if (!missingRoute) {
+    if (!isMissingRouteError(error) && !isMissingKvStoreError(error)) {
       throw error;
     }
 
@@ -3914,9 +3927,7 @@ export async function updateAdminSystemSettings(input: AdminSystemSettings) {
     writeStoredAdminSystemSettings(normalized);
     return normalized;
   } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : '';
-    const missingRoute = message.includes('404') || message.includes('not found');
-    if (!missingRoute) {
+    if (!isMissingRouteError(error) && !isMissingKvStoreError(error)) {
       throw error;
     }
 

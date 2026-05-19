@@ -435,7 +435,7 @@ export default function StudentDashboard() {
             {records.length > 0 ? (
               <button
                 className="shrink-0 text-xs font-semibold text-primary transition-colors hover:text-primary/80 sm:text-sm"
-                onClick={() => navigate('/student/records')}
+                onClick={() => navigate('/student/clearance?tab=history')}
               >
                 View records
               </button>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   ArrowRight,
@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getRoleLabel } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { SubmissionSummaryRecord } from '../../lib/record-types';
+import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import { useStaffDashboardOverviewQuery } from './staff-workflow-query';
 
 function formatEmailName(email?: string | null) {
@@ -100,17 +101,25 @@ function getActiveReviewerMessage(
 export default function StaffDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
+  const staffRoleLabel = getRoleLabel(me?.profile?.role, me?.staff?.position);
+  const staffPreferenceId = String(me?.staff?.id || me?.profile.email || '').trim();
+  const workspacePreferences = useMemo(
+    () => loadStaffWorkspacePreferences(staffPreferenceId, staffRoleLabel),
+    [staffPreferenceId, staffRoleLabel],
+  );
   const displayName =
     [me?.staff?.first_name || me?.profile.first_name || '', me?.staff?.last_name || me?.profile.last_name || '']
       .filter(Boolean)
       .join(' ')
       .trim() ||
     formatEmailName(me?.profile.email) ||
-    getRoleLabel(me?.profile?.role, me?.staff?.position);
+    staffRoleLabel;
   const currentStaffId = String(me?.staff?.id || '').trim();
 
-  const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>('pending');
+  const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>(workspacePreferences.reviewSortOrder);
+  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>(
+    workspacePreferences.dashboardQueueTab,
+  );
   const {
     data: overview,
     isLoading: overviewLoading,
@@ -123,6 +132,11 @@ export default function StaffDashboard() {
       console.error('Error loading clinic dashboard');
     }
   }, [isOverviewError]);
+
+  useEffect(() => {
+    setQueueSortOrder(workspacePreferences.reviewSortOrder);
+    setQueueTab(workspacePreferences.dashboardQueueTab);
+  }, [workspacePreferences]);
 
   if (overviewLoading || !overview) {
     return <PortalPageSkeleton variant="dashboard" />;

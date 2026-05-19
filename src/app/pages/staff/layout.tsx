@@ -1,13 +1,11 @@
 import { useEffect } from 'react';
 import {
   Activity,
-  Award,
   ClipboardCheck,
   FileText,
   Home,
   Megaphone,
   Settings,
-  ShieldPlus,
   Stethoscope,
 } from 'lucide-react';
 import PortalShell, {
@@ -23,15 +21,13 @@ import { getRoleLabel } from '../../lib/api';
 const navItems = [
   { path: '/staff', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
   { path: '/staff/submissions', label: 'Review Queue', mobileLabel: 'Queue', icon: ClipboardCheck },
-  { path: '/staff/records', label: 'Records Archive', mobileLabel: 'Records', icon: FileText },
+  { path: '/staff/records', label: 'Records & Certificates', mobileLabel: 'Records', icon: FileText },
   { path: '/staff/reports', label: 'Reports', mobileLabel: 'Reports', icon: Activity },
-  { path: '/staff/certificates', label: 'Certificates', mobileLabel: 'Certs', icon: Award },
   { path: '/staff/announcements', label: 'Announcements', mobileLabel: 'Posts', icon: Megaphone },
   { path: '/staff/settings', label: 'Settings', mobileLabel: 'Settings', icon: Settings },
 ] as const satisfies readonly PortalNavItem[];
 
 const topActions = [
-  { label: 'Clinic safeguards', icon: ShieldPlus },
   { label: 'Staff settings', icon: Settings, path: '/staff/settings' },
 ] as const satisfies readonly PortalTopAction[];
 

@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 import type { SubmissionSummaryRecord } from '../../lib/record-types';
 import { useAuth } from '../../lib/auth';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
+import { getRoleLabel } from '../../lib/api';
+import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import { useStaffSubmissionSummariesQuery } from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
@@ -43,6 +45,29 @@ function formatTimestamp(value?: string) {
   return `${date.toLocaleDateString()} at ${date.toLocaleTimeString()}`;
 }
 
+function getStatusFilterLabel(status: string) {
+  switch (status) {
+    case 'action_needed':
+      return 'Needs Action';
+    case 'all':
+      return 'All Records';
+    case 'pending':
+      return 'Pending';
+    case 'in_review':
+      return 'In Review';
+    case 'physical_exam_done':
+      return 'Physical Exam Done';
+    case 'approved':
+      return 'Approved';
+    case 'returned':
+      return 'Returned';
+    case 'resubmitted':
+      return 'Resubmitted';
+    default:
+      return status;
+  }
+}
+
 function getActiveReviewerMessage(
   submission: SubmissionSummaryRecord,
   currentStaffId?: string | null,
@@ -66,13 +91,22 @@ export default function StaffSubmissions() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { me } = useAuth();
+  const staffRoleLabel = getRoleLabel(me?.profile?.role, me?.staff?.position);
+  const staffPreferenceId = String(me?.staff?.id || me?.profile.email || '').trim();
+  const workspacePreferences = useMemo(
+    () => loadStaffWorkspacePreferences(staffPreferenceId, staffRoleLabel),
+    [staffPreferenceId, staffRoleLabel],
+  );
   const currentStaffId = String(me?.staff?.id || '').trim();
-  const statusFilter = parseStatusFilter(searchParams.get('status'));
+  const defaultStatusFilter = workspacePreferences.reviewQueueStatus;
+  const defaultSortOrder = workspacePreferences.reviewSortOrder;
+  const defaultShowAdvancedFilters = workspacePreferences.showAdvancedQueueFilters;
+  const statusFilter = parseStatusFilter(searchParams.get('status') ?? defaultStatusFilter);
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>(defaultSortOrder);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(defaultShowAdvancedFilters);
   const [currentPage, setCurrentPage] = useState(1);
 
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
@@ -82,10 +116,15 @@ export default function StaffSubmissions() {
     setCurrentPage(1);
   }, [deferredSearchQuery, statusFilter, departmentFilter, yearFilter, sortOrder]);
 
+  useEffect(() => {
+    setSortOrder(defaultSortOrder);
+    setShowAdvancedFilters(defaultShowAdvancedFilters);
+  }, [defaultShowAdvancedFilters, defaultSortOrder]);
+
   const updateStatusFilter = (nextStatus: string) => {
     const normalizedStatus = parseStatusFilter(nextStatus);
     const nextParams = new URLSearchParams(searchParams);
-    if (normalizedStatus === 'action_needed') {
+    if (normalizedStatus === defaultStatusFilter) {
       nextParams.delete('status');
     } else {
       nextParams.set('status', normalizedStatus);
@@ -136,19 +175,19 @@ export default function StaffSubmissions() {
 
   const clearFilters = () => {
     setSearchQuery('');
-    updateStatusFilter('action_needed');
+    updateStatusFilter(defaultStatusFilter);
     setDepartmentFilter('all');
     setYearFilter('all');
-    setSortOrder('desc');
-    setShowAdvancedFilters(false);
+    setSortOrder(defaultSortOrder);
+    setShowAdvancedFilters(defaultShowAdvancedFilters);
   };
 
   const hasActiveFilters =
     searchQuery ||
-    statusFilter !== 'action_needed' ||
+    statusFilter !== defaultStatusFilter ||
     departmentFilter !== 'all' ||
     yearFilter !== 'all' ||
-    sortOrder !== 'desc';
+    sortOrder !== defaultSortOrder;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -324,14 +363,13 @@ export default function StaffSubmissions() {
           {hasActiveFilters && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">Active filters:</span>
-              {statusFilter === 'action_needed' ? (
-                <Badge variant="outline" className="text-xs">Needs Action</Badge>
-              ) : null}
-              {sortOrder !== 'desc' && (
-                <Badge variant="outline" className="text-xs">Oldest First</Badge>
+              {statusFilter !== defaultStatusFilter && (
+                <Badge variant="outline" className="text-xs">{getStatusFilterLabel(statusFilter)}</Badge>
               )}
-              {statusFilter !== 'all' && statusFilter !== 'action_needed' && (
-                <Badge variant="outline" className="text-xs">{statusFilter}</Badge>
+              {sortOrder !== defaultSortOrder && (
+                <Badge variant="outline" className="text-xs">
+                  {sortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
+                </Badge>
               )}
               {departmentFilter !== 'all' && (
                 <Badge variant="outline" className="text-xs">{departmentFilter}</Badge>

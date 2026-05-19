@@ -5,6 +5,7 @@ import {
   saveStudentNotificationState,
   type StudentNotificationStatePayload,
 } from '../../lib/api';
+import { trackPendingStudentNotificationSave } from '../../lib/student-notification-save-queue';
 import { useStudentRecordsQuery } from './student-records-query';
 
 type NotifiableStatus = 'approved' | 'returned';
@@ -89,7 +90,13 @@ function persistLocalState(studentId: string, state: StoredNotificationState) {
 
 function persistState(studentId: string, state: StoredNotificationState) {
   persistLocalState(studentId, state);
-  void saveStudentNotificationState(studentId, state).catch(() => undefined);
+  const savePromise = saveStudentNotificationState(studentId, state)
+    .then(() => undefined)
+    .catch((error) => {
+      console.warn('Failed to persist student notification state:', error);
+    });
+  trackPendingStudentNotificationSave(studentId, savePromise);
+  return savePromise;
 }
 
 function getRecordTimestamp(record: SubmissionRecord) {
@@ -149,10 +156,22 @@ function sortNotifications(items: StoredNotificationItem[]) {
   return [...items].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
+function normalizeStateForComparison(state: StoredNotificationState): StoredNotificationState {
+  return {
+    items: sortNotifications(state.items).slice(0, MAX_NOTIFICATION_ITEMS),
+    snapshot: Object.fromEntries(
+      Object.entries(state.snapshot || {})
+        .filter(([key, value]) => key && typeof value === 'string')
+        .sort(([keyA], [keyB]) => keyA.localeCompare(keyB)),
+    ),
+  };
+}
+
 function mergeStoredStates(localState: StoredNotificationState, remoteState: StoredNotificationState) {
   const itemsById = new Map<string, StoredNotificationItem>();
   for (const item of remoteState.items) {
-    itemsById.set(item.id, item);
+    const localItem = localState.items.find((candidate) => candidate.id === item.id);
+    itemsById.set(item.id, localItem ? { ...item, ...localItem, read: Boolean(item.read || localItem.read) } : item);
   }
   for (const item of localState.items) {
     if (!itemsById.has(item.id)) {
@@ -167,6 +186,10 @@ function mergeStoredStates(localState: StoredNotificationState, remoteState: Sto
       ...remoteState.snapshot,
     },
   };
+}
+
+function areStoredStatesEqual(left: StoredNotificationState, right: StoredNotificationState) {
+  return JSON.stringify(normalizeStateForComparison(left)) === JSON.stringify(normalizeStateForComparison(right));
 }
 
 function haveSnapshotsChanged(previous: Record<string, string>, next: Record<string, string>) {
@@ -203,8 +226,8 @@ export function useStudentNotifications(studentId?: string | null) {
         setState((previousState) => {
           const mergedState = mergeStoredStates(previousState, remoteState);
           persistLocalState(normalizedStudentId, mergedState);
-          if (remoteState.items.length !== mergedState.items.length) {
-            void saveStudentNotificationState(normalizedStudentId, mergedState).catch(() => undefined);
+          if (!areStoredStatesEqual(remoteState, mergedState)) {
+            void persistState(normalizedStudentId, mergedState);
           }
           return mergedState;
         });

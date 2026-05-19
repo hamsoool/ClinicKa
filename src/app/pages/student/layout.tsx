@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-  Award,
   ClipboardList,
   FileCheck2,
   FilePlus,
-  HelpCircle,
   Home,
   Megaphone,
   User,
@@ -22,17 +20,14 @@ import { useStudentNotifications } from './student-notifications';
 
 const navItems = [
   { path: '/student', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
-  { path: '/student/records', label: 'Record History', mobileLabel: 'Records', icon: ClipboardList },
+  { path: '/student/clearance', label: 'Records & Clearance', mobileLabel: 'Records', icon: ClipboardList },
   { path: '/student/year-selection', label: 'Submit Record', mobileLabel: 'Submit', icon: FilePlus },
-  { path: '/student/requirements', label: 'Requirements', mobileLabel: 'Reqs', icon: FileCheck2 },
   { path: '/student/announcements', label: 'Announcements', mobileLabel: 'News', icon: Megaphone },
-  { path: '/student/clearance', label: 'Clearance', mobileLabel: 'Clear', icon: Award },
   { path: '/student/profile', label: 'Profile', mobileLabel: 'Profile', icon: User },
 ] as const satisfies readonly PortalNavItem[];
 
 const topActions = [
   { label: 'Profile settings', icon: User, path: '/student/profile' },
-  { label: 'Requirements help', icon: HelpCircle, path: '/student/requirements' },
 ] as const satisfies readonly PortalTopAction[];
 
 export default function StudentLayout() {

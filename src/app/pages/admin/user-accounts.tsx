@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -23,12 +24,14 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui/table';
-import { Archive, Download, Printer, Search, Trash2, UserPlus, Users, ArrowUpDown, RefreshCcw } from 'lucide-react';
+import { Archive, Download, Printer, Search, Trash2, UserCog, UserPlus, Users, ArrowUpDown, RefreshCcw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { cn } from '../../components/ui/utils';
 import { toast } from 'sonner';
 import {
   archiveUserAccount,
   createAdminAccount,
+  createAdminStaff,
   deleteArchivedUserAccount,
   restoreArchivedUserAccount,
   type AdminUserAccount,
@@ -40,6 +43,63 @@ import {
   useAdminUserAccountsQuery,
 } from './admin-workflow-query';
 
+const CLINIC_STAFF_ROLE_FILTER = 'clinic-staff';
+
+function isClinicStaffRole(role: string) {
+  return role === 'Clinic Staff' || role === 'Clinic Doctor';
+}
+
+function normalizeRoleFilter(value?: string | null) {
+  const raw = String(value || '').trim();
+  const normalized = raw.toLowerCase();
+
+  if (!raw || normalized === 'all') return 'all';
+  if (normalized === CLINIC_STAFF_ROLE_FILTER || normalized === 'clinic staff' || normalized === 'staff') {
+    return CLINIC_STAFF_ROLE_FILTER;
+  }
+  if (normalized === 'student') return 'Student';
+  if (normalized === 'clinic doctor') return 'Clinic Doctor';
+  if (normalized === 'administrator') return 'Administrator';
+  return 'all';
+}
+
+function matchesRoleFilter(role: string, filter: string) {
+  if (filter === 'all') return true;
+  if (filter === CLINIC_STAFF_ROLE_FILTER) return isClinicStaffRole(role);
+  return role === filter;
+}
+
+function AccountSummaryButton({
+  label,
+  value,
+  active,
+  children,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  active?: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'group flex min-h-[6.75rem] w-full items-center justify-between rounded-xl border bg-card p-5 text-left text-card-foreground transition-all hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary-container/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2',
+        active && 'border-primary/45 bg-primary-container/10 shadow-sm',
+      )}
+    >
+      <span>
+        <span className="block text-sm text-muted-foreground">{label}</span>
+        <span className="mt-2 block text-2xl font-bold text-on-surface sm:text-3xl">{value}</span>
+      </span>
+      {children}
+    </button>
+  );
+}
+
 const roleTone = (role: string) => {
   if (role === 'Administrator') {
     return 'bg-purple-100 text-purple-700';
@@ -48,7 +108,7 @@ const roleTone = (role: string) => {
     return 'bg-indigo-100 text-indigo-700';
   }
   if (role === 'Clinic Staff') {
-    return 'bg-blue-100 text-blue-700';
+    return 'bg-emerald-100 text-emerald-700';
   }
   return 'bg-slate-100 text-slate-700';
 };
@@ -112,9 +172,11 @@ function getDisplayName(account: { name?: string; email?: string | null; id?: st
 
 export default function AdminUserAccounts() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState('active');
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const urlRoleFilter = normalizeRoleFilter(searchParams.get('role'));
+  const [roleFilter, setRoleFilter] = useState(urlRoleFilter);
   const [openCreate, setOpenCreate] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<AdminUserAccount | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ArchivedUserAccount | null>(null);
@@ -136,6 +198,7 @@ export default function AdminUserAccounts() {
     studentId: '',
     department: '',
     course: '',
+    staffPosition: 'Clinic Staff',
   });
 
   const { data: activeData, isError: isErrorActive } = useAdminUserAccountsQuery();
@@ -149,13 +212,36 @@ export default function AdminUserAccounts() {
       toast.error('Failed to load user accounts');
     }
   }, [isErrorActive, isErrorArchived]);
-  
+
+  useEffect(() => {
+    setRoleFilter((current) => (current === urlRoleFilter ? current : urlRoleFilter));
+  }, [urlRoleFilter]);
+
+  const applyRoleFilter = (value: string) => {
+    const nextFilter = normalizeRoleFilter(value);
+    setRoleFilter(nextFilter);
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextFilter === 'all') {
+      nextParams.delete('role');
+    } else {
+      nextParams.set('role', nextFilter);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const showAccounts = (nextTab: 'active' | 'archive', nextRoleFilter = 'all') => {
+    setTab(nextTab);
+    setSearchQuery('');
+    setSelectedUserIds(new Set());
+    applyRoleFilter(nextRoleFilter);
+  };
 
   const filteredActiveUsers = useMemo(
     () =>
       userAccounts.filter((user) => {
         if (!matchesSearch(user, searchQuery)) return false;
-        if (roleFilter !== 'all' && user.role !== roleFilter) return false;
+        if (!matchesRoleFilter(user.role, roleFilter)) return false;
         return true;
       }),
     [searchQuery, roleFilter, userAccounts],
@@ -165,7 +251,7 @@ export default function AdminUserAccounts() {
     () =>
       archivedAccounts.filter((user) => {
         if (!matchesSearch(user, searchQuery)) return false;
-        if (roleFilter !== 'all' && user.role !== roleFilter) return false;
+        if (!matchesRoleFilter(user.role, roleFilter)) return false;
         return true;
       }),
     [archivedAccounts, searchQuery, roleFilter],
@@ -257,20 +343,34 @@ export default function AdminUserAccounts() {
       toast.error('Student ID is required for student accounts');
       return;
     }
+    if (form.role === 'staff' && (!form.firstName.trim() || !form.lastName.trim())) {
+      toast.error('First name and last name are required for clinic staff accounts');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
-      await createAdminAccount({
-        email: form.email.trim(),
-        password: form.password,
-        role: form.role,
-        firstName: form.firstName.trim() || undefined,
-        lastName: form.lastName.trim() || undefined,
-        studentId: form.role === 'student' ? form.studentId.trim() : undefined,
-        department: form.department.trim() || undefined,
-        course: form.course.trim() || undefined,
-      });
-      toast.success('Account created without email verification');
+      if (form.role === 'staff') {
+        await createAdminStaff({
+          email: form.email.trim(),
+          password: form.password,
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          position: form.staffPosition,
+        });
+      } else {
+        await createAdminAccount({
+          email: form.email.trim(),
+          password: form.password,
+          role: form.role,
+          firstName: form.firstName.trim() || undefined,
+          lastName: form.lastName.trim() || undefined,
+          studentId: form.role === 'student' ? form.studentId.trim() : undefined,
+          department: form.department.trim() || undefined,
+          course: form.course.trim() || undefined,
+        });
+      }
+      toast.success(form.role === 'staff' ? 'Staff account created without email verification' : 'Account created without email verification');
       setOpenCreate(false);
       setForm({
         email: '',
@@ -281,6 +381,7 @@ export default function AdminUserAccounts() {
         studentId: '',
         department: '',
         course: '',
+        staffPosition: 'Clinic Staff',
       });
       await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
@@ -448,6 +549,15 @@ export default function AdminUserAccounts() {
   };
 
   const protectedCount = userAccounts.filter((user) => !user.canArchive).length;
+  const clinicStaffCount = userAccounts.filter((user) => isClinicStaffRole(user.role)).length;
+  const accountSearchPlaceholder =
+    roleFilter === CLINIC_STAFF_ROLE_FILTER
+      ? tab === 'archive'
+        ? 'Search archived clinic staff'
+        : 'Search clinic staff accounts'
+      : tab === 'archive'
+        ? 'Search archived accounts'
+        : 'Search active accounts';
 
   return (
     <div className="space-y-6">
@@ -464,34 +574,39 @@ export default function AdminUserAccounts() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center justify-between p-5">
-            <div>
-              <p className="text-sm text-muted-foreground">Active Accounts</p>
-              <p className="mt-2 text-2xl font-bold text-on-surface sm:text-3xl">{userAccounts.length}</p>
-            </div>
-            <Users className="h-8 w-8 text-primary" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between p-5">
-            <div>
-              <p className="text-sm text-muted-foreground">Archived Accounts</p>
-              <p className="mt-2 text-2xl font-bold text-on-surface sm:text-3xl">{archivedAccounts.length}</p>
-            </div>
-            <Archive className="h-8 w-8 text-amber-600" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between p-5">
-            <div>
-              <p className="text-sm text-muted-foreground">Protected Admins</p>
-              <p className="mt-2 text-2xl font-bold text-on-surface sm:text-3xl">{protectedCount}</p>
-            </div>
-            <Badge className="bg-purple-100 px-3 py-1 text-purple-700">Protected</Badge>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <AccountSummaryButton
+          label="Active Accounts"
+          value={userAccounts.length}
+          active={tab === 'active' && roleFilter === 'all'}
+          onClick={() => showAccounts('active')}
+        >
+          <Users className="h-8 w-8 text-primary transition-transform group-hover:scale-110" />
+        </AccountSummaryButton>
+        <AccountSummaryButton
+          label="Clinic Staff"
+          value={clinicStaffCount}
+          active={tab === 'active' && roleFilter === CLINIC_STAFF_ROLE_FILTER}
+          onClick={() => showAccounts('active', CLINIC_STAFF_ROLE_FILTER)}
+        >
+          <UserCog className="h-8 w-8 text-emerald-700 transition-transform group-hover:scale-110" />
+        </AccountSummaryButton>
+        <AccountSummaryButton
+          label="Archived Accounts"
+          value={archivedAccounts.length}
+          active={tab === 'archive' && roleFilter === 'all'}
+          onClick={() => showAccounts('archive')}
+        >
+          <Archive className="h-8 w-8 text-amber-600 transition-transform group-hover:scale-110" />
+        </AccountSummaryButton>
+        <AccountSummaryButton
+          label="Protected Admins"
+          value={protectedCount}
+          active={tab === 'active' && roleFilter === 'Administrator'}
+          onClick={() => showAccounts('active', 'Administrator')}
+        >
+          <Badge className="bg-purple-100 px-3 py-1 text-purple-700 transition-transform group-hover:scale-105">Protected</Badge>
+        </AccountSummaryButton>
       </div>
 
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
@@ -514,7 +629,7 @@ export default function AdminUserAccounts() {
               <Tabs value={form.role} onValueChange={(value) => setForm((prev) => ({ ...prev, role: value as 'student' | 'staff' | 'admin' }))}>
                 <TabsList className="w-full">
                   <TabsTrigger value="student">Student</TabsTrigger>
-                  <TabsTrigger value="staff">Staff</TabsTrigger>
+                  <TabsTrigger value="staff">Clinic Staff</TabsTrigger>
                   <TabsTrigger value="admin">Admin</TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -543,6 +658,23 @@ export default function AdminUserAccounts() {
                   <Label htmlFor="ua-course">Course</Label>
                   <Input id="ua-course" value={form.course} onChange={(e) => setForm((prev) => ({ ...prev, course: e.target.value }))} />
                 </div>
+              </div>
+            ) : null}
+            {form.role === 'staff' ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="ua-staff-position">Position</Label>
+                <Select
+                  value={form.staffPosition}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, staffPosition: value }))}
+                >
+                  <SelectTrigger id="ua-staff-position">
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
+                    <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             ) : null}
           </div>
@@ -781,19 +913,28 @@ export default function AdminUserAccounts() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
-                placeholder={tab === 'archive' ? 'Search archived accounts' : 'Search active accounts'}
+                placeholder={accountSearchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <Button
+              variant={roleFilter === CLINIC_STAFF_ROLE_FILTER ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => applyRoleFilter(roleFilter === CLINIC_STAFF_ROLE_FILTER ? 'all' : CLINIC_STAFF_ROLE_FILTER)}
+              className="w-full sm:w-auto"
+            >
+              <UserCog className="mr-2 h-4 w-4" />
+              Clinic Staff
+            </Button>
+            <Select value={roleFilter} onValueChange={applyRoleFilter}>
               <SelectTrigger className="w-full sm:w-[190px]">
                 <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="Student">Student</SelectItem>
-                <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
+                <SelectItem value={CLINIC_STAFF_ROLE_FILTER}>Clinic Staff</SelectItem>
                 <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
                 <SelectItem value="Administrator">Administrator</SelectItem>
               </SelectContent>
