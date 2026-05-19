@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -23,98 +24,47 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui/table';
-import { Archive, Download, Printer, Search, Trash2, UserPlus, Users, ArrowUpDown, RefreshCcw } from 'lucide-react';
+import { Archive, Download, Printer, Search, Trash2, UserCog, UserPlus, Users, ArrowUpDown, RefreshCcw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import {
   archiveUserAccount,
   createAdminAccount,
+  createAdminStaff,
   deleteArchivedUserAccount,
   restoreArchivedUserAccount,
   type AdminUserAccount,
   type ArchivedUserAccount,
 } from '../../lib/api';
+import { getPasswordLengthMessage, isPasswordLongEnough } from '../../lib/password-policy';
 import {
   invalidateAdminWorkflowQueries,
   useAdminArchivedAccountsQuery,
   useAdminUserAccountsQuery,
 } from './admin-workflow-query';
-
-const roleTone = (role: string) => {
-  if (role === 'Administrator') {
-    return 'bg-purple-100 text-purple-700';
-  }
-  if (role === 'Clinic Doctor') {
-    return 'bg-indigo-100 text-indigo-700';
-  }
-  if (role === 'Clinic Staff') {
-    return 'bg-blue-100 text-blue-700';
-  }
-  return 'bg-slate-100 text-slate-700';
-};
-
-const statusTone = (status: string) => {
-  if (status === 'Active') {
-    return 'bg-green-100 text-green-700';
-  }
-  if (status === 'Archived') {
-    return 'bg-amber-100 text-amber-700';
-  }
-  return 'bg-yellow-100 text-yellow-700';
-};
-
-function formatDateTime(value?: string) {
-  if (!value) return '-';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function matchesSearch(
-  account: Pick<AdminUserAccount, 'id' | 'name' | 'role' | 'email'> | Pick<ArchivedUserAccount, 'id' | 'name' | 'role' | 'email'>,
-  query: string,
-) {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return true;
-
-  return [account.id, account.name, account.role, account.email || '']
-    .join(' ')
-    .toLowerCase()
-    .includes(needle);
-}
-
-function prettifyEmailName(email?: string | null) {
-  const source = String(email || '').trim();
-  if (!source.includes('@')) return '';
-  return source
-    .split('@')[0]
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function getDisplayName(account: { name?: string; email?: string | null; id?: string }) {
-  const rawName = String(account.name || '').trim();
-  if (rawName && !rawName.includes('@')) return rawName;
-  const fromEmail = prettifyEmailName(account.email);
-  if (fromEmail) return fromEmail;
-  return rawName || String(account.id || 'Unnamed User');
-}
+import {
+  AccountSummaryButton,
+  CLINIC_STAFF_ROLE_FILTER,
+  downloadAccountsCsv,
+  formatDateTime,
+  getDisplayName,
+  isClinicStaffRole,
+  matchesRoleFilter,
+  matchesSearch,
+  normalizeRoleFilter,
+  roleTone,
+  sortAccountRows,
+  statusTone,
+  type SortConfig,
+} from './user-accounts-helpers';
 
 export default function AdminUserAccounts() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState('active');
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const urlRoleFilter = normalizeRoleFilter(searchParams.get('role'));
+  const [roleFilter, setRoleFilter] = useState(urlRoleFilter);
   const [openCreate, setOpenCreate] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<AdminUserAccount | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ArchivedUserAccount | null>(null);
@@ -122,7 +72,7 @@ export default function AdminUserAccounts() {
   const [archiveReason, setArchiveReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [bulkArchiveOpen, setBulkArchiveOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -130,12 +80,13 @@ export default function AdminUserAccounts() {
   const [form, setForm] = useState({
     email: '',
     password: '',
-    role: 'student' as 'student' | 'staff' | 'admin',
+    role: 'student' as 'student' | 'staff',
     firstName: '',
     lastName: '',
     studentId: '',
     department: '',
     course: '',
+    staffPosition: 'Clinic Staff',
   });
 
   const { data: activeData, isError: isErrorActive } = useAdminUserAccountsQuery();
@@ -149,13 +100,36 @@ export default function AdminUserAccounts() {
       toast.error('Failed to load user accounts');
     }
   }, [isErrorActive, isErrorArchived]);
-  
+
+  useEffect(() => {
+    setRoleFilter((current) => (current === urlRoleFilter ? current : urlRoleFilter));
+  }, [urlRoleFilter]);
+
+  const applyRoleFilter = (value: string) => {
+    const nextFilter = normalizeRoleFilter(value);
+    setRoleFilter(nextFilter);
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextFilter === 'all') {
+      nextParams.delete('role');
+    } else {
+      nextParams.set('role', nextFilter);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const showAccounts = (nextTab: 'active' | 'archive', nextRoleFilter = 'all') => {
+    setTab(nextTab);
+    setSearchQuery('');
+    setSelectedUserIds(new Set());
+    applyRoleFilter(nextRoleFilter);
+  };
 
   const filteredActiveUsers = useMemo(
     () =>
       userAccounts.filter((user) => {
         if (!matchesSearch(user, searchQuery)) return false;
-        if (roleFilter !== 'all' && user.role !== roleFilter) return false;
+        if (!matchesRoleFilter(user.role, roleFilter)) return false;
         return true;
       }),
     [searchQuery, roleFilter, userAccounts],
@@ -165,51 +139,21 @@ export default function AdminUserAccounts() {
     () =>
       archivedAccounts.filter((user) => {
         if (!matchesSearch(user, searchQuery)) return false;
-        if (roleFilter !== 'all' && user.role !== roleFilter) return false;
+        if (!matchesRoleFilter(user.role, roleFilter)) return false;
         return true;
       }),
     [archivedAccounts, searchQuery, roleFilter],
   );
 
-  const sortedActiveUsers = useMemo(() => {
-    let sortableItems = [...filteredActiveUsers];
-    if (sortConfig !== null) {
-      sortableItems.sort((a: any, b: any) => {
-        let aVal = a[sortConfig.key] || '';
-        let bVal = b[sortConfig.key] || '';
-        
-        if (sortConfig.key === 'lastActive') {
-          aVal = aVal ? new Date(aVal as string).getTime() : 0;
-          bVal = bVal ? new Date(bVal as string).getTime() : 0;
-        }
+  const sortedActiveUsers = useMemo(
+    () => sortAccountRows(filteredActiveUsers, sortConfig, ['lastActive']),
+    [filteredActiveUsers, sortConfig],
+  );
 
-        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return sortableItems;
-  }, [filteredActiveUsers, sortConfig]);
-
-  const sortedArchivedUsers = useMemo(() => {
-    let sortableItems = [...filteredArchivedUsers];
-    if (sortConfig !== null) {
-      sortableItems.sort((a: any, b: any) => {
-        let aVal = a[sortConfig.key] || '';
-        let bVal = b[sortConfig.key] || '';
-
-        if (sortConfig.key === 'archivedAt') {
-          aVal = aVal ? new Date(aVal as string).getTime() : 0;
-          bVal = bVal ? new Date(bVal as string).getTime() : 0;
-        }
-
-        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return sortableItems;
-  }, [filteredArchivedUsers, sortConfig]);
+  const sortedArchivedUsers = useMemo(
+    () => sortAccountRows(filteredArchivedUsers, sortConfig, ['archivedAt']),
+    [filteredArchivedUsers, sortConfig],
+  );
 
   const archiveableActiveUsers = useMemo(
     () => sortedActiveUsers.filter((user) => user.canArchive),
@@ -253,24 +197,42 @@ export default function AdminUserAccounts() {
       toast.error('Email and password are required');
       return;
     }
+    if (!isPasswordLongEnough(form.password)) {
+      toast.error(getPasswordLengthMessage());
+      return;
+    }
     if (form.role === 'student' && !form.studentId.trim()) {
       toast.error('Student ID is required for student accounts');
+      return;
+    }
+    if (form.role === 'staff' && (!form.firstName.trim() || !form.lastName.trim())) {
+      toast.error('First name and last name are required for clinic staff accounts');
       return;
     }
 
     try {
       setIsSubmitting(true);
-      await createAdminAccount({
-        email: form.email.trim(),
-        password: form.password,
-        role: form.role,
-        firstName: form.firstName.trim() || undefined,
-        lastName: form.lastName.trim() || undefined,
-        studentId: form.role === 'student' ? form.studentId.trim() : undefined,
-        department: form.department.trim() || undefined,
-        course: form.course.trim() || undefined,
-      });
-      toast.success('Account created without email verification');
+      if (form.role === 'staff') {
+        await createAdminStaff({
+          email: form.email.trim(),
+          password: form.password,
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          position: form.staffPosition,
+        });
+      } else {
+        await createAdminAccount({
+          email: form.email.trim(),
+          password: form.password,
+          role: form.role,
+          firstName: form.firstName.trim() || undefined,
+          lastName: form.lastName.trim() || undefined,
+          studentId: form.role === 'student' ? form.studentId.trim() : undefined,
+          department: form.department.trim() || undefined,
+          course: form.course.trim() || undefined,
+        });
+      }
+      toast.success(form.role === 'staff' ? 'Staff account created without email verification' : 'Account created without email verification');
       setOpenCreate(false);
       setForm({
         email: '',
@@ -281,6 +243,7 @@ export default function AdminUserAccounts() {
         studentId: '',
         department: '',
         course: '',
+        staffPosition: 'Clinic Staff',
       });
       await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
@@ -405,41 +368,33 @@ export default function AdminUserAccounts() {
 
   const exportToCSV = () => {
     try {
-      const rows =
-        tab === 'archive'
-          ? filteredArchivedUsers.map((user) => ({
-              id: user.id,
-              name: getDisplayName(user),
-              role: user.role,
-              status: user.status,
-              date: user.archivedAt,
-              email: user.email || '',
-            }))
-          : filteredActiveUsers.map((user) => ({
-              id: user.id,
-              name: getDisplayName(user),
-              role: user.role,
-              status: user.status,
-              date: user.lastActive || '',
-              email: user.email || '',
-            }));
-
-      let csvContent = 'data:text/csv;charset=utf-8,';
-      csvContent += tab === 'archive'
-        ? 'User ID,Name,Role,Status,Archived At,Email\n'
-        : 'User ID,Name,Role,Status,Last Active,Email\n';
-
-      rows.forEach((row) => {
-        csvContent += `${row.id},${row.name},${row.role},${row.status},${row.date},${row.email}\n`;
-      });
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `${tab}_accounts_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (tab === 'archive') {
+        downloadAccountsCsv(
+          'archive',
+          'Archived At',
+          filteredArchivedUsers.map((user) => ({
+            id: user.id,
+            name: getDisplayName(user),
+            role: user.role,
+            status: user.status,
+            date: user.archivedAt,
+            email: user.email || '',
+          })),
+        );
+      } else {
+        downloadAccountsCsv(
+          'active',
+          'Last Active',
+          filteredActiveUsers.map((user) => ({
+            id: user.id,
+            name: getDisplayName(user),
+            role: user.role,
+            status: user.status,
+            date: user.lastActive || '',
+            email: user.email || '',
+          })),
+        );
+      }
 
       toast.success('Account list exported successfully');
     } catch {
@@ -447,7 +402,16 @@ export default function AdminUserAccounts() {
     }
   };
 
-  const protectedCount = userAccounts.filter((user) => !user.canArchive).length;
+  const administratorCount = userAccounts.filter((user) => user.role === 'Administrator').length;
+  const clinicStaffCount = userAccounts.filter((user) => isClinicStaffRole(user.role)).length;
+  const accountSearchPlaceholder =
+    roleFilter === CLINIC_STAFF_ROLE_FILTER
+      ? tab === 'archive'
+        ? 'Search archived clinic staff'
+        : 'Search clinic staff accounts'
+      : tab === 'archive'
+        ? 'Search archived accounts'
+        : 'Search active accounts';
 
   return (
     <div className="space-y-6">
@@ -464,41 +428,46 @@ export default function AdminUserAccounts() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center justify-between p-5">
-            <div>
-              <p className="text-sm text-muted-foreground">Active Accounts</p>
-              <p className="mt-2 text-2xl font-bold text-on-surface sm:text-3xl">{userAccounts.length}</p>
-            </div>
-            <Users className="h-8 w-8 text-primary" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between p-5">
-            <div>
-              <p className="text-sm text-muted-foreground">Archived Accounts</p>
-              <p className="mt-2 text-2xl font-bold text-on-surface sm:text-3xl">{archivedAccounts.length}</p>
-            </div>
-            <Archive className="h-8 w-8 text-amber-600" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between p-5">
-            <div>
-              <p className="text-sm text-muted-foreground">Protected Admins</p>
-              <p className="mt-2 text-2xl font-bold text-on-surface sm:text-3xl">{protectedCount}</p>
-            </div>
-            <Badge className="bg-purple-100 px-3 py-1 text-purple-700">Protected</Badge>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <AccountSummaryButton
+          label="Active Accounts"
+          value={userAccounts.length}
+          active={tab === 'active' && roleFilter === 'all'}
+          onClick={() => showAccounts('active')}
+        >
+          <Users className="h-8 w-8 text-primary transition-transform group-hover:scale-110" />
+        </AccountSummaryButton>
+        <AccountSummaryButton
+          label="Clinic Staff"
+          value={clinicStaffCount}
+          active={tab === 'active' && roleFilter === CLINIC_STAFF_ROLE_FILTER}
+          onClick={() => showAccounts('active', CLINIC_STAFF_ROLE_FILTER)}
+        >
+          <UserCog className="h-8 w-8 text-emerald-700 transition-transform group-hover:scale-110" />
+        </AccountSummaryButton>
+        <AccountSummaryButton
+          label="Archived Accounts"
+          value={archivedAccounts.length}
+          active={tab === 'archive' && roleFilter === 'all'}
+          onClick={() => showAccounts('archive')}
+        >
+          <Archive className="h-8 w-8 text-amber-600 transition-transform group-hover:scale-110" />
+        </AccountSummaryButton>
+        <AccountSummaryButton
+          label="Protected Admins"
+          value={administratorCount}
+          active={tab === 'active' && roleFilter === 'Administrator'}
+          onClick={() => showAccounts('active', 'Administrator')}
+        >
+          <Badge className="bg-purple-100 px-3 py-1 text-purple-700 transition-transform group-hover:scale-105">Protected</Badge>
+        </AccountSummaryButton>
       </div>
 
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Account</DialogTitle>
-            <DialogDescription>Admin-created accounts bypass email verification.</DialogDescription>
+            <DialogDescription>Admin-created student and clinic staff accounts bypass email verification.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="grid gap-1.5">
@@ -511,11 +480,10 @@ export default function AdminUserAccounts() {
             </div>
             <div className="grid gap-1.5">
               <Label>Role</Label>
-              <Tabs value={form.role} onValueChange={(value) => setForm((prev) => ({ ...prev, role: value as 'student' | 'staff' | 'admin' }))}>
+              <Tabs value={form.role} onValueChange={(value) => setForm((prev) => ({ ...prev, role: value as 'student' | 'staff' }))}>
                 <TabsList className="w-full">
                   <TabsTrigger value="student">Student</TabsTrigger>
-                  <TabsTrigger value="staff">Staff</TabsTrigger>
-                  <TabsTrigger value="admin">Admin</TabsTrigger>
+                  <TabsTrigger value="staff">Clinic Staff</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -543,6 +511,23 @@ export default function AdminUserAccounts() {
                   <Label htmlFor="ua-course">Course</Label>
                   <Input id="ua-course" value={form.course} onChange={(e) => setForm((prev) => ({ ...prev, course: e.target.value }))} />
                 </div>
+              </div>
+            ) : null}
+            {form.role === 'staff' ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="ua-staff-position">Position</Label>
+                <Select
+                  value={form.staffPosition}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, staffPosition: value }))}
+                >
+                  <SelectTrigger id="ua-staff-position">
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
+                    <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             ) : null}
           </div>
@@ -781,21 +766,31 @@ export default function AdminUserAccounts() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
-                placeholder={tab === 'archive' ? 'Search archived accounts' : 'Search active accounts'}
+                placeholder={accountSearchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <Button
+              variant={roleFilter === CLINIC_STAFF_ROLE_FILTER ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => applyRoleFilter(roleFilter === CLINIC_STAFF_ROLE_FILTER ? 'all' : CLINIC_STAFF_ROLE_FILTER)}
+              className="w-full sm:w-auto"
+            >
+              <UserCog className="mr-2 h-4 w-4" />
+              Clinic Staff
+            </Button>
+            <Select value={roleFilter} onValueChange={applyRoleFilter}>
               <SelectTrigger className="w-full sm:w-[190px]">
                 <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="Student">Student</SelectItem>
-                <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
+                <SelectItem value={CLINIC_STAFF_ROLE_FILTER}>Clinic Staff</SelectItem>
                 <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
                 <SelectItem value="Administrator">Administrator</SelectItem>
+                <SelectItem value="Super Admin">Super Admin</SelectItem>
               </SelectContent>
             </Select>
             <div className="flex flex-col gap-2 sm:flex-row print:hidden">
@@ -818,7 +813,7 @@ export default function AdminUserAccounts() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
-                Only student and clinic staff accounts can be archived here. Administrator accounts stay protected.
+                Only student and clinic staff accounts can be archived here. Administrator and super admin accounts stay protected.
               </div>
               {sortedActiveUsers.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -871,7 +866,7 @@ export default function AdminUserAccounts() {
                         </Button>
                       ) : (
                         <Button variant="secondary" size="sm" disabled className="w-full">
-                          Protected Administrator
+                          Protected Role
                         </Button>
                       )}
                     </CardContent>

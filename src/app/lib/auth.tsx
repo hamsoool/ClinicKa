@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
 import { authenticateWithPassword, clearStoredSession, getMe, getStoredSession, getUserByToken, hasServerPasswordSetupCompleted, markServerPasswordSetupCompleted, rejectUnauthorizedGoogleAccount, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
+import { flushPendingStudentNotificationSaves } from './student-notification-save-queue';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -343,6 +344,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout: async () => {
       setLoading(true);
       try {
+        await flushPendingStudentNotificationSaves(me?.student?.student_id || me?.profile.student_id || undefined);
         await signOut();
       } finally {
         clearStoredSession();
@@ -407,6 +409,8 @@ export function useAuth() {
 
 function getHomePath(role: UserRole | null) {
   switch (role) {
+    case 'super_admin':
+      return '/super-admin';
     case 'staff':
       return '/staff';
     case 'admin':

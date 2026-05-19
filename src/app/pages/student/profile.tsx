@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import PasswordChangeCard from '../../components/password-change-card';
+import SettingsLogoutCard from '../../components/settings-logout-card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -545,6 +546,8 @@ export default function StudentProfile() {
       </form>
 
       <PasswordChangeCard title="Change Password" description="Update the password for your student account." />
+
+      <SettingsLogoutCard className="flex justify-end" />
     </div>
   );
 }

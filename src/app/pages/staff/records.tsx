@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Search, X } from 'lucide-react';
+import { ChevronDown, Search, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
 import type { ApprovedStudentSummary } from '../../lib/record-types';
@@ -19,6 +19,10 @@ const YEAR_LABELS: Record<string, string> = {
 };
 const PAGE_SIZE = 20;
 
+type StaffRecordsProps = {
+  embedded?: boolean;
+};
+
 function formatDate(value?: string) {
   if (!value) return '--';
   const date = new Date(value);
@@ -26,7 +30,7 @@ function formatDate(value?: string) {
   return date.toLocaleDateString();
 }
 
-export default function StaffRecords() {
+export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -34,12 +38,14 @@ export default function StaffRecords() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const deferredSearchQuery = useDeferredValue(debouncedSearchQuery.trim());
 
   useEffect(() => {
     setCurrentPage(1);
+    setExpandedStudentId(null);
   }, [deferredSearchQuery, departmentFilter, yearFilter, courseFilter, fromDate, toDate]);
 
   const {
@@ -82,6 +88,12 @@ export default function StaffRecords() {
     }
   }, [currentPage, totalPages]);
 
+  useEffect(() => {
+    if (expandedStudentId && !students.some((student) => student.studentId === expandedStudentId)) {
+      setExpandedStudentId(null);
+    }
+  }, [expandedStudentId, students]);
+
   const clearFilters = () => {
     setSearchQuery('');
     setDepartmentFilter('all');
@@ -96,65 +108,79 @@ export default function StaffRecords() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Medical Records</h1>
-        <p className="text-muted-foreground">Approved medical clearances and records</p>
-      </div>
+      {!embedded ? (
+        <div className="mb-8">
+          <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Records Archive</h1>
+          <p className="text-muted-foreground">Approved medical clearances and records</p>
+        </div>
+      ) : null}
 
       <Card className="mb-6">
-        <CardContent className="pt-6 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search by name, student ID, or course..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 sm:max-w-md"
-            />
-          </div>
+        <CardContent className="space-y-4 p-4 sm:p-6">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">Search</p>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Name, student ID, or course"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-10 w-full pl-10"
+                />
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="All Departments" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {DEPARTMENTS.map((department) => (
-                  <SelectItem key={department} value={department}>
-                    {department}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">Department</p>
+              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                <SelectTrigger className="h-10 w-full">
+                  <SelectValue placeholder="All Departments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {DEPARTMENTS.map((department) => (
+                    <SelectItem key={department} value={department}>
+                      {department}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Select value={yearFilter} onValueChange={setYearFilter}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="All Year Levels" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Year Levels</SelectItem>
-                {Object.entries(YEAR_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">Year Level</p>
+              <Select value={yearFilter} onValueChange={setYearFilter}>
+                <SelectTrigger className="h-10 w-full">
+                  <SelectValue placeholder="All Year Levels" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Year Levels</SelectItem>
+                  {Object.entries(YEAR_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Select value={courseFilter} onValueChange={setCourseFilter}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="All Courses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Courses</SelectItem>
-                {availableCourses.map((course) => (
-                  <SelectItem key={course} value={course}>
-                    {course}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">Course</p>
+              <Select value={courseFilter} onValueChange={setCourseFilter}>
+                <SelectTrigger className="h-10 w-full">
+                  <SelectValue placeholder="All Courses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Courses</SelectItem>
+                  {availableCourses.map((course) => (
+                    <SelectItem key={course} value={course}>
+                      {course}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="space-y-1">
               <p className="px-1 text-xs font-medium text-muted-foreground">From</p>
@@ -162,7 +188,7 @@ export default function StaffRecords() {
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="w-full"
+                className="h-10 w-full"
                 aria-label="From date"
               />
             </div>
@@ -178,7 +204,7 @@ export default function StaffRecords() {
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="w-full"
+                className="h-10 w-full"
                 aria-label="To date"
               />
             </div>
@@ -224,38 +250,58 @@ export default function StaffRecords() {
               No approved records found
             </div>
           ) : (
-            <div className="space-y-4">
-              {students.map((student) => (
-                <Card key={student.studentId} className="border">
-                  <CardContent className="pt-6">
-                    <div className="mb-4">
-                      <h4 className="font-semibold text-lg">
-                        {student.firstName} {student.lastName}
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        {student.studentId} • {student.course}
-                      </p>
-                    </div>
+            <div className="space-y-3">
+              {students.map((student) => {
+                const isExpanded = expandedStudentId === student.studentId;
+                const approvedCount = student.records.length;
 
-                    <div className="space-y-2">
-                      {student.records.map((record) => (
-                        <div
-                          key={record.id}
-                          className="flex flex-col gap-3 rounded bg-muted p-3 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          <div>
-                            <p className="font-medium">Year {record.year} Medical Record</p>
-                            <p className="text-sm text-muted-foreground">
-                              Approved on {formatDate(record.updatedAt || record.submittedAt)}
-                            </p>
+                return (
+                  <div key={student.studentId} className="overflow-hidden rounded-xl border border-outline-variant/35 bg-white">
+                    <button
+                      type="button"
+                      className="flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-surface-container-lowest sm:flex-row sm:items-center sm:justify-between"
+                      onClick={() => setExpandedStudentId((current) => (current === student.studentId ? null : student.studentId))}
+                      aria-expanded={isExpanded}
+                    >
+                      <div className="min-w-0">
+                        <h4 className="text-base font-semibold text-on-surface sm:text-lg">
+                          {student.firstName} {student.lastName}
+                        </h4>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {student.studentId} • {student.course}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <Badge variant="outline" className="bg-green-50 text-green-800">
+                          {approvedCount} approved
+                        </Badge>
+                        <ChevronDown
+                          className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        />
+                      </div>
+                    </button>
+
+                    {isExpanded ? (
+                      <div className="space-y-2 border-t border-outline-variant/25 bg-surface-container-lowest/60 p-4">
+                        {student.records.map((record) => (
+                          <div
+                            key={record.id}
+                            className="flex flex-col gap-3 rounded-md bg-muted p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <p className="font-medium">Year {record.year} Medical Record</p>
+                              <p className="text-sm text-muted-foreground">
+                                Approved on {formatDate(record.updatedAt || record.submittedAt)}
+                              </p>
+                            </div>
+                            <Badge className="bg-green-100 text-green-800">Approved</Badge>
                           </div>
-                          <Badge className="bg-green-100 text-green-800">Approved</Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           )}
 

@@ -390,12 +390,12 @@ export default function AdminDashboard() {
 
           <div className="mt-8 grid gap-3 min-[440px]:grid-cols-2">
             <button
-              onClick={() => navigate('/admin/staff')}
+              onClick={() => navigate('/admin/users?role=clinic-staff')}
               className="flex items-center justify-between rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-4 text-left transition-colors hover:bg-surface-container"
             >
               <div>
-                <p className="text-sm font-semibold text-on-surface">Manage Staff</p>
-                <p className="mt-1 text-xs text-on-surface-variant">Roles, access, availability</p>
+                <p className="text-sm font-semibold text-on-surface">Clinic Staff Accounts</p>
+                <p className="mt-1 text-xs text-on-surface-variant">Staff access and status</p>
               </div>
               <UserCog className="h-5 w-5 text-primary" />
             </button>

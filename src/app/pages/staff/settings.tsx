@@ -1,8 +1,10 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
+import { useEffect, useMemo, useState } from 'react';
+import { Award, ClipboardCheck, User } from 'lucide-react';
+import { toast } from 'sonner';
 import PasswordChangeCard from '../../components/password-change-card';
-import { Input } from '../../components/ui/input';
-import { Label } from '../../components/ui/label';
+import SettingsLogoutCard from '../../components/settings-logout-card';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -11,12 +13,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../components/ui/dialog';
-import { useAuth } from '../../lib/auth';
-import { updateStaffProfile, getRoleLabel } from '../../lib/api';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Bell, Settings as SettingsIcon, User } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { Switch } from '../../components/ui/switch';
+import { useAuth } from '../../lib/auth';
+import { getRoleLabel, updateStaffProfile } from '../../lib/api';
+import {
+  loadStaffWorkspacePreferences,
+  saveStaffWorkspacePreferences,
+  type StaffWorkspacePreferences,
+} from './staff-workspace-preferences';
 
 type StaffProfileFormState = {
   name: string;
@@ -47,23 +54,33 @@ function buildProfileFormState(me?: ReturnType<typeof useAuth>['me'] | null): St
 export default function StaffSettings() {
   const { me, refresh } = useAuth();
   const initialProfileData = useMemo(() => buildProfileFormState(me), [me]);
+  const staffRoleLabel = useMemo(
+    () => getRoleLabel(me?.profile?.role, me?.staff?.position),
+    [me?.profile?.role, me?.staff?.position],
+  );
+  const staffPreferenceId = String(me?.staff?.id || me?.profile.email || '').trim();
+  const initialWorkspacePreferences = useMemo(
+    () => loadStaffWorkspacePreferences(staffPreferenceId, staffRoleLabel),
+    [staffPreferenceId, staffRoleLabel],
+  );
+
   const [profile, setProfile] = useState<StaffProfileFormState>(initialProfileData);
   const [savingProfile, setSavingProfile] = useState(false);
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
-  const [notifications, setNotifications] = useState({
-    emailAlerts: true,
-    pendingReminders: true,
-    weeklyReports: false,
-  });
-  const [system, setSystem] = useState({
-    academicYear: '2025-2026',
-    semester: 'Second Semester',
-    maintenanceMode: false,
-  });
+  const [savedWorkspacePreferences, setSavedWorkspacePreferences] =
+    useState<StaffWorkspacePreferences>(initialWorkspacePreferences);
+  const [workspacePreferences, setWorkspacePreferences] =
+    useState<StaffWorkspacePreferences>(initialWorkspacePreferences);
+  const [savingWorkspacePreferences, setSavingWorkspacePreferences] = useState(false);
 
   useEffect(() => {
     setProfile(initialProfileData);
   }, [initialProfileData]);
+
+  useEffect(() => {
+    setSavedWorkspacePreferences(initialWorkspacePreferences);
+    setWorkspacePreferences(initialWorkspacePreferences);
+  }, [initialWorkspacePreferences]);
 
   const hasProfileChanges = useMemo(
     () =>
@@ -72,12 +89,27 @@ export default function StaffSettings() {
       ),
     [initialProfileData, profile],
   );
+  const hasWorkspacePreferenceChanges = useMemo(
+    () => JSON.stringify(workspacePreferences) !== JSON.stringify(savedWorkspacePreferences),
+    [savedWorkspacePreferences, workspacePreferences],
+  );
 
   const isProfileValid =
     Boolean(profile.name.trim()) && Boolean(profile.email.trim()) && Boolean(profile.position.trim());
+  const isDoctorWorkspace = profile.position === 'Clinic Doctor' || staffRoleLabel === 'Clinic Doctor';
 
   const updateProfileField = <K extends keyof StaffProfileFormState>(field: K, value: StaffProfileFormState[K]) => {
     setProfile((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const updateWorkspacePreference = <K extends keyof StaffWorkspacePreferences>(
+    field: K,
+    value: StaffWorkspacePreferences[K],
+  ) => {
+    setWorkspacePreferences((prev) => ({
       ...prev,
       [field]: value,
     }));
@@ -109,12 +141,31 @@ export default function StaffSettings() {
     }
   };
 
+  const handleWorkspacePreferenceSave = () => {
+    if (!staffPreferenceId) {
+      toast.error('Unable to save workspace settings for this account right now.');
+      return;
+    }
+
+    setSavingWorkspacePreferences(true);
+    try {
+      const saved = saveStaffWorkspacePreferences(staffPreferenceId, workspacePreferences, profile.position || staffRoleLabel);
+      setSavedWorkspacePreferences(saved);
+      setWorkspacePreferences(saved);
+      toast.success('Workspace settings updated successfully.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save workspace settings.');
+    } finally {
+      setSavingWorkspacePreferences(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
         <h1 className="mb-2 text-3xl font-bold tracking-tight text-on-surface">Settings</h1>
         <p className="max-w-2xl text-sm text-on-surface-variant">
-          Manage your profile, notifications, and clinic preferences from one place.
+          Manage your profile, review workflow, certificate workspace, and account security from one place.
         </p>
       </div>
 
@@ -122,7 +173,7 @@ export default function StaffSettings() {
         <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader>
             <div className="flex items-center gap-3">
-              <User className="w-5 h-5 text-primary" />
+              <User className="h-5 w-5 text-primary" />
               <div>
                 <CardTitle>Profile Settings</CardTitle>
                 <CardDescription className="mt-1">
@@ -138,7 +189,7 @@ export default function StaffSettings() {
                 <Input
                   id="staffName"
                   value={profile.name}
-                  onChange={(e) => updateProfileField('name', e.target.value)}
+                  onChange={(event) => updateProfileField('name', event.target.value)}
                   placeholder="Enter your name"
                 />
               </div>
@@ -148,7 +199,7 @@ export default function StaffSettings() {
                   id="staffEmail"
                   type="email"
                   value={profile.email}
-                  onChange={(e) => updateProfileField('email', e.target.value)}
+                  onChange={(event) => updateProfileField('email', event.target.value)}
                   placeholder="Enter your email"
                 />
               </div>
@@ -156,10 +207,7 @@ export default function StaffSettings() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="min-w-0">
                 <Label htmlFor="staffPosition">Position</Label>
-                <Select
-                  value={profile.position}
-                  onValueChange={(value) => updateProfileField('position', value)}
-                >
+                <Select value={profile.position} onValueChange={(value) => updateProfileField('position', value)}>
                   <SelectTrigger id="staffPosition">
                     <SelectValue placeholder="Select position" />
                   </SelectTrigger>
@@ -174,7 +222,7 @@ export default function StaffSettings() {
                 <Input
                   id="staffPhone"
                   value={profile.phone}
-                  onChange={(e) => updateProfileField('phone', e.target.value)}
+                  onChange={(event) => updateProfileField('phone', event.target.value)}
                   placeholder="Contact number"
                 />
               </div>
@@ -199,117 +247,175 @@ export default function StaffSettings() {
         <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader>
             <div className="flex items-center gap-3">
-              <Bell className="w-5 h-5 text-primary" />
+              <ClipboardCheck className="h-5 w-5 text-primary" />
               <div>
-                <CardTitle>Notification Settings</CardTitle>
+                <CardTitle>Review Workspace</CardTitle>
                 <CardDescription className="mt-1">
-                  Choose which reminders and updates should reach you.
+                  Choose how your dashboard and review queue open when you start clinic work.
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="min-w-0">
-                  <p className="font-medium">Email Notifications</p>
-                  <p className="text-sm text-muted-foreground">
-                    Receive email alerts for new submissions
-                  </p>
+                <Label htmlFor="dashboardQueueTab">Dashboard default queue tab</Label>
+                <Select
+                  value={workspacePreferences.dashboardQueueTab}
+                  onValueChange={(value) => updateWorkspacePreference('dashboardQueueTab', value as StaffWorkspacePreferences['dashboardQueueTab'])}
+                >
+                  <SelectTrigger id="dashboardQueueTab">
+                    <SelectValue placeholder="Choose a starting tab" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending review</SelectItem>
+                    <SelectItem value="in_review">In review</SelectItem>
+                    <SelectItem value="returned">Returned</SelectItem>
+                    <SelectItem value="resubmitted">Resubmitted</SelectItem>
+                    <SelectItem value="all">All action items</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <input
-                type="checkbox"
-                className="h-4 w-4 shrink-0"
-                checked={notifications.emailAlerts}
-                onChange={(e) => setNotifications((prev) => ({ ...prev, emailAlerts: e.target.checked }))}
-              />
-            </div>
-            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="font-medium">Pending Review Reminders</p>
-                <p className="text-sm text-muted-foreground">
-                  Daily reminder for pending submissions
-                </p>
+                <Label htmlFor="reviewQueueStatus">Review queue default filter</Label>
+                <Select
+                  value={workspacePreferences.reviewQueueStatus}
+                  onValueChange={(value) => updateWorkspacePreference('reviewQueueStatus', value as StaffWorkspacePreferences['reviewQueueStatus'])}
+                >
+                  <SelectTrigger id="reviewQueueStatus">
+                    <SelectValue placeholder="Choose a default filter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="action_needed">Needs action</SelectItem>
+                    <SelectItem value="pending">Pending review</SelectItem>
+                    <SelectItem value="in_review">In review</SelectItem>
+                    <SelectItem value="physical_exam_done">Physical exam done</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="returned">Returned</SelectItem>
+                    <SelectItem value="resubmitted">Resubmitted</SelectItem>
+                    <SelectItem value="all">All records</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <input
-                type="checkbox"
-                className="h-4 w-4 shrink-0"
-                checked={notifications.pendingReminders}
-                onChange={(e) => setNotifications((prev) => ({ ...prev, pendingReminders: e.target.checked }))}
-              />
             </div>
-            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="min-w-0">
-                <p className="font-medium">Weekly Reports</p>
-                <p className="text-sm text-muted-foreground">
-                  Receive weekly summary reports
-                </p>
+                <Label htmlFor="reviewSortOrder">Review queue sort order</Label>
+                <Select
+                  value={workspacePreferences.reviewSortOrder}
+                  onValueChange={(value) => updateWorkspacePreference('reviewSortOrder', value as StaffWorkspacePreferences['reviewSortOrder'])}
+                >
+                  <SelectTrigger id="reviewSortOrder">
+                    <SelectValue placeholder="Choose a sort order" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desc">Newest first</SelectItem>
+                    <SelectItem value="asc">Oldest first</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <input
-                type="checkbox"
-                className="h-4 w-4 shrink-0"
-                checked={notifications.weeklyReports}
-                onChange={(e) => setNotifications((prev) => ({ ...prev, weeklyReports: e.target.checked }))}
-              />
+              <div className="flex flex-col justify-end rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-medium text-on-surface">Show advanced filters on open</p>
+                    <p className="text-sm text-muted-foreground">
+                      Open the full filter row immediately in the review queue.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={workspacePreferences.showAdvancedQueueFilters}
+                    onCheckedChange={(checked) => updateWorkspacePreference('showAdvancedQueueFilters', checked)}
+                    aria-label="Show advanced filters on open"
+                  />
+                </div>
+              </div>
             </div>
-            <Button className="w-full sm:w-auto">Save Notification Preferences</Button>
           </CardContent>
         </Card>
-
-        <PasswordChangeCard title="Change Password" description="Update the password for your clinic staff account." />
 
         <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader>
             <div className="flex items-center gap-3">
-              <SettingsIcon className="w-5 h-5 text-primary" />
+              <Award className="h-5 w-5 text-primary" />
               <div>
-                <CardTitle>System Settings</CardTitle>
+                <CardTitle>Certificate Workspace</CardTitle>
                 <CardDescription className="mt-1">
-                  Review the active academic term and clinic availability settings.
+                  Set how {isDoctorWorkspace ? 'clearances and active charts' : 'records and clearance previews'} should open in the certificates area.
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="academicYear">Current Academic Year</Label>
-              <Input
-                id="academicYear"
-                value={system.academicYear}
-                onChange={(e) => setSystem((prev) => ({ ...prev, academicYear: e.target.value }))}
-                placeholder="e.g., 2023-2024"
-              />
-            </div>
-            <div>
-              <Label htmlFor="semester">Current Semester</Label>
-              <select
-                id="semester"
-                className="w-full rounded-md border border-input bg-input-background px-3 py-2 text-sm outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                value={system.semester}
-                onChange={(e) => setSystem((prev) => ({ ...prev, semester: e.target.value }))}
-              >
-                <option>First Semester</option>
-                <option>Second Semester</option>
-                <option>Summer</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="min-w-0">
-                <p className="font-medium">Maintenance Mode</p>
-                <p className="text-sm text-muted-foreground">
-                  Disable student submissions temporarily
-                </p>
+                <Label htmlFor="certificatesDefaultView">Default certificate view</Label>
+                <Select
+                  value={workspacePreferences.certificatesDefaultView}
+                  onValueChange={(value) =>
+                    updateWorkspacePreference('certificatesDefaultView', value as StaffWorkspacePreferences['certificatesDefaultView'])
+                  }
+                >
+                  <SelectTrigger id="certificatesDefaultView">
+                    <SelectValue placeholder="Choose a default view" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="form">Medical record form</SelectItem>
+                    <SelectItem value="medical-clearance">Medical clearance</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <input
-                type="checkbox"
-                className="h-4 w-4 shrink-0"
-                checked={system.maintenanceMode}
-                onChange={(e) => setSystem((prev) => ({ ...prev, maintenanceMode: e.target.checked }))}
-              />
+              <div className="flex flex-col justify-end rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-medium text-on-surface">Remember last selected student</p>
+                    <p className="text-sm text-muted-foreground">
+                      Return to the last certificate student you were working on.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={workspacePreferences.rememberLastCertificateStudent}
+                    onCheckedChange={(checked) => updateWorkspacePreference('rememberLastCertificateStudent', checked)}
+                    aria-label="Remember last selected student"
+                  />
+                </div>
+              </div>
             </div>
-            <Button className="w-full sm:w-auto">Save System Settings</Button>
+
+            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground sm:max-w-xl">
+                {hasWorkspacePreferenceChanges
+                  ? 'You have unsaved workspace preference changes.'
+                  : 'Your workflow settings are already up to date.'}
+              </p>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setWorkspacePreferences(savedWorkspacePreferences)}
+                  disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                  className="w-full sm:w-auto"
+                >
+                  Reset
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleWorkspacePreferenceSave}
+                  disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                  className="w-full sm:w-auto"
+                >
+                  {savingWorkspacePreferences ? 'Saving...' : 'Save Workspace Settings'}
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
+        <div id="password">
+          <PasswordChangeCard title="Change Password" description="Update the password for your clinic staff account." />
+        </div>
+
+        <SettingsLogoutCard className="flex justify-end" />
       </div>
 
       <Dialog open={confirmSaveOpen} onOpenChange={setConfirmSaveOpen}>

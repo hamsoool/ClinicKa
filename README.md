@@ -6,11 +6,12 @@ The app is a React + Vite frontend connected to Supabase (Auth, Postgres, Storag
 
 ## What The System Does
 
-ClinicKa has three role-based portals:
+ClinicKa has four role-based portals:
 
 - Student portal (`/student`): profile management, yearly medical form submission, requirements tracking, and certificate viewing.
 - Staff portal (`/staff`): submission queue, detailed record review, status updates (`pending`, `returned`, `physical_exam_done`, `approved`, `resubmitted`), and certificate workflows.
 - Admin portal (`/admin`): user account management, staff management, archived account lifecycle, and reports.
+- Super admin portal (`/super-admin`): add and remove administrator accounts only.
 
 ## System Overview (End-to-End)
 
@@ -83,6 +84,7 @@ Required for server-side operations used by scripts and the Supabase Edge Functi
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `SITE_URL` or `ALLOWED_ORIGINS` for deployed Edge Function CORS
 
 Optional but required if you want email notifications to send successfully:
 
@@ -94,6 +96,7 @@ Optional but required if you want email notifications to send successfully:
 Notes:
 
 - `.env.example` also includes `VITE_SUPABASE_PROJECT_ID`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_PUBLISHABLE_KEY` for project compatibility; current app runtime primarily uses the variables listed above.
+- Set `ALLOWED_ORIGINS` to your deployed frontend origin before deploying the Supabase Edge Function. Keep `DEBUG_ERRORS=false` and `ENABLE_REQUEST_LOGGING=false` in production.
 - Never commit real secrets from `.env.local`.
 
 ## Supabase Setup Notes
@@ -104,7 +107,9 @@ Apply the SQL files in `supabase/` as needed:
 
 - `supabase/rls_storage_and_files_policies.sql`
 - `supabase/fix_files_bucket_migration.sql`
+- `supabase/clear_signed_file_urls_migration.sql`
 - `supabase/archived_accounts_migration.sql`
+- `supabase/super_admin_role_migration.sql`
 - `supabase/add_lab_test_source_columns.sql`
 - `supabase/add_resubmitted_status_constraint_migration.sql`
 
@@ -154,7 +159,8 @@ npm run build
 
 2. Deploy `dist/` to your static host.
 3. Deploy/update Supabase edge function (`server`) for backend routes, including status-email notifications.
-4. Add the `SMTP_*` secrets to the deployed edge-function environment if email notifications should be enabled.
+4. Add `SITE_URL` or `ALLOWED_ORIGINS` to the deployed edge-function environment so only your frontend origin can call it from browsers.
+5. Add the `SMTP_*` secrets to the deployed edge-function environment if email notifications should be enabled.
 
 `vercel.json` already includes SPA rewrite rules for client-side routing.
 

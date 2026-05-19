@@ -11,6 +11,7 @@ import {
   staffSubmissionSummariesQueryOptions,
 } from '../pages/staff/staff-workflow-query';
 import { studentRecordsQueryOptions } from '../pages/student/student-records-query';
+import { superAdminAdministratorsQueryOptions } from '../pages/super-admin/super-admin-workflow-query';
 import { prefetchPortalRoutes } from '../route-modules';
 
 function normalizeEmail(email?: string | null) {
@@ -58,6 +59,11 @@ export function prefetchPortalExperience(role: UserRole, me?: AuthMe | null) {
         }),
       ),
     );
+    return;
+  }
+
+  if (role === 'super_admin') {
+    warmQuery(appQueryClient.prefetchQuery(superAdminAdministratorsQueryOptions()));
     return;
   }
 

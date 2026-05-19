@@ -1,20 +1,26 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Skeleton } from '../../components/ui/skeleton';
 import type { SubmissionRecord } from '../../lib/record-types';
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import { Download, Search, FileText, X, ClipboardList, Award } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
+import { useAuth } from '../../lib/auth';
+import { getRoleLabel } from '../../lib/api';
+import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import {
   useStaffApprovedStudentsQuery,
   useStaffStudentCertificateRecordsQuery,
 } from './staff-workflow-query';
+import StaffRecords from './records';
 
 type StaffSubmission = SubmissionRecord & {
   photoUrl?: string;
@@ -28,6 +34,40 @@ const YEAR_LABELS: Record<string, string> = {
   '3': '3rd Year',
   '4': '4th Year',
 };
+type StaffRecordsCertificatesTab = 'archive' | 'certificates';
+
+const CERTIFICATE_SELECTION_STORAGE_KEY_PREFIX = 'gc-staff-certificate-selection';
+const staffRecordsCertificatesTabs = new Set<StaffRecordsCertificatesTab>(['archive', 'certificates']);
+
+function normalizeStaffRecordsCertificatesTab(value: string | null): StaffRecordsCertificatesTab {
+  return staffRecordsCertificatesTabs.has(value as StaffRecordsCertificatesTab)
+    ? (value as StaffRecordsCertificatesTab)
+    : 'archive';
+}
+
+function getCertificateSelectionStorageKey(staffId?: string | null) {
+  return `${CERTIFICATE_SELECTION_STORAGE_KEY_PREFIX}:${String(staffId || '').trim()}`;
+}
+
+function loadRememberedCertificateStudent(staffId?: string | null) {
+  if (typeof window === 'undefined' || !staffId) return '';
+
+  try {
+    return window.localStorage.getItem(getCertificateSelectionStorageKey(staffId)) || '';
+  } catch {
+    return '';
+  }
+}
+
+function persistRememberedCertificateStudent(staffId: string, studentId: string) {
+  if (typeof window === 'undefined' || !staffId) return;
+  window.localStorage.setItem(getCertificateSelectionStorageKey(staffId), studentId);
+}
+
+function clearRememberedCertificateStudent(staffId?: string | null) {
+  if (typeof window === 'undefined' || !staffId) return;
+  window.localStorage.removeItem(getCertificateSelectionStorageKey(staffId));
+}
 
 async function loadPdfDependencies() {
   const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
@@ -53,15 +93,124 @@ function buildLatestPerYear(records: SubmissionRecord[]) {
   }, {});
 }
 
-export default function StaffCertificates() {
+function ApprovedStudentsListSkeleton() {
+  return (
+    <div className="max-h-[500px] space-y-2 overflow-y-hidden" aria-hidden="true">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="rounded border border-outline-variant/40 p-3">
+          <Skeleton className="h-4 w-3/4 bg-surface-container-high" />
+          <Skeleton className="mt-2 h-3 w-24 bg-surface-container" />
+          <Skeleton className="mt-2 h-3 w-5/6 bg-surface-container" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StaffCertificatePreviewSkeleton() {
+  return (
+    <div aria-busy="true" aria-live="polite" className="min-w-0">
+      <div className="mb-4 grid gap-1 rounded-xl bg-muted p-1 sm:grid-cols-2">
+        <Skeleton className="h-11 rounded-xl bg-white/90" />
+        <Skeleton className="h-11 rounded-xl bg-surface-container-high" />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-6 w-full max-w-sm bg-surface-container-high" />
+              <Skeleton className="h-4 w-48 bg-surface-container" />
+            </div>
+            <Skeleton className="h-10 w-full rounded-md bg-primary/20 sm:w-56" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-hidden rounded-lg border bg-muted/30">
+            <div className="px-2 py-2 sm:px-4 sm:py-4">
+              <div className="mx-auto w-full max-w-[816px] rounded-sm bg-white p-6 shadow-lg ring-1 ring-black/5">
+                <div className="flex items-start justify-between gap-6">
+                  <div className="flex gap-2">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <Skeleton key={index} className="h-10 w-10 rounded-full bg-surface-container-high" />
+                    ))}
+                  </div>
+                  <div className="flex-1 space-y-2 text-center">
+                    <Skeleton className="mx-auto h-5 w-44 bg-surface-container-high" />
+                    <Skeleton className="mx-auto h-3 w-64 bg-surface-container" />
+                    <Skeleton className="mx-auto h-3 w-36 bg-surface-container" />
+                  </div>
+                  <Skeleton className="h-16 w-16 rounded-sm bg-surface-container-high" />
+                </div>
+
+                <div className="mt-8 space-y-3">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <Skeleton key={index} className="h-4 w-full bg-surface-container" />
+                  ))}
+                </div>
+
+                <div className="mt-8 grid grid-cols-4 gap-px overflow-hidden rounded border border-outline-variant/40 bg-outline-variant/40">
+                  {Array.from({ length: 32 }).map((_, index) => (
+                    <Skeleton key={index} className="h-8 rounded-none bg-white" />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function StaffCertificatesWorkspaceSkeleton() {
+  return (
+    <div aria-busy="true" aria-live="polite" className="grid gap-6 lg:grid-cols-3 lg:items-start">
+      <div className="min-w-0 lg:col-span-1">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-40 bg-surface-container-high" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full rounded-md bg-surface-container-high" />
+              <div className="grid grid-cols-2 gap-2">
+                <Skeleton className="h-10 rounded-md bg-surface-container-high" />
+                <Skeleton className="h-10 rounded-md bg-surface-container-high" />
+              </div>
+              <ApprovedStudentsListSkeleton />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="min-w-0 lg:col-span-2">
+        <StaffCertificatePreviewSkeleton />
+      </div>
+    </div>
+  );
+}
+
+function StaffCertificatesWorkspace() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
   const STUDENTS_PER_PAGE = 10;
+  const { me } = useAuth();
+  const staffRoleLabel = getRoleLabel(me?.profile?.role, me?.staff?.position);
+  const staffPreferenceId = String(me?.staff?.id || me?.profile.email || '').trim();
+  const workspacePreferences = useMemo(
+    () => loadStaffWorkspacePreferences(staffPreferenceId, staffRoleLabel),
+    [staffPreferenceId, staffRoleLabel],
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'form' | 'medical-clearance'>('form');
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(() =>
+    loadRememberedCertificateStudent(staffPreferenceId),
+  );
+  const [activeTab, setActiveTab] = useState<'form' | 'medical-clearance'>(
+    workspacePreferences.certificatesDefaultView,
+  );
   const [clearanceYearFilter, setClearanceYearFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
@@ -73,6 +222,22 @@ export default function StaffCertificates() {
   useEffect(() => {
     setCurrentPage(1);
   }, [deferredSearchQuery, departmentFilter, yearFilter]);
+
+  useEffect(() => {
+    setActiveTab(workspacePreferences.certificatesDefaultView);
+
+    if (workspacePreferences.rememberLastCertificateStudent) {
+      setSelectedStudentId(loadRememberedCertificateStudent(staffPreferenceId));
+      return;
+    }
+
+    clearRememberedCertificateStudent(staffPreferenceId);
+    setSelectedStudentId('');
+  }, [
+    staffPreferenceId,
+    workspacePreferences.certificatesDefaultView,
+    workspacePreferences.rememberLastCertificateStudent,
+  ]);
 
   const {
     data: approvedStudentsData,
@@ -122,6 +287,21 @@ export default function StaffCertificates() {
       setSelectedStudentId(studentRows[0]?.studentId || '');
     }
   }, [studentRows, selectedStudentId]);
+
+  useEffect(() => {
+    if (!workspacePreferences.rememberLastCertificateStudent) {
+      clearRememberedCertificateStudent(staffPreferenceId);
+      return;
+    }
+
+    if (staffPreferenceId && selectedStudentId) {
+      persistRememberedCertificateStudent(staffPreferenceId, selectedStudentId);
+    }
+  }, [
+    selectedStudentId,
+    staffPreferenceId,
+    workspacePreferences.rememberLastCertificateStudent,
+  ]);
 
   const {
     data: selectedStudentRecordsData = [],
@@ -313,14 +493,12 @@ export default function StaffCertificates() {
     }
   };
 
-  return (
-    <div className="min-w-0">
-      <div className="mb-8">
-        <h1 className="mb-2 text-3xl font-bold text-primary">Certificates & Records</h1>
-        <p className="text-muted-foreground">Combined student form and medical clearance preview in one workspace.</p>
-      </div>
+  if (loading && studentRows.length === 0) {
+    return <StaffCertificatesWorkspaceSkeleton />;
+  }
 
-      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+  return (
+    <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
         <div className="min-w-0 lg:col-span-1">
             <Card>
               <CardHeader>
@@ -379,7 +557,7 @@ export default function StaffCertificates() {
                 )}
 
                 {loading ? (
-                  <div className="py-4 text-center text-muted-foreground">Loading...</div>
+                  <ApprovedStudentsListSkeleton />
                 ) : studentRows.length === 0 ? (
                   <div className="py-4 text-center text-muted-foreground">No approved records found</div>
                 ) : (
@@ -416,7 +594,9 @@ export default function StaffCertificates() {
         </div>
 
         <div className="min-w-0 lg:col-span-2">
-          {!combinedRecord ? (
+          {selectedStudentId && selectedStudentRecordsFetching && !combinedRecord ? (
+            <StaffCertificatePreviewSkeleton />
+          ) : !combinedRecord ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16">
                 <ClipboardList className="mb-4 h-16 w-16 text-muted-foreground" />
@@ -544,7 +724,56 @@ export default function StaffCertificates() {
             </Tabs>
           )}
         </div>
+    </div>
+  );
+}
+
+export default function StaffRecordsAndCertificates() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeWorkspaceTab = normalizeStaffRecordsCertificatesTab(searchParams.get('tab'));
+
+  const handleWorkspaceTabChange = (value: string) => {
+    const nextTab = normalizeStaffRecordsCertificatesTab(value);
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (nextTab === 'archive') {
+      nextParams.delete('tab');
+    } else {
+      nextParams.set('tab', nextTab);
+    }
+
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  return (
+    <div className="min-w-0">
+      <div className="mb-8">
+        <h1 className="mb-2 text-3xl font-bold text-primary">Records & Certificates</h1>
+        <p className="text-muted-foreground">
+          Review approved records and generate medical forms or clearance certificates from one workspace.
+        </p>
       </div>
+
+      <Tabs className="min-w-0" value={activeWorkspaceTab} onValueChange={handleWorkspaceTabChange}>
+        <TabsList className="mb-4 h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-2">
+          <TabsTrigger value="certificates" className="min-h-11 justify-center gap-2 px-3 text-center whitespace-normal">
+            <Award className="h-4 w-4" />
+            Certificates
+          </TabsTrigger>
+          <TabsTrigger value="archive" className="min-h-11 justify-center gap-2 px-3 text-center whitespace-normal">
+            <FileText className="h-4 w-4" />
+            Records Archive
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="certificates" className="min-w-0">
+          <StaffCertificatesWorkspace />
+        </TabsContent>
+
+        <TabsContent value="archive" className="min-w-0">
+          <StaffRecords embedded />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

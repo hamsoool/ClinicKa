@@ -1,4 +1,4 @@
-export type AppRole = 'student' | 'staff' | 'admin';
+export type AppRole = 'student' | 'staff' | 'admin' | 'super_admin';
 
 type RouteLoader = () => Promise<unknown>;
 
@@ -11,8 +11,6 @@ export const loadStudentYearSelection = () => import('./pages/student/year-selec
 export const loadStudentPrivacyWaiver = () => import('./pages/student/privacy-waiver');
 export const loadStudentMedicalForm = () => import('./pages/student/medical-form');
 export const loadStudentLayout = () => import('./pages/student/layout');
-export const loadStudentRecords = () => import('./pages/student/records');
-export const loadStudentRequirements = () => import('./pages/student/requirements');
 export const loadStudentProfile = () => import('./pages/student/profile');
 export const loadStudentCertificate = () => import('./pages/student/certificate');
 export const loadStudentClearance = () => import('./pages/student/clearance');
@@ -22,7 +20,6 @@ export const loadStaffLayout = () => import('./pages/staff/layout');
 export const loadStaffDashboard = () => import('./pages/staff/dashboard');
 export const loadStaffSubmissions = () => import('./pages/staff/submissions');
 export const loadStaffRecordReview = () => import('./pages/staff/record-review');
-export const loadStaffRecords = () => import('./pages/staff/records');
 export const loadStaffReports = () => import('./pages/staff/reports');
 export const loadStaffCertificates = () => import('./pages/staff/certificates');
 export const loadStaffSettings = () => import('./pages/staff/settings');
@@ -31,10 +28,12 @@ export const loadStaffAnnouncements = () => import('./pages/staff/announcements'
 export const loadAdminLayout = () => import('./pages/admin/layout');
 export const loadAdminDashboard = () => import('./pages/admin/dashboard');
 export const loadAdminSystemSettings = () => import('./pages/admin/system-settings');
-export const loadAdminStaffManagement = () => import('./pages/admin/staff-management');
 export const loadAdminUserAccounts = () => import('./pages/admin/user-accounts');
 export const loadAdminReports = () => import('./pages/admin/reports');
 export const loadAdminAnnouncements = () => import('./pages/admin/announcements');
+
+export const loadSuperAdminLayout = () => import('./pages/super-admin/layout');
+export const loadSuperAdminAdministrators = () => import('./pages/super-admin/administrators');
 
 const preloadedLoaders = new Set<RouteLoader>();
 
@@ -50,9 +49,7 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
   student: [
     loadStudentLayout,
     loadStudentDashboard,
-    loadStudentRecords,
     loadStudentYearSelection,
-    loadStudentRequirements,
     loadStudentClearance,
     loadStudentCertificate,
     loadStudentProfile,
@@ -64,7 +61,6 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadStaffLayout,
     loadStaffDashboard,
     loadStaffSubmissions,
-    loadStaffRecords,
     loadStaffReports,
     loadStaffCertificates,
     loadStaffSettings,
@@ -75,10 +71,13 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadAdminLayout,
     loadAdminDashboard,
     loadAdminSystemSettings,
-    loadAdminStaffManagement,
     loadAdminUserAccounts,
     loadAdminReports,
     loadAdminAnnouncements,
+  ],
+  super_admin: [
+    loadSuperAdminLayout,
+    loadSuperAdminAdministrators,
   ],
 };
 

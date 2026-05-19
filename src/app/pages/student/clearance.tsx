@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -14,12 +14,22 @@ import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { useStudentRecordsQuery } from './student-records-query';
 
+type StudentClearanceTab = 'history' | 'form' | 'medical-clearance';
+
+const clearanceTabs = new Set<StudentClearanceTab>(['history', 'form', 'medical-clearance']);
+
+function normalizeClearanceTab(value: string | null): StudentClearanceTab {
+  return clearanceTabs.has(value as StudentClearanceTab) ? (value as StudentClearanceTab) : 'history';
+}
+
 export default function StudentClearance() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const clearanceRef = useRef<HTMLDivElement>(null);
-  const [activeTab, setActiveTab] = useState<'form' | 'medical-clearance'>('form');
+  const activeTab = normalizeClearanceTab(searchParams.get('tab'));
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
@@ -136,6 +146,38 @@ export default function StudentClearance() {
     }
   };
 
+  const handleTabChange = (value: string) => {
+    const nextTab = normalizeClearanceTab(value);
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (nextTab === 'history') {
+      nextParams.delete('tab');
+    } else {
+      nextParams.set('tab', nextTab);
+    }
+
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending Review</Badge>;
+      case 'in_review':
+        return <Badge className="bg-sky-100 text-sky-800 border-sky-200">In Review</Badge>;
+      case 'approved':
+        return <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge>;
+      case 'physical_exam_done':
+        return <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200">Physical Exam Done</Badge>;
+      case 'returned':
+        return <Badge className="bg-red-100 text-red-800 border-red-200">Returned</Badge>;
+      case 'resubmitted':
+        return <Badge className="bg-orange-100 text-orange-800 border-orange-200">Resubmitted</Badge>;
+      default:
+        return <Badge>{status}</Badge>;
+    }
+  };
+
   if (loading) {
     return <PortalPageSkeleton variant="certificate" />;
   }
@@ -150,37 +192,143 @@ export default function StudentClearance() {
   return (
     <div className="space-y-5 sm:space-y-6">
       <div className="mb-2 sm:mb-4">
-        <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Clearance</h1>
-        <p className="text-muted-foreground">Manage your medical form and medical clearance in one place.</p>
+        <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Records & Clearance</h1>
+        <p className="text-muted-foreground">
+          Track your submissions, open your medical form, and download your clearance when approved.
+        </p>
       </div>
 
-      <Tabs className="min-w-0" value={activeTab} onValueChange={(value) => setActiveTab(value as 'form' | 'medical-clearance')}>
-        <TabsList className="h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-2">
+      <Tabs className="min-w-0" value={activeTab} onValueChange={handleTabChange}>
+        <TabsList className="h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-3">
+          <TabsTrigger value="history" className="min-h-11 justify-center px-3 text-center whitespace-normal">History</TabsTrigger>
           <TabsTrigger value="form" className="min-h-11 justify-center px-3 text-center whitespace-normal">Form</TabsTrigger>
           <TabsTrigger value="medical-clearance" className="min-h-11 justify-center px-3 text-center whitespace-normal">Medical Clearance</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="form" className="min-w-0 space-y-4">
+        <TabsContent value="history" className="min-w-0 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Medical Record Form</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Start a new submission or continue updating your current year medical record.
-              </p>
+              <CardTitle>Medical Record History</CardTitle>
+              <p className="text-sm text-muted-foreground">Track every submitted record and review status by year.</p>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Use this to submit your yearly medical form before clearance is issued.
-              </p>
-              <Button onClick={() => navigate('/student/year-selection')} className="w-full sm:w-auto">
-                Go to Form
+            <CardContent>
+              {records.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground bg-muted/20 rounded-lg border-2 border-dashed">
+                  <FileText className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p className="text-lg font-medium">No records found</p>
+                  <p className="text-sm">Submit your first medical record to see your history here.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sortedRecords.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex flex-col justify-between gap-3 rounded-xl border border-outline-variant/25 bg-white p-4 transition-shadow hover:shadow-sm sm:flex-row sm:items-start"
+                    >
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-base font-bold leading-tight">Year {entry.year} Medical Record</p>
+                          <div className="mt-1.5 flex flex-col gap-0.5">
+                            <p className="flex items-center text-xs text-muted-foreground sm:text-sm">
+                              <span className="mr-1 font-medium text-foreground">Submitted:</span>
+                              {new Date(entry.submittedAt).toLocaleDateString()}
+                            </p>
+                            {entry.status === 'approved' && entry.updatedAt && (
+                              <p className="flex items-center text-xs font-medium text-green-600 sm:text-sm">
+                                <span className="mr-1">Approved:</span>
+                                {new Date(entry.updatedAt).toLocaleDateString()}
+                              </p>
+                            )}
+                            {entry.status === 'resubmitted' && entry.updatedAt && (
+                              <p className="flex items-center text-xs font-medium text-orange-600 sm:text-sm">
+                                <span className="mr-1">Resubmitted:</span>
+                                {new Date(entry.updatedAt).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                          {entry.staffNotes ? (
+                            <div className="mt-3 hidden rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700 sm:block sm:max-w-[320px]">
+                              <div className="flex items-start gap-2">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <p className={`${expandedNotes[entry.id] ? '' : 'line-clamp-2'}`}>
+                                  <strong>Staff Note:</strong> {entry.staffNotes}
+                                </p>
+                              </div>
+                              {entry.staffNotes.length > 100 ? (
+                                <button
+                                  type="button"
+                                  className="mt-1 text-[11px] font-semibold underline underline-offset-2"
+                                  onClick={() =>
+                                    setExpandedNotes((prev) => ({
+                                      ...prev,
+                                      [entry.id]: !prev[entry.id],
+                                    }))
+                                  }
+                                >
+                                  {expandedNotes[entry.id] ? 'See less' : 'See more'}
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:items-end">
+                        {entry.staffNotes ? (
+                          <div className="w-full rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700 sm:hidden">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                              <p className={`${expandedNotes[entry.id] ? '' : 'line-clamp-2'}`}>
+                                <strong>Staff Note:</strong> {entry.staffNotes}
+                              </p>
+                            </div>
+                            {entry.staffNotes.length > 100 ? (
+                              <button
+                                type="button"
+                                className="mt-1 text-[11px] font-semibold underline underline-offset-2"
+                                onClick={() =>
+                                  setExpandedNotes((prev) => ({
+                                    ...prev,
+                                    [entry.id]: !prev[entry.id],
+                                  }))
+                                }
+                              >
+                                {expandedNotes[entry.id] ? 'See less' : 'See more'}
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <div className="self-start sm:self-auto">{getStatusBadge(entry.status)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="form" className="min-w-0 space-y-4">
+          <Card>
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <div className="min-w-0">
+                <CardTitle className="text-base sm:text-lg">Medical Record Form</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Submit a new yearly medical record or continue an existing one before clearance is issued.
+                </p>
+              </div>
+              <Button onClick={() => navigate('/student/year-selection')} className="w-full shrink-0 sm:w-auto">
+                Open Form
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Medical Record Preview (Combined Year 1-4)</CardTitle>
+              <CardTitle>Medical Record Preview</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {profileRecord ? (
@@ -191,9 +339,9 @@ export default function StudentClearance() {
                   <div className="overflow-hidden rounded-lg border bg-muted/30">
                     <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
                       <div className="overflow-x-auto overscroll-x-contain">
-                        <div className="mx-auto w-max min-w-full">
+                        <div className="flex min-w-full justify-start lg:justify-center">
                           <div
-                            className="overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5"
+                            className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5"
                             style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                           >
                             <MedicalRecordPreview record={profileRecord} yearlyRecords={latestRecordPerYear} />

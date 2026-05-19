@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType } from 'react';
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, Navigate } from 'react-router';
 import { PortalPageSkeleton, PortalShellSkeleton, PublicPageSkeleton } from './components/project-skeletons';
 import { RedirectIfAuthenticated, RequireAuth } from './lib/auth';
 import {
@@ -7,7 +7,6 @@ import {
   loadAdminDashboard,
   loadAdminLayout,
   loadAdminReports,
-  loadAdminStaffManagement,
   loadAdminSystemSettings,
   loadAdminUserAccounts,
   loadAuthAccessPage,
@@ -18,7 +17,6 @@ import {
   loadStaffDashboard,
   loadStaffLayout,
   loadStaffRecordReview,
-  loadStaffRecords,
   loadStaffReports,
   loadStaffSettings,
   loadStaffSubmissions,
@@ -29,10 +27,10 @@ import {
   loadStudentMedicalForm,
   loadStudentPrivacyWaiver,
   loadStudentProfile,
-  loadStudentRecords,
-  loadStudentRequirements,
   loadStudentAnnouncements,
   loadStudentYearSelection,
+  loadSuperAdminAdministrators,
+  loadSuperAdminLayout,
 } from './route-modules';
 
 const RoleSelection = lazy(loadRoleSelection);
@@ -43,8 +41,6 @@ const StudentYearSelection = lazy(loadStudentYearSelection);
 const StudentPrivacyWaiver = lazy(loadStudentPrivacyWaiver);
 const StudentMedicalForm = lazy(loadStudentMedicalForm);
 const StudentLayout = lazy(loadStudentLayout);
-const StudentRecords = lazy(loadStudentRecords);
-const StudentRequirements = lazy(loadStudentRequirements);
 const StudentAnnouncements = lazy(loadStudentAnnouncements);
 const StudentProfile = lazy(loadStudentProfile);
 const StudentCertificate = lazy(loadStudentCertificate);
@@ -53,7 +49,6 @@ const StaffLayout = lazy(loadStaffLayout);
 const StaffDashboard = lazy(loadStaffDashboard);
 const StaffSubmissions = lazy(loadStaffSubmissions);
 const StaffRecordReview = lazy(loadStaffRecordReview);
-const StaffRecords = lazy(loadStaffRecords);
 const StaffReports = lazy(loadStaffReports);
 const StaffCertificates = lazy(loadStaffCertificates);
 const StaffAnnouncements = lazy(loadStaffAnnouncements);
@@ -61,10 +56,11 @@ const StaffSettings = lazy(loadStaffSettings);
 const AdminLayout = lazy(loadAdminLayout);
 const AdminDashboard = lazy(loadAdminDashboard);
 const AdminSystemSettings = lazy(loadAdminSystemSettings);
-const AdminStaffManagement = lazy(loadAdminStaffManagement);
 const AdminUserAccounts = lazy(loadAdminUserAccounts);
 const AdminReports = lazy(loadAdminReports);
 const AdminAnnouncements = lazy(loadAdminAnnouncements);
+const SuperAdminLayout = lazy(loadSuperAdminLayout);
+const SuperAdminAdministrators = lazy(loadSuperAdminAdministrators);
 
 type RouteSkeletonVariant =
   | 'marketing'
@@ -136,11 +132,10 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: withSuspense(StudentDashboard) },
-      { path: "records", element: withSuspense(StudentRecords, 'portal-table') },
+      { path: "records", element: <Navigate to="/student/clearance?tab=history" replace /> },
       { path: "year-selection", element: withSuspense(StudentYearSelection) },
       { path: "privacy-waiver/:year", element: withSuspense(StudentPrivacyWaiver) },
       { path: "medical-form/:year", element: withSuspense(StudentMedicalForm) },
-      { path: "requirements", element: withSuspense(StudentRequirements) },
       { path: "announcements", element: withSuspense(StudentAnnouncements) },
       { path: "profile", element: withSuspense(StudentProfile) },
       { path: "clearance", element: withSuspense(StudentClearance, 'portal-certificate') },
@@ -157,10 +152,10 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: withSuspense(StaffDashboard) },
       { path: "submissions", element: withSuspense(StaffSubmissions) },
-      { path: "records", element: withSuspense(StaffRecords) },
+      { path: "records", element: withSuspense(StaffCertificates) },
       { path: "review/:submissionId", element: withSuspense(StaffRecordReview) },
       { path: "reports", element: withSuspense(StaffReports) },
-      { path: "certificates", element: withSuspense(StaffCertificates) },
+      { path: "certificates", element: <Navigate to="/staff/records?tab=certificates" replace /> },
       { path: "announcements", element: withSuspense(StaffAnnouncements) },
       { path: "settings", element: withSuspense(StaffSettings) },
     ],
@@ -175,10 +170,21 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: withSuspense(AdminDashboard) },
       { path: "settings", element: withSuspense(AdminSystemSettings) },
-      { path: "staff", element: withSuspense(AdminStaffManagement) },
+      { path: "staff", element: <Navigate to="/admin/users?role=clinic-staff" replace /> },
       { path: "users", element: withSuspense(AdminUserAccounts) },
       { path: "reports", element: withSuspense(AdminReports) },
       { path: "announcements", element: withSuspense(AdminAnnouncements) },
+    ],
+  },
+  {
+    path: "/super-admin",
+    element: (
+      <RequireAuth allowedRoles={['super_admin']}>
+        {withSuspense(SuperAdminLayout, 'portal-shell')}
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: withSuspense(SuperAdminAdministrators, 'portal-table') },
     ],
   },
 ]);

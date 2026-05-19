@@ -7,18 +7,82 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const app = new Hono().basePath("/server");
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Max-Age': '600',
-};
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const requestLoggingEnabled = Deno.env.get('ENABLE_REQUEST_LOGGING') === 'true';
+const debugErrorsEnabled = Deno.env.get('DEBUG_ERRORS') === 'true';
+const minPasswordLength = 12;
+const configuredSignedUrlSeconds = Number(Deno.env.get('SIGNED_STORAGE_URL_EXPIRES_SECONDS') || '900');
+  const signedStorageUrlExpiresSeconds =
+  Number.isFinite(configuredSignedUrlSeconds) && configuredSignedUrlSeconds > 0
+    ? Math.min(configuredSignedUrlSeconds, 60 * 60)
+    : 900;
+const allowVercelPreviewOrigins = Deno.env.get('ALLOW_VERCEL_PREVIEW_ORIGINS') === 'true';
+const allowedCorsOrigins = new Set(
+  [
+    Deno.env.get('SITE_URL'),
+    Deno.env.get('VITE_SITE_URL'),
+    Deno.env.get('APP_ORIGIN'),
+    ...(Deno.env.get('ALLOWED_ORIGINS') || '').split(','),
+    'https://clinicka.vercel.app/',
+    'https://clinic-ka.vercel.app/',
+  ]
+    .map((origin) => normalizeOrigin(origin))
+    .filter(Boolean),
+);
 
-app.use('*', logger(console.log));
+function normalizeOrigin(origin?: string | null) {
+  const value = String(origin || '').trim().replace(/\/+$/, '');
+  if (!value) return '';
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return value;
+  }
+}
+
+function resolveCorsOrigin(origin?: string | null) {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return '';
+  if (allowedCorsOrigins.has(normalizedOrigin)) return normalizedOrigin;
+  if (
+    allowVercelPreviewOrigins &&
+    /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(normalizedOrigin)
+  ) {
+    return normalizedOrigin;
+  }
+  return '';
+}
+
+function buildCorsHeaders(origin?: string | null) {
+  const allowedOrigin = resolveCorsOrigin(origin);
+  return {
+    ...(allowedOrigin ? { 'Access-Control-Allow-Origin': allowedOrigin } : {}),
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Max-Age': '600',
+    'Vary': 'Origin',
+  };
+}
+
+function internalServerError(c: any, message: string, error: unknown) {
+  const body = debugErrorsEnabled ? { error: message, details: String(error) } : { error: message };
+  return c.json(body, 500);
+}
+
+function passwordLengthError() {
+  return `password must be at least ${minPasswordLength} characters`;
+}
+
+if (requestLoggingEnabled) {
+  app.use('*', logger(console.log));
+}
+
 app.use(
   "/*",
   cors({
-    origin: "*",
+    origin: (origin) => resolveCorsOrigin(origin) || null,
     allowHeaders: ["Content-Type", "Authorization", "apikey", "x-client-info"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
@@ -26,10 +90,19 @@ app.use(
   }),
 );
 
-app.options('*', (c) => new Response(null, { status: 204, headers: corsHeaders }));
+app.use("/*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store");
+  c.header("Pragma", "no-cache");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("Referrer-Policy", "no-referrer");
+});
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+app.options('*', (c) => new Response(null, {
+  status: 204,
+  headers: buildCorsHeaders(c.req.header('Origin')),
+}));
+
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 const bucketName = 'medical-files';
 const storageBuckets = [
@@ -133,7 +206,9 @@ type Requester = {
   archivedAccount?: any;
 };
 
-const isStaffRole = (role?: string) => role === 'staff' || role === 'admin';
+const isAdminRole = (role?: string) => role === 'admin';
+const isSuperAdminRole = (role?: string) => role === 'super_admin';
+const isStaffRole = (role?: string) => role === 'staff' || isAdminRole(role);
 
 const DOCTOR_POSITIONS = ['clinic doctor', 'doctor'];
 
@@ -143,7 +218,7 @@ function isDoctorPosition(position?: string | null) {
 }
 
 function isDoctorOrAdmin(requester: Requester) {
-  if (requester.profile.role === 'admin') return true;
+  if (isAdminRole(requester.profile.role)) return true;
   if (requester.profile.role === 'staff' && isDoctorPosition(requester.staff?.position)) return true;
   return false;
 }
@@ -212,6 +287,25 @@ function normalizeAdminSystemSettings(input: any = {}) {
   };
 }
 
+function isMissingKvStoreError(error: any) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    message.includes('kv_store_2a5e1a6b') ||
+    message.includes('schema cache') ||
+    message.includes('could not find the table') ||
+    (message.includes('relation') && message.includes('does not exist'))
+  );
+}
+
+function isMissingRelationError(error: any) {
+  const message = String(error?.message || error?.details || error || '').toLowerCase();
+  return (
+    message.includes('schema cache') ||
+    message.includes('could not find the table') ||
+    (message.includes('relation') && message.includes('does not exist'))
+  );
+}
+
 async function getAdminSystemSettings() {
   const { data, error } = await supabase
     .from('kv_store_2a5e1a6b')
@@ -220,6 +314,9 @@ async function getAdminSystemSettings() {
     .maybeSingle();
 
   if (error) {
+    if (isMissingKvStoreError(error)) {
+      return getDefaultAdminSystemSettings();
+    }
     throw new Error(error.message);
   }
 
@@ -421,6 +518,25 @@ function normalizeEmail(email?: string | null) {
   return String(email || '').trim().toLowerCase();
 }
 
+const SUPER_ADMIN_EMAILS = new Set(
+  String(Deno.env.get('SUPER_ADMIN_EMAILS') || '')
+    .split(',')
+    .map((email) => normalizeEmail(email))
+    .filter(Boolean),
+);
+
+function isConfiguredSuperAdminEmail(email?: string | null) {
+  return SUPER_ADMIN_EMAILS.has(normalizeEmail(email));
+}
+
+function withRuntimeRoleOverrides(profile: any, user: any) {
+  if (!profile) return profile;
+  if (!isConfiguredSuperAdminEmail(user?.email)) return profile;
+
+  // Keep access unblocked for configured super admins even before the DB role constraint is migrated.
+  return profile.role === 'super_admin' ? profile : { ...profile, role: 'super_admin' };
+}
+
 function normalizeNamePart(value?: string | null) {
   const normalized = String(value || '').trim();
   return normalized || null;
@@ -481,11 +597,8 @@ function isGCDomainEmail(email?: string | null) {
   return normalizeEmail(email).endsWith('@gordoncollege.edu.ph');
 }
 
-function resolveRoleFromEmail(email?: string | null) {
-  const normalized = normalizeEmail(email);
-  if (normalized.includes('admin')) return 'admin';
-  if (normalized.includes('staff')) return 'staff';
-  return 'student';
+function isValidStudentProvisionEmail(email?: string | null) {
+  return Boolean(isGCDomainEmail(email) && deriveStudentIdFromEmail(email));
 }
 
 function deriveStudentIdFromEmail(email?: string | null) {
@@ -527,6 +640,7 @@ async function purgeRejectedGoogleUser(user: any) {
 }
 
 function roleLabel(role?: string, position?: string | null) {
+  if (role === 'super_admin') return 'Super Admin';
   if (role === 'admin') return 'Administrator';
   if (role === 'staff') {
     if (isDoctorPosition(position)) return 'Clinic Doctor';
@@ -563,6 +677,34 @@ function normalizeStoragePath(storagePath?: string | null, targetBucket?: string
   return path;
 }
 
+async function createTemporaryFileUrl(file: any) {
+  const resolvedBucket = inferStorageBucket(file);
+  const storagePath = normalizeStoragePath(file?.storage_path, resolvedBucket);
+  if (!resolvedBucket || !storagePath) {
+    return String(file?.url || '').trim() || null;
+  }
+
+  const { data, error } = await supabase.storage
+    .from(resolvedBucket)
+    .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+
+  if (error) return null;
+  return data?.signedUrl || null;
+}
+
+async function normalizeFileRows(files: any[] | null | undefined) {
+  return Promise.all(
+    (files || []).map(async (file) => {
+      const storageBucket = inferStorageBucket(file);
+      return {
+        ...file,
+        storage_bucket: storageBucket,
+        url: await createTemporaryFileUrl(file),
+      };
+    }),
+  );
+}
+
 function isMissingStorageBucketError(error: any) {
   const message = String(error?.message || error || '').toLowerCase();
   return message.includes('bucket') && message.includes('not found');
@@ -571,21 +713,21 @@ function isMissingStorageBucketError(error: any) {
 function badRequest(message: string) {
   return new Response(JSON.stringify({ error: message }), {
     status: 400,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
   });
 }
 
 function unauthorized(message = 'Unauthorized') {
   return new Response(JSON.stringify({ error: message }), {
     status: 401,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
   });
 }
 
 function forbidden(message = 'Forbidden') {
   return new Response(JSON.stringify({ error: message }), {
     status: 403,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
   });
 }
 
@@ -699,7 +841,7 @@ function archivedAccountsMigrationRequired() {
     error: 'Archived accounts migration is not applied yet. Run supabase/archived_accounts_migration.sql first.',
   }), {
     status: 409,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
   });
 }
 
@@ -720,7 +862,7 @@ async function ensureBucket() {
 async function ensureProfile(user: any) {
   const derivedStudentId = deriveStudentIdFromEmail(user.email);
   const normalizedEmail = normalizeEmail(user.email) || null;
-  const resolvedRole = resolveRoleFromEmail(user.email);
+  const canSelfProvisionStudent = isValidStudentProvisionEmail(user.email);
   const { firstName, lastName } = deriveNamePartsFromUser(user);
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('profiles')
@@ -734,7 +876,8 @@ async function ensureProfile(user: any) {
 
   if (existingProfile) {
     if (
-      resolvedRole === 'student' &&
+      existingProfile.role === 'student' &&
+      canSelfProvisionStudent &&
       (
         existingProfile.student_id !== derivedStudentId
         || existingProfile.email !== normalizedEmail
@@ -764,13 +907,20 @@ async function ensureProfile(user: any) {
     return existingProfile;
   }
 
+  const roleForNewProfile =
+    canSelfProvisionStudent ? 'student' : isConfiguredSuperAdminEmail(user?.email) ? 'admin' : null;
+
+  if (!roleForNewProfile) {
+    throw new Error('Profile not found for authenticated user.');
+  }
+
   const { data: createdProfile, error: createdProfileError } = await supabase
     .from('profiles')
     .upsert({
       id: user.id,
-      role: resolvedRole,
+      role: roleForNewProfile,
       email: normalizedEmail,
-      student_id: derivedStudentId,
+      student_id: canSelfProvisionStudent ? derivedStudentId : null,
       first_name: firstName,
       last_name: lastName,
     })
@@ -872,6 +1022,17 @@ async function clearArchivedAuthState(userId: string) {
   }
 }
 
+async function reassignAdministratorOwnedRows(userId: string, replacementUserId: string) {
+  const { error } = await supabase
+    .from('announcements')
+    .update({ created_by: replacementUserId })
+    .eq('created_by', userId);
+
+  if (error && !isMissingRelationError(error)) {
+    throw new Error(error.message);
+  }
+}
+
 async function authenticate(c: any): Promise<Requester | null> {
   const authHeader = c.req.header('Authorization') || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -939,7 +1100,13 @@ async function authenticate(c: any): Promise<Requester | null> {
       .maybeSingle(),
   ]);
 
-  return { user, profile, student, staff, archivedAccount: null };
+  return {
+    user,
+    profile: withRuntimeRoleOverrides(profile, user),
+    student,
+    staff,
+    archivedAccount: null,
+  };
 }
 
 function mapMedicalHistory(row: any) {
@@ -1173,7 +1340,8 @@ async function loadRelatedData(rows: any[]) {
       return acc;
     }, {} as Record<string, any>);
 
-  const filesBySubmission = (filesRes.data || []).reduce((acc, file) => {
+  const normalizedFiles = await normalizeFileRows(filesRes.data);
+  const filesBySubmission = normalizedFiles.reduce((acc, file) => {
     acc[file.submission_id] = acc[file.submission_id] || [];
     acc[file.submission_id].push(file);
     return acc;
@@ -1787,7 +1955,7 @@ async function requireSubmissionAccess(requester: Requester, submissionId: strin
     .maybeSingle();
 
   if (error || !submission) {
-    return { response: new Response(JSON.stringify({ error: 'Record not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }) };
+    return { response: new Response(JSON.stringify({ error: 'Record not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }) };
   }
 
   if (!isStaffRole(requester.profile.role) && requester.profile.student_id !== submission.student_id) {
@@ -1820,7 +1988,7 @@ app.post("/auth/reject-google-account", async (c) => {
     return c.json({ success: true, deleted: true });
   } catch (error) {
     console.log('Failed to purge rejected Google user:', error);
-    return c.json({ error: 'Failed to reject unauthorized Google account', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to reject unauthorized Google account', error);
   }
 });
 
@@ -1912,7 +2080,7 @@ app.put("/student-profile", async (c) => {
     });
   } catch (error) {
     console.log('Error updating student profile:', error);
-    return c.json({ error: 'Failed to update student profile', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to update student profile', error);
   }
 });
 
@@ -2021,7 +2189,7 @@ app.post("/submit-record", async (c) => {
     return c.json({ success: true, recordId: submissionId });
   } catch (error) {
     console.log('Error submitting medical record:', error);
-    return c.json({ error: 'Failed to submit record', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to submit record', error);
   }
 });
 
@@ -2040,7 +2208,7 @@ app.get("/student-records", async (c) => {
     return c.json({ records });
   } catch (error) {
     console.log('Error fetching student records:', error);
-    return c.json({ error: 'Failed to fetch records', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch records', error);
   }
 });
 
@@ -2058,7 +2226,7 @@ app.get("/student-records/:studentId", async (c) => {
     return c.json({ records });
   } catch (error) {
     console.log('Error fetching student records:', error);
-    return c.json({ error: 'Failed to fetch records', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch records', error);
   }
 });
 
@@ -2073,7 +2241,7 @@ app.get("/submissions", async (c) => {
     return c.json({ submissions });
   } catch (error) {
     console.log('Error fetching submissions:', error);
-    return c.json({ error: 'Failed to fetch submissions', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch submissions', error);
   }
 });
 
@@ -2087,7 +2255,7 @@ app.get("/staff/dashboard-overview", async (c) => {
     return c.json(await getCachedStaffDashboardOverview());
   } catch (error) {
     console.log('Error fetching staff dashboard overview:', error);
-    return c.json({ error: 'Failed to fetch staff dashboard overview', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch staff dashboard overview', error);
   }
 });
 
@@ -2119,7 +2287,7 @@ app.get("/staff/submission-summaries", async (c) => {
     );
   } catch (error) {
     console.log('Error fetching staff submission summaries:', error);
-    return c.json({ error: 'Failed to fetch staff submission summaries', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch staff submission summaries', error);
   }
 });
 
@@ -2153,7 +2321,7 @@ app.get("/staff/approved-students", async (c) => {
     );
   } catch (error) {
     console.log('Error fetching approved student summaries:', error);
-    return c.json({ error: 'Failed to fetch approved student summaries', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch approved student summaries', error);
   }
 });
 
@@ -2174,7 +2342,7 @@ app.get("/submission/:id", async (c) => {
     return c.json({ submission });
   } catch (error) {
     console.log('Error fetching submission:', error);
-    return c.json({ error: 'Failed to fetch submission', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch submission', error);
   }
 });
 
@@ -2290,7 +2458,7 @@ app.put("/submission/:id/status", async (c) => {
     return c.json({ success: true });
   } catch (error) {
     console.log('Error updating submission status:', error);
-    return c.json({ error: 'Failed to update status', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to update status', error);
   }
 });
 
@@ -2315,7 +2483,7 @@ app.post("/notifications/status-email", async (c) => {
     return c.json(result);
   } catch (error) {
     console.log('Error sending status email notification:', error);
-    return c.json({ error: 'Failed to send status email notification', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to send status email notification', error);
   }
 });
 
@@ -2338,14 +2506,21 @@ app.get("/student-notifications/state", async (c) => {
       .eq('key', getStudentNotificationStateKey(requester, studentId))
       .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (isMissingKvStoreError(error)) {
+        return c.json({
+          state: normalizeStudentNotificationState({}),
+        });
+      }
+      throw new Error(error.message);
+    }
 
     return c.json({
       state: normalizeStudentNotificationState(data?.value || {}),
     });
   } catch (error) {
     console.log('Error fetching student notification state:', error);
-    return c.json({ error: 'Failed to fetch notification state', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch notification state', error);
   }
 });
 
@@ -2371,13 +2546,18 @@ app.put("/student-notifications/state", async (c) => {
         value: state,
       });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (isMissingKvStoreError(error)) {
+        return c.json({ success: true, persisted: false });
+      }
+      throw new Error(error.message);
+    }
 
     invalidateDashboardReadCaches();
     return c.json({ success: true });
   } catch (error) {
     console.log('Error saving student notification state:', error);
-    return c.json({ error: 'Failed to save notification state', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to save notification state', error);
   }
 });
 
@@ -2434,7 +2614,7 @@ app.put("/submission/:id/measurements", async (c) => {
     return c.json({ success: true });
   } catch (error) {
     console.log('Error updating measurements:', error);
-    return c.json({ error: 'Failed to update measurements', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to update measurements', error);
   }
 });
 
@@ -2475,7 +2655,7 @@ app.post("/upload-file", async (c) => {
 
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from(bucketName)
-      .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
 
     if (signedUrlError) throw new Error(signedUrlError.message);
 
@@ -2486,7 +2666,7 @@ app.post("/upload-file", async (c) => {
         type: fileType,
         file_name: file.name,
         mime_type: file.type,
-        url: signedUrlData?.signedUrl,
+        url: null,
         storage_bucket: bucketName,
         storage_path: storagePath,
         uploaded_by: requester.profile.id,
@@ -2516,7 +2696,7 @@ app.post("/upload-file", async (c) => {
     });
   } catch (error) {
     console.log('Error in file upload:', error);
-    return c.json({ error: 'Failed to upload file', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to upload file', error);
   }
 });
 
@@ -2531,7 +2711,7 @@ app.get("/analytics", async (c) => {
     return c.json(analytics);
   } catch (error) {
     console.log('Error fetching analytics:', error);
-    return c.json({ error: 'Failed to fetch analytics', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch analytics', error);
   }
 });
 
@@ -2568,7 +2748,7 @@ app.get("/staff-users", async (c) => {
     });
   } catch (error) {
     console.log('Error fetching staff users:', error);
-    return c.json({ error: 'Failed to fetch staff users', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch staff users', error);
   }
 });
 
@@ -2576,7 +2756,7 @@ app.get("/user-accounts", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
-  if (requester.profile.role !== 'admin') return forbidden();
+  if (!isAdminRole(requester.profile.role)) return forbidden();
 
   try {
     const [
@@ -2629,7 +2809,145 @@ app.get("/user-accounts", async (c) => {
     });
   } catch (error) {
     console.log('Error fetching user accounts:', error);
-    return c.json({ error: 'Failed to fetch user accounts', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch user accounts', error);
+  }
+});
+
+app.get("/super-admin/administrators", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
+
+  try {
+    const [{ data: profiles, error }, archivedState] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id,first_name,last_name,email,role,created_at,updated_at')
+        .eq('role', 'admin')
+        .order('created_at', { ascending: false }),
+      getArchivedUserIds(),
+    ]);
+
+    if (error) throw new Error(error.message);
+    const archivedUserIds = archivedState.userIds;
+
+    return c.json({
+      administrators: (profiles || [])
+        .filter((profile) => !archivedUserIds.has(profile.id))
+        .map((profile) => {
+          const name = [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim()
+            || profile.email
+            || 'Unnamed Administrator';
+
+          return {
+            userId: profile.id,
+            id: profile.id,
+            name,
+            email: profile.email || '',
+            role: 'Administrator',
+            roleKey: 'admin',
+            status: 'Active',
+            createdAt: profile.created_at,
+            lastActive: profile.updated_at || profile.created_at,
+          };
+        }),
+    });
+  } catch (error) {
+    console.log('Error fetching administrators:', error);
+    return internalServerError(c, 'Failed to fetch administrators', error);
+  }
+});
+
+app.post("/super-admin/administrators", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
+
+  try {
+    const { email, password, firstName, lastName } = await c.req.json();
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail || !password) return badRequest('email and password are required');
+    if (String(password).trim().length < minPasswordLength) return badRequest(passwordLengthError());
+
+    const { data: created, error: createError } = await supabase.auth.admin.createUser({
+      email: normalizedEmail,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName || null,
+        last_name: lastName || null,
+      },
+    });
+    if (createError || !created?.user) throw new Error(createError?.message || 'Failed to create administrator');
+
+    const userId = created.user.id;
+
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: userId,
+      role: 'admin',
+      email: normalizedEmail,
+      first_name: firstName || null,
+      last_name: lastName || null,
+      student_id: null,
+      department: null,
+      course: null,
+      created_at: new Date().toISOString(),
+    });
+
+    if (profileError) {
+      await supabase.auth.admin.deleteUser(userId).catch(() => null);
+      throw new Error(profileError.message);
+    }
+
+    invalidateDashboardReadCaches();
+    return c.json({ success: true, userId });
+  } catch (error) {
+    console.log('Error creating administrator:', error);
+    return internalServerError(c, 'Failed to create administrator', error);
+  }
+});
+
+app.delete("/super-admin/administrators/:userId", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
+
+  try {
+    const userId = c.req.param('userId');
+    if (!userId) return badRequest('userId is required');
+    if (userId === requester.profile.id) return badRequest('You cannot remove your own super administrator account.');
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id,role,email,first_name,last_name')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profileError) throw new Error(profileError.message);
+    if (!profile) return badRequest('Administrator account not found.');
+    if (!isAdminRole(profile.role)) {
+      return badRequest('Only administrator accounts can be removed here.');
+    }
+
+    await reassignAdministratorOwnedRows(userId, requester.profile.id);
+
+    const { error: staffDeleteError } = await supabase.from('staff_users').delete().eq('profile_id', userId);
+    if (staffDeleteError) throw new Error(staffDeleteError.message);
+
+    const { error: profileDeleteError } = await supabase.from('profiles').delete().eq('id', userId);
+    if (profileDeleteError) throw new Error(profileDeleteError.message);
+
+    const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId);
+    if (authDeleteError) throw new Error(authDeleteError.message);
+
+    invalidateDashboardReadCaches();
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error removing administrator:', error);
+    return internalServerError(c, 'Failed to remove administrator', error);
   }
 });
 
@@ -2643,7 +2961,7 @@ app.get("/admin/system-settings", async (c) => {
     return c.json(await getAdminSystemSettings());
   } catch (error) {
     console.log('Error fetching admin system settings:', error);
-    return c.json({ error: 'Failed to fetch admin system settings', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch admin system settings', error);
   }
 });
 
@@ -2664,12 +2982,17 @@ app.put("/admin/system-settings", async (c) => {
         value: settings,
       });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (isMissingKvStoreError(error)) {
+        return c.json(settings);
+      }
+      throw new Error(error.message);
+    }
 
     return c.json(settings);
   } catch (error) {
     console.log('Error saving admin system settings:', error);
-    return c.json({ error: 'Failed to save admin system settings', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to save admin system settings', error);
   }
 });
 
@@ -2708,7 +3031,7 @@ app.get("/archived-accounts", async (c) => {
     });
   } catch (error) {
     console.log('Error fetching archived accounts:', error);
-    return c.json({ error: 'Failed to fetch archived accounts', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to fetch archived accounts', error);
   }
 });
 
@@ -2821,7 +3144,7 @@ app.post("/admin/archive-account", async (c) => {
     return c.json({ success: true });
   } catch (error) {
     console.log('Error archiving account:', error);
-    return c.json({ error: 'Failed to archive account', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to archive account', error);
   }
 });
 
@@ -2868,7 +3191,7 @@ app.post("/admin/restore-account/:archiveId", async (c) => {
     return c.json({ success: true });
   } catch (error) {
     console.log('Error restoring account:', error);
-    return c.json({ error: 'Failed to restore account', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to restore account', error);
   }
 });
 
@@ -3034,7 +3357,7 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
     return c.json({ success: true });
   } catch (error) {
     console.log('Error permanently deleting archived account:', error);
-    return c.json({ error: 'Failed to permanently delete archived account', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to permanently delete archived account', error);
   }
 });
 
@@ -3042,12 +3365,15 @@ app.post("/admin/create-account", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
-  if (requester.profile.role !== 'admin') return forbidden();
+  if (!isAdminRole(requester.profile.role)) return forbidden();
 
   try {
     const { email, password, role = 'student', firstName, lastName, studentId, department, course } = await c.req.json();
     if (!email || !password) return badRequest('email and password are required');
-    if (!['student', 'staff', 'admin'].includes(role)) return badRequest('invalid role');
+    if (String(password).trim().length < minPasswordLength) return badRequest(passwordLengthError());
+    if (!['student', 'staff'].includes(role)) {
+      return badRequest('Only super administrators can create administrator accounts.');
+    }
 
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
       email,
@@ -3091,7 +3417,7 @@ app.post("/admin/create-account", async (c) => {
     return c.json({ success: true, userId });
   } catch (error) {
     console.log('Error creating account:', error);
-    return c.json({ error: 'Failed to create account', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to create account', error);
   }
 });
 
@@ -3099,11 +3425,12 @@ app.post("/admin/create-staff", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
-  if (requester.profile.role !== 'admin') return forbidden();
+  if (!isAdminRole(requester.profile.role)) return forbidden();
 
   try {
     const { email, password, firstName, lastName, position = 'Clinic Staff' } = await c.req.json();
     if (!email || !password || !firstName || !lastName) return badRequest('email, password, firstName, and lastName are required');
+    if (String(password).trim().length < minPasswordLength) return badRequest(passwordLengthError());
     if (!['Clinic Staff', 'Clinic Doctor'].includes(position)) return badRequest('position must be either Clinic Staff or Clinic Doctor');
 
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
@@ -3145,7 +3472,7 @@ app.post("/admin/create-staff", async (c) => {
     return c.json({ success: true, userId });
   } catch (error) {
     console.log('Error creating staff:', error);
-    return c.json({ error: 'Failed to create staff', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to create staff', error);
   }
 });
 
@@ -3179,7 +3506,7 @@ app.post("/issue-certificate", async (c) => {
     return c.json({ success: true });
   } catch (error) {
     console.log('Error issuing certificate:', error);
-    return c.json({ error: 'Failed to issue certificate', details: String(error) }, 500);
+    return internalServerError(c, 'Failed to issue certificate', error);
   }
 });
 
