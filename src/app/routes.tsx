@@ -29,6 +29,8 @@ import {
   loadStudentProfile,
   loadStudentAnnouncements,
   loadStudentYearSelection,
+  loadSuperAdminAdministrators,
+  loadSuperAdminLayout,
 } from './route-modules';
 
 const RoleSelection = lazy(loadRoleSelection);
@@ -57,6 +59,8 @@ const AdminSystemSettings = lazy(loadAdminSystemSettings);
 const AdminUserAccounts = lazy(loadAdminUserAccounts);
 const AdminReports = lazy(loadAdminReports);
 const AdminAnnouncements = lazy(loadAdminAnnouncements);
+const SuperAdminLayout = lazy(loadSuperAdminLayout);
+const SuperAdminAdministrators = lazy(loadSuperAdminAdministrators);
 
 type RouteSkeletonVariant =
   | 'marketing'
@@ -170,6 +174,17 @@ export const router = createBrowserRouter([
       { path: "users", element: withSuspense(AdminUserAccounts) },
       { path: "reports", element: withSuspense(AdminReports) },
       { path: "announcements", element: withSuspense(AdminAnnouncements) },
+    ],
+  },
+  {
+    path: "/super-admin",
+    element: (
+      <RequireAuth allowedRoles={['super_admin']}>
+        {withSuspense(SuperAdminLayout, 'portal-shell')}
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: withSuspense(SuperAdminAdministrators, 'portal-table') },
     ],
   },
 ]);

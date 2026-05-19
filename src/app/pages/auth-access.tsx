@@ -27,12 +27,18 @@ import {
   PASSWORD_RESET_COOLDOWN_SECONDS,
   sendPasswordResetEmail,
   signInWithGoogle,
+  type UserRole,
 } from '../lib/api';
 import {
   inferRoleFromEmail,
   prefetchLikelyPortalRoutes,
   prefetchPortalExperience,
 } from '../lib/login-prefetch';
+import {
+  getPasswordLengthMessage,
+  isPasswordLongEnough,
+  MIN_PASSWORD_LENGTH,
+} from '../lib/password-policy';
 import { useAuth } from '../lib/auth';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -298,7 +304,8 @@ function LegalDialog({ label, eyebrow, title, description, meta, sections, foote
   );
 }
 
-function getHomePath(role: 'student' | 'staff' | 'admin') {
+function getHomePath(role: UserRole) {
+  if (role === 'super_admin') return '/super-admin';
   if (role === 'staff') return '/staff';
   if (role === 'admin') return '/admin';
   return '/student';
@@ -483,8 +490,8 @@ export default function AuthAccessPage() {
       setError(`Use your 9-digit school ID email in the format yourschoolid@${GC_DOMAIN}.`);
       return;
     }
-    if (signUpForm.password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (!isPasswordLongEnough(signUpForm.password)) {
+      setError(getPasswordLengthMessage());
       return;
     }
     if (signUpForm.password !== signUpForm.confirmPassword) {
@@ -523,8 +530,8 @@ export default function AuthAccessPage() {
     setError(null);
     setSuccessMessage(null);
 
-    if (passwordSetupForm.password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (!isPasswordLongEnough(passwordSetupForm.password)) {
+      setError(getPasswordLengthMessage());
       return;
     }
     if (passwordSetupForm.password !== passwordSetupForm.confirmPassword) {
@@ -617,7 +624,7 @@ export default function AuthAccessPage() {
               </div>
               <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30] sm:text-3xl">Set your password</h2>
               <p className="mt-2 text-sm leading-7 text-[#425468]">
-                Choose a password with at least 6 characters to complete your account setup.
+                Choose a password with at least {MIN_PASSWORD_LENGTH} characters to complete your account setup.
               </p>
 
               <form className="mt-8 space-y-5" onSubmit={handlePasswordSetup}>
@@ -632,7 +639,7 @@ export default function AuthAccessPage() {
                     onChange={(event) =>
                       setPasswordSetupForm((prev) => ({ ...prev, password: event.target.value }))
                     }
-                    placeholder="At least 6 characters"
+                    placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                     className={inputClassName}
                   />
                 </div>
@@ -1060,7 +1067,7 @@ export default function AuthAccessPage() {
                         onChange={(event) =>
                           setSignUpForm((prev) => ({ ...prev, password: event.target.value }))
                         }
-                        placeholder="At least 6 characters"
+                        placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                         className={`${iconInputClassName} pr-12`}
                       />
                       <button

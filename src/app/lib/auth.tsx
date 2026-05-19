@@ -409,6 +409,8 @@ export function useAuth() {
 
 function getHomePath(role: UserRole | null) {
   switch (role) {
+    case 'super_admin':
+      return '/super-admin';
     case 'staff':
       return '/staff';
     case 'admin':

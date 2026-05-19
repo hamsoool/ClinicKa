@@ -37,6 +37,7 @@ import {
   type AdminUserAccount,
   type ArchivedUserAccount,
 } from '../../lib/api';
+import { getPasswordLengthMessage, isPasswordLongEnough } from '../../lib/password-policy';
 import {
   invalidateAdminWorkflowQueries,
   useAdminArchivedAccountsQuery,
@@ -60,6 +61,9 @@ function normalizeRoleFilter(value?: string | null) {
   if (normalized === 'student') return 'Student';
   if (normalized === 'clinic doctor') return 'Clinic Doctor';
   if (normalized === 'administrator') return 'Administrator';
+  if (normalized === 'super admin' || normalized === 'super_admin' || normalized === 'super administrator') {
+    return 'Super Admin';
+  }
   return 'all';
 }
 
@@ -101,6 +105,9 @@ function AccountSummaryButton({
 }
 
 const roleTone = (role: string) => {
+  if (role === 'Super Admin') {
+    return 'bg-rose-100 text-rose-700';
+  }
   if (role === 'Administrator') {
     return 'bg-purple-100 text-purple-700';
   }
@@ -192,7 +199,7 @@ export default function AdminUserAccounts() {
   const [form, setForm] = useState({
     email: '',
     password: '',
-    role: 'student' as 'student' | 'staff' | 'admin',
+    role: 'student' as 'student' | 'staff',
     firstName: '',
     lastName: '',
     studentId: '',
@@ -337,6 +344,10 @@ export default function AdminUserAccounts() {
   const submitCreate = async () => {
     if (!form.email || !form.password) {
       toast.error('Email and password are required');
+      return;
+    }
+    if (!isPasswordLongEnough(form.password)) {
+      toast.error(getPasswordLengthMessage());
       return;
     }
     if (form.role === 'student' && !form.studentId.trim()) {
@@ -548,7 +559,7 @@ export default function AdminUserAccounts() {
     }
   };
 
-  const protectedCount = userAccounts.filter((user) => !user.canArchive).length;
+  const administratorCount = userAccounts.filter((user) => user.role === 'Administrator').length;
   const clinicStaffCount = userAccounts.filter((user) => isClinicStaffRole(user.role)).length;
   const accountSearchPlaceholder =
     roleFilter === CLINIC_STAFF_ROLE_FILTER
@@ -601,7 +612,7 @@ export default function AdminUserAccounts() {
         </AccountSummaryButton>
         <AccountSummaryButton
           label="Protected Admins"
-          value={protectedCount}
+          value={administratorCount}
           active={tab === 'active' && roleFilter === 'Administrator'}
           onClick={() => showAccounts('active', 'Administrator')}
         >
@@ -613,7 +624,7 @@ export default function AdminUserAccounts() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Account</DialogTitle>
-            <DialogDescription>Admin-created accounts bypass email verification.</DialogDescription>
+            <DialogDescription>Admin-created student and clinic staff accounts bypass email verification.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="grid gap-1.5">
@@ -626,11 +637,10 @@ export default function AdminUserAccounts() {
             </div>
             <div className="grid gap-1.5">
               <Label>Role</Label>
-              <Tabs value={form.role} onValueChange={(value) => setForm((prev) => ({ ...prev, role: value as 'student' | 'staff' | 'admin' }))}>
+              <Tabs value={form.role} onValueChange={(value) => setForm((prev) => ({ ...prev, role: value as 'student' | 'staff' }))}>
                 <TabsList className="w-full">
                   <TabsTrigger value="student">Student</TabsTrigger>
                   <TabsTrigger value="staff">Clinic Staff</TabsTrigger>
-                  <TabsTrigger value="admin">Admin</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -937,6 +947,7 @@ export default function AdminUserAccounts() {
                 <SelectItem value={CLINIC_STAFF_ROLE_FILTER}>Clinic Staff</SelectItem>
                 <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
                 <SelectItem value="Administrator">Administrator</SelectItem>
+                <SelectItem value="Super Admin">Super Admin</SelectItem>
               </SelectContent>
             </Select>
             <div className="flex flex-col gap-2 sm:flex-row print:hidden">
@@ -959,7 +970,7 @@ export default function AdminUserAccounts() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
-                Only student and clinic staff accounts can be archived here. Administrator accounts stay protected.
+                Only student and clinic staff accounts can be archived here. Administrator and super admin accounts stay protected.
               </div>
               {sortedActiveUsers.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -1012,7 +1023,7 @@ export default function AdminUserAccounts() {
                         </Button>
                       ) : (
                         <Button variant="secondary" size="sm" disabled className="w-full">
-                          Protected Administrator
+                          Protected Role
                         </Button>
                       )}
                     </CardContent>

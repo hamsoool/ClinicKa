@@ -6,6 +6,7 @@ import type {
   SubmissionRecord,
   SubmissionSummaryRecord,
 } from './record-types';
+import { getPasswordLengthMessage, isPasswordLongEnough } from './password-policy';
 
 const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '')
   .trim()
@@ -123,7 +124,7 @@ async function createSignedStorageUrlWithBucketFallbacks(
   return null;
 }
 
-export type UserRole = 'student' | 'staff' | 'admin';
+export type UserRole = 'student' | 'staff' | 'admin' | 'super_admin';
 
 export type AuthSession = {
   access_token: string;
@@ -287,6 +288,18 @@ export type ArchivedUserAccount = {
   archivedReason?: string;
 };
 
+export type SuperAdminAdministrator = {
+  userId: string;
+  id: string;
+  name: string;
+  email?: string;
+  role: 'Administrator';
+  roleKey: 'admin';
+  status: 'Active';
+  createdAt?: string;
+  lastActive?: string;
+};
+
 type RequestOptions = {
   method?: string;
   token?: string | null;
@@ -393,6 +406,7 @@ export function isDoctorPosition(position?: string | null) {
 }
 
 export function getRoleLabel(role?: string | null, position?: string | null) {
+  if (role === 'super_admin') return 'Super Admin';
   if (role === 'admin') return 'Administrator';
   if (role === 'staff') {
     if (isDoctorPosition(position)) return 'Clinic Doctor';
@@ -414,6 +428,7 @@ function isValidStudentRegistrationEmail(email?: string | null) {
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const ME_CACHE_TTL_MS = 15_000;
 const SIGNED_URL_CACHE_TTL_MS = 5 * 60 * 1000;
+const SIGNED_STORAGE_URL_EXPIRES_SECONDS = 15 * 60;
 const STORAGE_FALLBACK_MAX_SUBMISSIONS = 12;
 const PROFILE_ASSET_FALLBACK_MAX_STUDENTS = 20;
 
@@ -761,8 +776,8 @@ export async function getUserByToken(token: string | null) {
 
 export async function updateUserPassword(newPassword: string, token?: string | null) {
   const password = newPassword?.trim();
-  if (!password || password.length < 6) {
-    throw new Error('Password must be at least 6 characters.');
+  if (!password || !isPasswordLongEnough(password)) {
+    throw new Error(getPasswordLengthMessage());
   }
 
   return authRequest<{ id: string; email?: string | null }>('/auth/v1/user', {
@@ -958,7 +973,7 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
             Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365, paths: [targetPath] }),
+          body: JSON.stringify({ expiresIn: SIGNED_STORAGE_URL_EXPIRES_SECONDS, paths: [targetPath] }),
         },
       );
       const payload = await response.json().catch(() => ({}));
@@ -1896,7 +1911,7 @@ async function normalizeFileRows(files: any[] | null | undefined, token?: string
         return {
           ...file,
           storage_bucket: resolvedBucket,
-          url: signedUrl || normalizeStorageFileUrl(file.url) || null,
+          url: signedUrl || null,
         };
       }
       return { ...file, url: normalizeStorageFileUrl(file?.url) || null };
@@ -2997,7 +3012,7 @@ export async function getStudentProfilePhoto(studentId?: string) {
         )
       : null;
 
-    const finalUrl = signed || normalizeStorageFileUrl(file?.url) || null;
+    const finalUrl = signed || (file?.storage_path ? null : normalizeStorageFileUrl(file?.url)) || null;
     if (finalUrl) return { photoUrl: finalUrl };
   }
 
@@ -3529,7 +3544,7 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
+      body: JSON.stringify({ expiresIn: SIGNED_STORAGE_URL_EXPIRES_SECONDS }),
     },
   );
 
@@ -3555,7 +3570,7 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
         type: fileType,
         file_name: file.name,
         mime_type: file.type,
-        url: fileUrl,
+        url: null,
         storage_bucket: storageBucket,
         storage_path: storagePath,
         uploaded_by: (await getCurrentAuthUser()).id,
@@ -3640,7 +3655,7 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
+      body: JSON.stringify({ expiresIn: SIGNED_STORAGE_URL_EXPIRES_SECONDS }),
     },
   );
 
@@ -3668,7 +3683,7 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
           type: fileType,
           file_name: file.name,
           mime_type: file.type,
-          url: fileUrl,
+          url: null,
           storage_bucket: storageBucket,
           storage_path: storagePath,
           uploaded_by: authUser.id,
@@ -3857,7 +3872,7 @@ function writeStoredAdminSystemSettings(settings: AdminSystemSettings) {
 type AdminCreateAccountInput = {
   email: string;
   password: string;
-  role: UserRole;
+  role: 'student' | 'staff';
   firstName?: string;
   lastName?: string;
   studentId?: string;
@@ -3960,4 +3975,39 @@ export async function restoreArchivedUserAccount(archiveId: string) {
     return apiRequest<{ success: boolean }>(`/functions/v1/server/admin/restore-account/${encodeURIComponent(archiveId)}`, {
     method: 'POST',
   });
+}
+
+type SuperAdminCreateAdministratorInput = {
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+};
+
+export async function getSuperAdminAdministrators() {
+  return apiRequest<{ administrators: SuperAdminAdministrator[] }>(
+    '/functions/v1/server/super-admin/administrators',
+  );
+}
+
+export async function createSuperAdminAdministrator(input: SuperAdminCreateAdministratorInput) {
+  return apiRequest<{ success: boolean; userId?: string }>(
+    '/functions/v1/server/super-admin/administrators',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export async function deleteSuperAdminAdministrator(userId: string) {
+  return apiRequest<{ success: boolean }>(
+    `/functions/v1/server/super-admin/administrators/${encodeURIComponent(userId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
 }

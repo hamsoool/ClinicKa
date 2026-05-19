@@ -6,6 +6,11 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import {
+  getPasswordLengthMessage,
+  isPasswordLongEnough,
+  MIN_PASSWORD_LENGTH,
+} from '../lib/password-policy';
 
 type PasswordChangeCardProps = {
   title?: string;
@@ -32,8 +37,8 @@ export default function PasswordChangeCard({
       return;
     }
 
-    if (form.newPassword.trim().length < 6) {
-      toast.error('Password must be at least 6 characters.');
+    if (!isPasswordLongEnough(form.newPassword)) {
+      toast.error(getPasswordLengthMessage());
       return;
     }
 
@@ -88,7 +93,7 @@ export default function PasswordChangeCard({
               type="password"
               value={form.newPassword}
               onChange={(event) => setForm((prev) => ({ ...prev, newPassword: event.target.value }))}
-              placeholder="At least 6 characters"
+              placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
             />
           </div>
           <div className="min-w-0">

@@ -1,4 +1,4 @@
-export type AppRole = 'student' | 'staff' | 'admin';
+export type AppRole = 'student' | 'staff' | 'admin' | 'super_admin';
 
 type RouteLoader = () => Promise<unknown>;
 
@@ -31,6 +31,9 @@ export const loadAdminSystemSettings = () => import('./pages/admin/system-settin
 export const loadAdminUserAccounts = () => import('./pages/admin/user-accounts');
 export const loadAdminReports = () => import('./pages/admin/reports');
 export const loadAdminAnnouncements = () => import('./pages/admin/announcements');
+
+export const loadSuperAdminLayout = () => import('./pages/super-admin/layout');
+export const loadSuperAdminAdministrators = () => import('./pages/super-admin/administrators');
 
 const preloadedLoaders = new Set<RouteLoader>();
 
@@ -71,6 +74,10 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadAdminUserAccounts,
     loadAdminReports,
     loadAdminAnnouncements,
+  ],
+  super_admin: [
+    loadSuperAdminLayout,
+    loadSuperAdminAdministrators,
   ],
 };
 

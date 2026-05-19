@@ -1,1 +1,0 @@
-import{j as n}from"./vendor-react-CWIi4Oxr.js";import{A as m}from"./announcements-management-DJ0NriIZ.js";import"./useQuery-CR0DHoU0.js";import"./index-mVG035tR.js";import"./vendor-charts-DkPmYEJI.js";import"./vendor-radix-BMW-LMZc.js";function s(){return n.jsx(m,{mode:"admin"})}export{s as default};

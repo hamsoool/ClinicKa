@@ -26,6 +26,7 @@ import { Plus, Search, Download, Printer, Archive } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import { archiveUserAccount, createAdminStaff } from '../../lib/api';
+import { getPasswordLengthMessage, isPasswordLongEnough } from '../../lib/password-policy';
 import { invalidateAdminWorkflowQueries, useAdminStaffUsersQuery } from './admin-workflow-query';
 
 const statusTone = (status: string) => {
@@ -69,6 +70,10 @@ export default function AdminStaffManagement() {
   const submitCreate = async () => {
     if (!form.email || !form.password || !form.firstName || !form.lastName) {
       toast.error('Email, password, first name, and last name are required');
+      return;
+    }
+    if (!isPasswordLongEnough(form.password)) {
+      toast.error(getPasswordLengthMessage());
       return;
     }
     try {
