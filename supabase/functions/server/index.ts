@@ -597,11 +597,8 @@ function isGCDomainEmail(email?: string | null) {
   return normalizeEmail(email).endsWith('@gordoncollege.edu.ph');
 }
 
-function resolveRoleFromEmail(email?: string | null) {
-  const normalized = normalizeEmail(email);
-  if (normalized.includes('admin')) return 'admin';
-  if (normalized.includes('staff')) return 'staff';
-  return 'student';
+function isValidStudentProvisionEmail(email?: string | null) {
+  return Boolean(isGCDomainEmail(email) && deriveStudentIdFromEmail(email));
 }
 
 function deriveStudentIdFromEmail(email?: string | null) {
@@ -865,7 +862,7 @@ async function ensureBucket() {
 async function ensureProfile(user: any) {
   const derivedStudentId = deriveStudentIdFromEmail(user.email);
   const normalizedEmail = normalizeEmail(user.email) || null;
-  const resolvedRole = resolveRoleFromEmail(user.email);
+  const canSelfProvisionStudent = isValidStudentProvisionEmail(user.email);
   const { firstName, lastName } = deriveNamePartsFromUser(user);
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('profiles')
@@ -879,7 +876,8 @@ async function ensureProfile(user: any) {
 
   if (existingProfile) {
     if (
-      resolvedRole === 'student' &&
+      existingProfile.role === 'student' &&
+      canSelfProvisionStudent &&
       (
         existingProfile.student_id !== derivedStudentId
         || existingProfile.email !== normalizedEmail
@@ -909,13 +907,20 @@ async function ensureProfile(user: any) {
     return existingProfile;
   }
 
+  const roleForNewProfile =
+    canSelfProvisionStudent ? 'student' : isConfiguredSuperAdminEmail(user?.email) ? 'admin' : null;
+
+  if (!roleForNewProfile) {
+    throw new Error('Profile not found for authenticated user.');
+  }
+
   const { data: createdProfile, error: createdProfileError } = await supabase
     .from('profiles')
     .upsert({
       id: user.id,
-      role: resolvedRole,
+      role: roleForNewProfile,
       email: normalizedEmail,
-      student_id: derivedStudentId,
+      student_id: canSelfProvisionStudent ? derivedStudentId : null,
       first_name: firstName,
       last_name: lastName,
     })

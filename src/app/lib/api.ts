@@ -6,17 +6,26 @@ import type {
   SubmissionRecord,
   SubmissionSummaryRecord,
 } from './record-types';
+import {
+  createDefaultAdminSystemSettings,
+  isMissingKvStoreError,
+  isMissingRouteError,
+  normalizeAdminSystemSettings,
+  readStoredAdminSystemSettings,
+  writeStoredAdminSystemSettings,
+} from './admin-system-settings';
+import type { AdminSystemSettings } from './admin-system-settings';
 import { getPasswordLengthMessage, isPasswordLongEnough } from './password-policy';
+import {
+  assertPublicSupabaseConfig,
+  configuredSiteUrl,
+  publicAnonKey,
+  PUBLIC_SUPABASE_CONFIG_ERROR,
+  supabaseUrl,
+} from './supabase-config';
 
-const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '')
-  .trim()
-  .replace(/\/+$/, '');
-const publicAnonKey = String(
-  import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
-).trim();
-const configuredSiteUrl = String(import.meta.env.VITE_SITE_URL || '')
-  .trim()
-  .replace(/\/+$/, '');
+export { createDefaultAdminSystemSettings } from './admin-system-settings';
+export type { AdminSystemSettings } from './admin-system-settings';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
@@ -33,11 +42,7 @@ const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
 let authClient: SupabaseClient | null = null;
 
 function getAuthClient() {
-  if (!supabaseUrl || !publicAnonKey) {
-    throw new Error(
-      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
-    );
-  }
+  assertPublicSupabaseConfig();
 
   if (!authClient) {
     authClient = createClient(supabaseUrl, publicAnonKey, {
@@ -393,13 +398,6 @@ function isGCDomainEmail(email?: string | null) {
   return normalizeEmail(email).endsWith(`@${GC_DOMAIN}`);
 }
 
-function resolveRoleFromEmail(email?: string | null): UserRole {
-  const normalized = normalizeEmail(email);
-  if (normalized.includes('admin')) return 'admin';
-  if (normalized.includes('staff')) return 'staff';
-  return 'student';
-}
-
 export function isDoctorPosition(position?: string | null) {
   if (!position) return false;
   return ['clinic doctor', 'doctor'].includes(position.trim().toLowerCase());
@@ -632,9 +630,7 @@ async function getValidAccessToken() {
 
 async function apiRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error(
-      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
-    );
+    throw new Error(PUBLIC_SUPABASE_CONFIG_ERROR);
   }
 
   const token = options.token ?? (await getValidAccessToken());
@@ -698,9 +694,7 @@ async function restRequest<T>(
 
 async function authRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error(
-      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
-    );
+    throw new Error(PUBLIC_SUPABASE_CONFIG_ERROR);
   }
 
   const token = options.token ?? (await getValidAccessToken());
@@ -1487,9 +1481,7 @@ async function getMappedSubmissions(query: string) {
 
 export async function authenticateWithPassword(email: string, password: string) {
   if (!supabaseUrl || !publicAnonKey) {
-    throw new Error(
-      'Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in your .env file.',
-    );
+    throw new Error(PUBLIC_SUPABASE_CONFIG_ERROR);
   }
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST',
@@ -1723,6 +1715,7 @@ export async function getMe(token?: string | null) {
     } catch {
       const user = await getCurrentAuthUser(token);
       const derivedStudentId = deriveStudentIdFromEmail(user.email);
+      const canSelfProvisionStudent = isValidStudentRegistrationEmail(user.email);
       const { firstName, lastName } = deriveNamePartsFromUser(user);
       const profileRows = await restRequest<any[]>(
         'profiles',
@@ -1734,10 +1727,12 @@ export async function getMe(token?: string | null) {
       );
       const profile = profileRows[0];
       const normalizedEmail = normalizeEmail(user.email) || null;
-      const resolvedRole = resolveRoleFromEmail(user.email);
       let resolvedProfile = profile;
 
       if (!resolvedProfile) {
+        if (!canSelfProvisionStudent) {
+          throw new Error('Profile not found for authenticated user.');
+        }
         resolvedProfile = (
           await restRequest<any[]>(
             'profiles',
@@ -1751,7 +1746,7 @@ export async function getMe(token?: string | null) {
               },
               body: JSON.stringify({
                 id: user.id,
-                role: resolvedRole,
+                role: 'student',
                 email: normalizedEmail,
                 student_id: derivedStudentId,
                 first_name: firstName,
@@ -1761,7 +1756,8 @@ export async function getMe(token?: string | null) {
           )
         )[0];
       } else if (
-        resolvedRole === 'student' &&
+        resolvedProfile.role === 'student' &&
+        canSelfProvisionStudent &&
         (
           resolvedProfile.student_id !== derivedStudentId
           || resolvedProfile.email !== normalizedEmail
@@ -3740,132 +3736,6 @@ export async function getAnalytics() {
 export async function getStaffUsers() {
     return apiRequest<{ staff: Array<{ id: string; userId?: string; name: string; role: string; status: string; email: string }> }>(
     '/functions/v1/server/staff-users',
-  );
-}
-
-export type AdminSystemSettings = {
-  academicYear: string;
-  semester: 'First Semester' | 'Second Semester' | 'Summer';
-  acceptingSubmissions: boolean;
-  requireTwoFactorAuth: boolean;
-  sessionTimeoutMinutes: number;
-  auditLogging: boolean;
-  approvalEmailNotifications: boolean;
-  pendingReviewReminders: boolean;
-  autoArchiveAfterMonths: number;
-};
-
-const ADMIN_SYSTEM_SETTINGS_STORAGE_KEY = 'admin_system_settings_v1';
-const ADMIN_SYSTEM_SETTINGS_SEMESTERS = new Set<AdminSystemSettings['semester']>([
-  'First Semester',
-  'Second Semester',
-  'Summer',
-]);
-const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = new Set([15, 30, 45, 60, 120]);
-const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = new Set([0, 12, 24, 36]);
-
-function isMissingKvStoreError(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
-  return (
-    message.includes('kv_store_2a5e1a6b') ||
-    message.includes('schema cache') ||
-    message.includes('could not find the table') ||
-    (message.includes('relation') && message.includes('does not exist'))
-  );
-}
-
-function isMissingRouteError(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
-  return message.includes('404') || message.includes('not found');
-}
-
-function getDefaultAcademicYear() {
-  const now = new Date();
-  const startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
-  return `${startYear}-${startYear + 1}`;
-}
-
-export function createDefaultAdminSystemSettings(): AdminSystemSettings {
-  return {
-    academicYear: getDefaultAcademicYear(),
-    semester: 'Second Semester',
-    acceptingSubmissions: true,
-    requireTwoFactorAuth: true,
-    sessionTimeoutMinutes: 30,
-    auditLogging: true,
-    approvalEmailNotifications: true,
-    pendingReviewReminders: true,
-    autoArchiveAfterMonths: 12,
-  };
-}
-
-function normalizeAdminSystemSettings(
-  value?: Partial<AdminSystemSettings> | null,
-): AdminSystemSettings {
-  const defaults = createDefaultAdminSystemSettings();
-  const academicYearValue = String(value?.academicYear ?? defaults.academicYear).trim();
-  const parsedTimeout = Number(value?.sessionTimeoutMinutes);
-  const parsedAutoArchive = Number(value?.autoArchiveAfterMonths);
-
-  const academicYear =
-    /^\d{4}-\d{4}$/.test(academicYearValue) &&
-    Number(academicYearValue.slice(5, 9)) - Number(academicYearValue.slice(0, 4)) === 1
-      ? academicYearValue
-      : defaults.academicYear;
-  const semester = ADMIN_SYSTEM_SETTINGS_SEMESTERS.has(value?.semester as AdminSystemSettings['semester'])
-    ? (value?.semester as AdminSystemSettings['semester'])
-    : defaults.semester;
-
-  return {
-    academicYear,
-    semester,
-    acceptingSubmissions:
-      typeof value?.acceptingSubmissions === 'boolean'
-        ? value.acceptingSubmissions
-        : defaults.acceptingSubmissions,
-    requireTwoFactorAuth:
-      typeof value?.requireTwoFactorAuth === 'boolean'
-        ? value.requireTwoFactorAuth
-        : defaults.requireTwoFactorAuth,
-    sessionTimeoutMinutes: ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS.has(parsedTimeout)
-      ? parsedTimeout
-      : defaults.sessionTimeoutMinutes,
-    auditLogging:
-      typeof value?.auditLogging === 'boolean' ? value.auditLogging : defaults.auditLogging,
-    approvalEmailNotifications:
-      typeof value?.approvalEmailNotifications === 'boolean'
-        ? value.approvalEmailNotifications
-        : defaults.approvalEmailNotifications,
-    pendingReviewReminders:
-      typeof value?.pendingReviewReminders === 'boolean'
-        ? value.pendingReviewReminders
-        : defaults.pendingReviewReminders,
-    autoArchiveAfterMonths: ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS.has(parsedAutoArchive)
-      ? parsedAutoArchive
-      : defaults.autoArchiveAfterMonths,
-  };
-}
-
-function readStoredAdminSystemSettings() {
-  if (typeof window === 'undefined') {
-    return createDefaultAdminSystemSettings();
-  }
-
-  const raw = window.localStorage.getItem(ADMIN_SYSTEM_SETTINGS_STORAGE_KEY);
-  if (!raw) return createDefaultAdminSystemSettings();
-
-  try {
-    return normalizeAdminSystemSettings(JSON.parse(raw) as Partial<AdminSystemSettings>);
-  } catch {
-    return createDefaultAdminSystemSettings();
-  }
-}
-
-function writeStoredAdminSystemSettings(settings: AdminSystemSettings) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(
-    ADMIN_SYSTEM_SETTINGS_STORAGE_KEY,
-    JSON.stringify(normalizeAdminSystemSettings(settings)),
   );
 }
 

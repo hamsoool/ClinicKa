@@ -10,17 +10,14 @@ import {
   ShieldCheck,
   Sparkles,
   Stethoscope,
-  XIcon,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '../components/ui/dialog';
 import {
   getPasswordResetCooldownRemaining,
@@ -40,268 +37,17 @@ import {
   MIN_PASSWORD_LENGTH,
 } from '../lib/password-policy';
 import { useAuth } from '../lib/auth';
+import { LegalDialog } from './auth/legal-dialog';
+import { CONTACT_EMAIL, POLICY_UPDATED_AT, privacySections, termsSections } from './auth/legal-content';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
-const POLICY_UPDATED_AT = 'April 29, 2026';
 const AUTH_LOGO_SRC = '/logo.png';
 const DASHBOARD_PREVIEW_SRC = new URL('../../../exports/figma/02-student-dashboard.png', import.meta.url).href;
-const CONTACT_EMAIL = 'digitalduo.clinicka@gmail.com';
 
 function deriveStudentIdFromEmail(email?: string | null) {
   const localPart = (email || '').trim().toLowerCase().split('@')[0] || '';
   const match = localPart.match(/^(\d{9})/);
   return match?.[1] || null;
-}
-
-type LegalSection = {
-  title: string;
-  body: string;
-  bullets?: string[];
-};
-
-const termsSections: LegalSection[] = [
-  {
-    title: 'Who may use the portal',
-    body:
-      'The Clinic Management System is intended for Gordon College students, clinic staff, and authorized administrators handling school health records and related transactions.',
-    bullets: [
-      'Access is limited to users with a valid Gordon College account.',
-      'Clinic workflows and records may only be handled by authorized personnel.',
-    ],
-  },
-  {
-    title: 'Account responsibility',
-    body:
-      'You are responsible for protecting your password and for all actions performed under your account.',
-    bullets: [
-      'Do not share credentials or allow another person to use your account.',
-      'Report suspected account compromise or unauthorized access immediately.',
-    ],
-  },
-  {
-    title: 'Accurate submissions',
-    body:
-      'All information and uploaded files submitted through the portal must be truthful, complete, and reasonably current.',
-    bullets: [
-      'Use your real student details and current contact information.',
-      'Do not upload altered, misleading, or unrelated medical documents.',
-    ],
-  },
-  {
-    title: 'Acceptable use',
-    body:
-      'The portal must not be used in a way that harms the system, other users, or Gordon College operations.',
-    bullets: [
-      "Malicious files, impersonation, and misuse of another person's records are prohibited.",
-      'Users must follow applicable school policies, privacy rules, and law.',
-    ],
-  },
-  {
-    title: 'Clinic review',
-    body:
-      'Submitted records may be reviewed, returned for correction, or processed by authorized clinic personnel as part of health compliance and school record management.',
-  },
-  {
-    title: 'Service changes',
-    body:
-      'Gordon College may update the portal, its workflows, and related rules when needed for operations, security, or compliance.',
-  },
-];
-
-const privacySections: LegalSection[] = [
-  {
-    title: 'Overview',
-    body:
-      'This notice explains how personal data is handled in the Gordon College Clinic Management System. It reflects the Gordon College General Privacy Notice and applies to account registration, record submission, and clinic-related workflows in the portal.',
-  },
-  {
-    title: 'Information we collect',
-    body:
-      'The portal may collect personal, academic, contact, and medical information needed to manage clinic transactions and student health requirements.',
-    bullets: [
-      'Identity details such as name, birth date, sex, civil status, and affiliations.',
-      'Contact details such as address, email address, and mobile number.',
-      'Academic details such as course, department, year level, and school-related standing.',
-      'Medical details such as history, physical measurements, laboratory files, and clinic submissions.',
-    ],
-  },
-  {
-    title: 'Why we process your data',
-    body:
-      'Gordon College processes personal data to support its obligations as a higher education institution and to administer clinic-related services and compliance requirements.',
-    bullets: [
-      'To manage medical record submissions and clinic review workflows.',
-      'To support school health requirements, documentation, and follow-up.',
-      'To comply with academic, administrative, legal, and regulatory obligations.',
-    ],
-  },
-  {
-    title: 'How data is collected',
-    body:
-      'Personal data may be collected through online forms, uploaded files, email-based registration, and related supporting documents submitted through the portal or school processes.',
-  },
-  {
-    title: 'Storage, transfer, and retention',
-    body:
-      'Records may be stored in physical or electronic systems managed or controlled by Gordon College. Data may be retained and transferred in accordance with school policy and applicable privacy rules.',
-    bullets: [
-      'Electronic records may be stored in secure cloud-based or institution-managed systems.',
-      'Retention periods follow applicable Gordon College records management practices.',
-    ],
-  },
-  {
-    title: 'Your rights as a data subject',
-    body:
-      'Subject to school policy and applicable law, data subjects may exercise rights over their personal data.',
-    bullets: [
-      'Right to be informed.',
-      'Right to access and request correction of personal data.',
-      'Right to object where applicable.',
-      'Right to erasure or blocking where legally permitted.',
-    ],
-  },
-  {
-    title: 'Data Privacy Office',
-    body:
-      'For privacy-related concerns, requests, or questions, you may contact Gordon College through its Data Privacy Office.',
-    bullets: [
-      `Email: ${CONTACT_EMAIL}`,
-      'Phone: (047) 222-4080',
-      'Address: Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City 2200',
-    ],
-  },
-];
-
-type LegalDialogProps = {
-  label: string;
-  eyebrow: string;
-  title: string;
-  description: string;
-  meta: string[];
-  sections: LegalSection[];
-  footer?: string;
-};
-
-function LegalDialog({ label, eyebrow, title, description, meta, sections, footer }: LegalDialogProps) {
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          className="font-semibold text-[#065f46] underline underline-offset-4 transition-colors hover:text-[#004532]"
-        >
-          {label}
-        </button>
-      </DialogTrigger>
-      <DialogContent className="legal-dialog-native-scroll flex h-[100dvh] max-h-[100dvh] max-w-none flex-col overflow-y-auto rounded-none border-0 bg-[linear-gradient(180deg,#f8fbf8_0%,#f5f9ff_100%)] p-0 shadow-none sm:h-[92vh] sm:max-h-[92vh] sm:max-w-[95vw] sm:rounded-[2rem] sm:border sm:border-white/70 sm:shadow-[0_30px_90px_rgba(11,28,48,0.18)] xl:max-w-6xl [&_[data-dialog-close=default]]:hidden">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-          <div className="absolute left-[-8rem] top-[-7rem] h-64 w-64 rounded-full bg-[#d9f3e4]/70 blur-3xl" />
-          <div className="absolute right-[-7rem] top-12 h-72 w-72 rounded-full bg-[#d9e8ff]/75 blur-3xl" />
-        </div>
-
-        <div className="sticky top-4 z-20 flex justify-end px-5 sm:top-6 sm:px-8">
-          <DialogClose className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 text-[#0b1c30] shadow-[0_14px_32px_rgba(11,28,48,0.16)] transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#065f46]/30 focus:ring-offset-2 focus:ring-offset-white">
-            <XIcon className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </DialogClose>
-        </div>
-
-        <div className="relative flex flex-col">
-          <div className="border-b border-emerald-950/10 bg-[linear-gradient(135deg,#f8fcf9_0%,#eef7f1_52%,#edf4ff_100%)]">
-            <DialogHeader className="px-5 py-6 sm:px-8 sm:py-8">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/75 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.26em] text-[#065f46] shadow-[0_10px_30px_rgba(11,28,48,0.05)]">
-                <Sparkles className="h-3.5 w-3.5" />
-                {eyebrow}
-              </div>
-              <div className="mt-5 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                <div className="max-w-3xl">
-                  <DialogTitle className="text-3xl font-semibold tracking-[-0.05em] text-[#0b1c30] sm:text-[2.6rem]">
-                    {title}
-                  </DialogTitle>
-                  <DialogDescription className="mt-4 max-w-2xl text-base leading-8 text-[#425468]">
-                    {description}
-                  </DialogDescription>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-3 lg:w-[27rem] lg:grid-cols-1">
-                  {meta.map((item) => (
-                    <div
-                      key={item}
-                      className="rounded-[1.35rem] border border-[#e6eeea] bg-white px-4 py-3 text-sm font-medium leading-6 text-[#0b1c30] shadow-[0_12px_26px_rgba(11,28,48,0.05)]"
-                    >
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </DialogHeader>
-          </div>
-
-          <div className="space-y-5 px-5 py-5 sm:px-8 sm:py-8">
-            {sections.map((section, index) => (
-              <section
-                key={section.title}
-                className="overflow-hidden rounded-[1.7rem] border border-[#e6eeea] bg-white shadow-[0_22px_60px_rgba(11,28,48,0.06)]"
-              >
-                <div className="h-1.5 bg-[linear-gradient(90deg,rgba(6,95,70,0.95)_0%,rgba(74,163,138,0.75)_45%,rgba(145,219,193,0.45)_100%)]" />
-                <div className="p-5 sm:p-6">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#d9f3e4] text-sm font-semibold text-[#065f46] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                      {String(index + 1).padStart(2, '0')}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-xl font-semibold tracking-[-0.03em] text-[#0b1c30]">{section.title}</h3>
-                      <p className="mt-3 text-sm leading-7 text-[#425468]">{section.body}</p>
-                      {section.bullets?.length ? (
-                        <ul className="mt-5 space-y-3">
-                          {section.bullets.map((bullet) => (
-                            <li
-                              key={bullet}
-                              className="flex items-start gap-3 rounded-2xl border border-[#e4ece8] bg-[#fcfefd] px-4 py-3 text-sm leading-6 text-[#3f4944]"
-                            >
-                              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#4aa38a]" />
-                              <span>{bullet}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </section>
-            ))}
-
-            {footer ? (
-              <div className="rounded-[1.7rem] border border-[#bbe4d0] bg-[linear-gradient(135deg,#ecfaf2_0%,#f7fcff_100%)] p-5 shadow-[0_20px_45px_rgba(11,28,48,0.05)] sm:p-6">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#065f46] shadow-[0_10px_24px_rgba(11,28,48,0.08)]">
-                    <ShieldCheck className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#065f46]">Key acknowledgement</p>
-                    <p className="mt-2 text-sm leading-7 text-emerald-950/85">{footer}</p>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="rounded-[1.35rem] border border-[#d5e7de] bg-[linear-gradient(135deg,#edf9f2_0%,#f7fcff_100%)] p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#065f46] shadow-[0_10px_24px_rgba(11,28,48,0.08)]">
-                  <Mail className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-[#0b1c30]">Need help?</p>
-                  <p className="mt-1 text-sm leading-6 text-[#425468]">
-                    Contact the support team at <span className="font-semibold text-[#065f46]">{CONTACT_EMAIL}</span>.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function getHomePath(role: UserRole) {

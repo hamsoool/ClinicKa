@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -26,7 +26,6 @@ import {
 } from '../../components/ui/table';
 import { Archive, Download, Printer, Search, Trash2, UserCog, UserPlus, Users, ArrowUpDown, RefreshCcw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { cn } from '../../components/ui/utils';
 import { toast } from 'sonner';
 import {
   archiveUserAccount,
@@ -43,139 +42,21 @@ import {
   useAdminArchivedAccountsQuery,
   useAdminUserAccountsQuery,
 } from './admin-workflow-query';
-
-const CLINIC_STAFF_ROLE_FILTER = 'clinic-staff';
-
-function isClinicStaffRole(role: string) {
-  return role === 'Clinic Staff' || role === 'Clinic Doctor';
-}
-
-function normalizeRoleFilter(value?: string | null) {
-  const raw = String(value || '').trim();
-  const normalized = raw.toLowerCase();
-
-  if (!raw || normalized === 'all') return 'all';
-  if (normalized === CLINIC_STAFF_ROLE_FILTER || normalized === 'clinic staff' || normalized === 'staff') {
-    return CLINIC_STAFF_ROLE_FILTER;
-  }
-  if (normalized === 'student') return 'Student';
-  if (normalized === 'clinic doctor') return 'Clinic Doctor';
-  if (normalized === 'administrator') return 'Administrator';
-  if (normalized === 'super admin' || normalized === 'super_admin' || normalized === 'super administrator') {
-    return 'Super Admin';
-  }
-  return 'all';
-}
-
-function matchesRoleFilter(role: string, filter: string) {
-  if (filter === 'all') return true;
-  if (filter === CLINIC_STAFF_ROLE_FILTER) return isClinicStaffRole(role);
-  return role === filter;
-}
-
-function AccountSummaryButton({
-  label,
-  value,
-  active,
-  children,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  active?: boolean;
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'group flex min-h-[6.75rem] w-full items-center justify-between rounded-xl border bg-card p-5 text-left text-card-foreground transition-all hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary-container/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2',
-        active && 'border-primary/45 bg-primary-container/10 shadow-sm',
-      )}
-    >
-      <span>
-        <span className="block text-sm text-muted-foreground">{label}</span>
-        <span className="mt-2 block text-2xl font-bold text-on-surface sm:text-3xl">{value}</span>
-      </span>
-      {children}
-    </button>
-  );
-}
-
-const roleTone = (role: string) => {
-  if (role === 'Super Admin') {
-    return 'bg-rose-100 text-rose-700';
-  }
-  if (role === 'Administrator') {
-    return 'bg-purple-100 text-purple-700';
-  }
-  if (role === 'Clinic Doctor') {
-    return 'bg-indigo-100 text-indigo-700';
-  }
-  if (role === 'Clinic Staff') {
-    return 'bg-emerald-100 text-emerald-700';
-  }
-  return 'bg-slate-100 text-slate-700';
-};
-
-const statusTone = (status: string) => {
-  if (status === 'Active') {
-    return 'bg-green-100 text-green-700';
-  }
-  if (status === 'Archived') {
-    return 'bg-amber-100 text-amber-700';
-  }
-  return 'bg-yellow-100 text-yellow-700';
-};
-
-function formatDateTime(value?: string) {
-  if (!value) return '-';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function matchesSearch(
-  account: Pick<AdminUserAccount, 'id' | 'name' | 'role' | 'email'> | Pick<ArchivedUserAccount, 'id' | 'name' | 'role' | 'email'>,
-  query: string,
-) {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return true;
-
-  return [account.id, account.name, account.role, account.email || '']
-    .join(' ')
-    .toLowerCase()
-    .includes(needle);
-}
-
-function prettifyEmailName(email?: string | null) {
-  const source = String(email || '').trim();
-  if (!source.includes('@')) return '';
-  return source
-    .split('@')[0]
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function getDisplayName(account: { name?: string; email?: string | null; id?: string }) {
-  const rawName = String(account.name || '').trim();
-  if (rawName && !rawName.includes('@')) return rawName;
-  const fromEmail = prettifyEmailName(account.email);
-  if (fromEmail) return fromEmail;
-  return rawName || String(account.id || 'Unnamed User');
-}
+import {
+  AccountSummaryButton,
+  CLINIC_STAFF_ROLE_FILTER,
+  downloadAccountsCsv,
+  formatDateTime,
+  getDisplayName,
+  isClinicStaffRole,
+  matchesRoleFilter,
+  matchesSearch,
+  normalizeRoleFilter,
+  roleTone,
+  sortAccountRows,
+  statusTone,
+  type SortConfig,
+} from './user-accounts-helpers';
 
 export default function AdminUserAccounts() {
   const queryClient = useQueryClient();
@@ -191,7 +72,7 @@ export default function AdminUserAccounts() {
   const [archiveReason, setArchiveReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [bulkArchiveOpen, setBulkArchiveOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -264,45 +145,15 @@ export default function AdminUserAccounts() {
     [archivedAccounts, searchQuery, roleFilter],
   );
 
-  const sortedActiveUsers = useMemo(() => {
-    let sortableItems = [...filteredActiveUsers];
-    if (sortConfig !== null) {
-      sortableItems.sort((a: any, b: any) => {
-        let aVal = a[sortConfig.key] || '';
-        let bVal = b[sortConfig.key] || '';
-        
-        if (sortConfig.key === 'lastActive') {
-          aVal = aVal ? new Date(aVal as string).getTime() : 0;
-          bVal = bVal ? new Date(bVal as string).getTime() : 0;
-        }
+  const sortedActiveUsers = useMemo(
+    () => sortAccountRows(filteredActiveUsers, sortConfig, ['lastActive']),
+    [filteredActiveUsers, sortConfig],
+  );
 
-        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return sortableItems;
-  }, [filteredActiveUsers, sortConfig]);
-
-  const sortedArchivedUsers = useMemo(() => {
-    let sortableItems = [...filteredArchivedUsers];
-    if (sortConfig !== null) {
-      sortableItems.sort((a: any, b: any) => {
-        let aVal = a[sortConfig.key] || '';
-        let bVal = b[sortConfig.key] || '';
-
-        if (sortConfig.key === 'archivedAt') {
-          aVal = aVal ? new Date(aVal as string).getTime() : 0;
-          bVal = bVal ? new Date(bVal as string).getTime() : 0;
-        }
-
-        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return sortableItems;
-  }, [filteredArchivedUsers, sortConfig]);
+  const sortedArchivedUsers = useMemo(
+    () => sortAccountRows(filteredArchivedUsers, sortConfig, ['archivedAt']),
+    [filteredArchivedUsers, sortConfig],
+  );
 
   const archiveableActiveUsers = useMemo(
     () => sortedActiveUsers.filter((user) => user.canArchive),
@@ -517,41 +368,33 @@ export default function AdminUserAccounts() {
 
   const exportToCSV = () => {
     try {
-      const rows =
-        tab === 'archive'
-          ? filteredArchivedUsers.map((user) => ({
-              id: user.id,
-              name: getDisplayName(user),
-              role: user.role,
-              status: user.status,
-              date: user.archivedAt,
-              email: user.email || '',
-            }))
-          : filteredActiveUsers.map((user) => ({
-              id: user.id,
-              name: getDisplayName(user),
-              role: user.role,
-              status: user.status,
-              date: user.lastActive || '',
-              email: user.email || '',
-            }));
-
-      let csvContent = 'data:text/csv;charset=utf-8,';
-      csvContent += tab === 'archive'
-        ? 'User ID,Name,Role,Status,Archived At,Email\n'
-        : 'User ID,Name,Role,Status,Last Active,Email\n';
-
-      rows.forEach((row) => {
-        csvContent += `${row.id},${row.name},${row.role},${row.status},${row.date},${row.email}\n`;
-      });
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `${tab}_accounts_${new Date().toISOString().split('T')[0]}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (tab === 'archive') {
+        downloadAccountsCsv(
+          'archive',
+          'Archived At',
+          filteredArchivedUsers.map((user) => ({
+            id: user.id,
+            name: getDisplayName(user),
+            role: user.role,
+            status: user.status,
+            date: user.archivedAt,
+            email: user.email || '',
+          })),
+        );
+      } else {
+        downloadAccountsCsv(
+          'active',
+          'Last Active',
+          filteredActiveUsers.map((user) => ({
+            id: user.id,
+            name: getDisplayName(user),
+            role: user.role,
+            status: user.status,
+            date: user.lastActive || '',
+            email: user.email || '',
+          })),
+        );
+      }
 
       toast.success('Account list exported successfully');
     } catch {
