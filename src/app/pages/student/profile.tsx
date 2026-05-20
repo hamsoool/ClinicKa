@@ -72,6 +72,13 @@ function buildEmptyAssets(): StudentProfileAssets {
   };
 }
 
+function withCacheBust(url: string | null | undefined) {
+  const value = String(url || '').trim();
+  if (!value) return null;
+  const separator = value.includes('?') ? '&' : '?';
+  return `${value}${separator}t=${Date.now()}`;
+}
+
 export default function StudentProfile() {
   const { me, refresh } = useAuth();
   const initialFormData = useMemo(() => buildProfileFormState(me), [me]);
@@ -254,16 +261,27 @@ export default function StudentProfile() {
       const resolvedStudentId = result.student?.student_id || nextStateFromResult.studentId;
       const resolvedProfileId = result.student?.profile_id || me?.student?.profile_id || result.profile.id;
 
+      let uploadedPhotoUrl: string | null = null;
+      let uploadedSignatureUrl: string | null = null;
+
       if (photoFile) {
-        await uploadStudentProfileAsset(photoFile, resolvedStudentId, 'photo');
+        const uploaded = await uploadStudentProfileAsset(photoFile, resolvedStudentId, 'photo');
+        uploadedPhotoUrl = withCacheBust(uploaded.url || null);
       }
 
       if (signatureFile) {
-        await uploadStudentProfileAsset(signatureFile, resolvedStudentId, 'signature');
+        const uploaded = await uploadStudentProfileAsset(signatureFile, resolvedStudentId, 'signature');
+        uploadedSignatureUrl = withCacheBust(uploaded.url || null);
       }
 
       const assets = await getStudentProfileAssets(resolvedStudentId, resolvedProfileId);
-      setProfileAssets(assets);
+      setProfileAssets({
+        ...assets,
+        photoUrl: uploadedPhotoUrl || assets.photoUrl,
+        signatureUrl: uploadedSignatureUrl || assets.signatureUrl,
+        photoFileName: photoFile?.name || assets.photoFileName,
+        signatureFileName: signatureFile?.name || assets.signatureFileName,
+      });
       setPhotoFile(null);
       setSignatureFile(null);
 
