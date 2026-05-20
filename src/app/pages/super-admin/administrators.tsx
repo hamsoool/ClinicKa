@@ -176,7 +176,7 @@ export default function SuperAdminAdministrators() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto w-full max-w-[100rem] space-y-6">
       <PortalPageIntro
         eyebrow={(
           <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
@@ -253,6 +253,7 @@ export default function SuperAdminAdministrators() {
         </Card>
       </div>
 
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.45fr)_minmax(28rem,0.75fr)] 2xl:items-start">
       <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -358,10 +359,13 @@ export default function SuperAdminAdministrators() {
         </CardContent>
       </Card>
 
+        <div className="space-y-6 2xl:sticky 2xl:top-24">
       <PasswordChangeCard
         title="Super Admin Password"
         description="Update the password for your super administrator account."
       />
+        </div>
+      </div>
 
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent>

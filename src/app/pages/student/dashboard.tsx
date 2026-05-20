@@ -267,12 +267,14 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4 sm:space-y-6 lg:space-y-8">
+    <div className="mx-auto w-full max-w-[100rem] space-y-4 sm:space-y-6 lg:space-y-8">
       <StudentPageIntro
         title={`Welcome, ${displayName}`}
         description="Check your latest record status, finish missing requirements, and stay updated with clinic announcements from one place."
       />
 
+      <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.8fr)] xl:items-start">
+        <div className="space-y-4 sm:space-y-6 lg:space-y-8">
       <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-6 lg:p-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -444,7 +446,9 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+        </div>
+
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-1">
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-4 flex items-center justify-between gap-3 sm:mb-6">
             <h3 className="text-lg font-semibold text-on-surface">Current Submission</h3>
@@ -588,6 +592,7 @@ export default function StudentDashboard() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

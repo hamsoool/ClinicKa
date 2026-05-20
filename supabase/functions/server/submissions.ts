@@ -13,6 +13,7 @@ import {
   getArchivedUserIds,
   loadStaffUsersByIds,
 } from "./requester.ts";
+import { getSafeAdminSystemSettings } from "./settings.ts";
 import { normalizeFileRows } from "./storage.ts";
 
 const ANALYTICS_CACHE_TTL_MS = 30_000;
@@ -603,12 +604,32 @@ async function loadStaffDashboardOverview() {
 
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
+  const weekStart = new Date(today);
+  const dayOfWeek = weekStart.getDay();
+  const weekOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  weekStart.setDate(weekStart.getDate() + weekOffset);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const reportingTermSettings = await getSafeAdminSystemSettings();
+  const [academicYearStartValue, academicYearEndValue] = String(reportingTermSettings?.academicYear || "").split("-");
+  const academicYearStart = Number.parseInt(academicYearStartValue || "", 10);
+  const academicYearEnd = Number.parseInt(academicYearEndValue || "", 10);
+  const academicYearStartDate =
+    Number.isFinite(academicYearStart) && Number.isFinite(academicYearEnd)
+      ? new Date(Date.UTC(academicYearStart, 6, 1))
+      : new Date(Date.UTC(today.getUTCFullYear(), 6, 1));
+  const academicYearEndDate =
+    Number.isFinite(academicYearStart) && Number.isFinite(academicYearEnd)
+      ? new Date(Date.UTC(academicYearEnd, 6, 1))
+      : new Date(Date.UTC(today.getUTCFullYear() + 1, 6, 1));
 
   const [
     { count: totalSubmissions, error: totalSubmissionsError },
     { count: approvedRecords, error: approvedError },
     { count: submittedToday, error: todayError },
     { count: submittedYesterday, error: yesterdayError },
+    { count: submittedThisWeek, error: weekError },
+    { count: submittedThisMonth, error: monthError },
+    { count: submittedThisAcademicYear, error: academicYearError },
     { data: actionableRows, error: actionableRowsError },
     { data: latestRowsUniverse, error: latestRowsUniverseError },
     { data: departmentSourceRows, error: departmentSourceError },
@@ -626,6 +647,18 @@ async function loadStaffDashboardOverview() {
       "submitted_at",
       yesterday.toISOString(),
     ).lt("submitted_at", today.toISOString()),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).gte(
+      "submitted_at",
+      weekStart.toISOString(),
+    ),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).gte(
+      "submitted_at",
+      monthStart.toISOString(),
+    ),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).gte(
+      "submitted_at",
+      academicYearStartDate.toISOString(),
+    ).lt("submitted_at", academicYearEndDate.toISOString()),
     supabase
       .from("submissions")
       .select(SUBMISSION_SUMMARY_COLUMNS)
@@ -644,6 +677,9 @@ async function loadStaffDashboardOverview() {
   if (approvedError) throw new Error(approvedError.message);
   if (todayError) throw new Error(todayError.message);
   if (yesterdayError) throw new Error(yesterdayError.message);
+  if (weekError) throw new Error(weekError.message);
+  if (monthError) throw new Error(monthError.message);
+  if (academicYearError) throw new Error(academicYearError.message);
   if (actionableRowsError) throw new Error(actionableRowsError.message);
   if (latestRowsUniverseError) throw new Error(latestRowsUniverseError.message);
   if (departmentSourceError) throw new Error(departmentSourceError.message);
@@ -743,6 +779,10 @@ async function loadStaffDashboardOverview() {
       (returnedRecords || 0) + (resubmittedRecords || 0),
     submittedToday: submittedToday || 0,
     submittedYesterday: submittedYesterday || 0,
+    submittedThisWeek: submittedThisWeek || 0,
+    submittedThisMonth: submittedThisMonth || 0,
+    submittedThisAcademicYear: submittedThisAcademicYear || 0,
+    academicYearLabel: reportingTermSettings?.academicYear || "",
     pendingQueueItems,
     inReviewQueueItems,
     returnedQueueItems,

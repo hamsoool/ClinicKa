@@ -205,8 +205,8 @@ function StaffCertificatePreviewSkeleton() {
 
 function StaffCertificatesWorkspaceSkeleton() {
   return (
-    <div aria-busy="true" aria-live="polite" className="grid gap-6 lg:grid-cols-3 lg:items-start">
-      <div className="min-w-0 lg:col-span-1">
+    <div aria-busy="true" aria-live="polite" className="grid gap-6 xl:grid-cols-[minmax(18rem,0.72fr)_minmax(0,1.7fr)] xl:items-start">
+      <div className="min-w-0">
         <Card>
           <CardHeader>
             <Skeleton className="h-5 w-40 bg-surface-container-high" />
@@ -224,7 +224,7 @@ function StaffCertificatesWorkspaceSkeleton() {
         </Card>
       </div>
 
-      <div className="min-w-0 lg:col-span-2">
+      <div className="min-w-0">
         <StaffCertificatePreviewSkeleton />
       </div>
     </div>
@@ -538,8 +538,8 @@ function StaffCertificatesWorkspace() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
-        <div className="min-w-0 lg:col-span-1">
+    <div className="grid gap-6 xl:grid-cols-[minmax(18rem,0.72fr)_minmax(0,1.7fr)] xl:items-start">
+        <div className="min-w-0">
             <Card>
               <CardHeader>
               <div className="flex items-center justify-between gap-3">
@@ -633,7 +633,7 @@ function StaffCertificatesWorkspace() {
           </Card>
         </div>
 
-        <div className="min-w-0 lg:col-span-2">
+        <div className="min-w-0">
           {selectedStudentId && selectedStudentRecordsFetching && !combinedRecord ? (
             <StaffCertificatePreviewSkeleton />
           ) : !combinedRecord ? (
@@ -786,7 +786,7 @@ export default function StaffRecordsAndCertificates() {
   };
 
   return (
-    <div className="min-w-0">
+    <div className="mx-auto w-full max-w-[100rem] min-w-0">
       <PortalPageIntro
         className="mb-8"
         title="Records & Certificates"

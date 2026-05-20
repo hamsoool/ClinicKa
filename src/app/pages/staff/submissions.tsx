@@ -36,6 +36,7 @@ const STATUS_FILTER_VALUES = new Set([
 
 function parseStatusFilter(value: string | null) {
   if (!value) return 'action_needed';
+  if (value === 'in_review') return 'action_needed';
   return STATUS_FILTER_VALUES.has(value) ? value : 'action_needed';
 }
 
@@ -67,25 +68,6 @@ function getStatusFilterLabel(status: string) {
     default:
       return status;
   }
-}
-
-function getActiveReviewerMessage(
-  submission: SubmissionSummaryRecord,
-  currentStaffId?: string | null,
-) {
-  if (submission.status !== 'in_review' || !submission.reviewedByStaffId) {
-    return null;
-  }
-
-  if (submission.reviewedByStaffId === String(currentStaffId || '').trim()) {
-    return 'Assigned reviewer: You';
-  }
-
-  if (submission.reviewedByName) {
-    return `Assigned reviewer: ${submission.reviewedByName}`;
-  }
-
-  return 'Assigned reviewer: Another clinic staff member';
 }
 
 export default function StaffSubmissions() {
@@ -195,7 +177,7 @@ export default function StaffSubmissions() {
       case 'pending':
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
       case 'in_review':
-        return <Badge variant="secondary" className="bg-sky-100 text-sky-800">In Review</Badge>;
+        return null;
       case 'physical_exam_done':
         return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Physical Exam Done</Badge>;
       case 'approved':
@@ -210,7 +192,7 @@ export default function StaffSubmissions() {
   };
 
   return (
-    <div>
+    <div className="mx-auto w-full max-w-[100rem]">
       <PortalPageIntro
         className="mb-8"
         title="Student Submissions"
@@ -219,7 +201,7 @@ export default function StaffSubmissions() {
 
       <Card className="mb-6">
         <CardContent className="pt-6 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3">
             <button
               type="button"
               onClick={() => updateStatusFilter('pending')}
@@ -229,16 +211,6 @@ export default function StaffSubmissions() {
             >
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pending</p>
               <p className="mt-1 text-2xl font-bold text-foreground">{counts.pending}</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => updateStatusFilter('in_review')}
-              className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-                statusFilter === 'in_review' ? 'border-sky-300 bg-sky-50' : 'border-border hover:bg-accent/50'
-              }`}
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">In Review</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{counts.inReview}</p>
             </button>
             <button
               type="button"
@@ -303,7 +275,7 @@ export default function StaffSubmissions() {
           </div>
 
           {showAdvancedFilters ? (
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as 'asc' | 'desc')}>
                 <SelectTrigger>
                   <SelectValue placeholder="Sort Order" />
@@ -322,7 +294,6 @@ export default function StaffSubmissions() {
                   <SelectItem value="action_needed">Needs Action</SelectItem>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="in_review">In Review</SelectItem>
                   <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="returned">Returned</SelectItem>
@@ -423,11 +394,6 @@ export default function StaffSubmissions() {
                       <div className="text-sm text-muted-foreground space-y-0.5">
                         <p>Student ID: {submission.studentId}</p>
                         <p>{submission.department || submission.course}</p>
-                        {getActiveReviewerMessage(submission, currentStaffId) ? (
-                          <p className="font-medium text-sky-700">
-                            {getActiveReviewerMessage(submission, currentStaffId)}
-                          </p>
-                        ) : null}
                         <p>Submitted: {formatTimestamp(submission.submittedAt)}</p>
                       </div>
                     </div>
@@ -441,9 +407,7 @@ export default function StaffSubmissions() {
                       <Eye className="w-4 h-4 mr-2" />
                       {submission.status === 'in_review' && submission.reviewedByStaffId && submission.reviewedByStaffId !== currentStaffId
                         ? 'View'
-                        : submission.status === 'in_review' && submission.reviewedByStaffId === currentStaffId
-                          ? 'Continue Review'
-                          : 'Review'}
+                        : 'Review'}
                     </Button>
                   </div>
                 </div>

@@ -36,6 +36,7 @@ import {
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const REPORTING_TERM_REFRESH_INTERVAL_MS = 180_000;
 const YEAR_LABELS: Record<string, string> = { '1': '1st Year', '2': '2nd Year', '3': '3rd Year', '4': '4th Year' };
+const YEAR_LEVEL_ORDER = ['1', '2', '3', '4'];
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
   in_review: 'In Review',
@@ -58,6 +59,18 @@ const DEPARTMENT_COLORS: Record<string, string> = {
   CHTM: '#ec4899',
   CAHS: '#ef4444',
 };
+const YEAR_LEVEL_COLORS: Record<string, string> = {
+  '1': '#f97316',
+  '2': '#facc15',
+  '3': '#3b82f6',
+  '4': '#14b8a6',
+};
+const GENDER_ORDER = ['male', 'female', 'other'];
+const GENDER_COLORS: Record<string, string> = {
+  male: '#3b82f6',
+  female: '#ec4899',
+  other: '#8b5cf6',
+};
 
 type ReportsSummary = {
   total: number;
@@ -74,7 +87,7 @@ type ReportsSummary = {
   byCourse: Record<string, number>;
 };
 
-type SubmissionBreakdownView = 'department' | 'program';
+type SubmissionBreakdownView = 'department' | 'program' | 'year' | 'gender';
 type SubmissionBreakdownDatum = {
   label: string;
   count: number;
@@ -157,6 +170,59 @@ function abbreviateCourse(value?: string) {
     .toUpperCase();
 
   return acronym.length >= 3 && acronym.length <= 8 ? acronym : raw;
+}
+
+function normalizeSubmissionGenderValue(value?: string) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (normalized === 'm' || normalized === 'male') return 'male';
+  if (normalized === 'f' || normalized === 'female') return 'female';
+  if (['other', 'others', 'non-binary', 'nonbinary'].includes(normalized)) return 'other';
+  return normalized;
+}
+
+function formatSubmissionBreakdownLabel(view: SubmissionBreakdownView) {
+  switch (view) {
+    case 'department':
+      return 'Department';
+    case 'program':
+      return 'Program';
+    case 'year':
+      return 'Year Level';
+    case 'gender':
+      return 'Gender';
+    default:
+      return 'Department';
+  }
+}
+
+function formatGenderLabel(value: string) {
+  if (!value) return 'Unspecified';
+  if (value === 'male') return 'Male';
+  if (value === 'female') return 'Female';
+  if (value === 'other') return 'Other';
+  return value.replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function getLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getLocalDateStartTimestamp(value?: string) {
+  const raw = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return Number.NaN;
+  const [year, month, day] = raw.split('-').map((part) => Number(part));
+  return new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
+}
+
+function getLocalDateEndTimestamp(value?: string) {
+  const raw = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return Number.NaN;
+  const [year, month, day] = raw.split('-').map((part) => Number(part));
+  return new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
 }
 
 function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRange {
@@ -523,7 +589,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [statusOverviewFromDate, setStatusOverviewFromDate] = useState('');
-  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const today = useMemo(() => getLocalDateInputValue(), []);
   const defaultReportingTermSettings = useMemo(() => createDefaultAdminSystemSettings(), []);
   const {
     data: analytics,
@@ -621,7 +687,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         if (certificateFilter === 'issued' && !sub.clearanceInfo?.issuedDate) return false;
         if (certificateFilter === 'not_issued' && sub.clearanceInfo?.issuedDate) return false;
         if (genderFilter !== 'all') {
-          const gender = String(sub.gender || sub.sex || '').trim().toLowerCase();
+          const gender = normalizeSubmissionGenderValue(sub.gender || sub.sex);
           if (gender !== genderFilter) return false;
         }
         if (studentBatchFilter !== 'all') {
@@ -629,8 +695,8 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           if (!id.startsWith(studentBatchFilter)) return false;
         }
         const subDate = sub.submittedAt ? new Date(sub.submittedAt) : null;
-        if (fromDate && subDate && subDate < new Date(`${fromDate}T00:00:00`)) return false;
-        if (toDate && subDate && subDate > new Date(`${toDate}T23:59:59`)) return false;
+        if (fromDate && subDate && subDate.getTime() < getLocalDateStartTimestamp(fromDate)) return false;
+        if (toDate && subDate && subDate.getTime() > getLocalDateEndTimestamp(toDate)) return false;
         return true;
       }),
     [normalizedSubmissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, genderFilter, studentBatchFilter, fromDate, toDate],
@@ -661,7 +727,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       .map((s) => (s.submittedAt ? new Date(s.submittedAt).getTime() : NaN))
       .filter((t) => Number.isFinite(t)) as number[];
     if (!timestamps.length) return { minDate: '', maxDate: today };
-    const min = new Date(Math.min(...timestamps)).toISOString().split('T')[0];
+    const min = getLocalDateInputValue(new Date(Math.min(...timestamps)));
     return { minDate: min, maxDate: today };
   }, [normalizedSubmissions, today]);
 
@@ -683,14 +749,14 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
   const handleFromDateChange = (nextValue: string) => {
     setFromDate(nextValue);
-    if (toDate && nextValue && new Date(`${nextValue}T00:00:00`).getTime() > new Date(`${toDate}T23:59:59`).getTime()) {
+    if (toDate && nextValue && getLocalDateStartTimestamp(nextValue) > getLocalDateEndTimestamp(toDate)) {
       setToDate(nextValue);
     }
   };
 
   const handleToDateChange = (nextValue: string) => {
     setToDate(nextValue);
-    if (fromDate && nextValue && new Date(`${nextValue}T23:59:59`).getTime() < new Date(`${fromDate}T00:00:00`).getTime()) {
+    if (fromDate && nextValue && getLocalDateEndTimestamp(nextValue) < getLocalDateStartTimestamp(fromDate)) {
       setFromDate(nextValue);
     }
   };
@@ -812,32 +878,114 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     },
     [currentTermSubmissions],
   );
-  const submissionBreakdownData: SubmissionBreakdownDatum[] = submissionBreakdownView === 'department'
-    ? departmentChartData.map((item) => ({
-        label: item.department,
-        count: item.count,
-        fill: item.fill,
-      }))
-    : programChartData;
+  const yearChartData = useMemo(() => {
+    const yearCounts = currentTermSubmissions.reduce((acc, sub) => {
+      const year = String(sub.year || '').trim();
+      acc[year] = (acc[year] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
-  const statusChartData = useMemo(
-    () => {
-      const statusOverviewSubmissions = dedupedFilteredSubmissions.filter((submission) => {
-        if (!statusOverviewFromDate) return true;
-        const submittedTimestamp = new Date(submission.submittedAt || 0).getTime();
-        return Number.isFinite(submittedTimestamp)
-          && submittedTimestamp >= new Date(`${statusOverviewFromDate}T00:00:00`).getTime();
+    const extraYears = Object.keys(yearCounts)
+      .filter((year) => year && !YEAR_LEVEL_ORDER.includes(year))
+      .sort((a, b) => {
+        const aNumber = Number.parseInt(a, 10);
+        const bNumber = Number.parseInt(b, 10);
+        const areNumbers = Number.isFinite(aNumber) && Number.isFinite(bNumber);
+        return areNumbers ? aNumber - bNumber : a.localeCompare(b);
       });
 
-      return [
+    const data = [
+      ...YEAR_LEVEL_ORDER.map((year) => ({
+        label: YEAR_LABELS[year] || `Year ${year}`,
+        count: yearCounts[year] || 0,
+        fill: YEAR_LEVEL_COLORS[year] || '#94a3b8',
+      })),
+      ...extraYears.map((year) => ({
+        label: YEAR_LABELS[year] || `Year ${year}`,
+        count: yearCounts[year] || 0,
+        fill: YEAR_LEVEL_COLORS[year] || '#94a3b8',
+      })),
+    ];
+
+    if (yearCounts['']) {
+      data.push({
+        label: 'Unspecified',
+        count: yearCounts[''],
+        fill: '#94a3b8',
+      });
+    }
+
+    return data;
+  }, [currentTermSubmissions]);
+  const genderChartData = useMemo(() => {
+    const genderCounts = currentTermSubmissions.reduce((acc, sub) => {
+      const gender = normalizeSubmissionGenderValue(sub.gender || sub.sex);
+      acc[gender] = (acc[gender] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const extraGenders = Object.keys(genderCounts)
+      .filter((gender) => gender && !GENDER_ORDER.includes(gender))
+      .sort((a, b) => a.localeCompare(b));
+
+    const data = [
+      ...GENDER_ORDER.map((gender) => ({
+        label: formatGenderLabel(gender),
+        count: genderCounts[gender] || 0,
+        fill: GENDER_COLORS[gender] || '#94a3b8',
+      })),
+      ...extraGenders.map((gender) => ({
+        label: formatGenderLabel(gender),
+        count: genderCounts[gender] || 0,
+        fill: GENDER_COLORS[gender] || '#94a3b8',
+      })),
+    ];
+
+    if (genderCounts['']) {
+      data.push({
+        label: 'Unspecified',
+        count: genderCounts[''],
+        fill: '#94a3b8',
+      });
+    }
+
+    return data;
+  }, [currentTermSubmissions]);
+  const submissionBreakdownLabel = formatSubmissionBreakdownLabel(submissionBreakdownView);
+  const submissionBreakdownData: SubmissionBreakdownDatum[] =
+    submissionBreakdownView === 'department'
+      ? departmentChartData.map((item) => ({
+          label: item.department,
+          count: item.count,
+          fill: item.fill,
+        }))
+      : submissionBreakdownView === 'program'
+        ? programChartData
+        : submissionBreakdownView === 'year'
+          ? yearChartData
+          : genderChartData;
+
+  const statusOverviewSubmissions = useMemo(() => {
+    if (!statusOverviewFromDate) return filteredSubmissions;
+
+    const selectedStart = getLocalDateStartTimestamp(statusOverviewFromDate);
+    if (!Number.isFinite(selectedStart)) return [];
+
+    return filteredSubmissions.filter((submission) => {
+      const submittedTimestamp = new Date(submission.submittedAt || 0).getTime();
+      return Number.isFinite(submittedTimestamp) && submittedTimestamp >= selectedStart;
+    });
+  }, [filteredSubmissions, statusOverviewFromDate]);
+
+  const statusChartData = useMemo(
+    () =>
+      [
         { name: 'Approved', value: statusOverviewSubmissions.filter((s) => s.status === 'approved').length },
         { name: 'Pending', value: statusOverviewSubmissions.filter((s) => s.status === 'pending').length },
-        { name: 'In Review', value: statusOverviewSubmissions.filter((s) => s.status === 'in_review').length },
         { name: 'Returned', value: statusOverviewSubmissions.filter((s) => s.status === 'returned').length },
         { name: 'Exam Done', value: statusOverviewSubmissions.filter((s) => s.status === 'physical_exam_done').length },
-      ].filter((d) => d.value > 0);
-    },
-    [dedupedFilteredSubmissions, statusOverviewFromDate],
+      ].filter((d) => d.value > 0),
+    [statusOverviewSubmissions],
   );
 
   const submissionsByDate = useMemo(() => {
@@ -955,7 +1103,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   // ── Loading skeleton ────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="space-y-5">
+      <div className="mx-auto w-full max-w-[100rem] space-y-5">
         <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <Skeleton className="h-9 w-56 sm:h-10 sm:w-80" />
@@ -1002,7 +1150,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-5">
+    <div className="mx-auto w-full max-w-[100rem] space-y-5">
       {/* ── Page Header ───────────────────────────────────────────────── */}
       <PortalPageIntro
         title={`${mode === 'admin' ? 'Admin' : 'Staff'} Reports & Analytics`}
@@ -1148,9 +1296,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         <Card className="border-outline-variant/30">
           <CardHeader className="pb-0 pt-5 px-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
+                <div>
                 <CardTitle className="text-base font-semibold">
-                  Submissions by {submissionBreakdownView === 'department' ? 'Department' : 'Program'}
+                  Submissions by {submissionBreakdownLabel}
                 </CardTitle>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Total medical clearance forms for the current academic year.
@@ -1171,6 +1319,8 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                   <SelectContent>
                     <SelectItem value="department">Department</SelectItem>
                     <SelectItem value="program">Program</SelectItem>
+                    <SelectItem value="year">Year Level</SelectItem>
+                    <SelectItem value="gender">Gender</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1238,9 +1388,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               </div>
             </CardHeader>
             <CardContent className="px-5 pb-5 pt-4">
-              {statusChartData.length === 0 ? (
+              {statusOverviewSubmissions.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
-                  No status data available for the selected filters.
+                  No records found from the selected overview date.
                 </div>
               ) : (
                 <div className="h-56">

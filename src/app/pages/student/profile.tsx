@@ -285,12 +285,13 @@ export default function StudentProfile() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
+    <div className="mx-auto w-full max-w-[100rem] space-y-8">
       <StudentPageIntro
         title="Profile"
         description="Keep your student information, 1x1 photo, and signature up to date. These saved assets are reused for your student records."
       />
 
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
       <form onSubmit={handleSubmit} className="space-y-6">
         <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
@@ -544,9 +545,12 @@ export default function StudentProfile() {
         </Card>
       </form>
 
+        <div className="space-y-6 xl:sticky xl:top-24">
       <PasswordChangeCard title="Change Password" description="Update the password for your student account." />
 
       <SettingsLogoutCard className="flex justify-end" />
+        </div>
+      </div>
     </div>
   );
 }

@@ -247,7 +247,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-surface-container via-surface-container-lowest to-surface-container-lowest">
-      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mx-auto w-full max-w-[100rem] px-4 py-8 sm:px-6">
         <PortalPageIntro
           className="mb-8"
           title={isAdmin ? 'Announcement Hub' : 'My Announcements'}
@@ -258,7 +258,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
           }
         />
 
-        <section className="grid gap-6 lg:grid-cols-[1fr_1.35fr]">
+        <section className="grid gap-6 xl:grid-cols-[minmax(22rem,0.78fr)_minmax(0,1.45fr)] xl:items-start">
           {/* Form Section */}
           <form
             onSubmit={onSubmit}
@@ -377,7 +377,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
           </form>
 
           {/* Posts Section */}
-          <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-sm ring-1 ring-outline-variant/10 sm:p-8">
+          <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-sm ring-1 ring-outline-variant/10 sm:p-8 xl:min-h-[42rem]">
             <div className="mb-6 flex items-center justify-between">
               <h3 className="text-lg font-bold text-on-surface">
                 📝 Your Posts {announcements.length > 0 && <span className="ml-2 text-sm font-normal text-on-surface-variant">({announcements.length})</span>}

@@ -3617,6 +3617,8 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
         type: fileType,
         file_name: file.name,
         mime_type: file.type,
+        // Persist only storage metadata in the database.
+        // Access is resolved later through signed URLs instead of a stored public URL.
         url: null,
         storage_bucket: storageBucket,
         storage_path: storagePath,
@@ -3626,6 +3628,10 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
   );
 
   const fileId = inserted[0]?.id;
+  if (!fileId) {
+    throw new Error('File upload metadata could not be saved in the database.');
+  }
+
   if (fileId && (fileType === 'xray' || fileType === 'cbc' || fileType === 'urinalysis')) {
     const table = fileType === 'xray' ? 'lab_chest_xray' : fileType === 'cbc' ? 'lab_cbc' : 'lab_urinalysis';
     await restRequest(

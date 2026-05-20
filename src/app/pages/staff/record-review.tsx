@@ -3,9 +3,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 import {
   ArrowLeft,
+  Camera,
   CheckCircle2,
   ClipboardCheck,
   FileCheck2,
+  ImageUp,
   Save,
   ShieldCheck,
   Stethoscope,
@@ -36,7 +38,7 @@ import {
 } from '../../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Textarea } from '../../components/ui/textarea';
-import { saveSubmissionReview, updateSubmissionStatus } from '../../lib/api';
+import { saveSubmissionReview, updateSubmissionStatus, uploadFile } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { MedicalHistory, SubmissionRecord } from '../../lib/record-types';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
@@ -56,6 +58,7 @@ type SubmissionDetails = SubmissionRecord & {
 };
 
 type ReviewStatus = SubmissionRecord['status'];
+type LabUploadType = 'xray' | 'cbc' | 'urinalysis';
 
 type RecordForm = {
   studentId: string;
@@ -156,6 +159,44 @@ const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAS', 'CED'];
 const YEAR_OPTIONS = ['1', '2', '3', '4'];
+const LAB_IMAGE_MAX_SIZE_BYTES = 2 * 1024 * 1024;
+
+type LabUploadActionsProps = {
+  title: string;
+  isUploading: boolean;
+  onChooseImage: () => void;
+  onOpenCamera: () => void;
+};
+
+function LabUploadActions({
+  title,
+  isUploading,
+  onChooseImage,
+  onOpenCamera,
+}: LabUploadActionsProps) {
+  return (
+    <div className="rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-low px-4 py-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-on-surface">Add or replace {title} image</p>
+          <p className="text-xs text-on-surface-variant">
+            Images only, up to 2MB. Camera opens on supported mobile devices.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+          <Button type="button" variant="outline" onClick={onChooseImage} disabled={isUploading} className="w-full sm:w-auto">
+            <ImageUp className="mr-2 h-4 w-4" />
+            {isUploading ? 'Uploading...' : 'Upload Image'}
+          </Button>
+          <Button type="button" variant="outline" onClick={onOpenCamera} disabled={isUploading} className="w-full sm:w-auto">
+            <Camera className="mr-2 h-4 w-4" />
+            Use Camera
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function createEmptyMedicalHistory(): MedicalHistory {
   return MEDICAL_HISTORY_FIELDS.reduce((acc, item) => {
@@ -297,7 +338,7 @@ function getStatusBadge(status: ReviewStatus) {
     case 'pending':
       return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending Review</Badge>;
     case 'in_review':
-      return <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">In Review</Badge>;
+      return null;
     case 'physical_exam_done':
       return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Physical Exam Done</Badge>;
     case 'approved':
@@ -323,6 +364,7 @@ export default function StaffRecordReview() {
   const staffPosition = me?.staff?.position || 'Clinic Staff';
   const currentStaffId = String(me?.staff?.id || '').trim();
   const isDoctor = ['clinic doctor', 'doctor'].includes(staffPosition.trim().toLowerCase()) || me?.profile.role === 'admin';
+  const canFinalizeClearance = isDoctor || me?.profile.role === 'staff';
   const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
   const [saving, setSaving] = useState(false);
   const [recordForm, setRecordForm] = useState<RecordForm>(() => createRecordForm());
@@ -332,7 +374,18 @@ export default function StaffRecordReview() {
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('pending');
   const [showReturnDialog, setShowReturnDialog] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [uploadingLabFile, setUploadingLabFile] = useState<Record<LabUploadType, boolean>>({
+    xray: false,
+    cbc: false,
+    urinalysis: false,
+  });
   const inReviewTransitionRef = useRef<string | null>(null);
+  const xrayUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const cbcUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const urinalysisUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const xrayCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const cbcCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const urinalysisCameraInputRef = useRef<HTMLInputElement | null>(null);
   const defaultSignatoryName = [
     me?.staff?.first_name || me?.profile.first_name || '',
     me?.staff?.last_name || me?.profile.last_name || '',
@@ -400,7 +453,7 @@ export default function StaffRecordReview() {
         console.warn('Failed to mark submission as in review:', error);
         await invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId);
         const errorMessage = error instanceof Error ? error.message.trim() : '';
-        toast.error(errorMessage || 'Could not mark this record as In Review. Please refresh and try again.');
+        toast.error(errorMessage || 'Could not update the record status. Please refresh and try again.');
         inReviewTransitionRef.current = null;
       }
     })();
@@ -484,6 +537,73 @@ export default function StaffRecordReview() {
           ? normalizeDateInputValue(String(value))
           : value,
     }));
+  }
+
+  function validateLabImageFile(file: File, title: string) {
+    if (!file.type.startsWith('image/')) {
+      toast.error(`${title} must be uploaded as an image.`);
+      return false;
+    }
+
+    if (file.size > LAB_IMAGE_MAX_SIZE_BYTES) {
+      toast.error(`${title} image must be 2MB or smaller.`);
+      return false;
+    }
+
+    return true;
+  }
+
+  function getLabUploadTitle(fileType: LabUploadType) {
+    if (fileType === 'xray') return 'Chest X-Ray';
+    if (fileType === 'cbc') return 'CBC';
+    return 'Urinalysis';
+  }
+
+  function getLabImageInputRef(fileType: LabUploadType, source: 'library' | 'camera') {
+    if (fileType === 'xray') {
+      return source === 'camera' ? xrayCameraInputRef : xrayUploadInputRef;
+    }
+    if (fileType === 'cbc') {
+      return source === 'camera' ? cbcCameraInputRef : cbcUploadInputRef;
+    }
+    return source === 'camera' ? urinalysisCameraInputRef : urinalysisUploadInputRef;
+  }
+
+  function openLabImagePicker(fileType: LabUploadType, source: 'library' | 'camera') {
+    getLabImageInputRef(fileType, source).current?.click();
+  }
+
+  async function handleLabImageSelected(fileType: LabUploadType, file: File | null) {
+    if (!submissionId || !submission || !file) return;
+
+    const title = getLabUploadTitle(fileType);
+    if (!validateLabImageFile(file, title)) return;
+
+    setUploadingLabFile((prev) => ({ ...prev, [fileType]: true }));
+    try {
+      const result = await uploadFile(file, submissionId, fileType);
+      const nextUrl = result.url || '';
+      const now = new Date().toISOString();
+
+      setSubmission((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          xrayFileUrl: fileType === 'xray' ? nextUrl || prev.xrayFileUrl : prev.xrayFileUrl,
+          cbcFileUrl: fileType === 'cbc' ? nextUrl || prev.cbcFileUrl : prev.cbcFileUrl,
+          urinalysisFileUrl: fileType === 'urinalysis' ? nextUrl || prev.urinalysisFileUrl : prev.urinalysisFileUrl,
+          updatedAt: now,
+        };
+      });
+
+      await invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId);
+      toast.success(`${title} image uploaded.`);
+    } catch (error) {
+      console.error(`Failed to upload ${fileType} image:`, error);
+      toast.error(error instanceof Error ? error.message : `Failed to upload ${title} image.`);
+    } finally {
+      setUploadingLabFile((prev) => ({ ...prev, [fileType]: false }));
+    }
   }
 
   async function persistReview(nextStatus?: ReviewStatus, customNotes?: string) {
@@ -673,7 +793,6 @@ export default function StaffRecordReview() {
     persistedStatus === 'in_review'
     && Boolean(submission.reviewedByStaffId)
     && submission.reviewedByStaffId !== currentStaffId;
-  const activeReviewerName = submission.reviewedByName || 'another clinic staff member';
   const physicalExamStatus = persistedStatus === 'approved' || persistedStatus === 'physical_exam_done'
     ? 'Completed'
     : 'Pending';
@@ -684,7 +803,76 @@ export default function StaffRecordReview() {
       : 'Pending';
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[100rem] space-y-6">
+      <input
+        ref={xrayUploadInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] || null;
+          void handleLabImageSelected('xray', file);
+          event.currentTarget.value = '';
+        }}
+      />
+      <input
+        ref={cbcUploadInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] || null;
+          void handleLabImageSelected('cbc', file);
+          event.currentTarget.value = '';
+        }}
+      />
+      <input
+        ref={urinalysisUploadInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] || null;
+          void handleLabImageSelected('urinalysis', file);
+          event.currentTarget.value = '';
+        }}
+      />
+      <input
+        ref={xrayCameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] || null;
+          void handleLabImageSelected('xray', file);
+          event.currentTarget.value = '';
+        }}
+      />
+      <input
+        ref={cbcCameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] || null;
+          void handleLabImageSelected('cbc', file);
+          event.currentTarget.value = '';
+        }}
+      />
+      <input
+        ref={urinalysisCameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] || null;
+          void handleLabImageSelected('urinalysis', file);
+          event.currentTarget.value = '';
+        }}
+      />
       <Button
         variant="ghost"
         onClick={() => navigate('/staff/submissions')}
@@ -704,11 +892,7 @@ export default function StaffRecordReview() {
               {reviewStatus === 'approved'
                 ? 'Ready for clearance release'
                 : reviewStatus === 'in_review'
-                  ? isAssignedToAnotherReviewer
-                    ? `${activeReviewerName} is currently the active reviewer for this submission.`
-                    : submission.reviewedByStaffId
-                      ? 'You are currently the active reviewer for this submission.'
-                      : 'Currently being reviewed by the clinic.'
+                  ? 'Currently being reviewed by the clinic.'
                 : reviewStatus === 'physical_exam_done'
                   ? 'Physical exam completed and ready for final clearance decision'
                 : reviewStatus === 'returned'
@@ -751,7 +935,7 @@ export default function StaffRecordReview() {
           <CardContent className="pt-5">
             <p className="text-sm font-semibold text-amber-900">Another clinic staff member already claimed this review</p>
             <p className="mt-1 text-sm text-amber-800">
-              {activeReviewerName} is currently assigned to this submission. You can inspect the record, but coordinate first before making edits.
+              This submission is already being handled in the clinic review queue. You can inspect it, but coordinate first before making edits.
             </p>
           </CardContent>
         </Card>
@@ -821,7 +1005,7 @@ export default function StaffRecordReview() {
         <CardContent className="pt-5">
           <p className="text-sm font-semibold text-foreground">Recommended workflow</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            1) Confirm student record, 2) verify labs, 3) complete assessment, {isDoctor ? '4) finalize decision.' : '4) save notes and status for doctor review.'}
+            1) Confirm student record, 2) verify labs, 3) complete assessment, 4) finalize the clinic decision.
           </p>
         </CardContent>
       </Card>
@@ -838,7 +1022,7 @@ export default function StaffRecordReview() {
             Assessment
           </TabsTrigger>
           <TabsTrigger value="decision" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
-            {isDoctor ? 'Final Decision' : 'Notes & Status'}
+            {canFinalizeClearance ? 'Final Decision' : 'Notes & Status'}
           </TabsTrigger>
         </TabsList>
 
@@ -1155,6 +1339,12 @@ export default function StaffRecordReview() {
             </CardHeader>
             <CardContent className="space-y-6">
               <SubmittedFilePreview title="Chest X-Ray" fileUrl={submission.xrayFileUrl} alt="Chest X-Ray" />
+              <LabUploadActions
+                title="Chest X-Ray"
+                isUploading={uploadingLabFile.xray}
+                onChooseImage={() => openLabImagePicker('xray', 'library')}
+                onOpenCamera={() => openLabImagePicker('xray', 'camera')}
+              />
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor="xrayDate">Date</Label>
@@ -1201,6 +1391,12 @@ export default function StaffRecordReview() {
             </CardHeader>
             <CardContent className="space-y-6">
               <SubmittedFilePreview title="CBC" fileUrl={submission.cbcFileUrl} alt="CBC" />
+              <LabUploadActions
+                title="CBC"
+                isUploading={uploadingLabFile.cbc}
+                onChooseImage={() => openLabImagePicker('cbc', 'library')}
+                onOpenCamera={() => openLabImagePicker('cbc', 'camera')}
+              />
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <Label htmlFor="cbcDate">Date</Label>
@@ -1257,24 +1453,6 @@ export default function StaffRecordReview() {
                     className="mt-2"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="glucose">Glucose</Label>
-                  <Input
-                    id="glucose"
-                    value={assessmentForm.glucose}
-                    onChange={(event) => updateAssessmentField('glucose', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="protein">Protein</Label>
-                  <Input
-                    id="protein"
-                    value={assessmentForm.protein}
-                    onChange={(event) => updateAssessmentField('protein', event.target.value)}
-                    className="mt-2"
-                  />
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -1285,6 +1463,12 @@ export default function StaffRecordReview() {
             </CardHeader>
             <CardContent className="space-y-6">
               <SubmittedFilePreview title="Urinalysis" fileUrl={submission.urinalysisFileUrl} alt="Urinalysis" />
+              <LabUploadActions
+                title="Urinalysis"
+                isUploading={uploadingLabFile.urinalysis}
+                onChooseImage={() => openLabImagePicker('urinalysis', 'library')}
+                onOpenCamera={() => openLabImagePicker('urinalysis', 'camera')}
+              />
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <Label htmlFor="urinalysisDate">Date</Label>
@@ -1328,7 +1512,7 @@ export default function StaffRecordReview() {
               {!isDoctor && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                   <strong>Clinic Staff view:</strong> You can verify measurements (blood pressure, weight, height, BMI, visual acuity) below.
-                  Physical examination fields and clearance actions are restricted to Clinic Doctors.
+                  Physical examination findings remain restricted to Clinic Doctors.
                 </div>
               )}
               <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -1525,36 +1709,14 @@ export default function StaffRecordReview() {
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
                 {!isDoctor ? (
-                <div className="xl:col-span-2">
-                  <Label htmlFor="reviewStatus">Medical Clearance Status</Label>
-                  <Select value={reviewStatus} onValueChange={(value) => setReviewStatus(value as ReviewStatus)} disabled={isApprovedLocked}>
-                    <SelectTrigger id="reviewStatus" className="mt-2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending Review</SelectItem>
-                      <SelectItem value="in_review">In Review</SelectItem>
-                      <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
-                      <SelectItem value="returned">Returned for Correction</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {hasUnsavedStatusChange ? (
-                    <p className="mt-2 text-xs text-amber-600">This status change will be applied after you save.</p>
-                  ) : null}
-                  {isApprovedLocked ? (
-                    <p className="mt-2 text-xs text-green-700">This record is approved and status changes are locked.</p>
-                  ) : null}
-                </div>
-                ) : null}
-                {!isDoctor ? (
-                  <div className="md:col-span-1 xl:col-span-4">
+                  <div className="md:col-span-2 xl:col-span-6">
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                      Clinic Staff can update notes and status, but final clearance fields are limited to Clinic Doctors.
+                      Clinic Staff can finalize the clearance here. The medical clearance signatory remains one of the configured clinic doctors.
                     </div>
                   </div>
                 ) : null}
 
-                {isDoctor ? (
+                {canFinalizeClearance ? (
                 <div className="xl:col-span-2">
                   <Label htmlFor="clearancePurpose">Purpose</Label>
                   <Select
@@ -1573,7 +1735,7 @@ export default function StaffRecordReview() {
                 </div>
                 ) : null}
 
-                {isDoctor ? (
+                {canFinalizeClearance ? (
                 <div className="xl:col-span-2">
                   <Label htmlFor="controlNo">Control Number</Label>
                   <Input
@@ -1585,7 +1747,7 @@ export default function StaffRecordReview() {
                 </div>
                 ) : null}
 
-                {isDoctor ? (
+                {canFinalizeClearance ? (
                 <div className="xl:col-span-2">
                   <Label htmlFor="issuedDate">Issued Date</Label>
                   <Input
@@ -1598,7 +1760,7 @@ export default function StaffRecordReview() {
                 </div>
                 ) : null}
 
-                {isDoctor ? (
+                {canFinalizeClearance ? (
                 <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
                   <Select
@@ -1620,7 +1782,7 @@ export default function StaffRecordReview() {
                 </div>
                 ) : null}
 
-                {isDoctor ? (
+                {canFinalizeClearance ? (
                 <div className="md:col-span-1 xl:col-span-3">
                   <Label>General Findings</Label>
                   <RadioGroup
@@ -1640,7 +1802,7 @@ export default function StaffRecordReview() {
                 </div>
                 ) : null}
 
-                {isDoctor ? (
+                {canFinalizeClearance ? (
                 <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
                   <Textarea
@@ -1653,7 +1815,7 @@ export default function StaffRecordReview() {
                 </div>
                 ) : null}
 
-                {isDoctor ? (
+                {canFinalizeClearance ? (
                 <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="remarks">Clearance Remarks</Label>
                   <Textarea
@@ -1679,7 +1841,7 @@ export default function StaffRecordReview() {
             <p className="text-sm text-muted-foreground">
               {isApprovedLocked
                 ? 'This submission is already approved. Actions are locked to prevent accidental changes.'
-                : isDoctor
+                : canFinalizeClearance
                   ? 'Save draft edits at any time, return the record for correction when needed, or approve the clearance once everything is complete.'
                   : 'Save draft edits at any time or return the record for correction when updates are needed.'}
             </p>
@@ -1697,7 +1859,7 @@ export default function StaffRecordReview() {
             }} disabled={saving}>
               Return for Correction
             </Button>
-            {isDoctor ? (
+            {canFinalizeClearance ? (
               <Button
                 onClick={() => void persistReview('approved')}
                 disabled={saving}

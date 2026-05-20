@@ -56,7 +56,7 @@ export default function StudentYearSelection() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-8">
+    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
       <button
         type="button"
         onClick={() => navigate('/student')}
@@ -69,10 +69,9 @@ export default function StudentYearSelection() {
       <StudentPageIntro
         title="Select Year Level"
         description="Choose the academic year corresponding to the medical records you are preparing to submit. Your progress is automatically saved."
-        className="max-w-3xl"
       />
 
-      <div className="grid gap-3 sm:gap-6 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-6 xl:grid-cols-4">
         {years.map((year) => {
           const isFutureYearLocked = year.level > studentYearLevel;
           const latestYearStatus = latestByYear.get(year.level)?.status || '';

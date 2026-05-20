@@ -1,9 +1,8 @@
-export type StaffDashboardQueueTab = 'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted';
+export type StaffDashboardQueueTab = 'all' | 'pending' | 'returned' | 'resubmitted';
 export type StaffReviewQueueStatus =
   | 'action_needed'
   | 'all'
   | 'pending'
-  | 'in_review'
   | 'physical_exam_done'
   | 'approved'
   | 'returned'
@@ -25,7 +24,6 @@ const STORAGE_KEY_PREFIX = 'gc-staff-workspace-preferences';
 const DASHBOARD_QUEUE_TABS = new Set<StaffDashboardQueueTab>([
   'all',
   'pending',
-  'in_review',
   'returned',
   'resubmitted',
 ]);
@@ -33,7 +31,6 @@ const REVIEW_QUEUE_STATUSES = new Set<StaffReviewQueueStatus>([
   'action_needed',
   'all',
   'pending',
-  'in_review',
   'physical_exam_done',
   'approved',
   'returned',
@@ -54,8 +51,8 @@ export function getDefaultStaffWorkspacePreferences(position?: string | null): S
   const doctorDefaults = isClinicDoctor(position);
 
   return {
-    dashboardQueueTab: doctorDefaults ? 'in_review' : 'pending',
-    reviewQueueStatus: doctorDefaults ? 'in_review' : 'action_needed',
+    dashboardQueueTab: doctorDefaults ? 'pending' : 'pending',
+    reviewQueueStatus: doctorDefaults ? 'action_needed' : 'action_needed',
     reviewSortOrder: 'desc',
     showAdvancedQueueFilters: false,
     certificatesDefaultView: doctorDefaults ? 'medical-clearance' : 'form',

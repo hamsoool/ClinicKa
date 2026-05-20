@@ -186,7 +186,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
         <div className="space-y-4">
           <h3 className="mb-2 text-xl font-semibold">Medical History</h3>
           <p className="mb-4 text-sm text-muted-foreground">Place a check on conditions that apply to you</p>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
             {MEDICAL_CONDITIONS.map(({ key, label }) => (
               <div key={key} className="flex items-center space-x-2">
                 <Checkbox
@@ -261,7 +261,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           )}
           <div className="mt-6 border-t pt-4">
             <h4 className="mb-4 font-semibold">Emergency Contact Person</h4>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div>
                 <Label htmlFor="ecName">Name *</Label>
                 <Input
@@ -293,7 +293,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 </Select>
               </div>
             </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div>
                 <Label htmlFor="ecPhone">Cellphone Number *</Label>
                 <Input

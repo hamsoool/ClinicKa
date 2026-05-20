@@ -349,7 +349,7 @@ export default function StudentClearance() {
   const isPhysicalExamDone = normalizedStatus === 'physical_exam_done';
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-6">
+    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-6">
       <StudentPageIntro
         title="Records & Clearance"
         description="Track your submissions, open your medical form, and download your clearance when approved."
