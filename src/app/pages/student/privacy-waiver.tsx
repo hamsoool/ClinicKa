@@ -35,7 +35,7 @@ export default function StudentPrivacyWaiver() {
   }, [year]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto w-full max-w-[100rem] space-y-8">
       <button
         type="button"
         onClick={() => navigate('/student/year-selection')}
@@ -66,7 +66,7 @@ export default function StudentPrivacyWaiver() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-2">
               <div className="rounded-[1.25rem] border border-emerald-200 bg-emerald-50/70 p-5 text-sm leading-7 text-emerald-950">
                 <p>{DATA_PRIVACY_CONSENT_BODY}</p>
               </div>
@@ -76,7 +76,7 @@ export default function StudentPrivacyWaiver() {
               </div>
 
               <div
-                className={`rounded-[1.25rem] border p-4 ${
+                className={`rounded-[1.25rem] border p-4 xl:col-span-2 ${
                   dataPrivacyConsent ? 'border-emerald-200 bg-emerald-50/70' : 'border-red-200 bg-red-50'
                 }`}
               >
@@ -96,7 +96,7 @@ export default function StudentPrivacyWaiver() {
           </div>
 
         </CardContent>
-        <CardFooter className="flex items-center justify-between border-t border-outline-variant/30 bg-surface-container-low px-6 py-4">
+        <CardFooter className="flex flex-col gap-3 border-t border-outline-variant/30 bg-surface-container-low px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <Button type="button" variant="outline" onClick={() => navigate('/student/profile')}>
             Go to Profile
           </Button>

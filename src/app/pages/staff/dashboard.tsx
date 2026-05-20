@@ -1,31 +1,38 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowRight,
   ArrowUpDown,
   CheckCircle2,
   ClipboardCheck,
-  Clock3,
   FileWarning,
   ShieldCheck,
 } from 'lucide-react';
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
   Cell,
-  Pie,
-  PieChart,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
+  XAxis,
+  YAxis,
   type TooltipProps,
 } from 'recharts';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { getRoleLabel } from '../../lib/api';
+import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
+import { getRoleLabel, getSubmissions } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import type { DepartmentBreakdownItem, SubmissionSummaryRecord } from '../../lib/record-types';
+import type { SubmissionRecord, SubmissionSummaryRecord } from '../../lib/record-types';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import { useStaffDashboardOverviewQuery } from './staff-workflow-query';
 
+const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const DEPARTMENT_COLORS: Record<string, string> = {
   CCS: '#f97316',
   CBA: '#facc15',
@@ -33,17 +40,58 @@ const DEPARTMENT_COLORS: Record<string, string> = {
   CHTM: '#ec4899',
   CAHS: '#ef4444',
 };
+const SUBMISSION_RANGE_COLORS = ['#0f766e', '#14b8a6', '#f59e0b', '#f97316'];
+const REPORT_GROUP_LABELS = {
+  department: 'Department',
+  gender: 'Gender',
+  year: 'Year Level',
+  program: 'Program',
+} as const;
+const REPORT_CHART_COLORS = ['#0f766e', '#14b8a6', '#22c55e', '#f59e0b', '#f97316', '#ef4444', '#6366f1', '#ec4899'];
+const YEAR_LEVEL_COLORS: Record<string, string> = {
+  '1': '#f97316',
+  '2': '#facc15',
+  '3': '#3b82f6',
+  '4': '#14b8a6',
+};
+const GENDER_COLORS: Record<string, string> = {
+  male: '#3b82f6',
+  female: '#ec4899',
+  other: '#8b5cf6',
+  unspecified: '#94a3b8',
+};
+const YEAR_LABELS: Record<string, string> = {
+  '1': '1st Year',
+  '2': '2nd Year',
+  '3': '3rd Year',
+  '4': '4th Year',
+};
+const GENDER_ORDER = ['male', 'female', 'other', 'unspecified'];
 
-type DepartmentChartDatum = DepartmentBreakdownItem & {
+const SUBMISSION_RANGE_LABELS = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  academicYear: 'School Year',
+} as const;
+type SubmissionRangeKey = keyof typeof SUBMISSION_RANGE_LABELS;
+type ReportGroupKey = keyof typeof REPORT_GROUP_LABELS;
+
+type ReportChartDatum = {
+  key: string;
+  rawValue: string;
+  label: string;
+  count: number;
   fill: string;
   share: number;
 };
 
-type PieChartSegment = {
-  department: string;
+type SubmissionTrendDatum = {
+  key: SubmissionRangeKey;
+  label: string;
   count: number;
   fill: string;
-  share: number;
+  helper: string;
 };
 
 function formatEmailName(email?: string | null) {
@@ -74,8 +122,6 @@ function getStatusLabel(status: SubmissionSummaryRecord['status']) {
   switch (status) {
     case 'pending':
       return 'Pending review';
-    case 'in_review':
-      return 'In review';
     case 'physical_exam_done':
       return 'Physical exam done';
     case 'approved':
@@ -95,8 +141,6 @@ function getStatusStyles(status: SubmissionSummaryRecord['status']) {
       return 'bg-primary-container/20 text-on-primary-container';
     case 'pending':
       return 'bg-amber-100 text-amber-800';
-    case 'in_review':
-      return 'bg-sky-100 text-sky-800';
     case 'physical_exam_done':
       return 'bg-blue-100 text-blue-800';
     case 'returned':
@@ -108,27 +152,123 @@ function getStatusStyles(status: SubmissionSummaryRecord['status']) {
   }
 }
 
-function getActiveReviewerMessage(
-  submission: SubmissionSummaryRecord,
-  currentStaffId?: string | null,
-) {
-  if (submission.status !== 'in_review' || !submission.reviewedByStaffId) {
-    return null;
-  }
-
-  if (submission.reviewedByStaffId === String(currentStaffId || '').trim()) {
-    return 'Assigned reviewer: You';
-  }
-
-  if (submission.reviewedByName) {
-    return `Assigned reviewer: ${submission.reviewedByName}`;
-  }
-
-  return 'Assigned reviewer: Another clinic staff member';
+function normalizeSubmissionGenderValue(value?: string) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return 'unspecified';
+  if (normalized === 'm' || normalized === 'male') return 'male';
+  if (normalized === 'f' || normalized === 'female') return 'female';
+  if (['other', 'others', 'non-binary', 'nonbinary'].includes(normalized)) return 'other';
+  return normalized;
 }
 
-function DepartmentBreakdownTooltip({ active, payload }: TooltipProps<number, string>) {
-  const entry = payload?.[0]?.payload as DepartmentChartDatum | undefined;
+function formatGenderLabel(value: string) {
+  if (value === 'male') return 'Male';
+  if (value === 'female') return 'Female';
+  if (value === 'other') return 'Other';
+  if (value === 'unspecified') return 'Unspecified';
+  return value.replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function abbreviateCourse(value?: string) {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Unspecified';
+
+  const parenMatch = raw.match(/\(([A-Za-z]{2,10})\)\s*$/);
+  if (parenMatch?.[1]) return parenMatch[1].toUpperCase();
+
+  const normalized = raw.toLowerCase().replace(/\./g, '');
+  const known: Array<[string, string]> = [
+    ['bachelor of science in information technology', 'BSIT'],
+    ['bs information technology', 'BSIT'],
+    ['bachelor of science in computer science', 'BSCS'],
+    ['bs computer science', 'BSCS'],
+    ['bachelor of science in nursing', 'BSN'],
+    ['bs nursing', 'BSN'],
+    ['bachelor of science in business administration', 'BSBA'],
+    ['bs business administration', 'BSBA'],
+    ['bachelor of science in psychology', 'BSPsych'],
+    ['bs psychology', 'BSPsych'],
+    ['bachelor of science in hospitality management', 'BSHM'],
+    ['bs hospitality management', 'BSHM'],
+    ['bachelor of secondary education', 'BSEd'],
+    ['bachelor of elementary education', 'BEEd'],
+  ];
+  const exact = known.find(([key]) => normalized === key);
+  if (exact) return exact[1];
+
+  if (/^[A-Za-z]{2,10}$/.test(raw.replace(/\s+/g, ''))) return raw.toUpperCase();
+
+  const acronym = raw
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((part) => !['of', 'in', 'and', 'the'].includes(part.toLowerCase()))
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
+  return acronym.length >= 3 && acronym.length <= 10 ? acronym : raw;
+}
+
+function resolveDepartmentValue(department?: string, course?: string) {
+  const normalizedDepartment = String(department || '').trim().toUpperCase();
+  if (DEPARTMENTS.includes(normalizedDepartment)) return normalizedDepartment;
+
+  const normalizedCourse = String(course || '').trim().toUpperCase();
+  const matchedDepartment = DEPARTMENTS.find((item) => normalizedCourse.includes(item));
+  if (matchedDepartment) return matchedDepartment;
+
+  return normalizedDepartment || 'Unspecified';
+}
+
+function getAcademicYearRange(label?: string) {
+  const [startYearValue, endYearValue] = String(label || '').split('-');
+  const startYear = Number.parseInt(startYearValue || '', 10);
+  const endYear = Number.parseInt(endYearValue || '', 10);
+  if (Number.isFinite(startYear) && Number.isFinite(endYear)) {
+    return {
+      start: new Date(startYear, 6, 1),
+      end: new Date(endYear, 6, 1),
+    };
+  }
+
+  const now = new Date();
+  const fallbackStartYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+  return {
+    start: new Date(fallbackStartYear, 6, 1),
+    end: new Date(fallbackStartYear + 1, 6, 1),
+  };
+}
+
+function getSubmissionGroupValue(submission: SubmissionRecord, groupBy: ReportGroupKey) {
+  if (groupBy === 'department') {
+    return resolveDepartmentValue(submission.department, submission.course);
+  }
+
+  if (groupBy === 'gender') {
+    return normalizeSubmissionGenderValue(submission.sex);
+  }
+
+  if (groupBy === 'year') {
+    return String(submission.year || '').trim() || 'unspecified';
+  }
+
+  return abbreviateCourse(submission.course);
+}
+
+function formatSubmissionGroupLabel(value: string, groupBy: ReportGroupKey) {
+  if (groupBy === 'gender') {
+    return formatGenderLabel(value);
+  }
+
+  if (groupBy === 'year') {
+    return YEAR_LABELS[value] || (value === 'unspecified' ? 'Unspecified' : `Year ${value}`);
+  }
+
+  return value || 'Unspecified';
+}
+
+function ReportBreakdownTooltip({ active, payload }: TooltipProps<number, string>) {
+  const entry = payload?.[0]?.payload as ReportChartDatum | undefined;
 
   if (!active || !entry) {
     return null;
@@ -136,11 +276,27 @@ function DepartmentBreakdownTooltip({ active, payload }: TooltipProps<number, st
 
   return (
     <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 shadow-sm">
-      <p className="text-sm font-semibold text-on-surface">{entry.department}</p>
+      <p className="text-sm font-semibold text-on-surface">{entry.label}</p>
       <p className="mt-1 text-xs text-on-surface-variant">
-        {entry.count} records ({entry.share.toFixed(1)}%)
+        {entry.count} submission{entry.count === 1 ? '' : 's'} • {entry.share.toFixed(0)}%
       </p>
     </div>
+  );
+}
+
+function ReportBarValueLabel(props: any) {
+  const { x = 0, y = 0, width = 0, value = 0 } = props || {};
+
+  return (
+    <text
+      x={x + width / 2}
+      y={Math.max(Number(y) - 8, 14)}
+      textAnchor="middle"
+      fontSize={12}
+      fill="hsl(var(--muted-foreground))"
+    >
+      {value}
+    </text>
   );
 }
 
@@ -160,18 +316,35 @@ export default function StaffDashboard() {
       .trim() ||
     formatEmailName(me?.profile.email) ||
     staffRoleLabel;
-  const currentStaffId = String(me?.staff?.id || '').trim();
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>(workspacePreferences.reviewSortOrder);
-  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>(
+  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'returned' | 'resubmitted'>(
     workspacePreferences.dashboardQueueTab,
   );
+  const [reportRange, setReportRange] = useState<SubmissionRangeKey>('today');
+  const [reportGroupBy, setReportGroupBy] = useState<ReportGroupKey>('department');
   const {
     data: overview,
     isLoading: overviewLoading,
     isFetching: overviewFetching,
     isError: isOverviewError,
   } = useStaffDashboardOverviewQuery();
+  const {
+    data: reportSubmissions = [],
+    isLoading: reportSubmissionsLoading,
+  } = useQuery({
+    queryKey: ['staffDashboardReportSubmissions'],
+    queryFn: async () => {
+      const response = await getSubmissions();
+      return Array.isArray(response?.submissions) ? response.submissions as SubmissionRecord[] : [];
+    },
+    staleTime: 45_000,
+    refetchInterval: () => getActiveAjaxRefetchInterval(60_000),
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
+  });
 
   useEffect(() => {
     if (isOverviewError) {
@@ -184,15 +357,11 @@ export default function StaffDashboard() {
     setQueueTab(workspacePreferences.dashboardQueueTab);
   }, [workspacePreferences]);
 
-  if (overviewLoading || !overview) {
-    return <PortalPageSkeleton variant="dashboard" />;
-  }
-
   const queueGroups = {
-    pending: overview.pendingQueueItems || [],
-    in_review: overview.inReviewQueueItems || [],
-    returned: overview.returnedQueueItems || [],
-    resubmitted: overview.resubmittedQueueItems || [],
+    pending: overview?.pendingQueueItems || [],
+    in_review: overview?.inReviewQueueItems || [],
+    returned: overview?.returnedQueueItems || [],
+    resubmitted: overview?.resubmittedQueueItems || [],
   } as const;
 
   const actionQueue = [
@@ -212,11 +381,6 @@ export default function StaffDashboard() {
     const timeB = new Date(b.submittedAt).getTime();
     return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
   });
-  const inReviewQueue = [...queueGroups.in_review].sort((a, b) => {
-    const timeA = new Date(a.submittedAt).getTime();
-    const timeB = new Date(b.submittedAt).getTime();
-    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
-  });
   const returnedQueue = [...queueGroups.returned].sort((a, b) => {
     const timeA = new Date(a.submittedAt).getTime();
     const timeB = new Date(b.submittedAt).getTime();
@@ -230,8 +394,6 @@ export default function StaffDashboard() {
   const visibleQueue =
     queueTab === 'pending'
       ? pendingQueue
-      : queueTab === 'in_review'
-      ? inReviewQueue
       : queueTab === 'returned'
       ? returnedQueue
       : queueTab === 'resubmitted'
@@ -240,57 +402,208 @@ export default function StaffDashboard() {
 
   const summaryCards = [
     {
-      label: 'Needs Action',
-      value: overview.actionableRecords || 0,
+      label: 'Pending',
+      value: overview?.pendingRecords || 0,
       icon: ClipboardCheck,
       tone: 'text-primary',
-      href: '/staff/submissions',
-    },
-    {
-      label: 'In Review',
-      value: overview.inReviewRecords || 0,
-      icon: Clock3,
-      tone: 'text-blue-600',
-      href: '/staff/submissions?status=in_review',
+      href: '/staff/submissions?status=pending',
     },
     {
       label: 'Returned',
-      value: overview.returnedRecords || 0,
+      value: overview?.returnedRecords || 0,
       icon: FileWarning,
       tone: 'text-rose-600',
       href: '/staff/submissions?status=returned',
     },
     {
-      label: 'Cleared Records',
-      value: overview.approvedRecords || 0,
+      label: 'Approved Clearance',
+      value: overview?.approvedRecords || 0,
       icon: ShieldCheck,
       tone: 'text-emerald-700',
       href: '/staff/records',
     },
   ] as const;
-  const departmentChartData = (overview.departmentBreakdown || []).map((item) => ({
-    ...item,
-    fill: DEPARTMENT_COLORS[item.department] || '#94a3b8',
-  }));
-  const departmentTotal = departmentChartData.reduce((total, item) => total + item.count, 0);
-  const departmentBreakdown = departmentChartData.map((item) => ({
-    ...item,
-    share: departmentTotal > 0 ? (item.count / departmentTotal) * 100 : 0,
-  }));
-  const hasDepartmentData = departmentTotal > 0;
-  const pieChartSegments: PieChartSegment[] = hasDepartmentData
-    ? departmentBreakdown
-    : [
-        {
-          department: 'No data',
-          count: 1,
-          fill: 'rgba(148, 163, 184, 0.22)',
-          share: 0,
-        },
-      ];
+  const submissionTrendData: SubmissionTrendDatum[] = [
+    {
+      key: 'today',
+      label: SUBMISSION_RANGE_LABELS.today,
+      count: overview?.submittedToday || 0,
+      fill: SUBMISSION_RANGE_COLORS[0],
+      helper: 'Submitted since 12:00 AM today',
+    },
+    {
+      key: 'week',
+      label: SUBMISSION_RANGE_LABELS.week,
+      count: overview?.submittedThisWeek || 0,
+      fill: SUBMISSION_RANGE_COLORS[1],
+      helper: 'Submitted since the start of this week',
+    },
+    {
+      key: 'month',
+      label: SUBMISSION_RANGE_LABELS.month,
+      count: overview?.submittedThisMonth || 0,
+      fill: SUBMISSION_RANGE_COLORS[2],
+      helper: 'Submitted since the start of this month',
+    },
+    {
+      key: 'academicYear',
+      label: overview?.academicYearLabel
+        ? `SY ${overview.academicYearLabel}`
+        : SUBMISSION_RANGE_LABELS.academicYear,
+      count: overview?.submittedThisAcademicYear || 0,
+      fill: SUBMISSION_RANGE_COLORS[3],
+      helper: 'Submitted during the active academic year',
+    },
+  ];
+  const selectedSubmissionTrend =
+    submissionTrendData.find((item) => item.key === reportRange) || submissionTrendData[0];
+  const filteredReportSubmissions = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekStart = new Date(todayStart);
+    const dayOfWeek = weekStart.getDay();
+    const weekOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    weekStart.setDate(weekStart.getDate() + weekOffset);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const academicYearRange = getAcademicYearRange(overview?.academicYearLabel);
+
+    return reportSubmissions.filter((submission) => {
+      const submittedAt = new Date(submission.submittedAt || '');
+      if (Number.isNaN(submittedAt.getTime())) return false;
+
+      if (reportRange === 'today') return submittedAt >= todayStart;
+      if (reportRange === 'week') return submittedAt >= weekStart;
+      if (reportRange === 'month') return submittedAt >= monthStart;
+      return submittedAt >= academicYearRange.start && submittedAt < academicYearRange.end;
+    });
+  }, [overview?.academicYearLabel, reportRange, reportSubmissions]);
+  const uniqueReportSubmissions = useMemo(() => {
+    const latestByStudent = new Map<string, SubmissionRecord>();
+
+    filteredReportSubmissions.forEach((submission) => {
+      const studentKey = String(submission.studentId || submission.id || '').trim();
+      if (!studentKey) return;
+
+      const existing = latestByStudent.get(studentKey);
+      if (!existing) {
+        latestByStudent.set(studentKey, submission);
+        return;
+      }
+
+      const existingTs = new Date(existing.submittedAt || 0).getTime();
+      const nextTs = new Date(submission.submittedAt || 0).getTime();
+      if (nextTs >= existingTs) {
+        latestByStudent.set(studentKey, submission);
+      }
+    });
+
+    return [...latestByStudent.values()];
+  }, [filteredReportSubmissions]);
+  const reportChartData = useMemo(() => {
+    const counts = uniqueReportSubmissions.reduce((acc, submission) => {
+      const rawValue = getSubmissionGroupValue(submission, reportGroupBy);
+      const label = formatSubmissionGroupLabel(rawValue, reportGroupBy);
+      const key = `${reportGroupBy}:${rawValue}`;
+      const existing = acc[key];
+      if (existing) {
+        existing.count += 1;
+        return acc;
+      }
+
+      acc[key] = {
+        key,
+        rawValue,
+        label,
+        count: 1,
+        fill: '#94a3b8',
+        share: 0,
+      };
+      return acc;
+    }, {} as Record<string, ReportChartDatum>);
+
+    const total = uniqueReportSubmissions.length;
+
+    if (reportGroupBy === 'department') {
+      return DEPARTMENTS.map((department) => {
+        const key = `${reportGroupBy}:${department}`;
+        const item = counts[key];
+        const count = item?.count || 0;
+        return {
+          key,
+          rawValue: department,
+          label: department,
+          count,
+          fill: DEPARTMENT_COLORS[department] || '#94a3b8',
+          share: total > 0 ? (count / total) * 100 : 0,
+        };
+      });
+    }
+
+    if (reportGroupBy === 'year') {
+      const orderedYears = ['1', '2', '3', '4'];
+      const base = orderedYears.map((year) => {
+        const key = `${reportGroupBy}:${year}`;
+        const item = counts[key];
+        const count = item?.count || 0;
+        return {
+          key,
+          rawValue: year,
+          label: YEAR_LABELS[year] || `Year ${year}`,
+          count,
+          fill: YEAR_LEVEL_COLORS[year] || '#94a3b8',
+          share: total > 0 ? (count / total) * 100 : 0,
+        };
+      });
+
+      if (counts[`${reportGroupBy}:unspecified`]) {
+        const count = counts[`${reportGroupBy}:unspecified`].count;
+        base.push({
+          key: `${reportGroupBy}:unspecified`,
+          rawValue: 'unspecified',
+          label: 'Unspecified',
+          count,
+          fill: '#94a3b8',
+          share: total > 0 ? (count / total) * 100 : 0,
+        });
+      }
+
+      return base;
+    }
+
+    if (reportGroupBy === 'gender') {
+      return GENDER_ORDER.map((gender) => {
+        const key = `${reportGroupBy}:${gender}`;
+        const item = counts[key];
+        const count = item?.count || 0;
+        return {
+          key,
+          rawValue: gender,
+          label: formatGenderLabel(gender),
+          count,
+          fill: GENDER_COLORS[gender] || '#94a3b8',
+          share: total > 0 ? (count / total) * 100 : 0,
+        };
+      });
+    }
+
+    return Object.values(counts)
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+      .map((item, index) => ({
+        ...item,
+        fill: REPORT_CHART_COLORS[index % REPORT_CHART_COLORS.length],
+        share: total > 0 ? (item.count / total) * 100 : 0,
+      }));
+  }, [reportGroupBy, uniqueReportSubmissions]);
+  const totalReportStudents = uniqueReportSubmissions.length;
+  const hasReportChartData = totalReportStudents > 0;
+  const reportChartMinWidth = Math.max(320, reportChartData.length * (reportGroupBy === 'program' ? 96 : 76));
+
+  if (overviewLoading || !overview) {
+    return <PortalPageSkeleton variant="dashboard" />;
+  }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
+    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
       <PortalPageIntro
         eyebrow={(
           <span className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
@@ -306,7 +619,7 @@ export default function StaffDashboard() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
@@ -334,26 +647,26 @@ export default function StaffDashboard() {
         })}
       </div>
 
-      <div className="grid gap-5 sm:gap-6 lg:grid-cols-[1.25fr_0.95fr]">
+      <div className="grid gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)]">
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-on-surface">Priority Review Queue</h2>
+              <h2 className="text-lg font-semibold text-on-surface">Submission Queue</h2>
               <p className="mt-1 text-sm text-on-surface-variant">
                 By default, this view starts with pending records so staff can take action quickly.
               </p>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
               <button
                 onClick={() => setQueueSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-                className="flex w-full items-center justify-center gap-1.5 rounded-full border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface sm:w-auto"
+                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface sm:w-auto"
               >
-                <ArrowUpDown className="h-3 w-3" />
+                <ArrowUpDown className="h-3.5 w-3.5" />
                 {queueSortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
               </button>
               <button
                 onClick={() => navigate('/staff/submissions')}
-                className="w-full rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 hover:text-primary/80 sm:w-auto sm:border-none sm:bg-transparent sm:px-0 sm:py-0"
+                className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90 sm:w-auto"
               >
                 Open Queue
               </button>
@@ -364,25 +677,22 @@ export default function StaffDashboard() {
           </div>
           <Tabs
             value={queueTab}
-            onValueChange={(value) => setQueueTab(value as 'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted')}
+            onValueChange={(value) => setQueueTab(value as 'all' | 'pending' | 'returned' | 'resubmitted')}
             className="mb-5"
           >
             <div className="pb-1">
-              <TabsList className="flex h-auto min-h-10 w-full flex-wrap justify-start gap-2 rounded-2xl p-2 sm:max-w-xl sm:flex-nowrap sm:gap-0 sm:p-[3px]">
-                <TabsTrigger value="all" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
-                  All ({overview.actionableRecords || 0})
-                </TabsTrigger>
-                <TabsTrigger value="pending" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
+              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-4">
+                <TabsTrigger value="pending" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
                   Pending ({overview.pendingRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="in_review" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
-                  In Review ({overview.inReviewRecords || 0})
-                </TabsTrigger>
-                <TabsTrigger value="returned" className="min-h-9 flex-1 basis-[calc(50%-0.25rem)] px-3 text-xs sm:basis-0 sm:text-sm">
+                <TabsTrigger value="returned" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
                   Returned ({overview.returnedRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="resubmitted" className="min-h-9 flex-1 basis-full px-3 text-xs sm:basis-0 sm:text-sm">
+                <TabsTrigger value="resubmitted" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
                   Resubmitted ({overview.resubmittedRecords || 0})
+                </TabsTrigger>
+                <TabsTrigger value="all" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
+                  All ({overview.actionableRecords || 0})
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -394,7 +704,7 @@ export default function StaffDashboard() {
               <p className="mt-4 text-lg font-semibold text-on-surface">All caught up</p>
               <p className="mt-2 max-w-sm text-sm text-on-surface-variant">
                 {queueTab === 'all'
-                  ? 'There are no pending, in-review, returned, or resubmitted student records right now.'
+                  ? 'There are no records that need staff attention right now.'
                   : `There are no ${queueTab} records right now.`}
               </p>
             </div>
@@ -415,20 +725,17 @@ export default function StaffDashboard() {
                         <p className="truncate text-sm font-semibold text-on-surface">
                           {submission.firstName} {submission.lastName}
                         </p>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getStatusStyles(submission.status)}`}
-                        >
-                          {getStatusLabel(submission.status)}
-                        </span>
+                        {submission.status !== 'in_review' ? (
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getStatusStyles(submission.status)}`}
+                          >
+                            {getStatusLabel(submission.status)}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="mt-1 break-words text-xs text-on-surface-variant">
                         {submission.studentId} | {submission.course}
                       </p>
-                      {getActiveReviewerMessage(submission, currentStaffId) ? (
-                        <p className="mt-2 text-xs font-medium text-sky-700">
-                          {getActiveReviewerMessage(submission, currentStaffId)}
-                        </p>
-                      ) : null}
                       <p className="mt-2 text-sm text-on-surface-variant">
                         Submitted {formatDate(submission.submittedAt)}
                       </p>
@@ -444,70 +751,85 @@ export default function StaffDashboard() {
         </div>
 
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-on-surface">Report Graph</h2>
-            <p className="mt-1 text-sm text-on-surface-variant">
-              Department distribution across submitted clinic records.
-            </p>
-          </div>
-          <div className="space-y-4">
-            <div className="relative h-64 rounded-2xl border border-dashed border-outline-variant/30 bg-surface-container-low/40">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieChartSegments}
-                    dataKey="count"
-                    nameKey="department"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius="58%"
-                    outerRadius="82%"
-                    paddingAngle={hasDepartmentData ? 3 : 0}
-                    strokeWidth={0}
-                    isAnimationActive={false}
-                  >
-                    {pieChartSegments.map((entry) => (
-                      <Cell key={entry.department} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  {hasDepartmentData ? <Tooltip content={<DepartmentBreakdownTooltip />} /> : null}
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <p className="text-3xl font-bold leading-none text-on-surface">{departmentTotal}</p>
-                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-on-surface-variant">
-                  Records
+          <div className="mb-4 flex flex-col gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-on-surface">Report Graph</h2>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  {totalReportStudents} student{totalReportStudents === 1 ? '' : 's'}
                 </p>
-                {!hasDepartmentData ? (
-                  <p className="mt-2 max-w-[12rem] text-center text-xs text-on-surface-variant">
-                    Waiting for department data
-                  </p>
-                ) : null}
+              </div>
+              <div className="w-full sm:w-44">
+                <p className="mb-1 text-xs font-medium text-on-surface-variant">Group by</p>
+                <Select value={reportGroupBy} onValueChange={(value) => setReportGroupBy(value as ReportGroupKey)}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Choose grouping" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="department">Department</SelectItem>
+                    <SelectItem value="gender">Gender</SelectItem>
+                    <SelectItem value="year">Year Level</SelectItem>
+                    <SelectItem value="program">Program</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-
-            <div className="grid gap-2">
-              {departmentBreakdown.map((item) => (
-                <div
-                  key={item.department}
-                  className="flex items-center justify-between rounded-2xl border border-outline-variant/20 bg-surface-container-low px-3 py-2.5"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: item.fill }}
-                      aria-hidden="true"
-                    />
-                    <div>
-                      <p className="text-sm font-semibold text-on-surface">{item.department}</p>
-                      <p className="text-xs text-on-surface-variant">
-                        {hasDepartmentData ? `${item.share.toFixed(1)}% of department records` : '0 records'}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-sm font-semibold text-on-surface">{item.count}</p>
+            <Tabs
+              value={reportRange}
+              onValueChange={(value) => setReportRange(value as SubmissionRangeKey)}
+            >
+              <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-4 sm:gap-0 sm:p-[3px]">
+                <TabsTrigger value="today" className="min-h-9 px-3 text-xs sm:text-sm">Today</TabsTrigger>
+                <TabsTrigger value="week" className="min-h-9 px-3 text-xs sm:text-sm">This Week</TabsTrigger>
+                <TabsTrigger value="month" className="min-h-9 px-3 text-xs sm:text-sm">This Month</TabsTrigger>
+                <TabsTrigger value="academicYear" className="min-h-9 px-3 text-xs sm:text-sm">School Year</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-dashed border-outline-variant/30 bg-surface-container-low/40 p-4">
+              {reportSubmissionsLoading ? (
+                <div className="flex min-h-52 items-center justify-center text-sm text-on-surface-variant">
+                  Loading submission breakdown...
                 </div>
-              ))}
+              ) : !hasReportChartData ? (
+                <div className="flex min-h-52 flex-col items-center justify-center text-center">
+                  <p className="text-lg font-semibold text-on-surface">No submissions yet</p>
+                  <p className="mt-2 max-w-xs text-sm text-on-surface-variant">
+                    There are no student submissions to display for {selectedSubmissionTrend.label.toLowerCase()} grouped by {REPORT_GROUP_LABELS[reportGroupBy].toLowerCase()}.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <div className="h-64 min-w-full" style={{ width: `${reportChartMinWidth}px` }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={reportChartData} margin={{ top: 16, right: 8, left: -16, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--outline-variant) / 0.3)" vertical={false} />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize: 12 }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                          allowDecimals={false}
+                          domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]}
+                        />
+                        <Tooltip content={<ReportBreakdownTooltip />} cursor={{ fill: 'rgba(15, 118, 110, 0.06)' }} />
+                        <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                          {reportChartData.map((entry) => (
+                            <Cell key={entry.key} fill={entry.fill} />
+                          ))}
+                          <LabelList dataKey="count" content={<ReportBarValueLabel />} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
             </div>
             <button
               type="button"

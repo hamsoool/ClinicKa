@@ -220,7 +220,7 @@ export default function AdminDashboard() {
   const totalRoleCount = roleDistribution.reduce((sum, role) => sum + role.count, 0) || 1;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
+    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
       <PortalPageIntro
         eyebrow={(
           <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
@@ -300,7 +300,7 @@ export default function AdminDashboard() {
         })}
       </div>
 
-      <div className="grid gap-5 sm:gap-6 lg:grid-cols-[1.2fr_0.9fr]">
+      <div className="grid gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)]">
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>

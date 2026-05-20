@@ -511,12 +511,6 @@ app.put("/submission/:id/status", async (c) => {
     const normalizedStatus = String(status || '').trim().toLowerCase();
     const now = new Date().toISOString();
 
-    // Only doctors and admins can set statuses that finalize or change clearance
-    const doctorOnlyStatuses = ['approved', 'returned', 'physical_exam_done'];
-    if (doctorOnlyStatuses.includes(normalizedStatus) && !isDoctorOrAdmin(requester)) {
-      return c.json({ error: 'Only Clinic Doctors can approve, return, or mark physical exam done.' }, 403);
-    }
-
     if (normalizedStatus === 'in_review') {
       const reviewerId = String(requester.staff?.id || '').trim();
       if (!reviewerId) {
@@ -625,11 +619,6 @@ app.post("/notifications/status-email", async (c) => {
     const { submissionId, status, staffNotes } = await c.req.json();
     if (!submissionId || !status) {
       return badRequest('submissionId and status are required');
-    }
-
-    const doctorOnlyStatuses = ['approved', 'returned', 'physical_exam_done'];
-    if (doctorOnlyStatuses.includes(status) && !isDoctorOrAdmin(requester)) {
-      return c.json({ error: 'Only Clinic Doctors can send notifications for this status.' }, 403);
     }
 
     const result = await sendStatusNotificationEmail(submissionId, status, staffNotes || null);

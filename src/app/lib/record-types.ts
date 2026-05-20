@@ -188,6 +188,10 @@ export type StaffDashboardOverview = {
   actionableRecords: number;
   submittedToday: number;
   submittedYesterday: number;
+  submittedThisWeek: number;
+  submittedThisMonth: number;
+  submittedThisAcademicYear: number;
+  academicYearLabel: string;
   pendingQueueItems: SubmissionSummaryRecord[];
   inReviewQueueItems: SubmissionSummaryRecord[];
   returnedQueueItems: SubmissionSummaryRecord[];

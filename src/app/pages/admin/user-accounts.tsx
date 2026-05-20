@@ -415,7 +415,7 @@ export default function AdminUserAccounts() {
         : 'Search active accounts';
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[100rem] space-y-6">
       <PortalPageIntro
         title="User Accounts"
         description="Archive student and clinic staff accounts first, then permanently delete them from the archive when they should be removed from the system. Administrator account deletion stays reserved for the super admin console."

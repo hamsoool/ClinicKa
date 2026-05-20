@@ -176,7 +176,7 @@ export default function AdminSystemSettings() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto w-full max-w-[100rem] space-y-6">
       <PortalPageIntro
         title="Administrative Settings"
         description="Configure the school year, clinic intake, review notifications, account safeguards, and record retention policies for ClinicKa."
@@ -208,6 +208,8 @@ export default function AdminSystemSettings() {
         })}
       </div>
 
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
+        <div className="space-y-6">
       <SettingSection
         icon={CalendarRange}
         title="Academic Term and Student Intake"
@@ -357,6 +359,9 @@ export default function AdminSystemSettings() {
         </SettingRow>
       </SettingSection>
 
+        </div>
+
+        <div className="space-y-6 xl:sticky xl:top-24">
       <PasswordChangeCard title="Administrator Password" description="Update the password for your administrator account." />
 
       <Card className="border-outline-variant/35 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
@@ -390,6 +395,8 @@ export default function AdminSystemSettings() {
       </Card>
 
       <SettingsLogoutCard className="flex justify-end" />
+        </div>
+      </div>
     </div>
   );
 }

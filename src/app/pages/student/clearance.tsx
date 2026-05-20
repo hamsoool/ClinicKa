@@ -42,9 +42,12 @@ const styles = `
 
 export default function StudentClearance() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
+  const RECORD_PREVIEW_BASE_HEIGHT = 1344;
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const recordPreviewRef = useRef<HTMLDivElement>(null);
+  const recordPreviewFrameRef = useRef<HTMLDivElement>(null);
   const clearanceRef = useRef<HTMLDivElement>(null);
   const activeTab = normalizeClearanceTab(searchParams.get('tab'));
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
@@ -211,6 +214,44 @@ export default function StudentClearance() {
     }
   };
 
+  const downloadRecordPDF = async () => {
+    if (!recordPreviewRef.current || !profileRecord) return;
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
+
+      const canvas = await html2canvas(recordPreviewRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        width: RECORD_PREVIEW_BASE_WIDTH,
+        height: RECORD_PREVIEW_BASE_HEIGHT,
+        windowWidth: RECORD_PREVIEW_BASE_WIDTH,
+        windowHeight: RECORD_PREVIEW_BASE_HEIGHT,
+      });
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'legal',
+      });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth;
+      const imgHeight = pageHeight;
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
+
+      pdf.save(`medical_record_${profileRecord.lastName}_${profileRecord.firstName}.pdf`);
+      toast.success('Medical record PDF downloaded.');
+    } catch (error) {
+      console.error('Failed to generate medical record PDF:', error);
+      toast.error('Failed to download PDF. Please try again.');
+    }
+  };
+
   const handleTabChange = (value: string) => {
     const nextTab = normalizeClearanceTab(value);
     const nextParams = new URLSearchParams(searchParams);
@@ -255,7 +296,7 @@ export default function StudentClearance() {
   const isPhysicalExamDone = normalizedStatus === 'physical_exam_done';
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-6">
+    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-6">
       <StudentPageIntro
         title="Records & Clearance"
         description="Track your submissions, open your medical form, and download your clearance when approved."
@@ -391,7 +432,15 @@ export default function StudentClearance() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Medical Record Preview</CardTitle>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>Medical Record Preview</CardTitle>
+                {profileRecord ? (
+                  <Button onClick={downloadRecordPDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download PDF
+                  </Button>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {profileRecord ? (
@@ -404,10 +453,11 @@ export default function StudentClearance() {
                       <div className="overflow-x-auto overscroll-x-contain">
                         <div className="flex min-w-full justify-start lg:justify-center">
                           <div
+                            ref={recordPreviewFrameRef}
                             className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5"
                             style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                           >
-                            <MedicalRecordPreview record={profileRecord} yearlyRecords={latestRecordPerYear} />
+                            <MedicalRecordPreview ref={recordPreviewRef} record={profileRecord} yearlyRecords={latestRecordPerYear} />
                           </div>
                         </div>
                       </div>

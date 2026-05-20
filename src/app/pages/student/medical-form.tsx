@@ -32,9 +32,7 @@ export default function StudentMedicalForm() {
     updateField,
     updateEmergencyContact,
     updateMedicalCondition,
-    updateMeasurement,
     handleFileChange,
-    getBmiCategory,
     submit,
   } = useStudentMedicalForm({ year, me, editSubmissionId, initialDataPrivacyConsent: hasDataPrivacyConsent });
 
@@ -44,7 +42,7 @@ export default function StudentMedicalForm() {
   }, [navigate, submitted]);
 
   return (
-    <div className="min-h-screen px-4 py-4 md:px-8 md:py-6">
+    <div className="mx-auto w-full max-w-[100rem]">
       <div className="flex w-full flex-col gap-5">
         <Button variant="ghost" onClick={() => navigate('/student/year-selection')} className="w-fit">
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -54,7 +52,6 @@ export default function StudentMedicalForm() {
         <StudentPageIntro
           title={`Year ${year} Medical Record Form`}
           description="Complete each section carefully. Your progress is saved automatically while you work."
-          className="max-w-4xl"
         />
 
         <div className="space-y-2">
@@ -74,9 +71,7 @@ export default function StudentMedicalForm() {
                 onFieldChange={updateField}
                 onEmergencyContactChange={updateEmergencyContact}
                 onMedicalConditionChange={updateMedicalCondition}
-                onMeasurementChange={updateMeasurement}
                 onFileChange={handleFileChange}
-                getBmiCategory={getBmiCategory}
                 hasRequiredProfileFields={hasRequiredProfileFields}
                 hasProfilePhoto={hasProfilePhoto}
                 hasProfileSignature={hasProfileSignature}

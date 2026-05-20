@@ -162,13 +162,14 @@ export default function StaffSettings() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto w-full max-w-[100rem] space-y-6">
       <PortalPageIntro
         title="Settings"
         description="Manage your profile, review workflow, certificate workspace, and account security from one place."
       />
 
-      <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
+        <div className="space-y-6">
         <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -268,7 +269,6 @@ export default function StaffSettings() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending">Pending review</SelectItem>
-                    <SelectItem value="in_review">In review</SelectItem>
                     <SelectItem value="returned">Returned</SelectItem>
                     <SelectItem value="resubmitted">Resubmitted</SelectItem>
                     <SelectItem value="all">All action items</SelectItem>
@@ -287,7 +287,6 @@ export default function StaffSettings() {
                   <SelectContent>
                     <SelectItem value="action_needed">Needs action</SelectItem>
                     <SelectItem value="pending">Pending review</SelectItem>
-                    <SelectItem value="in_review">In review</SelectItem>
                     <SelectItem value="physical_exam_done">Physical exam done</SelectItem>
                     <SelectItem value="approved">Approved</SelectItem>
                     <SelectItem value="returned">Returned</SelectItem>
@@ -410,11 +409,13 @@ export default function StaffSettings() {
           </CardContent>
         </Card>
 
-        <div id="password">
-          <PasswordChangeCard title="Change Password" description="Update the password for your clinic staff account." />
         </div>
 
+        <div className="space-y-6 xl:sticky xl:top-24">
+          <PasswordChangeCard title="Change Password" description="Update the password for your clinic staff account." />
+
         <SettingsLogoutCard className="flex justify-end" />
+        </div>
       </div>
 
       <Dialog open={confirmSaveOpen} onOpenChange={setConfirmSaveOpen}>

@@ -18,8 +18,8 @@ export const MedicalFormSubmittedView = memo(function MedicalFormSubmittedView({
   onBack,
 }: Props) {
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="mx-auto max-w-5xl">
+    <div className="p-4 md:p-8">
+      <div className="mx-auto w-full max-w-[100rem]">
         <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h1 className="mb-1 text-3xl font-bold text-primary">Medical Record Submitted</h1>

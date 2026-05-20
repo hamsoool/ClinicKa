@@ -108,7 +108,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
     searchQuery || departmentFilter !== 'all' || yearFilter !== 'all' || courseFilter !== 'all' || fromDate || toDate;
 
   return (
-    <div>
+    <div className={embedded ? 'min-w-0' : 'mx-auto w-full max-w-[100rem]'}>
       {!embedded ? (
         <PortalPageIntro
           className="mb-8"

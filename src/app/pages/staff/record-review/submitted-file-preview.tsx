@@ -96,7 +96,7 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
     return (
       <div className="mb-4 flex items-center gap-3 rounded-lg border bg-muted/50 p-4 text-muted-foreground">
         <FileText className="h-6 w-6" />
-        <span className="text-sm">No {title} file uploaded by student</span>
+        <span className="text-sm">No {title} file uploaded yet</span>
       </div>
     );
   }
@@ -183,7 +183,7 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
     <div className="mb-4 overflow-hidden rounded-lg border">
       <div className="flex flex-col gap-3 border-b bg-muted/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{title} submitted file</p>
+          <p className="truncate text-sm font-medium">{title} file</p>
           <p className="text-xs text-muted-foreground">
             {previewType === 'pdf' ? 'PDF preview' : previewType === 'image' ? 'Image preview' : 'File attachment'}
           </p>
@@ -196,9 +196,9 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
                 Preview
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[90vh] max-w-5xl overflow-hidden p-0">
+              <DialogContent className="max-h-[90vh] max-w-5xl overflow-hidden p-0">
               <DialogHeader className="border-b px-6 py-4">
-                <DialogTitle>{title} Submitted File</DialogTitle>
+                <DialogTitle>{title} File</DialogTitle>
               </DialogHeader>
               <div className="max-h-[calc(90vh-80px)] overflow-auto bg-muted/20 p-4">
                 {previewType === 'pdf' ? (

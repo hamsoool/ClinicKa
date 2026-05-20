@@ -201,7 +201,7 @@ function DashboardCardSkeleton() {
 export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVariant }) {
   if (variant === 'table') {
     return (
-      <div aria-busy="true" aria-live="polite" className="mx-auto max-w-6xl space-y-8 pt-2">
+      <div aria-busy="true" aria-live="polite" className="mx-auto w-full max-w-[100rem] space-y-8 pt-2">
         <div className="space-y-3">
           <Skeleton className="h-10 w-64 bg-white/80" />
           <Skeleton className="h-4 w-72 bg-white/70" />
@@ -237,7 +237,7 @@ export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVar
 
   if (variant === 'certificate') {
     return (
-      <div aria-busy="true" aria-live="polite" className="mx-auto max-w-6xl space-y-8 pt-2">
+      <div aria-busy="true" aria-live="polite" className="mx-auto w-full max-w-[100rem] space-y-8 pt-2">
         <div className="space-y-3">
           <Skeleton className="h-10 w-72 bg-white/80" />
           <Skeleton className="h-4 w-80 bg-white/70" />
@@ -269,7 +269,7 @@ export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVar
   }
 
   return (
-    <div aria-busy="true" aria-live="polite" className="mx-auto max-w-6xl space-y-8 pt-2">
+    <div aria-busy="true" aria-live="polite" className="mx-auto w-full max-w-[100rem] space-y-8 pt-2">
       <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-4">
