@@ -27,7 +27,7 @@ type UseStudentMedicalFormArgs = {
   initialDataPrivacyConsent?: boolean;
 };
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5;
 const NAME_REGEX = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
 const COURSE_REGEX = /^[A-Za-z][A-Za-z\s.'&()/-]*$/;
 const SQL_INJECTION_REGEX = /(\b(select|insert|update|delete|drop|truncate|union|alter)\b)|(--|\/\*|\*\/|;)/i;
@@ -463,13 +463,6 @@ export function useStudentMedicalForm({
           formData.emergencyContact.address
         );
       case 4:
-        return (
-          formData.weight &&
-          formData.height &&
-          /^\d{1,3}$/.test(formData.weight) &&
-          /^\d{1,3}$/.test(formData.height)
-        );
-      case 5:
         if (!formData.labTestLocation) return false;
         if (formData.labTestLocation === 'jlgh') return true;
         return Boolean(
@@ -479,7 +472,7 @@ export function useStudentMedicalForm({
             !SQL_INJECTION_REGEX.test(formData.otherClinicName) &&
             hasAllUploads,
         );
-      case 6:
+      case 5:
         return true;
       default:
         return false;
@@ -500,18 +493,16 @@ export function useStudentMedicalForm({
         hasRequiredProfileFields &&
           formData.yearLevel &&
           formData.sex &&
-          formData.hadOperation &&
-          formData.emergencyContact.name &&
-          formData.emergencyContact.relationship &&
-          formData.emergencyContact.phone &&
-          isValidPhilippinePhoneNumber(formData.emergencyContact.phone) &&
-          formData.emergencyContact.address &&
-          formData.weight &&
-          formData.height &&
-          formData.labTestLocation &&
-          (formData.labTestLocation === 'jlgh' || hasXray) &&
-          (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
-          (!needsAllUploads || hasAllUploads) &&
+        formData.hadOperation &&
+        formData.emergencyContact.name &&
+        formData.emergencyContact.relationship &&
+        formData.emergencyContact.phone &&
+        isValidPhilippinePhoneNumber(formData.emergencyContact.phone) &&
+        formData.emergencyContact.address &&
+        formData.labTestLocation &&
+        (formData.labTestLocation === 'jlgh' || hasXray) &&
+        (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
+        (!needsAllUploads || hasAllUploads) &&
           NAME_REGEX.test(formData.firstName) &&
           NAME_REGEX.test(formData.lastName) &&
           COURSE_REGEX.test(formData.course) &&
@@ -521,8 +512,6 @@ export function useStudentMedicalForm({
             (COURSE_REGEX.test(formData.otherClinicName) &&
               formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
               !SQL_INJECTION_REGEX.test(formData.otherClinicName))) &&
-          /^\d{1,3}$/.test(formData.weight) &&
-          /^\d{1,3}$/.test(formData.height) &&
           (formData.hadOperation !== 'yes' || !SQL_INJECTION_REGEX.test(formData.operationDetails || '')),
       );
     },

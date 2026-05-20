@@ -32,9 +32,7 @@ export default function StudentMedicalForm() {
     updateField,
     updateEmergencyContact,
     updateMedicalCondition,
-    updateMeasurement,
     handleFileChange,
-    getBmiCategory,
     submit,
   } = useStudentMedicalForm({ year, me, editSubmissionId, initialDataPrivacyConsent: hasDataPrivacyConsent });
 
@@ -74,9 +72,7 @@ export default function StudentMedicalForm() {
                 onFieldChange={updateField}
                 onEmergencyContactChange={updateEmergencyContact}
                 onMedicalConditionChange={updateMedicalCondition}
-                onMeasurementChange={updateMeasurement}
                 onFileChange={handleFileChange}
-                getBmiCategory={getBmiCategory}
                 hasRequiredProfileFields={hasRequiredProfileFields}
                 hasProfilePhoto={hasProfilePhoto}
                 hasProfileSignature={hasProfileSignature}

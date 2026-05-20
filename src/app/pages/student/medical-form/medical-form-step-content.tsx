@@ -14,7 +14,7 @@ import {
   MEDICAL_CONDITIONS,
   YEAR_LEVELS,
 } from './constants';
-import type { BmiCategory, MedicalConditionKey, MedicalFormData } from './types';
+import type { MedicalConditionKey, MedicalFormData } from './types';
 
 type Props = {
   step: number;
@@ -22,9 +22,7 @@ type Props = {
   onFieldChange: <K extends keyof MedicalFormData>(field: K, value: MedicalFormData[K]) => void;
   onEmergencyContactChange: (field: 'name' | 'relationship' | 'phone' | 'address', value: string) => void;
   onMedicalConditionChange: (condition: MedicalConditionKey, checked: boolean) => void;
-  onMeasurementChange: (field: 'weight' | 'height', value: string) => void;
   onFileChange: (field: 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => void;
-  getBmiCategory: (bmi: string) => BmiCategory;
   hasRequiredProfileFields: boolean;
   hasProfilePhoto: boolean;
   hasProfileSignature: boolean;
@@ -37,9 +35,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   onFieldChange,
   onEmergencyContactChange,
   onMedicalConditionChange,
-  onMeasurementChange,
   onFileChange,
-  getBmiCategory,
   hasRequiredProfileFields,
   hasProfilePhoto,
   hasProfileSignature,
@@ -76,12 +72,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     !formData.emergencyContact.phone?.trim(),
     formData.emergencyContact.phone ? !/^\(\+63\)\s9\d{9}$/.test(formData.emergencyContact.phone.trim()) : false,
     !formData.emergencyContact.address?.trim(),
-  ].filter(Boolean).length;
-  const stepFourMissingRequired = [
-    !formData.weight?.trim(),
-    !formData.height?.trim(),
-    formData.weight ? !/^\d{1,3}$/.test(formData.weight.trim()) : false,
-    formData.height ? !/^\d{1,3}$/.test(formData.height.trim()) : false,
   ].filter(Boolean).length;
 
   const requiredFieldClass = (missing: boolean) =>
@@ -336,62 +326,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     case 4:
       return (
         <div className="space-y-4">
-          <h3 className="mb-4 text-xl font-semibold">Physical Measurements</h3>
-          {stepFourMissingRequired > 0 ? (
-            <div className="break-words rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              Required fields are missing or invalid. Please complete all fields marked with <span className="font-semibold">*</span>.
-            </div>
-          ) : null}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="weight">Weight (kg) *</Label>
-              <Input
-                id="weight"
-                type="text"
-                value={formData.weight}
-                onChange={(event) => onMeasurementChange('weight', event.target.value)}
-                placeholder="e.g., 065"
-                inputMode="numeric"
-                pattern="\d{1,3}"
-                maxLength={3}
-                className={requiredFieldClass(!formData.weight?.trim() || !/^\d{1,3}$/.test(formData.weight.trim()))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="height">Height (cm) *</Label>
-              <Input
-                id="height"
-                type="text"
-                value={formData.height}
-                onChange={(event) => onMeasurementChange('height', event.target.value)}
-                placeholder="e.g., 170"
-                inputMode="numeric"
-                pattern="\d{1,3}"
-                maxLength={3}
-                className={requiredFieldClass(!formData.height?.trim() || !/^\d{1,3}$/.test(formData.height.trim()))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="bmi">BMI (Auto-calculated)</Label>
-              <Input id="bmi" value={formData.bmi} disabled className="bg-muted" />
-            </div>
-          </div>
-          {formData.bmi && (
-            <Card className="bg-primary/5">
-              <CardContent className="pt-6">
-                <div className="text-center">
-                  <p className="mb-2 text-sm text-muted-foreground">Your BMI Category</p>
-                  <p className={`text-2xl font-bold ${getBmiCategory(formData.bmi).color}`}>{getBmiCategory(formData.bmi).category}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">BMI: {formData.bmi}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      );
-    case 5:
-      return (
-        <div className="space-y-4">
           <h3 className="mb-4 text-xl font-semibold">Laboratory Results Upload</h3>
           <div className="rounded-lg border bg-surface-container-low p-4">
             <Label>Did you take your tests at James L. Gordon Hospital? *</Label>
@@ -548,7 +482,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           ) : null}
         </div>
       );
-    case 6:
+    case 5:
       return (
         <div className="space-y-4">
           <h3 className="mb-4 text-xl font-semibold">Review and Submit</h3>
@@ -597,21 +531,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               ) : (
                 <p className="text-muted-foreground">No medical conditions reported</p>
               )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Physical Measurements</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <p className="text-muted-foreground">Weight:</p>
-                <p className="font-medium">{formData.weight} kg</p>
-                <p className="text-muted-foreground">Height:</p>
-                <p className="font-medium">{formData.height} cm</p>
-                <p className="text-muted-foreground">BMI:</p>
-                <p className="font-medium">{formData.bmi}</p>
-              </div>
             </CardContent>
           </Card>
           <Card>
