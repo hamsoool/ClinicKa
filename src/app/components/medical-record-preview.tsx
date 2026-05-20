@@ -62,7 +62,7 @@ const S = {
   page: {
     fontFamily: "'Arial', 'Helvetica', sans-serif",
     fontSize: '10px',
-    lineHeight: '1.35',
+    lineHeight: '1.5',
     color: '#000',
     background: '#fff',
     width: '100%',
@@ -92,20 +92,25 @@ const S = {
   th: {
     border: '1px solid #000',
     padding: '2px 3px',
-    fontWeight: 'bold' as const,
+    fontWeight: 'normal' as const,
     textAlign: 'center' as const,
     background: '#f0f0f0',
     fontSize: '9px',
   },
   td: {
     border: '1px solid #000',
-    padding: '2px 3px',
+    padding: '4px 5px',
     fontSize: '9px',
-    minHeight: '14px',
+    minHeight: '18px',
+    lineHeight: '1.45',
+    whiteSpace: 'normal' as const,
+    overflowWrap: 'anywhere' as const,
+    wordBreak: 'break-word' as const,
+    verticalAlign: 'top' as const,
   },
   tdLabel: {
     border: '1px solid #000',
-    padding: '2px 4px',
+    padding: '4px 5px',
     fontWeight: 'bold' as const,
     fontSize: '9px',
     width: '100px',
@@ -116,13 +121,21 @@ const S = {
     fontSize: '9px',
     whiteSpace: 'nowrap' as const,
   },
+  // FIX: increased paddingBottom from '1px' to '3px' and minHeight from '12px' to '14px'
+  // so the underline doesn't overlap text when rendered to PDF
   fieldValue: {
     borderBottom: '1px solid #000',
     display: 'inline-block' as const,
     minWidth: '60px',
-    paddingBottom: '1px',
+    paddingBottom: '3px',
+    paddingLeft: '2px',
+    paddingRight: '2px',
+    minHeight: '14px',
     fontSize: '9px',
+    lineHeight: '1.35',
     textAlign: 'center' as const,
+    verticalAlign: 'middle' as const,
+    boxSizing: 'border-box' as const,
   },
 };
 
@@ -290,19 +303,19 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
       <div style={{ fontSize: '9px', fontWeight: 'bold', marginBottom: '1px' }}>Name:</div>
       <div style={{ display: 'flex', gap: '4px', marginBottom: '3px', alignItems: 'flex-end' }}>
         <div style={{ flex: 1.2 }}>
-          <div style={{ borderBottom: '1px solid #000', paddingBottom: '1px', fontSize: '9px', minHeight: '12px' }}>{record.lastName}</div>
+          <div style={{ borderBottom: '1px solid #000', paddingBottom: '3px', fontSize: '9px', minHeight: '14px' }}>{record.lastName}</div>
           <div style={{ fontSize: '7.5px', color: '#555', textAlign: 'center' }}>Last Name</div>
         </div>
         <div style={{ flex: 1.2 }}>
-          <div style={{ borderBottom: '1px solid #000', paddingBottom: '1px', fontSize: '9px', minHeight: '12px' }}>{record.firstName}</div>
+          <div style={{ borderBottom: '1px solid #000', paddingBottom: '3px', fontSize: '9px', minHeight: '14px' }}>{record.firstName}</div>
           <div style={{ fontSize: '7.5px', color: '#555', textAlign: 'center' }}>First name</div>
         </div>
         <div style={{ width: '36px' }}>
-          <div style={{ borderBottom: '1px solid #000', paddingBottom: '1px', fontSize: '9px', minHeight: '12px', textAlign: 'center' }}>{record.middleInitial || ''}</div>
+          <div style={{ borderBottom: '1px solid #000', paddingBottom: '3px', fontSize: '9px', minHeight: '14px', textAlign: 'center' }}>{record.middleInitial || ''}</div>
           <div style={{ fontSize: '7.5px', color: '#555', textAlign: 'center' }}>M. I.</div>
         </div>
         <div style={{ flex: 1, marginLeft: '6px' }}>
-          <div style={{ borderBottom: '1px solid #000', paddingBottom: '1px', fontSize: '9px', minHeight: '12px' }}>
+          <div style={{ borderBottom: '1px solid #000', paddingBottom: '3px', fontSize: '9px', minHeight: '14px' }}>
             {abbreviateCourseDept(record.course)}
           </div>
           <div style={{ fontSize: '7.5px', color: '#555', textAlign: 'left', paddingLeft: '2px' }}>Course/Dept.</div>
@@ -382,7 +395,7 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
       </div>
       <div style={{ fontSize: '9px', marginBottom: '4px' }}>
         • If yes, state the nature of the operation and date/year:
-        <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px', marginLeft: '4px' }}>
+        <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '200px', marginLeft: '4px', paddingBottom: '3px', minHeight: '14px' }}>
           {record.hadOperation === 'yes' ? record.operationDetails || '' : ''}
         </span>
       </div>
@@ -421,6 +434,7 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
       </div>
 
       {/* ====== PHYSICAL EXAMINATION TABLE ====== */}
+      {/* FIX: removed blue highlight — all columns now use same background/fontWeight */}
       <table style={{ ...S.table, marginBottom: '0' }}>
         <thead>
           <tr>
@@ -428,8 +442,8 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
             {['Yr. I / Date:', 'Yr. II / Date:', 'Yr. III / Date:', 'Yr. IV / Date:'].map((h, i) => (
               <th key={i} style={{
                 ...S.th,
-                fontWeight: i === yrIndex ? 'bold' : 'normal',
-                background: i === yrIndex ? '#ddeeff' : '#f0f0f0',
+                fontWeight: 'normal',
+                background: '#f0f0f0',
               }}>
                 {h}
               </th>
@@ -441,7 +455,7 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
             <tr key={row}>
               <td style={S.tdLabel}>{row}</td>
               {[0, 1, 2, 3].map((i) => (
-                <td key={i} style={{ ...S.td, background: i === yrIndex ? '#f5faff' : 'transparent' }}>
+                <td key={i} style={{ ...S.td, background: 'transparent' }}>
                   {yearlyRecords ? getYearExamValue(i + 1, row) : i === yrIndex ? getExamValue(row) : ''}
                 </td>
               ))}
@@ -450,7 +464,7 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
           <tr>
             <td style={S.tdLabel}>Examined by:</td>
             {[0, 1, 2, 3].map((i) => (
-              <td key={i} style={{ ...S.td, background: i === yrIndex ? '#f5faff' : 'transparent' }}>
+              <td key={i} style={{ ...S.td, background: 'transparent' }}>
                 {yearlyRecords
                   ? (yearlyRecords[(i + 1) as 1 | 2 | 3 | 4]?.staffMeasurements?.examinedBy || '')
                   : i === yrIndex
@@ -462,7 +476,7 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
         </tbody>
       </table>
 
-      {/* ====== LAB RESULTS  E4-column structure matching physical form ====== */}
+      {/* ====== LAB RESULTS — 4-column structure matching physical form ====== */}
       <table style={{ ...S.table, marginTop: '0' }}>
         <tbody>
           {/* ── Chest X-Ray row ── */}
@@ -472,27 +486,27 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
             </td>
             {/* Yr I */}
             <td style={{ ...S.td, verticalAlign: 'top', fontSize: '8px' }}>
-              <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '50px' }}>{(yearlyRecords ? getYearLab(1) : lab).xrayDate || ''}</span></div>
+              <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '50px', paddingBottom: '2px' }}>{(yearlyRecords ? getYearLab(1) : lab).xrayDate || ''}</span></div>
               <div>Normal ( {(yearlyRecords ? getYearLab(1) : lab).xrayResult === 'normal' ? '✓' : ' '} )</div>
-              <div>Abnormal findings <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px' }}>{(yearlyRecords ? getYearLab(1) : lab).xrayFindings || ''}</span></div>
+              <div>Abnormal findings <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px', paddingBottom: '2px' }}>{(yearlyRecords ? getYearLab(1) : lab).xrayFindings || ''}</span></div>
             </td>
             {/* Yr II */}
             <td style={{ ...S.td, verticalAlign: 'top', fontSize: '8px' }}>
-              <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '50px' }}>{yearlyRecords ? getYearLab(2).xrayDate || '' : yrIndex === 1 ? lab.xrayDate || '' : ''}</span></div>
+              <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '50px', paddingBottom: '2px' }}>{yearlyRecords ? getYearLab(2).xrayDate || '' : yrIndex === 1 ? lab.xrayDate || '' : ''}</span></div>
               <div>Normal ( {yearlyRecords ? getYearLab(2).xrayResult === 'normal' ? '✓' : ' ' : yrIndex === 1 && lab.xrayResult === 'normal' ? '✓' : ' '} )</div>
-              <div>Abnormal findings <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px' }}>{yearlyRecords ? getYearLab(2).xrayFindings || '' : yrIndex === 1 ? lab.xrayFindings || '' : ''}</span></div>
+              <div>Abnormal findings <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px', paddingBottom: '2px' }}>{yearlyRecords ? getYearLab(2).xrayFindings || '' : yrIndex === 1 ? lab.xrayFindings || '' : ''}</span></div>
             </td>
             {/* Yr III */}
             <td style={{ ...S.td, verticalAlign: 'top', fontSize: '8px' }}>
-              <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '50px' }}>{yearlyRecords ? getYearLab(3).xrayDate || '' : yrIndex === 2 ? lab.xrayDate || '' : ''}</span></div>
+              <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '50px', paddingBottom: '2px' }}>{yearlyRecords ? getYearLab(3).xrayDate || '' : yrIndex === 2 ? lab.xrayDate || '' : ''}</span></div>
               <div>Normal ( {yearlyRecords ? getYearLab(3).xrayResult === 'normal' ? '✓' : ' ' : yrIndex === 2 && lab.xrayResult === 'normal' ? '✓' : ' '} )</div>
-              <div>Abnormal findings <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px' }}>{yearlyRecords ? getYearLab(3).xrayFindings || '' : yrIndex === 2 ? lab.xrayFindings || '' : ''}</span></div>
+              <div>Abnormal findings <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px', paddingBottom: '2px' }}>{yearlyRecords ? getYearLab(3).xrayFindings || '' : yrIndex === 2 ? lab.xrayFindings || '' : ''}</span></div>
             </td>
             {/* Yr IV */}
             <td style={{ ...S.td, verticalAlign: 'top', fontSize: '8px' }}>
-              <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '50px' }}>{yearlyRecords ? getYearLab(4).xrayDate || '' : yrIndex === 3 ? lab.xrayDate || '' : ''}</span></div>
+              <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '50px', paddingBottom: '2px' }}>{yearlyRecords ? getYearLab(4).xrayDate || '' : yrIndex === 3 ? lab.xrayDate || '' : ''}</span></div>
               <div>Normal ( {yearlyRecords ? getYearLab(4).xrayResult === 'normal' ? '✓' : ' ' : yrIndex === 3 && lab.xrayResult === 'normal' ? '✓' : ' '} )</div>
-              <div>Abnormal findings <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px' }}>{yearlyRecords ? getYearLab(4).xrayFindings || '' : yrIndex === 3 ? lab.xrayFindings || '' : ''}</span></div>
+              <div>Abnormal findings <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px', paddingBottom: '2px' }}>{yearlyRecords ? getYearLab(4).xrayFindings || '' : yrIndex === 3 ? lab.xrayFindings || '' : ''}</span></div>
             </td>
           </tr>
 
@@ -504,19 +518,19 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
               const yearLab = yearlyRecords ? getYearLab(i + 1) : lab;
               return (
                 <td key={i} style={{ ...S.td, verticalAlign: 'top', fontSize: '8px' }}>
-                  <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '44px' }}>{yearlyRecords ? yearLab.cbcDate || '' : isActive ? lab.cbcDate || '' : ''}</span></div>
+                  <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '44px', paddingBottom: '2px' }}>{yearlyRecords ? yearLab.cbcDate || '' : isActive ? lab.cbcDate || '' : ''}</span></div>
                   <div>
-                    Hgb. <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '28px' }}>{yearlyRecords ? yearLab.hemoglobin || '' : isActive ? lab.hemoglobin || '' : ''}</span>
-                    &nbsp;Hct. <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '28px' }}>{yearlyRecords ? yearLab.hematocrit || '' : isActive ? lab.hematocrit || '' : ''}</span>
+                    Hgb. <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '28px', paddingBottom: '2px' }}>{yearlyRecords ? yearLab.hemoglobin || '' : isActive ? lab.hemoglobin || '' : ''}</span>
+                    &nbsp;Hct. <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '28px', paddingBottom: '2px' }}>{yearlyRecords ? yearLab.hematocrit || '' : isActive ? lab.hematocrit || '' : ''}</span>
                   </div>
                   <div>
-                    WBC <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '30px' }}>{yearlyRecords ? yearLab.wbc || '' : isActive ? lab.wbc || '' : ''}</span> &lt;
+                    WBC <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '30px', paddingBottom: '2px' }}>{yearlyRecords ? yearLab.wbc || '' : isActive ? lab.wbc || '' : ''}</span> &lt;
                   </div>
                   <div>
-                    Plt. Ct. <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '28px' }}>{yearlyRecords ? yearLab.plateletCount || '' : isActive ? lab.plateletCount || '' : ''}</span>
+                    Plt. Ct. <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '28px', paddingBottom: '2px' }}>{yearlyRecords ? yearLab.plateletCount || '' : isActive ? lab.plateletCount || '' : ''}</span>
                   </div>
                   <div>
-                    Bld. Type <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '24px' }}>{yearlyRecords ? yearLab.bloodType || '' : isActive ? lab.bloodType || '' : ''}</span>
+                    Bld. Type <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '24px', paddingBottom: '2px' }}>{yearlyRecords ? yearLab.bloodType || '' : isActive ? lab.bloodType || '' : ''}</span>
                   </div>
                 </td>
               );
@@ -531,19 +545,19 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
               const yearLab = yearlyRecords ? getYearLab(i + 1) : lab;
               return (
                 <td key={i} style={{ ...S.td, verticalAlign: 'top', fontSize: '8px' }}>
-                  <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '44px' }}>{yearlyRecords ? yearLab.urinalysisDate || '' : isActive ? lab.urinalysisDate || '' : ''}</span></div>
+                  <div>Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '44px', paddingBottom: '2px' }}>{yearlyRecords ? yearLab.urinalysisDate || '' : isActive ? lab.urinalysisDate || '' : ''}</span></div>
                   <div>
-                    •Glucose/Sugar <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '30px' }}>{yearlyRecords ? yearLab.urinalysisGlucose || '' : isActive ? lab.urinalysisGlucose || '' : ''}</span>
+                    •Glucose/Sugar <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '30px', paddingBottom: '2px' }}>{yearlyRecords ? yearLab.urinalysisGlucose || '' : isActive ? lab.urinalysisGlucose || '' : ''}</span>
                   </div>
                   <div>
-                    •Protein <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px' }}>{yearlyRecords ? yearLab.urinalysisProtein || '' : isActive ? lab.urinalysisProtein || '' : ''}</span>
+                    •Protein <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '40px', paddingBottom: '2px' }}>{yearlyRecords ? yearLab.urinalysisProtein || '' : isActive ? lab.urinalysisProtein || '' : ''}</span>
                   </div>
                 </td>
               );
             })}
           </tr>
 
-          {/* ── OTHERS row  Efull width ── */}
+          {/* ── OTHERS row — full width ── */}
           <tr>
             <td style={{ ...S.tdLabel, fontWeight: 'bold', verticalAlign: 'top' }}>OTHERS:</td>
             <td colSpan={4} style={{ ...S.td, minHeight: '48px', verticalAlign: 'top' }}>
@@ -557,7 +571,7 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', marginTop: '8px' }}>
         <div style={{ fontWeight: 'bold' }}>
           Date<br />Received:
-          <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '100px', marginLeft: '6px', fontWeight: 'normal' }}>
+          <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '100px', marginLeft: '6px', fontWeight: 'normal', paddingBottom: '3px', minHeight: '14px' }}>
             {record.updatedAt ? new Date(record.updatedAt).toLocaleDateString() : ''}
           </span>
         </div>
@@ -574,7 +588,3 @@ MedicalRecordPreviewBase.displayName = 'MedicalRecordPreviewBase';
 const MedicalRecordPreview = memo(MedicalRecordPreviewBase);
 MedicalRecordPreview.displayName = 'MedicalRecordPreview';
 export default MedicalRecordPreview;
-
-
-
-

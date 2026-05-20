@@ -45,6 +45,7 @@ export default function StudentClearance() {
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const recordPreviewRef = useRef<HTMLDivElement>(null);
   const clearanceRef = useRef<HTMLDivElement>(null);
   const activeTab = normalizeClearanceTab(searchParams.get('tab'));
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
@@ -207,6 +208,99 @@ export default function StudentClearance() {
       toast.success('Medical clearance PDF downloaded.');
     } catch (error) {
       console.error('Failed to generate clearance PDF:', error);
+      toast.error('Failed to download PDF. Please try again.');
+    }
+  };
+
+  const downloadRecordPDF = async () => {
+    if (!recordPreviewRef.current || !profileRecord) return;
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
+
+      const exportRoot = document.createElement('div');
+      exportRoot.style.position = 'fixed';
+      exportRoot.style.left = '-10000px';
+      exportRoot.style.top = '0';
+      exportRoot.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
+      exportRoot.style.background = '#fff';
+      exportRoot.style.padding = '0';
+      exportRoot.style.margin = '0';
+
+      const clone = recordPreviewRef.current.cloneNode(true) as HTMLDivElement;
+      clone.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
+      clone.style.maxWidth = `${RECORD_PREVIEW_BASE_WIDTH}px`;
+      clone.style.margin = '0';
+      clone.style.padding = '0';
+      clone.style.transform = 'none';
+
+      exportRoot.appendChild(clone);
+      document.body.appendChild(exportRoot);
+
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        width: RECORD_PREVIEW_BASE_WIDTH,
+        windowWidth: RECORD_PREVIEW_BASE_WIDTH,
+      });
+      document.body.removeChild(exportRoot);
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [330.2, 215.9],
+      });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 6;
+      const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
+      const imgWidth = usableWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgData = canvas.toDataURL('image/png');
+
+      if (imgHeight <= usableHeight) {
+        pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
+      } else {
+        const fullCanvas = canvas;
+        const pageSliceHeightPx = Math.floor((usableHeight * fullCanvas.width) / usableWidth);
+        let renderedPx = 0;
+        let pageIndex = 0;
+
+        while (renderedPx < fullCanvas.height) {
+          const sliceHeightPx = Math.min(pageSliceHeightPx, fullCanvas.height - renderedPx);
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = fullCanvas.width;
+          pageCanvas.height = sliceHeightPx;
+          const ctx = pageCanvas.getContext('2d');
+          if (!ctx) break;
+          ctx.drawImage(
+            fullCanvas,
+            0,
+            renderedPx,
+            fullCanvas.width,
+            sliceHeightPx,
+            0,
+            0,
+            fullCanvas.width,
+            sliceHeightPx,
+          );
+          if (pageIndex > 0) pdf.addPage();
+          const sliceData = pageCanvas.toDataURL('image/png');
+          const sliceHeightMm = (sliceHeightPx * usableWidth) / fullCanvas.width;
+          pdf.addImage(sliceData, 'PNG', margin, margin, usableWidth, sliceHeightMm, undefined, 'FAST');
+          renderedPx += sliceHeightPx;
+          pageIndex += 1;
+        }
+      }
+
+      pdf.save(`medical_record_${profileRecord.lastName}_${profileRecord.firstName}.pdf`);
+      toast.success('Medical record PDF downloaded.');
+    } catch (error) {
+      console.error('Failed to generate medical record PDF:', error);
       toast.error('Failed to download PDF. Please try again.');
     }
   };
@@ -391,7 +485,15 @@ export default function StudentClearance() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Medical Record Preview</CardTitle>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>Medical Record Preview</CardTitle>
+                {profileRecord ? (
+                  <Button onClick={downloadRecordPDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download PDF
+                  </Button>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {profileRecord ? (
@@ -407,7 +509,7 @@ export default function StudentClearance() {
                             className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5"
                             style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                           >
-                            <MedicalRecordPreview record={profileRecord} yearlyRecords={latestRecordPerYear} />
+                            <MedicalRecordPreview ref={recordPreviewRef} record={profileRecord} yearlyRecords={latestRecordPerYear} />
                           </div>
                         </div>
                       </div>
