@@ -49,7 +49,7 @@ export default function StudentClearance() {
   const clearanceRef = useRef<HTMLDivElement>(null);
   const activeTab = normalizeClearanceTab(searchParams.get('tab'));
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
-  const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [selectedYear, setSelectedYear] = useState<string>(searchParams.get('year') || 'all');
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
 
@@ -78,6 +78,13 @@ export default function StudentClearance() {
       setSelectedYear('all');
     }
   }, [selectedYear, yearOptions]);
+
+  useEffect(() => {
+    const requestedYear = searchParams.get('year') || 'all';
+    if (requestedYear !== selectedYear) {
+      setSelectedYear(requestedYear);
+    }
+  }, [searchParams, selectedYear]);
 
   const filteredRecords = useMemo(
     () => (selectedYear === 'all' ? records : records.filter((entry) => String(entry.year || '') === selectedYear)),
@@ -318,6 +325,17 @@ export default function StudentClearance() {
     setSearchParams(nextParams, { replace: true });
   };
 
+  const handleYearChange = (value: string) => {
+    setSelectedYear(value);
+    const nextParams = new URLSearchParams(searchParams);
+    if (value === 'all') {
+      nextParams.delete('year');
+    } else {
+      nextParams.set('year', value);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -530,7 +548,7 @@ export default function StudentClearance() {
             <CardContent className="pt-6">
               <div className="flex flex-col gap-2 sm:max-w-xs">
                 <p className="text-sm font-medium">Filter by Year</p>
-                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <Select value={selectedYear} onValueChange={handleYearChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select year" />
                   </SelectTrigger>

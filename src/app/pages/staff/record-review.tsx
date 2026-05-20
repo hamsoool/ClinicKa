@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   Camera,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   FileCheck2,
   ImageUp,
@@ -160,6 +162,13 @@ const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAS', 'CED'];
 const YEAR_OPTIONS = ['1', '2', '3', '4'];
 const LAB_IMAGE_MAX_SIZE_BYTES = 2 * 1024 * 1024;
+const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
+const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'] as const;
+const BLOOD_PRESSURE_PATTERN = /^\d{2,3}\/\d{2,3}$/;
+const VISUAL_ACUITY_PATTERN = /^\d{1,2}\/\d{1,3}$/;
+const REVIEW_STEPS = ['record', 'labs', 'assessment', 'decision'] as const;
+
+type ReviewStep = (typeof REVIEW_STEPS)[number];
 
 type LabUploadActionsProps = {
   title: string;
@@ -215,6 +224,36 @@ function calculateBmi(weight: string, height: string) {
   if (!meters) return '';
 
   return (weightValue / (meters * meters)).toFixed(2);
+}
+
+function sanitizeNumericInput(value: string, maxDecimalPlaces = 2) {
+  const sanitized = value.replace(/[^\d.]/g, '');
+  const [integerPart = '', ...decimalParts] = sanitized.split('.');
+  const decimalPart = decimalParts.join('').slice(0, maxDecimalPlaces);
+
+  if (!sanitized.includes('.')) return integerPart;
+  return `${integerPart}.${decimalPart}`;
+}
+
+function sanitizeFractionLikeInput(value: string, maxLeftDigits: number, maxRightDigits: number) {
+  const sanitized = value.replace(/[^\d/]/g, '');
+  const [left = '', ...rightParts] = sanitized.split('/');
+  const normalizedLeft = left.slice(0, maxLeftDigits);
+  const right = rightParts.join('');
+  const normalizedRight = right.slice(0, maxRightDigits);
+
+  if (!sanitized.includes('/')) return normalizedLeft;
+  return `${normalizedLeft}/${normalizedRight}`;
+}
+
+function isValidBloodPressure(value: string) {
+  const trimmedValue = value.trim();
+  return !trimmedValue || BLOOD_PRESSURE_PATTERN.test(trimmedValue);
+}
+
+function isValidVisualAcuity(value: string) {
+  const trimmedValue = value.trim();
+  return !trimmedValue || VISUAL_ACUITY_PATTERN.test(trimmedValue);
 }
 
 function normalizeDateInputValue(value?: string | null) {
@@ -314,11 +353,11 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
     wbc: submission?.labResults?.wbc || '',
     plateletCount: submission?.labResults?.plateletCount || '',
     bloodType: submission?.labResults?.bloodType || '',
-    glucose: submission?.labResults?.glucose || '',
-    protein: submission?.labResults?.protein || '',
+    glucose: submission?.labResults?.glucose || submission?.labResults?.urinalysisGlucose || '',
+    protein: submission?.labResults?.protein || submission?.labResults?.urinalysisProtein || '',
     urinalysisDate: normalizeDateInputValue(submission?.labResults?.urinalysisDate) || getTodayDateInputValue(),
-    urinalysisGlucose: submission?.labResults?.urinalysisGlucose || '',
-    urinalysisProtein: submission?.labResults?.urinalysisProtein || '',
+    urinalysisGlucose: submission?.labResults?.urinalysisGlucose || submission?.labResults?.glucose || '',
+    urinalysisProtein: submission?.labResults?.urinalysisProtein || submission?.labResults?.protein || '',
   };
 }
 
@@ -361,10 +400,12 @@ export default function StaffRecordReview() {
   const { submissionId } = useParams();
   const queryClient = useQueryClient();
   const { me } = useAuth();
-  const staffPosition = me?.staff?.position || 'Clinic Staff';
   const currentStaffId = String(me?.staff?.id || '').trim();
-  const isDoctor = ['clinic doctor', 'doctor'].includes(staffPosition.trim().toLowerCase()) || me?.profile.role === 'admin';
-  const canFinalizeClearance = isDoctor || me?.profile.role === 'staff';
+  const hasFullClinicReviewAccess =
+    ['clinic doctor', 'doctor'].includes(String(me?.staff?.position || '').trim().toLowerCase())
+    || me?.profile.role === 'admin'
+    || me?.profile.role === 'staff';
+  const canFinalizeClearance = hasFullClinicReviewAccess;
   const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
   const [saving, setSaving] = useState(false);
   const [recordForm, setRecordForm] = useState<RecordForm>(() => createRecordForm());
@@ -372,6 +413,7 @@ export default function StaffRecordReview() {
   const [clearanceForm, setClearanceForm] = useState<ClearanceForm>(() => createClearanceForm());
   const [staffNotes, setStaffNotes] = useState('');
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('pending');
+  const [activeReviewStep, setActiveReviewStep] = useState<ReviewStep>('record');
   const [showReturnDialog, setShowReturnDialog] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [uploadingLabFile, setUploadingLabFile] = useState<Record<LabUploadType, boolean>>({
@@ -512,17 +554,43 @@ export default function StaffRecordReview() {
 
   function updateAssessmentField<K extends keyof AssessmentForm>(field: K, value: AssessmentForm[K]) {
     setAssessmentForm((prev) => {
-      const normalizedValue =
-        field === 'xrayDate' || field === 'cbcDate' || field === 'urinalysisDate'
-          ? (normalizeDateInputValue(String(value)) as AssessmentForm[K])
-          : value;
+      let normalizedValue = value;
+
+      if (field === 'xrayDate' || field === 'cbcDate' || field === 'urinalysisDate') {
+        normalizedValue = normalizeDateInputValue(String(value)) as AssessmentForm[K];
+      } else if (
+        field === 'hemoglobin'
+        || field === 'hematocrit'
+        || field === 'wbc'
+        || field === 'plateletCount'
+        || field === 'temperature'
+        || field === 'weight'
+        || field === 'height'
+        || field === 'cardiacRate'
+        || field === 'respiratoryRate'
+      ) {
+        normalizedValue = sanitizeNumericInput(String(value)) as AssessmentForm[K];
+      } else if (field === 'bloodPressure') {
+        normalizedValue = sanitizeFractionLikeInput(String(value), 3, 3) as AssessmentForm[K];
+      } else if (field === 'visualAcuity') {
+        normalizedValue = sanitizeFractionLikeInput(String(value), 2, 3) as AssessmentForm[K];
+      }
+
       const next = { ...prev, [field]: normalizedValue };
 
       if (field === 'weight' || field === 'height') {
         next.bmi = calculateBmi(
-          field === 'weight' ? String(value) : prev.weight,
-          field === 'height' ? String(value) : prev.height,
+          field === 'weight' ? String(normalizedValue) : prev.weight,
+          field === 'height' ? String(normalizedValue) : prev.height,
         );
+      }
+
+      if (field === 'urinalysisGlucose') {
+        next.glucose = String(normalizedValue);
+      }
+
+      if (field === 'urinalysisProtein') {
+        next.protein = String(normalizedValue);
       }
 
       return next;
@@ -625,7 +693,7 @@ export default function StaffRecordReview() {
           | 'examinedBy',
         incoming: string,
       ) => {
-        if (isDoctor) return incoming;
+        if (hasFullClinicReviewAccess) return incoming;
         const trimmedIncoming = String(incoming || '').trim();
         if (trimmedIncoming) return incoming;
         return (submission.staffMeasurements as any)?.[field] || '';
@@ -801,6 +869,24 @@ export default function StaffRecordReview() {
     : persistedStatus === 'returned'
       ? 'Returned'
       : 'Pending';
+  const currentReviewStepIndex = REVIEW_STEPS.indexOf(activeReviewStep);
+  const previousReviewStep = currentReviewStepIndex > 0 ? REVIEW_STEPS[currentReviewStepIndex - 1] : null;
+  const nextReviewStep =
+    currentReviewStepIndex < REVIEW_STEPS.length - 1 ? REVIEW_STEPS[currentReviewStepIndex + 1] : null;
+  const getReviewStepLabel = (step: ReviewStep) => {
+    switch (step) {
+      case 'record':
+        return 'Student Record';
+      case 'labs':
+        return 'Lab Results';
+      case 'assessment':
+        return 'Assessment';
+      case 'decision':
+        return 'Final Decision';
+      default:
+        return step;
+    }
+  };
 
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-6">
@@ -883,7 +969,7 @@ export default function StaffRecordReview() {
       </Button>
 
       <PortalPageIntro
-        title={isDoctor ? 'Clinic Doctor Review' : 'Clinic Staff Review'}
+        title="Clinic Review"
         description="Review, verify, and update the student medical record before finalizing the clinic decision."
         actions={(
           <div className="rounded-xl border bg-card px-4 py-3 text-sm shadow-sm">
@@ -1010,7 +1096,7 @@ export default function StaffRecordReview() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue={isDoctor ? 'assessment' : 'record'} className="space-y-6">
+      <Tabs value={activeReviewStep} onValueChange={(value) => setActiveReviewStep(value as ReviewStep)} className="space-y-6">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-border/60 bg-muted/40 p-1.5 md:grid-cols-4">
           <TabsTrigger value="record" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
             Student Record
@@ -1022,7 +1108,7 @@ export default function StaffRecordReview() {
             Assessment
           </TabsTrigger>
           <TabsTrigger value="decision" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
-            {canFinalizeClearance ? 'Final Decision' : 'Notes & Status'}
+            Final Decision
           </TabsTrigger>
         </TabsList>
 
@@ -1414,6 +1500,8 @@ export default function StaffRecordReview() {
                     id="hemoglobin"
                     value={assessmentForm.hemoglobin}
                     onChange={(event) => updateAssessmentField('hemoglobin', event.target.value)}
+                    inputMode="decimal"
+                    placeholder="13.5"
                     className="mt-2"
                   />
                 </div>
@@ -1423,6 +1511,8 @@ export default function StaffRecordReview() {
                     id="hematocrit"
                     value={assessmentForm.hematocrit}
                     onChange={(event) => updateAssessmentField('hematocrit', event.target.value)}
+                    inputMode="decimal"
+                    placeholder="42"
                     className="mt-2"
                   />
                 </div>
@@ -1432,6 +1522,8 @@ export default function StaffRecordReview() {
                     id="wbc"
                     value={assessmentForm.wbc}
                     onChange={(event) => updateAssessmentField('wbc', event.target.value)}
+                    inputMode="decimal"
+                    placeholder="7000"
                     className="mt-2"
                   />
                 </div>
@@ -1441,17 +1533,28 @@ export default function StaffRecordReview() {
                     id="plateletCount"
                     value={assessmentForm.plateletCount}
                     onChange={(event) => updateAssessmentField('plateletCount', event.target.value)}
+                    inputMode="decimal"
+                    placeholder="250000"
                     className="mt-2"
                   />
                 </div>
                 <div>
                   <Label htmlFor="bloodType">Blood Type</Label>
-                  <Input
-                    id="bloodType"
+                  <Select
                     value={assessmentForm.bloodType}
-                    onChange={(event) => updateAssessmentField('bloodType', event.target.value)}
-                    className="mt-2"
-                  />
+                    onValueChange={(value) => updateAssessmentField('bloodType', value)}
+                  >
+                    <SelectTrigger id="bloodType" className="mt-2">
+                      <SelectValue placeholder="Select blood type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BLOOD_TYPE_OPTIONS.map((bloodType) => (
+                        <SelectItem key={bloodType} value={bloodType}>
+                          {bloodType}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
@@ -1482,21 +1585,45 @@ export default function StaffRecordReview() {
                 </div>
                 <div>
                   <Label htmlFor="urinalysisGlucose">Glucose</Label>
-                  <Input
-                    id="urinalysisGlucose"
+                  <Select
                     value={assessmentForm.urinalysisGlucose}
-                    onChange={(event) => updateAssessmentField('urinalysisGlucose', event.target.value)}
-                    className="mt-2"
-                  />
+                    onValueChange={(value) => updateAssessmentField('urinalysisGlucose', value)}
+                  >
+                    <SelectTrigger
+                      id="urinalysisGlucose"
+                      className="mt-2"
+                    >
+                      <SelectValue placeholder="Select result" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {URINALYSIS_DIPSTICK_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label htmlFor="urinalysisProtein">Protein</Label>
-                  <Input
-                    id="urinalysisProtein"
+                  <Select
                     value={assessmentForm.urinalysisProtein}
-                    onChange={(event) => updateAssessmentField('urinalysisProtein', event.target.value)}
-                    className="mt-2"
-                  />
+                    onValueChange={(value) => updateAssessmentField('urinalysisProtein', value)}
+                  >
+                    <SelectTrigger
+                      id="urinalysisProtein"
+                      className="mt-2"
+                    >
+                      <SelectValue placeholder="Select result" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {URINALYSIS_DIPSTICK_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
@@ -1509,12 +1636,6 @@ export default function StaffRecordReview() {
               <CardTitle>Clinic Measurements and Verification</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {!isDoctor && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                  <strong>Clinic Staff view:</strong> You can verify measurements (blood pressure, weight, height, BMI, visual acuity) below.
-                  Physical examination findings remain restricted to Clinic Doctors.
-                </div>
-              )}
               <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
                 Compare the student-submitted values with the verified clinic examination values below before saving the review.
               </div>
@@ -1526,6 +1647,8 @@ export default function StaffRecordReview() {
                     id="clinicBp"
                     value={assessmentForm.bloodPressure}
                     onChange={(event) => updateAssessmentField('bloodPressure', event.target.value)}
+                    inputMode="numeric"
+                    placeholder="120/80"
                     className="mt-2"
                   />
                 </div>
@@ -1535,6 +1658,8 @@ export default function StaffRecordReview() {
                     id="cardiacRate"
                     value={assessmentForm.cardiacRate}
                     onChange={(event) => updateAssessmentField('cardiacRate', event.target.value)}
+                    inputMode="decimal"
+                    placeholder="72"
                     className="mt-2"
                   />
                 </div>
@@ -1544,6 +1669,8 @@ export default function StaffRecordReview() {
                     id="respiratoryRate"
                     value={assessmentForm.respiratoryRate}
                     onChange={(event) => updateAssessmentField('respiratoryRate', event.target.value)}
+                    inputMode="decimal"
+                    placeholder="16"
                     className="mt-2"
                   />
                 </div>
@@ -1553,6 +1680,8 @@ export default function StaffRecordReview() {
                     id="temperature"
                     value={assessmentForm.temperature}
                     onChange={(event) => updateAssessmentField('temperature', event.target.value)}
+                    inputMode="decimal"
+                    placeholder="36.8"
                     className="mt-2"
                   />
                 </div>
@@ -1562,6 +1691,8 @@ export default function StaffRecordReview() {
                     id="clinicWeight"
                     value={assessmentForm.weight}
                     onChange={(event) => updateAssessmentField('weight', event.target.value)}
+                    inputMode="decimal"
+                    placeholder="60.5"
                     className="mt-2"
                   />
                 </div>
@@ -1571,6 +1702,8 @@ export default function StaffRecordReview() {
                     id="clinicHeight"
                     value={assessmentForm.height}
                     onChange={(event) => updateAssessmentField('height', event.target.value)}
+                    inputMode="decimal"
+                    placeholder="170"
                     className="mt-2"
                   />
                 </div>
@@ -1584,6 +1717,8 @@ export default function StaffRecordReview() {
                     id="visualAcuity"
                     value={assessmentForm.visualAcuity}
                     onChange={(event) => updateAssessmentField('visualAcuity', event.target.value)}
+                    inputMode="numeric"
+                    placeholder="20/20"
                     className="mt-2"
                   />
                 </div>
@@ -1593,7 +1728,7 @@ export default function StaffRecordReview() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Physical Examination Results {!isDoctor && <span className="text-sm font-normal text-muted-foreground">(Doctor Only — Read Only)</span>}</CardTitle>
+              <CardTitle>Physical Examination Results</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div>
@@ -1604,7 +1739,6 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('skin', event.target.value)}
                   className="mt-2"
                   rows={3}
-                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1615,7 +1749,6 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('heent', event.target.value)}
                   className="mt-2"
                   rows={3}
-                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1626,7 +1759,6 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('chestLungs', event.target.value)}
                   className="mt-2"
                   rows={3}
-                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1637,7 +1769,6 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('heart', event.target.value)}
                   className="mt-2"
                   rows={3}
-                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1648,7 +1779,6 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('abdomen', event.target.value)}
                   className="mt-2"
                   rows={3}
-                  disabled={!isDoctor}
                 />
               </div>
               <div>
@@ -1659,7 +1789,6 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('extremities', event.target.value)}
                   className="mt-2"
                   rows={3}
-                  disabled={!isDoctor}
                 />
               </div>
               <div className="md:col-span-2">
@@ -1671,7 +1800,6 @@ export default function StaffRecordReview() {
                   className="mt-2"
                   rows={4}
                   placeholder="Document additional observations, recommendations, or restrictions."
-                  disabled={!isDoctor}
                 />
               </div>
               <div className="md:col-span-2">
@@ -1682,7 +1810,6 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
                   className="mt-2"
                   placeholder="Doctor name"
-                  disabled={!isDoctor}
                 />
               </div>
             </CardContent>
@@ -1708,14 +1835,6 @@ export default function StaffRecordReview() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-                {!isDoctor ? (
-                  <div className="md:col-span-2 xl:col-span-6">
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                      Clinic Staff can finalize the clearance here. The medical clearance signatory remains one of the configured clinic doctors.
-                    </div>
-                  </div>
-                ) : null}
-
                 {canFinalizeClearance ? (
                 <div className="xl:col-span-2">
                   <Label htmlFor="clearancePurpose">Purpose</Label>
@@ -1833,6 +1952,38 @@ export default function StaffRecordReview() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Card className="border-border/60">
+        <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold text-foreground">
+              Step {currentReviewStepIndex + 1} of {REVIEW_STEPS.length}: {getReviewStepLabel(activeReviewStep)}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {nextReviewStep
+                ? `Continue to ${getReviewStepLabel(nextReviewStep)} when this section is complete.`
+                : 'You are on the final review step. Finalize the clinic decision below.'}
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => previousReviewStep && setActiveReviewStep(previousReviewStep)}
+              disabled={!previousReviewStep}
+            >
+              <ChevronLeft className="mr-2 h-4 w-4" />
+              Previous
+            </Button>
+            {nextReviewStep ? (
+              <Button type="button" onClick={() => setActiveReviewStep(nextReviewStep)}>
+                Next
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-primary/20">
         <CardContent className="flex flex-col gap-4 pt-6 lg:flex-row lg:items-center lg:justify-between">

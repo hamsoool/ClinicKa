@@ -41,13 +41,24 @@ type StudentProfileFormState = {
   address: string;
 };
 
+function sanitizeName(value: string) {
+  return String(value).replace(/[^A-Za-z\s'-]/g, '').slice(0, 30);
+}
+
+function sanitizeAddress(value: string) {
+  return String(value)
+    .replace(/[<>`]/g, '')
+    .replace(/--|\/\*|\*\//g, '')
+    .slice(0, 180);
+}
+
 function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null): StudentProfileFormState {
   const department = resolveDepartmentValue(me?.student?.department || me?.profile.department || '');
   return {
     studentId: me?.student?.student_id || me?.profile.student_id || '',
-    firstName: me?.student?.first_name || me?.profile.first_name || '',
-    lastName: me?.student?.last_name || me?.profile.last_name || '',
-    middleInitial: me?.student?.middle_initial || '',
+    firstName: sanitizeName(me?.student?.first_name || me?.profile.first_name || ''),
+    lastName: sanitizeName(me?.student?.last_name || me?.profile.last_name || ''),
+    middleInitial: String(me?.student?.middle_initial || '').replace(/[^A-Za-z]/g, '').slice(0, 1),
     department,
     course: normalizeProgramForDepartment(department, me?.student?.course || me?.profile.course || ''),
     age: me?.student?.age ? String(me.student.age) : '',
@@ -55,7 +66,7 @@ function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null):
     birthday: me?.student?.birthday || '',
     civilStatus: me?.student?.civil_status || 'Single',
     contactNumber: formatPhilippinePhoneInput(me?.student?.contact_number || ''),
-    address: me?.student?.address || '',
+    address: sanitizeAddress(me?.student?.address || ''),
   };
 }
 
@@ -194,6 +205,14 @@ export default function StudentProfile() {
         ? {
             contactNumber: formatPhilippinePhoneInput(String(value)),
           }
+        : field === 'firstName'
+        ? {
+            firstName: sanitizeName(String(value)),
+          }
+        : field === 'lastName'
+        ? {
+            lastName: sanitizeName(String(value)),
+          }
         : field === 'middleInitial'
         ? {
             middleInitial: String(value).replace(/[^A-Za-z]/g, '').slice(0, 1),
@@ -201,6 +220,10 @@ export default function StudentProfile() {
         : field === 'age'
         ? {
             age: String(value).replace(/\D/g, '').slice(0, 2),
+          }
+        : field === 'address'
+        ? {
+            address: sanitizeAddress(String(value)),
           }
         : {
             [field]: value,

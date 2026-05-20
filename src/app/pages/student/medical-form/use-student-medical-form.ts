@@ -95,18 +95,18 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, init
   const department = resolveDepartmentValue(student?.department || me?.profile.department || 'CCS');
   return {
     studentId: normalizeStudentId(student?.student_id || me?.profile.student_id || ''),
-    firstName: student?.first_name || me?.profile.first_name || '',
-    lastName: student?.last_name || me?.profile.last_name || '',
+    firstName: sanitizeName(student?.first_name || me?.profile.first_name || ''),
+    lastName: sanitizeName(student?.last_name || me?.profile.last_name || ''),
     middleInitial: normalizeMiddleInitial(student?.middle_initial || ''),
     department,
     course: normalizeProgramForDepartment(department, student?.course || me?.profile.course || ''),
     yearLevel: year || '1',
-    age: student?.age ? String(student.age) : '',
+    age: student?.age ? sanitizeDigits(String(student.age), 2) : '',
     sex: student?.sex || 'female',
     birthday: student?.birthday || '',
     civilStatus: student?.civil_status || 'Single',
     contactNumber: formatPhilippinePhoneInput(student?.contact_number || ''),
-    address: student?.address || '',
+    address: sanitizeAddress(student?.address || ''),
     medicalHistory: { ...DEFAULT_MEDICAL_HISTORY },
     allergyDetails: '',
     hadOperation: 'no',
@@ -189,31 +189,33 @@ export function useStudentMedicalForm({
         setFormData((prev) => ({
           ...prev,
           studentId: normalizeStudentId(submission.studentId || prev.studentId),
-          firstName: submission.firstName || prev.firstName,
-          lastName: submission.lastName || prev.lastName,
+          firstName: sanitizeName(submission.firstName || prev.firstName),
+          lastName: sanitizeName(submission.lastName || prev.lastName),
           middleInitial: normalizeMiddleInitial(submission.middleInitial || prev.middleInitial),
           department: resolveDepartmentValue(submission.department || prev.department),
           course: normalizeProgramForDepartment(submission.department || prev.department, submission.course || prev.course),
           yearLevel: submission.year || prev.yearLevel,
           year: submission.year || prev.year,
-          age: submission.age || prev.age,
+          age: sanitizeDigits(submission.age || prev.age, 2),
           sex: submission.sex || prev.sex,
           birthday: submission.birthday || prev.birthday,
           civilStatus: submission.civilStatus || prev.civilStatus,
           contactNumber: formatPhilippinePhoneInput(submission.contactNumber || prev.contactNumber),
-          address: submission.address || prev.address,
+          address: sanitizeAddress(submission.address || prev.address),
           medicalHistory: {
             ...DEFAULT_MEDICAL_HISTORY,
             ...(submission.medicalHistory || {}),
           },
-          allergyDetails: submission.allergyDetails || prev.allergyDetails,
+          allergyDetails: sanitizeSafeText(submission.allergyDetails || prev.allergyDetails, 120),
           hadOperation: submission.hadOperation || prev.hadOperation,
-          operationDetails: submission.operationDetails || prev.operationDetails,
+          operationDetails: sanitizeSafeText(submission.operationDetails || prev.operationDetails, 120),
           emergencyContact: {
             ...prev.emergencyContact,
             ...(submission.emergencyContact || {}),
+            name: sanitizeName(submission.emergencyContact?.name || prev.emergencyContact.name),
             relationship: sanitizeEmergencyRelationship(submission.emergencyContact?.relationship || prev.emergencyContact.relationship),
             phone: formatPhilippinePhoneInput(submission.emergencyContact?.phone || prev.emergencyContact.phone),
+            address: sanitizeAddress(submission.emergencyContact?.address || prev.emergencyContact.address),
           },
           weight: submission.weight || prev.weight,
           height: submission.height || prev.height,
@@ -222,7 +224,7 @@ export function useStudentMedicalForm({
           existingCbcFileUrl: (submission as any).cbcFileUrl || '',
           existingUrinalysisFileUrl: (submission as any).urinalysisFileUrl || '',
           labTestLocation: ((submission as any).labTestLocation || '') as '' | 'jlgh' | 'other',
-          otherClinicName: (submission as any).otherClinicName || '',
+          otherClinicName: sanitizeCourse((submission as any).otherClinicName || '').slice(0, MAX_CLINIC_NAME_LENGTH),
           submissionConfirmed: false,
         }));
       } catch (error) {
@@ -270,20 +272,20 @@ export function useStudentMedicalForm({
     setFormData((prev) => ({
       ...prev,
       studentId: normalizeStudentId(student?.student_id || me?.profile.student_id || prev.studentId),
-      firstName: student?.first_name || me?.profile.first_name || prev.firstName,
-      lastName: student?.last_name || me?.profile.last_name || prev.lastName,
+      firstName: sanitizeName(student?.first_name || me?.profile.first_name || prev.firstName),
+      lastName: sanitizeName(student?.last_name || me?.profile.last_name || prev.lastName),
       middleInitial: normalizeMiddleInitial(student?.middle_initial || prev.middleInitial),
       department: resolveDepartmentValue(student?.department || me?.profile.department || prev.department),
       course: normalizeProgramForDepartment(
         student?.department || me?.profile.department || prev.department,
         student?.course || me?.profile.course || prev.course,
       ),
-      age: student?.age ? String(student.age) : prev.age,
+      age: student?.age ? sanitizeDigits(String(student.age), 2) : prev.age,
       sex: student?.sex || prev.sex,
       birthday: student?.birthday || prev.birthday,
       civilStatus: student?.civil_status || prev.civilStatus,
       contactNumber: formatPhilippinePhoneInput(student?.contact_number || prev.contactNumber),
-      address: student?.address || prev.address,
+      address: sanitizeAddress(student?.address || prev.address),
       dataPrivacyConsent: initialDataPrivacyConsent,
       yearLevel: year || prev.yearLevel,
       year: year || prev.year,
@@ -333,6 +335,9 @@ export function useStudentMedicalForm({
       }));
     }
     if (field === 'address') return setFormData((prev) => ({ ...prev, address: sanitizeAddress(String(value)) }));
+    if (field === 'allergyDetails') {
+      return setFormData((prev) => ({ ...prev, allergyDetails: sanitizeSafeText(String(value), 120) }));
+    }
     if (field === 'otherClinicName') {
       const safe = sanitizeCourse(String(value)).slice(0, MAX_CLINIC_NAME_LENGTH);
       if (SQL_INJECTION_REGEX.test(safe)) return;

@@ -1,7 +1,7 @@
 import { Skeleton } from './ui/skeleton';
 
 type PublicSkeletonVariant = 'marketing' | 'auth';
-type PortalPageSkeletonVariant = 'dashboard' | 'table' | 'certificate';
+type PortalPageSkeletonVariant = 'dashboard' | 'table' | 'certificate' | 'year-selection';
 
 function PublicTopBarSkeleton() {
   return (
@@ -198,7 +198,51 @@ function DashboardCardSkeleton() {
   );
 }
 
+function YearSelectionCardSkeleton({ highlighted = false }: { highlighted?: boolean }) {
+  return (
+    <div
+      className={`rounded-2xl border p-5 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6 ${
+        highlighted
+          ? 'border-primary/40 bg-primary/15'
+          : 'border-primary/10 bg-primary/5'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <Skeleton className="h-7 w-24 rounded-b-xl rounded-t-md bg-white/55" />
+        <Skeleton className="h-7 w-24 rounded-b-xl rounded-t-md bg-primary/20" />
+      </div>
+
+      <div className="mt-7 flex min-h-[180px] flex-col items-center justify-center text-center">
+        <Skeleton className="h-12 w-12 rounded-xl bg-primary/20" />
+        <div className="mt-4 space-y-2">
+          <Skeleton className="mx-auto h-8 w-36 bg-primary/25" />
+          <Skeleton className="mx-auto h-4 w-32 bg-primary/18" />
+        </div>
+        <div className="mt-4 space-y-2">
+          <Skeleton className="mx-auto h-4 w-56 bg-primary/18" />
+          <Skeleton className="mx-auto h-4 w-40 bg-primary/15" />
+        </div>
+        <Skeleton className="mt-6 h-4 w-32 bg-primary/20" />
+      </div>
+    </div>
+  );
+}
+
 export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVariant }) {
+  if (variant === 'year-selection') {
+    return (
+      <div aria-busy="true" aria-live="polite" className="mx-auto w-full max-w-[100rem] space-y-5 pt-2 sm:space-y-8">
+        <Skeleton className="h-6 w-40 bg-primary/20" />
+
+        <div className="mx-auto grid max-w-[78rem] gap-5 md:grid-cols-2 xl:gap-6">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <YearSelectionCardSkeleton key={index} highlighted={index === 2} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (variant === 'table') {
     return (
       <div aria-busy="true" aria-live="polite" className="mx-auto w-full max-w-[100rem] space-y-8 pt-2">

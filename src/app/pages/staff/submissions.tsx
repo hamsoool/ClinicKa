@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import ListPagination from '../../components/list-pagination';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { ChevronDown, ChevronUp, Eye, Search, X } from 'lucide-react';
@@ -22,7 +23,8 @@ const YEAR_LABELS: Record<string, string> = {
   '3': '3rd Year',
   '4': '4th Year',
 };
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [20];
 const STATUS_FILTER_VALUES = new Set([
   'action_needed',
   'all',
@@ -91,13 +93,14 @@ export default function StaffSubmissions() {
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>(defaultSortOrder);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(defaultShowAdvancedFilters);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const deferredSearchQuery = useDeferredValue(debouncedSearchQuery.trim());
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [deferredSearchQuery, statusFilter, departmentFilter, yearFilter, sortOrder]);
+  }, [deferredSearchQuery, statusFilter, departmentFilter, yearFilter, sortOrder, pageSize]);
 
   useEffect(() => {
     setSortOrder(defaultSortOrder);
@@ -127,7 +130,7 @@ export default function StaffSubmissions() {
     yearFilter,
     sortOrder,
     page: currentPage,
-    pageSize: PAGE_SIZE,
+    pageSize,
   });
 
   useEffect(() => {
@@ -141,7 +144,7 @@ export default function StaffSubmissions() {
     [data?.items],
   );
   const total = data?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const counts = data?.counts || {
     pending: 0,
     inReview: 0,
@@ -415,32 +418,17 @@ export default function StaffSubmissions() {
             </div>
           )}
 
-          {!loading && totalPages > 1 ? (
-            <div className="mt-6 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
+          {!loading ? (
+            <ListPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={total}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              itemLabel="submissions"
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           ) : null}
         </CardContent>
       </Card>
