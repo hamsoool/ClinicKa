@@ -132,7 +132,23 @@ export default function StudentDashboard() {
       const bTime = new Date(b.updatedAt || b.submittedAt || 0).getTime();
       return bTime - aTime;
     });
-    const latest = sorted[0];
+    const recordsByYear = new Map<number, typeof sorted>();
+    for (const item of sorted) {
+      const yearNum = Number.parseInt(String(item.year || ''), 10);
+      if (!Number.isFinite(yearNum) || yearNum < 1) continue;
+      const bucket = recordsByYear.get(yearNum) || [];
+      bucket.push(item);
+      recordsByYear.set(yearNum, bucket);
+    }
+
+    const latestYear = Math.max(...Array.from(recordsByYear.keys(), (year) => year), 0);
+    const latestYearRecords = latestYear > 0 ? recordsByYear.get(latestYear) || [] : [];
+    const preferredLatest =
+      latestYearRecords.find((item) => String(item.status || '').toLowerCase() !== 'returned') ||
+      latestYearRecords[0] ||
+      sorted[0];
+
+    const latest = preferredLatest;
     const yearly = yearLabels.map((label, index) => {
       const year = index + 1;
       const record = sorted.find((item) => Number.parseInt(item.year || '', 10) === year);

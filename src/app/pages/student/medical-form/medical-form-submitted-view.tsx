@@ -1,7 +1,6 @@
 import { memo, type RefObject } from 'react';
-import { Download, Eye } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import MedicalRecordPreview from '../../../components/medical-record-preview';
 import type { SubmissionPreviewRecord } from './types';
 
@@ -36,19 +35,20 @@ export const MedicalFormSubmittedView = memo(function MedicalFormSubmittedView({
             </Button>
           </div>
         </div>
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Eye className="h-5 w-5 text-primary" />
-              <CardTitle>Medical Record Form Preview</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-auto rounded-lg border bg-white p-4">
-              <MedicalRecordPreview ref={previewRef} record={previewRecord} />
-            </div>
-          </CardContent>
-        </Card>
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            left: '-10000px',
+            top: '0',
+            width: '816px',
+            background: '#fff',
+            pointerEvents: 'none',
+            opacity: 0,
+          }}
+        >
+          <MedicalRecordPreview ref={previewRef} record={previewRecord} />
+        </div>
       </div>
     </div>
   );
