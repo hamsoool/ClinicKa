@@ -12,6 +12,7 @@ import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
 import {
   BarChart,
   Bar,
+  LabelList,
   LineChart,
   Line,
   PieChart,
@@ -24,12 +25,19 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { getAnalytics, getSubmissions } from '../../lib/api';
+import {
+  createDefaultAdminSystemSettings,
+  getAnalytics,
+  getReportingTermSettings,
+  getSubmissions,
+  type AdminSystemSettings,
+} from '../../lib/api';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
+const REPORTING_TERM_REFRESH_INTERVAL_MS = 180_000;
 const YEAR_LABELS: Record<string, string> = { '1': '1st Year', '2': '2nd Year', '3': '3rd Year', '4': '4th Year' };
 const STATUS_LABELS: Record<string, string> = {
-  pending: 'Under Review',
+  pending: 'Pending',
   in_review: 'In Review',
   approved: 'Approved',
   returned: 'Returned',
@@ -38,16 +46,24 @@ const STATUS_LABELS: Record<string, string> = {
 const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', issued: 'Issued Only', not_issued: 'Not Issued' };
 const STATUS_COLORS: Record<string, string> = {
   Approved: '#3b6d11',
-  'Under Review': '#ba7517',
+  Pending: '#ba7517',
   'In Review': '#2f6fa3',
   Returned: '#a32d2d',
   'Exam Done': '#185fa5',
+};
+const DEPARTMENT_COLORS: Record<string, string> = {
+  CCS: '#f97316',
+  CBA: '#facc15',
+  CEAS: '#3b82f6',
+  CHTM: '#ec4899',
+  CAHS: '#ef4444',
 };
 
 type ReportsSummary = {
   total: number;
   approved: number;
   pending: number;
+  inReview: number;
   returned: number;
   physicalExamDone: number;
   firstYears: number;
@@ -58,8 +74,38 @@ type ReportsSummary = {
   byCourse: Record<string, number>;
 };
 
+type SubmissionBreakdownView = 'department' | 'program';
+type SubmissionBreakdownDatum = {
+  label: string;
+  count: number;
+  fill: string;
+};
+type ReportingTermRange = {
+  label: string;
+  startMs: number;
+  endMs: number;
+};
+type ProgramChartAccumulator = Record<
+  string,
+  {
+    count: number;
+    department: string;
+  }
+>;
+
 function normalizeCourseValue(value: unknown) {
   return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function resolveDepartmentValue(department?: string, course?: string) {
+  const normalizedDepartment = String(department || '').trim().toUpperCase();
+  if (DEPARTMENTS.includes(normalizedDepartment)) return normalizedDepartment;
+
+  const normalizedCourse = String(course || '').trim().toUpperCase();
+  const matchedDepartment = DEPARTMENTS.find((item) => normalizedCourse.includes(item));
+  if (matchedDepartment) return matchedDepartment;
+
+  return normalizedDepartment;
 }
 
 function abbreviateCourse(value?: string) {
@@ -111,6 +157,22 @@ function abbreviateCourse(value?: string) {
     .toUpperCase();
 
   return acronym.length >= 3 && acronym.length <= 8 ? acronym : raw;
+}
+
+function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRange {
+  const [startYearValue, endYearValue] = String(settings.academicYear || '').split('-');
+  const startYear = Number.parseInt(startYearValue || '', 10);
+  const endYear = Number.parseInt(endYearValue || '', 10);
+
+  if (!Number.isFinite(startYear) || !Number.isFinite(endYear)) {
+    return buildReportingTermRange(createDefaultAdminSystemSettings());
+  }
+
+  return {
+    label: settings.academicYear,
+    startMs: Date.UTC(startYear, 6, 1),
+    endMs: Date.UTC(endYear, 6, 1),
+  };
 }
 
 async function imagePathToDataUrl(path: string, options?: { maxDimension?: number }) {
@@ -428,10 +490,27 @@ function CustomDonutTooltip({ active, payload }: any) {
   );
 }
 
+function DepartmentBarValueLabel(props: any) {
+  const { x = 0, y = 0, width = 0, value = 0 } = props || {};
+
+  return (
+    <text
+      x={x + width / 2}
+      y={Math.max(Number(y) - 8, 14)}
+      textAnchor="middle"
+      fontSize={12}
+      fill="hsl(var(--muted-foreground))"
+    >
+      {value}
+    </text>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) {
   const analyticsQueryKey = mode === 'admin' ? ['adminAnalytics'] : ['staffAnalytics'];
   const submissionsQueryKey = mode === 'admin' ? ['adminSubmissions'] : ['staffSubmissions'];
+  const reportingTermQueryKey = ['reportingTermSettings'];
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -440,9 +519,12 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const [certificateFilter, setCertificateFilter] = useState('all');
   const [genderFilter, setGenderFilter] = useState('all');
   const [studentBatchFilter, setStudentBatchFilter] = useState('all');
+  const [submissionBreakdownView, setSubmissionBreakdownView] = useState<SubmissionBreakdownView>('department');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [statusOverviewFromDate, setStatusOverviewFromDate] = useState('');
   const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const defaultReportingTermSettings = useMemo(() => createDefaultAdminSystemSettings(), []);
   const {
     data: analytics,
     isLoading: analyticsLoading,
@@ -474,6 +556,19 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     refetchOnReconnect: true,
     refetchOnMount: true,
   });
+  const {
+    data: reportingTermSettings = defaultReportingTermSettings,
+    isLoading: reportingTermLoading,
+  } = useQuery({
+    queryKey: reportingTermQueryKey,
+    queryFn: getReportingTermSettings,
+    staleTime: 60_000,
+    refetchInterval: () => getActiveAjaxRefetchInterval(REPORTING_TERM_REFRESH_INTERVAL_MS),
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
+  });
   const normalizedSubmissions = useMemo(
     () =>
       Array.isArray(submissions)
@@ -483,7 +578,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           : [],
     [submissions],
   );
-  const loading = analyticsLoading || submissionsLoading;
+  const loading = analyticsLoading || submissionsLoading || reportingTermLoading;
 
   useEffect(() => {
     if (isAnalyticsError || isSubmissionsError) {
@@ -576,10 +671,33 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     if (!toDate) setToDate(dateRange.maxDate);
   }, [normalizedSubmissions, fromDate, toDate, dateRange.minDate, dateRange.maxDate]);
 
+  useEffect(() => {
+    if (!normalizedSubmissions.length) return;
+    if (!statusOverviewFromDate) setStatusOverviewFromDate(dateRange.minDate);
+  }, [normalizedSubmissions, statusOverviewFromDate, dateRange.minDate]);
+
   const hasActiveFilters =
     departmentFilter !== 'all' || yearFilter !== 'all' || statusFilter !== 'all' ||
     courseFilter !== 'all' || conditionFilter !== 'all' || certificateFilter !== 'all' ||
     genderFilter !== 'all' || studentBatchFilter !== 'all';
+
+  const handleFromDateChange = (nextValue: string) => {
+    setFromDate(nextValue);
+    if (toDate && nextValue && new Date(`${nextValue}T00:00:00`).getTime() > new Date(`${toDate}T23:59:59`).getTime()) {
+      setToDate(nextValue);
+    }
+  };
+
+  const handleToDateChange = (nextValue: string) => {
+    setToDate(nextValue);
+    if (fromDate && nextValue && new Date(`${nextValue}T23:59:59`).getTime() < new Date(`${fromDate}T00:00:00`).getTime()) {
+      setFromDate(nextValue);
+    }
+  };
+
+  const handleStatusOverviewFromDateChange = (nextValue: string) => {
+    setStatusOverviewFromDate(nextValue);
+  };
 
   const resetFilters = () => {
     setDepartmentFilter('all');
@@ -597,7 +715,8 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const summary = useMemo<ReportsSummary>(() => {
     const total = dedupedFilteredSubmissions.length;
     const approved = dedupedFilteredSubmissions.filter((s) => s.status === 'approved').length;
-    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending' || s.status === 'in_review').length;
+    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending').length;
+    const inReview = dedupedFilteredSubmissions.filter((s) => s.status === 'in_review').length;
     const returned = dedupedFilteredSubmissions.filter((s) => s.status === 'returned').length;
     const physicalExamDone = dedupedFilteredSubmissions.filter((s) => s.status === 'physical_exam_done').length;
     const firstYears = dedupedFilteredSubmissions.filter((s) => String(s.year) === '1');
@@ -613,26 +732,112 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       },
       {} as Record<string, number>,
     );
-    return { total, approved, pending, returned, physicalExamDone, firstYears: firstYears.length, firstYearUnderReview, firstYearNotUnderReview, withCertificate, approvalRate, byCourse };
+    return {
+      total,
+      approved,
+      pending,
+      inReview,
+      returned,
+      physicalExamDone,
+      firstYears: firstYears.length,
+      firstYearUnderReview,
+      firstYearNotUnderReview,
+      withCertificate,
+      approvalRate,
+      byCourse,
+    };
   }, [dedupedFilteredSubmissions]);
-
-  // ── Chart data ─────────────────────────────────────────────────────────
-  const courseChartData = useMemo(
+  const reportingTermRange = useMemo(
+    () => buildReportingTermRange(reportingTermSettings),
+    [reportingTermSettings],
+  );
+  const currentTermSubmissions = useMemo(
     () =>
-      Object.entries(summary.byCourse)
-        .sort((a, b) => b[1] - a[1])
-        .map(([course, count]) => ({ course: abbreviateCourse(course), count })),
-    [summary.byCourse],
+      dedupedFilteredSubmissions.filter((submission) => {
+        const submittedTimestamp = new Date(submission.submittedAt || 0).getTime();
+        return Number.isFinite(submittedTimestamp)
+          && submittedTimestamp >= reportingTermRange.startMs
+          && submittedTimestamp < reportingTermRange.endMs;
+      }),
+    [dedupedFilteredSubmissions, reportingTermRange.endMs, reportingTermRange.startMs],
   );
 
+  // ── Chart data ─────────────────────────────────────────────────────────
+  const departmentChartData = useMemo(() => {
+    const counts = currentTermSubmissions.reduce((acc, sub) => {
+      const department = resolveDepartmentValue(sub.department, sub.course);
+      if (!department) return acc;
+
+      acc[department] = (acc[department] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return DEPARTMENTS
+      .map((department) => ({
+        department,
+        count: counts[department] || 0,
+        fill: DEPARTMENT_COLORS[department] || '#94a3b8',
+      }));
+  }, [currentTermSubmissions]);
+  const programChartData = useMemo(
+    () => {
+      const programCounts = currentTermSubmissions.reduce((acc, sub) => {
+        const program = abbreviateCourse(sub.course);
+        if (!program || program === '-') return acc;
+
+        const department = resolveDepartmentValue(sub.department, sub.course);
+        const existing = acc[program];
+        if (existing) {
+          existing.count += 1;
+          if (!existing.department && department) {
+            existing.department = department;
+          }
+          return acc;
+        }
+
+        acc[program] = {
+          count: 1,
+          department,
+        };
+        return acc;
+      }, {} as ProgramChartAccumulator);
+
+      return (Object.entries(programCounts) as Array<[string, ProgramChartAccumulator[string]]>)
+        .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+        .map(([label, details]) => ({
+          label,
+          count: details.count,
+          fill: DEPARTMENT_COLORS[details.department] || 'hsl(var(--primary))',
+        }));
+    },
+    [currentTermSubmissions],
+  );
+  const submissionBreakdownData: SubmissionBreakdownDatum[] = submissionBreakdownView === 'department'
+    ? departmentChartData.map((item) => ({
+        label: item.department,
+        count: item.count,
+        fill: item.fill,
+      }))
+    : programChartData;
+
   const statusChartData = useMemo(
-    () => [
-      { name: 'Approved', value: summary.approved },
-      { name: 'Under Review', value: summary.pending },
-      { name: 'Returned', value: summary.returned },
-      { name: 'Exam Done', value: summary.physicalExamDone },
-    ].filter((d) => d.value > 0),
-    [summary],
+    () => {
+      const statusOverviewSubmissions = dedupedFilteredSubmissions.filter((submission) => {
+        if (!statusOverviewFromDate) return true;
+        const submittedTimestamp = new Date(submission.submittedAt || 0).getTime();
+        return Number.isFinite(submittedTimestamp)
+          && submittedTimestamp >= new Date(`${statusOverviewFromDate}T00:00:00`).getTime();
+      });
+
+      return [
+        { name: 'Approved', value: statusOverviewSubmissions.filter((s) => s.status === 'approved').length },
+        { name: 'Pending', value: statusOverviewSubmissions.filter((s) => s.status === 'pending').length },
+        { name: 'In Review', value: statusOverviewSubmissions.filter((s) => s.status === 'in_review').length },
+        { name: 'Returned', value: statusOverviewSubmissions.filter((s) => s.status === 'returned').length },
+        { name: 'Exam Done', value: statusOverviewSubmissions.filter((s) => s.status === 'physical_exam_done').length },
+      ].filter((d) => d.value > 0);
+    },
+    [dedupedFilteredSubmissions, statusOverviewFromDate],
   );
 
   const submissionsByDate = useMemo(() => {
@@ -673,7 +878,8 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       const summaryRows = [
         { label: 'Total submissions', value: String(summary.total) },
         { label: 'Approved', value: String(summary.approved) },
-        { label: 'Under review', value: String(summary.pending) },
+        { label: 'Pending', value: String(summary.pending) },
+        { label: 'In review', value: String(summary.inReview) },
         { label: 'Approval rate', value: `${summary.approvalRate}%` },
         { label: 'With medical certificate', value: String(summary.withCertificate) },
         {
@@ -874,7 +1080,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <LabeledSelect label="Status" value={statusFilter} onValueChange={setStatusFilter} placeholder="Status">
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Under Review</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="in_review">In Review</SelectItem>
                 <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
@@ -915,7 +1121,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                   min={dateRange.minDate || undefined}
                   max={today}
                   value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
+                  onChange={(e) => handleFromDateChange(e.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -926,7 +1132,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                   min={dateRange.minDate || undefined}
                   max={today}
                   value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
+                  onChange={(e) => handleToDateChange(e.target.value)}
                 />
               </div>
             </div>
@@ -938,24 +1144,50 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       {/* ── Charts ────────────────────────────────────────────────────── */}
       <div className="space-y-4">
 
-        {/* Bar chart: submissions by course */}
+        {/* Bar chart: submissions by department */}
         <Card className="border-outline-variant/30">
           <CardHeader className="pb-0 pt-5 px-5">
-            <CardTitle className="text-base font-semibold">Submissions by Course</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">Total medical clearance forms per program</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold">
+                  Submissions by {submissionBreakdownView === 'department' ? 'Department' : 'Program'}
+                </CardTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Total medical clearance forms for the current academic year.
+                </p>
+                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
+                  Current Academic Year: {reportingTermRange.label}
+                </p>
+              </div>
+              <div className="w-full sm:w-44">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Sort by</p>
+                <Select
+                  value={submissionBreakdownView}
+                  onValueChange={(value) => setSubmissionBreakdownView(value as SubmissionBreakdownView)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Choose chart view" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="department">Department</SelectItem>
+                    <SelectItem value="program">Program</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="px-5 pb-5 pt-4">
-            {courseChartData.length === 0 ? (
+            {submissionBreakdownView === 'program' && submissionBreakdownData.length === 0 ? (
               <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
-                No course data available for the selected filters.
+                No current academic year program submissions are available for the selected filters.
               </div>
             ) : (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={courseChartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                  <BarChart data={submissionBreakdownData} margin={{ top: 16, right: 8, left: -16, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--outline-variant) / 0.3)" vertical={false} />
                     <XAxis
-                      dataKey="course"
+                      dataKey="label"
                       tick={{ fontSize: 12 }}
                       tickLine={false}
                       axisLine={false}
@@ -965,9 +1197,15 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                       tickLine={false}
                       axisLine={false}
                       allowDecimals={false}
+                      domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]}
                     />
-                    <Tooltip content={<CustomBarTooltip />} cursor={{ fill: 'hsl(var(--outline-variant) / 0.15)' }} />
-                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                    <Tooltip content={<CustomBarTooltip />} cursor={false} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                      {submissionBreakdownData.map((entry) => (
+                        <Cell key={entry.label} fill={entry.fill} />
+                      ))}
+                      <LabelList dataKey="count" content={<DepartmentBarValueLabel />} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -981,8 +1219,23 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           {/* Donut chart: status breakdown */}
           <Card className="border-outline-variant/30">
             <CardHeader className="pb-0 pt-5 px-5">
-              <CardTitle className="text-base font-semibold">Status Breakdown</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Distribution across approval stages</p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="text-base font-semibold">Status Breakdown</CardTitle>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Distribution across approval stages</p>
+                </div>
+                <div className="w-full sm:w-44">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Overview from</p>
+                  <Input
+                    type="date"
+                    className="h-9 text-sm"
+                    min={dateRange.minDate || undefined}
+                    max={toDate || today}
+                    value={statusOverviewFromDate}
+                    onChange={(event) => handleStatusOverviewFromDateChange(event.target.value)}
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="px-5 pb-5 pt-4">
               {statusChartData.length === 0 ? (

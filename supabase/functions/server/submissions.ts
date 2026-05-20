@@ -22,6 +22,7 @@ const STAFF_DASHBOARD_OVERVIEW_TTL_MS = 15_000;
 const STAFF_SUBMISSION_SUMMARIES_TTL_MS = 20_000;
 const STAFF_APPROVED_STUDENTS_TTL_MS = 30_000;
 const STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS = 20;
+const STAFF_DASHBOARD_DEPARTMENTS = ["CCS", "CBA", "CEAS", "CHTM", "CAHS"];
 const STAFF_SUBMISSION_SUMMARIES_DEFAULT_PAGE_SIZE = 25;
 const STAFF_SUBMISSION_SUMMARIES_MAX_PAGE_SIZE = 100;
 const STAFF_APPROVED_STUDENTS_DEFAULT_PAGE_SIZE = 20;
@@ -544,6 +545,58 @@ function applyApprovedStudentFilters(queryBuilder: any, options: any = {}) {
   return query;
 }
 
+function resolveDashboardDepartmentValue(value: unknown) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return STAFF_DASHBOARD_DEPARTMENTS.includes(normalized) ? normalized : "";
+}
+
+function inferDashboardDepartmentFromCourse(value: unknown) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return STAFF_DASHBOARD_DEPARTMENTS.find((department) =>
+    normalized.includes(department)
+  ) || "";
+}
+
+function resolveDashboardDepartmentForRow(
+  row: any,
+  studentDirectory: Record<string, any>,
+) {
+  const submissionDepartment = resolveDashboardDepartmentValue(row?.department);
+  if (submissionDepartment) return submissionDepartment;
+
+  const student = studentDirectory[String(row?.student_id || "").trim()] || null;
+  const studentDepartment = resolveDashboardDepartmentValue(student?.department);
+  if (studentDepartment) return studentDepartment;
+
+  return inferDashboardDepartmentFromCourse(row?.course) ||
+    inferDashboardDepartmentFromCourse(student?.course);
+}
+
+async function loadStudentDepartmentDirectory(studentIds: string[]) {
+  const uniqueStudentIds = [
+    ...new Set(
+      (studentIds || []).map((value) => String(value || "").trim()).filter(Boolean),
+    ),
+  ];
+  if (!uniqueStudentIds.length) {
+    return {} as Record<string, any>;
+  }
+
+  const { data, error } = await supabase
+    .from("students")
+    .select("student_id,department,course")
+    .in("student_id", uniqueStudentIds);
+
+  if (error) throw new Error(error.message);
+
+  return (data || []).reduce((acc, student) => {
+    const studentId = String(student?.student_id || "").trim();
+    if (!studentId) return acc;
+    acc[studentId] = student;
+    return acc;
+  }, {} as Record<string, any>);
+}
+
 async function loadStaffDashboardOverview() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -558,6 +611,7 @@ async function loadStaffDashboardOverview() {
     { count: submittedYesterday, error: yesterdayError },
     { data: actionableRows, error: actionableRowsError },
     { data: latestRowsUniverse, error: latestRowsUniverseError },
+    { data: departmentSourceRows, error: departmentSourceError },
   ] = await Promise.all([
     supabase.from("submissions").select("id", { count: "exact", head: true }),
     supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
@@ -583,6 +637,7 @@ async function loadStaffDashboardOverview() {
       .select(SUBMISSION_SUMMARY_COLUMNS)
       .order("submitted_at", { ascending: false })
       .limit(5000),
+    supabase.from("submissions").select("student_id,department,course"),
   ]);
 
   if (totalSubmissionsError) throw new Error(totalSubmissionsError.message);
@@ -591,6 +646,7 @@ async function loadStaffDashboardOverview() {
   if (yesterdayError) throw new Error(yesterdayError.message);
   if (actionableRowsError) throw new Error(actionableRowsError.message);
   if (latestRowsUniverseError) throw new Error(latestRowsUniverseError.message);
+  if (departmentSourceError) throw new Error(departmentSourceError.message);
 
   const latestByStudentYear = new Map<string, any>();
   for (const row of latestRowsUniverse || []) {
@@ -634,11 +690,16 @@ async function loadStaffDashboardOverview() {
   const returnedRecords = returnedRowsAll.length;
   const resubmittedRecords = resubmittedRowsAll.length;
 
-  const reviewerDirectory = await loadStaffUsersByIds([
-    ...(pendingQueueRows || []).map((row: any) => row.reviewed_by),
-    ...(inReviewQueueRows || []).map((row: any) => row.reviewed_by),
-    ...(returnedQueueRows || []).map((row: any) => row.reviewed_by),
-    ...(resubmittedQueueRows || []).map((row: any) => row.reviewed_by),
+  const [reviewerDirectory, studentDepartmentDirectory] = await Promise.all([
+    loadStaffUsersByIds([
+      ...(pendingQueueRows || []).map((row: any) => row.reviewed_by),
+      ...(inReviewQueueRows || []).map((row: any) => row.reviewed_by),
+      ...(returnedQueueRows || []).map((row: any) => row.reviewed_by),
+      ...(resubmittedQueueRows || []).map((row: any) => row.reviewed_by),
+    ]),
+    loadStudentDepartmentDirectory(
+      (departmentSourceRows || []).map((row: any) => row.student_id),
+    ),
   ]);
 
   const [
@@ -652,6 +713,24 @@ async function loadStaffDashboardOverview() {
     mapSubmissionSummaries(returnedQueueRows || [], reviewerDirectory),
     mapSubmissionSummaries(resubmittedQueueRows || [], reviewerDirectory),
   ]);
+  const departmentCounts = STAFF_DASHBOARD_DEPARTMENTS.reduce((acc, department) => {
+    acc[department] = 0;
+    return acc;
+  }, {} as Record<string, number>);
+
+  (departmentSourceRows || []).forEach((row: any) => {
+    const department = resolveDashboardDepartmentForRow(
+      row,
+      studentDepartmentDirectory,
+    );
+    if (!department) return;
+    departmentCounts[department] = (departmentCounts[department] || 0) + 1;
+  });
+
+  const departmentBreakdown = STAFF_DASHBOARD_DEPARTMENTS.map((department) => ({
+    department,
+    count: departmentCounts[department] || 0,
+  }));
 
   return {
     totalSubmissions: totalSubmissions || 0,
@@ -668,6 +747,7 @@ async function loadStaffDashboardOverview() {
     inReviewQueueItems,
     returnedQueueItems,
     resubmittedQueueItems,
+    departmentBreakdown,
   };
 }
 

@@ -742,8 +742,8 @@ function StaffCertificatesWorkspace() {
                       <div className="overflow-hidden rounded-lg border bg-white">
                         <div className="px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
                           <div className="overflow-x-auto overscroll-x-contain">
-                            <div className="mx-auto w-max">
-                              <div style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
+                            <div className="w-max lg:w-full">
+                              <div className="lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
                                 <MedicalClearancePreview ref={clearancePreviewRef} record={clearanceRecord} />
                               </div>
                             </div>

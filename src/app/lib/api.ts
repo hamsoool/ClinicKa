@@ -3848,6 +3848,17 @@ export async function getAdminSystemSettings() {
   }
 }
 
+export async function getReportingTermSettings() {
+  try {
+    const settings = await apiRequest<AdminSystemSettings>('/functions/v1/server/reporting-term');
+    const normalized = normalizeAdminSystemSettings(settings);
+    writeStoredAdminSystemSettings(normalized);
+    return normalized;
+  } catch {
+    return readStoredAdminSystemSettings();
+  }
+}
+
 export async function updateAdminSystemSettings(input: AdminSystemSettings) {
   const payload = normalizeAdminSystemSettings(input);
 

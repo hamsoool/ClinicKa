@@ -44,6 +44,7 @@ import {
 } from "./requester.ts";
 import {
   getAdminSystemSettings,
+  getSafeAdminSystemSettings,
   getStudentNotificationStateKey,
   normalizeAdminSystemSettings,
   normalizeStudentNotificationState,
@@ -394,6 +395,20 @@ app.get("/staff/dashboard-overview", async (c) => {
   } catch (error) {
     console.log('Error fetching staff dashboard overview:', error);
     return internalServerError(c, 'Failed to fetch staff dashboard overview', error);
+  }
+});
+
+app.get("/reporting-term", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    return c.json(await getSafeAdminSystemSettings());
+  } catch (error) {
+    console.log('Error fetching reporting term settings:', error);
+    return internalServerError(c, 'Failed to fetch reporting term settings', error);
   }
 });
 

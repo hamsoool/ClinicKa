@@ -17,12 +17,11 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import studentMedicalFormPreview from '../../assets/previews/student-medical-form-preview.png';
 import { useAuth } from '../lib/auth';
 
 const LOGO_SRC = '/logo.png';
 const LANDING_PREVIEW_SRC = '/clinickalogo.png';
-const FORM_PREVIEW_SRC = studentMedicalFormPreview;
+const FORM_PREVIEW_SRC = '/previews/student-medical-form-preview.png';
 const CAMPUS_PREVIEW_SRC = '/backdrop.jpg';
 
 const navLinks = [
