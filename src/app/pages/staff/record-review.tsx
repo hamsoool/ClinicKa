@@ -128,6 +128,11 @@ type ClearanceForm = {
   issuedDate: string;
 };
 
+const CLEARANCE_DOCTORS = [
+  'GERALD S. BERNAL, MD',
+  'ARMANDO TAMAYO, MD',
+] as const;
+
 const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }> = [
   { key: 'allergy', label: 'Allergy' },
   { key: 'asthma', label: 'Asthma' },
@@ -190,6 +195,17 @@ function normalizeDateInputValue(value?: string | null) {
   return isSameDate ? candidate : '';
 }
 
+function getTodayDateInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function generateClearanceControlNo(submission?: SubmissionDetails | null) {
+  const yearTag = String(submission?.year || '').trim() || 'Y';
+  const studentTag = String(submission?.studentId || '').trim() || 'STUDENT';
+  const currentYear = new Date().getFullYear();
+  return `GC-${currentYear}-${yearTag}-${studentTag}`;
+}
+
 function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
   return {
     studentId: submission?.studentId || '',
@@ -248,10 +264,10 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
     extremities: submission?.staffMeasurements?.extremities || '',
     others: submission?.staffMeasurements?.others || '',
     examinedBy: submission?.staffMeasurements?.examinedBy || '',
-    xrayDate: normalizeDateInputValue(submission?.labResults?.xrayDate),
+    xrayDate: normalizeDateInputValue(submission?.labResults?.xrayDate) || getTodayDateInputValue(),
     xrayResult: submission?.labResults?.xrayResult || 'normal',
     xrayFindings: submission?.labResults?.xrayFindings || '',
-    cbcDate: normalizeDateInputValue(submission?.labResults?.cbcDate),
+    cbcDate: normalizeDateInputValue(submission?.labResults?.cbcDate) || getTodayDateInputValue(),
     hemoglobin: submission?.labResults?.hemoglobin || '',
     hematocrit: submission?.labResults?.hematocrit || '',
     wbc: submission?.labResults?.wbc || '',
@@ -259,7 +275,7 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
     bloodType: submission?.labResults?.bloodType || '',
     glucose: submission?.labResults?.glucose || '',
     protein: submission?.labResults?.protein || '',
-    urinalysisDate: normalizeDateInputValue(submission?.labResults?.urinalysisDate),
+    urinalysisDate: normalizeDateInputValue(submission?.labResults?.urinalysisDate) || getTodayDateInputValue(),
     urinalysisGlucose: submission?.labResults?.urinalysisGlucose || '',
     urinalysisProtein: submission?.labResults?.urinalysisProtein || '',
   };
@@ -271,8 +287,8 @@ function createClearanceForm(submission?: SubmissionDetails | null): ClearanceFo
     diagnosis: submission?.clearanceInfo?.diagnosis || '',
     remarks: submission?.clearanceInfo?.remarks || '',
     purpose: submission?.clearanceInfo?.purpose || 'enrolment',
-    controlNo: submission?.clearanceInfo?.controlNo || '',
-    issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate),
+    controlNo: submission?.clearanceInfo?.controlNo || generateClearanceControlNo(submission),
+    issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate) || getTodayDateInputValue(),
   };
 }
 
@@ -1563,8 +1579,8 @@ export default function StaffRecordReview() {
                   <Input
                     id="controlNo"
                     value={clearanceForm.controlNo}
-                    onChange={(event) => updateClearanceField('controlNo', event.target.value)}
-                    className="mt-2"
+                    readOnly
+                    className="mt-2 bg-muted/40"
                   />
                 </div>
                 ) : null}
@@ -1585,13 +1601,21 @@ export default function StaffRecordReview() {
                 {isDoctor ? (
                 <div className="md:col-span-1 xl:col-span-3">
                   <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
-                  <Input
-                    id="clearanceSignatory"
-                    value={assessmentForm.examinedBy}
-                    onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
-                    className="mt-2"
-                    placeholder="Doctor name"
-                  />
+                  <Select
+                    value={assessmentForm.examinedBy || CLEARANCE_DOCTORS[0]}
+                    onValueChange={(value) => updateAssessmentField('examinedBy', value)}
+                  >
+                    <SelectTrigger id="clearanceSignatory" className="mt-2">
+                      <SelectValue placeholder="Select doctor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CLEARANCE_DOCTORS.map((doctor) => (
+                        <SelectItem key={doctor} value={doctor}>
+                          {doctor}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical clearance.</p>
                 </div>
                 ) : null}

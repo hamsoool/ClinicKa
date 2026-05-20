@@ -1,14 +1,12 @@
-import { useCallback, useRef } from 'react';
+import { useEffect } from 'react';
 import { ArrowLeft, ArrowRight, Upload } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Progress } from '../../components/ui/progress';
 import StudentPageIntro from '../../components/student-page-intro';
 import { useAuth } from '../../lib/auth';
 import { MedicalFormStepContent } from './medical-form/medical-form-step-content';
-import { MedicalFormSubmittedView } from './medical-form/medical-form-submitted-view';
 import { useStudentMedicalForm } from './medical-form/use-student-medical-form';
 
 export default function StudentMedicalForm() {
@@ -16,7 +14,6 @@ export default function StudentMedicalForm() {
   const { year } = useParams();
   const [searchParams] = useSearchParams();
   const { me } = useAuth();
-  const previewRef = useRef<HTMLDivElement>(null);
   const editSubmissionId = searchParams.get('edit');
   const hasDataPrivacyConsent = searchParams.get('consent') === '1';
 
@@ -32,7 +29,6 @@ export default function StudentMedicalForm() {
     hasRequiredProfileFields,
     hasProfilePhoto,
     hasProfileSignature,
-    previewRecord,
     updateField,
     updateEmergencyContact,
     updateMedicalCondition,
@@ -42,94 +38,10 @@ export default function StudentMedicalForm() {
     submit,
   } = useStudentMedicalForm({ year, me, editSubmissionId, initialDataPrivacyConsent: hasDataPrivacyConsent });
 
-  const downloadPdf = useCallback(async () => {
-    if (!previewRef.current) return;
-    try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf'),
-      ]);
-      const element = previewRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-      });
-
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [330.2, 215.9], // Long bond: 8.5in x 13in
-      });
-
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 6;
-      const usableWidth = pageWidth - margin * 2;
-      const usableHeight = pageHeight - margin * 2;
-
-      const imgWidth = usableWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      const imgData = canvas.toDataURL('image/png');
-
-      if (imgHeight <= usableHeight) {
-        pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight);
-      } else {
-        const fullCanvas = canvas;
-        const pageSliceHeightPx = Math.floor((usableHeight * fullCanvas.width) / usableWidth);
-        let renderedPx = 0;
-        let pageIndex = 0;
-
-        while (renderedPx < fullCanvas.height) {
-          const sliceHeightPx = Math.min(pageSliceHeightPx, fullCanvas.height - renderedPx);
-          const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = fullCanvas.width;
-          pageCanvas.height = sliceHeightPx;
-          const ctx = pageCanvas.getContext('2d');
-          if (!ctx) break;
-          ctx.drawImage(
-            fullCanvas,
-            0,
-            renderedPx,
-            fullCanvas.width,
-            sliceHeightPx,
-            0,
-            0,
-            fullCanvas.width,
-            sliceHeightPx,
-          );
-
-          const sliceData = pageCanvas.toDataURL('image/png');
-          const sliceHeightMm = (sliceHeightPx * usableWidth) / fullCanvas.width;
-
-          if (pageIndex > 0) pdf.addPage();
-          pdf.addImage(sliceData, 'PNG', margin, margin, usableWidth, sliceHeightMm);
-
-          renderedPx += sliceHeightPx;
-          pageIndex += 1;
-        }
-      }
-
-      const safeFirstName = String(formData.firstName || 'Student').trim().replace(/\s+/g, '_');
-      const safeLastName = String(formData.lastName || 'Record').trim().replace(/\s+/g, '_');
-      pdf.save(`medical_record_${safeLastName}_${safeFirstName}.pdf`);
-      toast.success('Medical record PDF downloaded');
-    } catch {
-      toast.error('Failed to download PDF. Please try again.');
-    }
-  }, [formData.firstName, formData.lastName]);
-
-  if (submitted) {
-    return (
-      <MedicalFormSubmittedView
-        previewRef={previewRef}
-        previewRecord={previewRecord}
-        onDownload={downloadPdf}
-        onBack={() => navigate('/student')}
-      />
-    );
-  }
+  useEffect(() => {
+    if (!submitted) return;
+    navigate('/student/year-selection', { replace: true });
+  }, [navigate, submitted]);
 
   return (
     <div className="min-h-screen px-4 py-4 md:px-8 md:py-6">

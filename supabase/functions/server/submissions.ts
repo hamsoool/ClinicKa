@@ -554,37 +554,15 @@ async function loadStaffDashboardOverview() {
   const [
     { count: totalSubmissions, error: totalSubmissionsError },
     { count: approvedRecords, error: approvedError },
-    { count: pendingRecords, error: pendingError },
-    { count: inReviewRecords, error: inReviewError },
-    { count: returnedRecords, error: returnedError },
-    { count: resubmittedRecords, error: resubmittedError },
     { count: submittedToday, error: todayError },
     { count: submittedYesterday, error: yesterdayError },
-    { data: pendingQueueRows, error: pendingQueueError },
-    { data: inReviewQueueRows, error: inReviewQueueError },
-    { data: returnedQueueRows, error: returnedQueueError },
-    { data: resubmittedQueueRows, error: resubmittedQueueError },
+    { data: actionableRows, error: actionableRowsError },
+    { data: latestRowsUniverse, error: latestRowsUniverseError },
   ] = await Promise.all([
     supabase.from("submissions").select("id", { count: "exact", head: true }),
     supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
       "status",
       "approved",
-    ),
-    supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
-      "status",
-      "pending",
-    ),
-    supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
-      "status",
-      "in_review",
-    ),
-    supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
-      "status",
-      "returned",
-    ),
-    supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
-      "status",
-      "resubmitted",
     ),
     supabase.from("submissions").select("id", { count: "exact", head: true }).gte(
       "submitted_at",
@@ -597,41 +575,64 @@ async function loadStaffDashboardOverview() {
     supabase
       .from("submissions")
       .select(SUBMISSION_SUMMARY_COLUMNS)
-      .eq("status", "pending")
+      .in("status", ACTIONABLE_SUBMISSION_STATUSES)
       .order("submitted_at", { ascending: false })
-      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+      .limit(2000),
     supabase
       .from("submissions")
       .select(SUBMISSION_SUMMARY_COLUMNS)
-      .eq("status", "in_review")
       .order("submitted_at", { ascending: false })
-      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
-    supabase
-      .from("submissions")
-      .select(SUBMISSION_SUMMARY_COLUMNS)
-      .eq("status", "returned")
-      .order("submitted_at", { ascending: false })
-      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
-    supabase
-      .from("submissions")
-      .select(SUBMISSION_SUMMARY_COLUMNS)
-      .eq("status", "resubmitted")
-      .order("submitted_at", { ascending: false })
-      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+      .limit(5000),
   ]);
 
   if (totalSubmissionsError) throw new Error(totalSubmissionsError.message);
   if (approvedError) throw new Error(approvedError.message);
-  if (pendingError) throw new Error(pendingError.message);
-  if (inReviewError) throw new Error(inReviewError.message);
-  if (returnedError) throw new Error(returnedError.message);
-  if (resubmittedError) throw new Error(resubmittedError.message);
   if (todayError) throw new Error(todayError.message);
   if (yesterdayError) throw new Error(yesterdayError.message);
-  if (pendingQueueError) throw new Error(pendingQueueError.message);
-  if (inReviewQueueError) throw new Error(inReviewQueueError.message);
-  if (returnedQueueError) throw new Error(returnedQueueError.message);
-  if (resubmittedQueueError) throw new Error(resubmittedQueueError.message);
+  if (actionableRowsError) throw new Error(actionableRowsError.message);
+  if (latestRowsUniverseError) throw new Error(latestRowsUniverseError.message);
+
+  const latestByStudentYear = new Map<string, any>();
+  for (const row of latestRowsUniverse || []) {
+    const key = `${String(row?.student_id || "").trim()}:${String(row?.year_level || "").trim()}`;
+    if (!key || key === ":") continue;
+    const existing = latestByStudentYear.get(key);
+    if (!existing) {
+      latestByStudentYear.set(key, row);
+      continue;
+    }
+    const existingTs = new Date(existing.updated_at || existing.submitted_at || 0).getTime();
+    const nextTs = new Date(row.updated_at || row.submitted_at || 0).getTime();
+    if (nextTs >= existingTs) {
+      latestByStudentYear.set(key, row);
+    }
+  }
+
+  const latestActionableRows = [...latestByStudentYear.values()].filter((row) =>
+    ACTIONABLE_SUBMISSION_STATUSES.includes(String(row?.status || "")),
+  );
+  const pendingRowsAll = latestActionableRows
+    .filter((row) => row.status === "pending")
+    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
+  const inReviewRowsAll = latestActionableRows
+    .filter((row) => row.status === "in_review")
+    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
+  const returnedRowsAll = latestActionableRows
+    .filter((row) => row.status === "returned")
+    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
+  const resubmittedRowsAll = latestActionableRows
+    .filter((row) => row.status === "resubmitted")
+    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
+
+  const pendingQueueRows = pendingRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
+  const inReviewQueueRows = inReviewRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
+  const returnedQueueRows = returnedRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
+  const resubmittedQueueRows = resubmittedRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
+
+  const pendingRecords = pendingRowsAll.length;
+  const inReviewRecords = inReviewRowsAll.length;
+  const returnedRecords = returnedRowsAll.length;
+  const resubmittedRecords = resubmittedRowsAll.length;
 
   const reviewerDirectory = await loadStaffUsersByIds([
     ...(pendingQueueRows || []).map((row: any) => row.reviewed_by),

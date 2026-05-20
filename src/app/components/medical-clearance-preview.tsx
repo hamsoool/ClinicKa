@@ -108,8 +108,7 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
   const cl = record.clearanceInfo || {};
   const purpose = cl.purpose || 'enrolment';
 
-  // Permanently fixed — not connected to any input field
-  const signatoryName = 'GERALD S. BERNAL, MD';
+  const signatoryName = (record.staffMeasurements?.examinedBy || '').trim() || 'GERALD S. BERNAL, MD';
   const signatoryTitle = 'College Physician';
 
   const isStudentCopy = copyType === "STUDENT'S COPY";

@@ -620,7 +620,7 @@ export function useStudentMedicalForm({
       };
 
       let recordId = activeSubmissionId;
-      const isResubmission = Boolean(recordId && originalSubmissionStatus === 'returned');
+      let isResubmission = Boolean(recordId && originalSubmissionStatus === 'returned');
       if (!recordId) {
         const myStudentId = formData.studentId.trim();
         if (myStudentId && formData.yearLevel) {
@@ -633,19 +633,39 @@ export function useStudentMedicalForm({
                 new Date(a?.updatedAt || a?.submittedAt || 0).getTime(),
             )[0];
           const latestSameYearStatus = String(latestSameYear?.status || '').toLowerCase();
+          const latestSameYearId = String(latestSameYear?.id || '').trim();
+
+          // Safety: even without ?edit=... in URL, force resubmission to update
+          // the latest returned record for this year instead of creating a new row.
+          if (latestSameYearStatus === 'returned' && latestSameYearId) {
+            recordId = latestSameYearId;
+            isResubmission = true;
+            setActiveSubmissionId(latestSameYearId);
+            setOriginalSubmissionStatus('returned');
+          }
+
           if (latestSameYearStatus && latestSameYearStatus !== 'returned') {
             throw new Error(
               `You already have a Year ${formData.yearLevel} submission with status "${latestSameYearStatus}".`,
             );
           }
         }
-        const result = await submitMedicalRecord(payload);
-        recordId = result.recordId;
-        setActiveSubmissionId(recordId);
+        if (!recordId) {
+          const result = await submitMedicalRecord(payload);
+          recordId = result.recordId;
+          setActiveSubmissionId(recordId);
+        }
       } else {
         await updateMedicalRecord(recordId, {
           ...payload,
           status: isResubmission ? 'resubmitted' : undefined,
+        });
+      }
+
+      if (recordId && isResubmission && !activeSubmissionId) {
+        await updateMedicalRecord(recordId, {
+          ...payload,
+          status: 'resubmitted',
         });
       }
 
