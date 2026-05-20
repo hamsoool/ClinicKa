@@ -288,9 +288,9 @@ export default function PortalShell({
                       onClick={() => goTo(item.path)}
                       aria-current={active ? 'page' : undefined}
                       className={cn(
-                        'flex min-h-12 w-full items-center gap-3 rounded-md px-4 py-3 text-sm font-medium tracking-tight transition-all',
+                        "relative flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium tracking-tight outline-none transition-all focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset",
                         active
-                          ? 'border-l-4 border-emerald-300 bg-emerald-800 text-white shadow-[0_10px_24px_rgba(0,0,0,0.12)]'
+                          ? "bg-emerald-800 text-white shadow-[0_10px_24px_rgba(0,0,0,0.12)] before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-r-full before:bg-emerald-300 before:content-['']"
                           : 'text-emerald-100/70 hover:bg-emerald-800/50 hover:text-white',
                       )}
                     >
@@ -319,7 +319,7 @@ export default function PortalShell({
             <div className="space-y-1.5 border-t border-white/10 pt-4">
               <button
                 type="button"
-                className="flex min-h-12 w-full items-center gap-3 rounded-md px-4 py-3 text-sm font-medium text-emerald-100/70 transition-colors hover:bg-emerald-800/50 hover:text-white"
+                className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-emerald-100/70 outline-none transition-colors hover:bg-emerald-800/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset"
                 onClick={() => setConfirmSignOutOpen(true)}
               >
                 <LogOut className="h-5 w-5 shrink-0" />

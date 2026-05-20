@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Award, ClipboardCheck, User } from 'lucide-react';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { toast } from 'sonner';
 import PasswordChangeCard from '../../components/password-change-card';
 import SettingsLogoutCard from '../../components/settings-logout-card';
@@ -162,12 +163,10 @@ export default function StaffSettings() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
-        <h1 className="mb-2 text-3xl font-bold tracking-tight text-on-surface">Settings</h1>
-        <p className="max-w-2xl text-sm text-on-surface-variant">
-          Manage your profile, review workflow, certificate workspace, and account security from one place.
-        </p>
-      </div>
+      <PortalPageIntro
+        title="Settings"
+        description="Manage your profile, review workflow, certificate workspace, and account security from one place."
+      />
 
       <div className="space-y-6">
         <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">

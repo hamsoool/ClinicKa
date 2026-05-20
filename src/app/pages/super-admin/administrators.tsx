@@ -9,6 +9,7 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { toast } from 'sonner';
 import PasswordChangeCard from '../../components/password-change-card';
 import { Badge } from '../../components/ui/badge';
@@ -176,29 +177,22 @@ export default function SuperAdminAdministrators() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="rounded-[1.5rem] border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-4">
-            <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
-              <ShieldCheck className="h-4 w-4" />
-              Super Admin Console
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
-                Administrator Management
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm text-on-surface-variant sm:text-base">
-                Add administrator access for system operators and remove administrator accounts that should no longer control the clinic portal.
-              </p>
-            </div>
+      <PortalPageIntro
+        eyebrow={(
+          <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
+            <ShieldCheck className="h-4 w-4" />
+            Super Admin Console
           </div>
-
+        )}
+        title="Administrator Management"
+        description="Create administrator access for system operators and permanently delete admin sign-in accounts that should no longer control the clinic portal."
+        actions={(
           <Button className="w-full sm:w-fit" onClick={() => setOpenCreate(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
             Add Administrator
           </Button>
-        </div>
-      </div>
+        )}
+      />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
@@ -312,7 +306,7 @@ export default function SuperAdminAdministrators() {
                     onClick={() => setDeleteTarget(administrator)}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Remove Administrator
+                    Delete Admin Account
                   </Button>
                 </CardContent>
               </Card>
@@ -353,7 +347,7 @@ export default function SuperAdminAdministrators() {
                         onClick={() => setDeleteTarget(administrator)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
-                        Remove
+                        Delete Account
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -442,7 +436,7 @@ export default function SuperAdminAdministrators() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Administrator?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Admin Account?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget
                 ? `${getDisplayName(deleteTarget)} will lose administrator access and their sign-in account will be deleted.`
@@ -459,7 +453,7 @@ export default function SuperAdminAdministrators() {
               disabled={isDeleting}
               className="bg-destructive text-white hover:bg-destructive/90"
             >
-              {isDeleting ? 'Removing...' : 'Remove Administrator'}
+              {isDeleting ? 'Deleting...' : 'Delete Admin Account'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

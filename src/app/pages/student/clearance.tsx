@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Download, FileText, ShieldCheck, Clock, AlertCircle } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import StudentPageIntro from '../../components/student-page-intro';
 import type { SubmissionRecord } from '../../lib/record-types';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import MedicalRecordPreview from '../../components/medical-record-preview';
@@ -22,6 +23,23 @@ function normalizeClearanceTab(value: string | null): StudentClearanceTab {
   return clearanceTabs.has(value as StudentClearanceTab) ? (value as StudentClearanceTab) : 'history';
 }
 
+const styles = `
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+`;
+
 export default function StudentClearance() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
@@ -33,6 +51,16 @@ export default function StudentClearance() {
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
+
+  // Inject styles once on mount
+  useEffect(() => {
+    const styleSheet = document.createElement('style');
+    styleSheet.textContent = styles;
+    document.head.appendChild(styleSheet);
+    return () => {
+      document.head.removeChild(styleSheet);
+    };
+  }, []);
 
   const { data = [], isLoading: loading, isError } = useStudentRecordsQuery(studentId);
   const records = data;
@@ -63,12 +91,49 @@ export default function StudentClearance() {
     (a, b) => new Date(b.updatedAt || b.submittedAt).getTime() - new Date(a.updatedAt || a.submittedAt).getTime(),
   );
   const profileRecord = sortedRecords[0] || null;
+  const examCompletenessScore = (entry: SubmissionRecord) => {
+    const exam = entry.staffMeasurements || {};
+    const values = [
+      exam.bloodPressure,
+      exam.cardiacRate,
+      exam.respiratoryRate,
+      exam.temperature,
+      exam.weight,
+      exam.height,
+      exam.bmi,
+      exam.visualAcuity,
+      exam.skin,
+      exam.heent,
+      exam.chestLungs,
+      exam.heart,
+      exam.abdomen,
+      exam.extremities,
+      exam.others,
+      exam.examinedBy,
+      entry.bloodPressure,
+      entry.weight,
+      entry.height,
+      entry.bmi,
+    ];
+
+    return values.filter((value) => String(value || '').trim().length > 0).length;
+  };
+
   const latestRecordPerYear = records.reduce<Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>>((acc, item) => {
     const yearNum = Number.parseInt(String(item.year || ''), 10) as 1 | 2 | 3 | 4;
     if (![1, 2, 3, 4].includes(yearNum)) return acc;
     const current = acc[yearNum];
     if (!current) {
       acc[yearNum] = item;
+      return acc;
+    }
+    const currentScore = examCompletenessScore(current);
+    const nextScore = examCompletenessScore(item);
+    if (nextScore > currentScore) {
+      acc[yearNum] = item;
+      return acc;
+    }
+    if (currentScore > nextScore) {
       return acc;
     }
     const currentTs = new Date(current.updatedAt || current.submittedAt).getTime();
@@ -190,13 +255,11 @@ export default function StudentClearance() {
   const isPhysicalExamDone = normalizedStatus === 'physical_exam_done';
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <div className="mb-2 sm:mb-4">
-        <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Records & Clearance</h1>
-        <p className="text-muted-foreground">
-          Track your submissions, open your medical form, and download your clearance when approved.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-6">
+      <StudentPageIntro
+        title="Records & Clearance"
+        description="Track your submissions, open your medical form, and download your clearance when approved."
+      />
 
       <Tabs className="min-w-0" value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-3">
@@ -205,7 +268,7 @@ export default function StudentClearance() {
           <TabsTrigger value="medical-clearance" className="min-h-11 justify-center px-3 text-center whitespace-normal">Medical Clearance</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="history" className="min-w-0 space-y-4">
+        <TabsContent value="history" className="min-w-0 space-y-4 animate-fade-in">
           <Card>
             <CardHeader>
               <CardTitle>Medical Record History</CardTitle>
@@ -311,7 +374,7 @@ export default function StudentClearance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="form" className="min-w-0 space-y-4">
+        <TabsContent value="form" className="min-w-0 space-y-4 animate-fade-in">
           <Card>
             <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div className="min-w-0">
@@ -360,7 +423,7 @@ export default function StudentClearance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="medical-clearance" className="min-w-0 space-y-4">
+        <TabsContent value="medical-clearance" className="min-w-0 space-y-4 animate-fade-in">
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col gap-2 sm:max-w-xs">
@@ -498,7 +561,7 @@ export default function StudentClearance() {
                     <div className="overflow-hidden rounded-lg border bg-white">
                       <div className="px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
                         <div className="overflow-x-auto overscroll-x-contain">
-                          <div className="mx-auto w-max min-w-full">
+                          <div className="mx-auto w-max">
                             <div style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
                               <MedicalClearancePreview ref={clearanceRef} record={record} />
                             </div>

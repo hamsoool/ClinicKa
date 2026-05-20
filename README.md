@@ -24,6 +24,11 @@ ClinicKa has four role-based portals:
 Core backend entrypoint:
 
 - `supabase/functions/server/index.ts`
+- `supabase/functions/server/context.ts` - shared server config, CORS, and response helpers
+- `supabase/functions/server/requester.ts` - requester authentication and archived-account helpers
+- `supabase/functions/server/settings.ts` - admin settings and student notification-state helpers
+- `supabase/functions/server/storage.ts` - storage URL and cleanup helpers
+- `supabase/functions/server/submissions.ts` - submission mapping, staff dashboards, and read-cache helpers
 
 ## Tech Stack
 
@@ -80,7 +85,7 @@ Required for frontend runtime:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-Required for server-side operations used by scripts and the Supabase Edge Function:
+Required for server-side operations used by the Supabase Edge Function:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -101,17 +106,9 @@ Notes:
 
 ## Supabase Setup Notes
 
-This repository includes policy/patch SQL files (not a complete schema bootstrap). Ensure your Supabase project has the expected ClinicKa tables before running the app.
+The app depends on an existing Supabase project with the expected ClinicKa tables, storage buckets, RLS policies, and edge-function environment variables already configured.
 
-Apply the SQL files in `supabase/` as needed:
-
-- `supabase/rls_storage_and_files_policies.sql`
-- `supabase/fix_files_bucket_migration.sql`
-- `supabase/clear_signed_file_urls_migration.sql`
-- `supabase/archived_accounts_migration.sql`
-- `supabase/super_admin_role_migration.sql`
-- `supabase/add_lab_test_source_columns.sql`
-- `supabase/add_resubmitted_status_constraint_migration.sql`
+This repository keeps the edge-function source under `supabase/functions/server/`, but the SQL migration and patch files were one-time setup artifacts and are no longer stored in the project.
 
 Expected storage buckets used by uploads:
 
@@ -120,7 +117,7 @@ Expected storage buckets used by uploads:
 - `lab_chest_xray`
 - `lab_cbc`
 - `lab_urinalysis`
-- (legacy references may still point to `medical-files`, use the migration above)
+- (legacy references may still point to `medical-files`, so keep bucket compatibility in the target Supabase project)
 
 ## Useful Scripts
 
@@ -129,23 +126,29 @@ Expected storage buckets used by uploads:
 - `npm run build` - Production build into `dist/`
 - `npm run check` - `typecheck` + `build`
 
-Optional helper script:
+## Attributions
 
-- `scripts/create-admin-account.local.mjs` - create/bootstrap a user via Supabase Admin API using env credentials.
+- UI components in this project include `shadcn/ui`-derived source used under the MIT license.
+- Project imagery includes an Unsplash photo used under the Unsplash license.
 
 ## Project Structure
 
 ```text
 src/
   app/
-    pages/               Role-based pages (student, staff, admin, auth)
-    lib/                 Auth/API client logic
     components/          Shared UI, shell, reports, previews
+    lib/                 Auth/API client logic
+    pages/               Role-based pages (student, staff, admin, auth)
+  assets/previews/       App-owned preview images used by auth/marketing screens
   styles/                Global and font/style files
 supabase/
-  functions/server/      Edge function API
-  *.sql                  SQL migrations/policies
-scripts/                 Utility scripts (admin bootstrap, exports)
+  functions/server/
+    index.ts             Route entrypoint
+    context.ts           Shared server config and response helpers
+    requester.ts         Authentication and requester helpers
+    settings.ts          Admin settings and notification-state helpers
+    storage.ts           Storage bucket and file cleanup helpers
+    submissions.ts       Submission read models and dashboard caches
 public/                  Static assets + PWA icons
 ```
 
@@ -167,7 +170,7 @@ npm run build
 ## Troubleshooting
 
 - `Missing Supabase config...`: check `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-- Upload/sign URL errors: verify buckets exist and run `rls_storage_and_files_policies.sql`.
-- Archived account endpoints returning migration errors: run `archived_accounts_migration.sql`.
+- Upload/sign URL errors: verify the expected Supabase buckets and storage policies exist in the target project.
+- Archived account endpoints returning migration errors: verify the target Supabase project already includes the archived accounts schema changes.
 - Google sign-in blocked: student accounts are restricted to `@gordoncollege.edu.ph`.
 - Email notifications not sending: verify `SMTP_*` values are available to the deployed Supabase edge function (and in `.env.local` if you also use local function tooling).

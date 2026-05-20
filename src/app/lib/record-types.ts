@@ -130,6 +130,8 @@ export type SubmissionRecord = {
   staffMeasurements?: PhysicalExamination;
   labResults?: LabResults;
   clearanceInfo?: ClearanceInfo;
+  photoUrl?: string;
+  signatureUrl?: string;
   labTestLocation?: 'jlgh' | 'other' | '';
   otherClinicName?: string;
 };

@@ -163,6 +163,39 @@ interface Props {
   yearlyRecords?: Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>;
 }
 
+function abbreviateCourseDept(value: string) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+
+  const acronymInParens = text.match(/\(([A-Za-z0-9&.\- ]+)\)\s*$/);
+  if (acronymInParens?.[1]) {
+    return acronymInParens[1].trim();
+  }
+
+  const upperCode = text.match(/\b([A-Z]{2,}(?:[-/][A-Z]{2,})?)\b/);
+  if (upperCode?.[1]) {
+    return upperCode[1].trim();
+  }
+
+  return text;
+}
+
+function formatLocalPhone(value: string) {
+  const digitsOnly = String(value || '').replace(/\D/g, '');
+  if (!digitsOnly) return '';
+
+  let normalized = digitsOnly;
+  if (normalized.startsWith('63')) normalized = normalized.slice(2);
+  if (normalized.startsWith('0')) normalized = normalized.slice(1);
+  normalized = normalized.slice(0, 10);
+
+  if (normalized.length === 10 && normalized.startsWith('9')) {
+    return `0${normalized}`;
+  }
+
+  return String(value || '').trim();
+}
+
 const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, yearlyRecords }, ref) => {
   const exam = record.staffMeasurements || {};
   const lab = record.labResults || {};
@@ -170,18 +203,32 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
   const yr = record.year || '1';
   const yrIndex = parseInt(yr, 10) - 1; // 0-based
   const civilStatusNormalized = String(record.civilStatus || '').trim().toLowerCase();
-  const photoUrl = (record as any).photoUrl as string | undefined;
-  const signatureUrl = (record as any).signatureUrl as string | undefined;
+  const photoUrl = record.photoUrl;
+  const signatureUrl = record.signatureUrl;
+
+  const getExamFieldValue = (sourceRecord: SubmissionRecord | undefined, field: string) => {
+    if (!sourceRecord) return '';
+    const sourceExam = sourceRecord.staffMeasurements || {};
+    const direct = (sourceExam as any)?.[field];
+    if (String(direct || '').trim()) return direct;
+
+    // Fallback for records that store some vitals at top-level fields.
+    if (field === 'bloodPressure') return sourceRecord.bloodPressure || '';
+    if (field === 'weight') return sourceRecord.weight || '';
+    if (field === 'height') return sourceRecord.height || '';
+    if (field === 'bmi') return sourceRecord.bmi || '';
+    return '';
+  };
 
   const getExamValue = (row: string) => {
     const field = EXAM_FIELD_MAP[row];
-    return field ? (exam as any)[field] || '' : '';
+    return field ? getExamFieldValue(record, field) : '';
   };
   const getYearExamValue = (year: number, row: string) => {
     const field = EXAM_FIELD_MAP[row];
     if (!field) return '';
-    const yearExam = yearlyRecords?.[year as 1 | 2 | 3 | 4]?.staffMeasurements;
-    return (yearExam as any)?.[field] || '';
+    const yearRecord = yearlyRecords?.[year as 1 | 2 | 3 | 4];
+    return getExamFieldValue(yearRecord, field);
   };
   const getYearLab = (year: number) => yearlyRecords?.[year as 1 | 2 | 3 | 4]?.labResults || {};
 
@@ -254,9 +301,11 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
           <div style={{ borderBottom: '1px solid #000', paddingBottom: '1px', fontSize: '9px', minHeight: '12px', textAlign: 'center' }}>{record.middleInitial || ''}</div>
           <div style={{ fontSize: '7.5px', color: '#555', textAlign: 'center' }}>M. I.</div>
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ borderBottom: '1px solid #000', paddingBottom: '1px', fontSize: '9px', minHeight: '12px' }}>{record.course}</div>
-          <div style={{ fontSize: '7.5px', color: '#555', textAlign: 'center' }}>Course/Dept.</div>
+        <div style={{ flex: 1, marginLeft: '6px' }}>
+          <div style={{ borderBottom: '1px solid #000', paddingBottom: '1px', fontSize: '9px', minHeight: '12px' }}>
+            {abbreviateCourseDept(record.course)}
+          </div>
+          <div style={{ fontSize: '7.5px', color: '#555', textAlign: 'left', paddingLeft: '2px' }}>Course/Dept.</div>
         </div>
       </div>
 
@@ -289,7 +338,7 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
           <span style={S.fieldLabel}>Tel. /CP#:</span>
-          <span style={{ ...S.fieldValue, minWidth: '80px' }}>{record.contactNumber || ''}</span>
+          <span style={{ ...S.fieldValue, minWidth: '80px' }}>{formatLocalPhone(record.contactNumber || '')}</span>
         </span>
       </div>
 
@@ -349,7 +398,7 @@ const MedicalRecordPreviewBase = forwardRef<HTMLDivElement, Props>(({ record, ye
         <span style={{ fontWeight: 'bold' }}>Address:</span>
         <span style={{ ...S.fieldValue, minWidth: '160px' }}>{record.emergencyContact?.address || ''}</span>
         <span style={{ fontWeight: 'bold' }}>Tel. phone No. CP:</span>
-        <span style={{ ...S.fieldValue, minWidth: '100px' }}>{record.emergencyContact?.phone || ''}</span>
+        <span style={{ ...S.fieldValue, minWidth: '100px' }}>{formatLocalPhone(record.emergencyContact?.phone || '')}</span>
       </div>
 
       {/* ====== DATA PRIVACY ====== */}

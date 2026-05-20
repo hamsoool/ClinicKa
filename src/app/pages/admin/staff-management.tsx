@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Label } from '../../components/ui/label';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { Textarea } from '../../components/ui/textarea';
 import {
   Dialog,
@@ -161,16 +162,16 @@ export default function AdminStaffManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-primary mb-2">Clinic Staff Management</h1>
-          <p className="text-muted-foreground">Manage staff roles, access, and availability</p>
-        </div>
-        <Button className="w-full md:w-auto md:self-auto" onClick={() => setOpenCreate(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Staff
-        </Button>
-      </div>
+      <PortalPageIntro
+        title="Clinic Staff Management"
+        description="Manage staff roles, access, and availability."
+        actions={(
+          <Button className="w-full md:w-auto md:self-auto" onClick={() => setOpenCreate(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Staff
+          </Button>
+        )}
+      />
 
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent className="w-[calc(100%-1.5rem)] rounded-xl sm:max-w-xl">

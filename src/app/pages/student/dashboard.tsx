@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, Megaphone, Plus } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import StudentPageIntro from '../../components/student-page-intro';
 import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { getStudentAnnouncements, getStudentProfileAssets } from '../../lib/api';
@@ -251,11 +252,10 @@ export default function StudentDashboard() {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 sm:space-y-6 lg:space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
-          Welcome, {displayName}
-        </h2>
-      </div>
+      <StudentPageIntro
+        title={`Welcome, ${displayName}`}
+        description="Check your latest record status, finish missing requirements, and stay updated with clinic announcements from one place."
+      />
 
       <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-6 lg:p-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

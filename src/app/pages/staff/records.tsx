@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { ChevronDown, Search, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
@@ -109,10 +110,11 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
   return (
     <div>
       {!embedded ? (
-        <div className="mb-8">
-          <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Records Archive</h1>
-          <p className="text-muted-foreground">Approved medical clearances and records</p>
-        </div>
+        <PortalPageIntro
+          className="mb-8"
+          title="Records Archive"
+          description="Approved medical clearances and records."
+        />
       ) : null}
 
       <Card className="mb-6">

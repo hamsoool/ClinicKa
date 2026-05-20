@@ -22,6 +22,7 @@ import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Switch } from '../../components/ui/switch';
 import { Badge } from '../../components/ui/badge';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import {
   createDefaultAdminSystemSettings,
@@ -176,17 +177,15 @@ export default function AdminSystemSettings() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="mb-2 text-2xl font-bold text-primary sm:text-3xl">Administrative Settings</h1>
-          <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
-            Configure the school year, clinic intake, review notifications, account safeguards, and record retention policies for ClinicKa.
-          </p>
-        </div>
-        <Badge className={hasChanges ? 'bg-amber-100 px-3 py-1 text-amber-700' : 'bg-emerald-100 px-3 py-1 text-emerald-700'}>
-          {hasChanges ? 'Unsaved changes' : 'Up to date'}
-        </Badge>
-      </div>
+      <PortalPageIntro
+        title="Administrative Settings"
+        description="Configure the school year, clinic intake, review notifications, account safeguards, and record retention policies for ClinicKa."
+        actions={(
+          <Badge className={hasChanges ? 'bg-amber-100 px-3 py-1 text-amber-700' : 'bg-emerald-100 px-3 py-1 text-emerald-700'}>
+            {hasChanges ? 'Unsaved changes' : 'Up to date'}
+          </Badge>
+        )}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {settingsSummary.map((item) => {

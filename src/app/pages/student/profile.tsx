@@ -3,6 +3,7 @@ import { Check, ImageIcon, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import StudentPageIntro from '../../components/student-page-intro';
 import PasswordChangeCard from '../../components/password-change-card';
 import SettingsLogoutCard from '../../components/settings-logout-card';
 import { Input } from '../../components/ui/input';
@@ -285,12 +286,10 @@ export default function StudentProfile() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
-        <h1 className="text-3xl font-bold tracking-tight text-on-surface">Profile</h1>
-        <p className="mt-2 max-w-2xl text-sm text-on-surface-variant">
-          Keep your student information, 1x1 photo, and signature up to date. These saved assets are reused for your student records.
-        </p>
-      </div>
+      <StudentPageIntro
+        title="Profile"
+        description="Keep your student information, 1x1 photo, and signature up to date. These saved assets are reused for your student records."
+      />
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">

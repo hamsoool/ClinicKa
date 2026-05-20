@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { ArrowLeft, ArrowRight, GraduationCap, Lock } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import StudentPageIntro from '../../components/student-page-intro';
 import { useStudentRecordsQuery } from './student-records-query';
 
 const years = [
@@ -55,7 +56,7 @@ export default function StudentYearSelection() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 sm:space-y-8">
+    <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-8">
       <button
         type="button"
         onClick={() => navigate('/student')}
@@ -65,13 +66,11 @@ export default function StudentYearSelection() {
         Back to Dashboard
       </button>
 
-      <div className="max-w-3xl">
-        <h1 className="text-2xl font-bold tracking-tight text-on-surface sm:text-3xl">Select Year Level</h1>
-        <p className="mt-2 text-sm text-on-surface-variant sm:text-base">
-          Choose the academic year corresponding to the medical records you are preparing to submit.
-          Your progress is automatically saved.
-        </p>
-      </div>
+      <StudentPageIntro
+        title="Select Year Level"
+        description="Choose the academic year corresponding to the medical records you are preparing to submit. Your progress is automatically saved."
+        className="max-w-3xl"
+      />
 
       <div className="grid gap-3 sm:gap-6 sm:grid-cols-2">
         {years.map((year) => {

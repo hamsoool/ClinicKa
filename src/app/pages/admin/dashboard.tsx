@@ -12,6 +12,7 @@ import {
   UserCog,
   Users,
 } from 'lucide-react';
+import PortalPageIntro from '../../components/portal-page-intro';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { useAuth } from '../../lib/auth';
 import { useAdminAnalyticsQuery, useAdminStaffUsersQuery, useAdminSubmissionsQuery, useAdminUserAccountsQuery } from './admin-workflow-query';
@@ -220,31 +221,16 @@ export default function AdminDashboard() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
-      <div className="rounded-[1.5rem] border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-8">
-        <div className="flex flex-col gap-5 sm:gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-4">
-            <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
-              <ShieldCheck className="h-4 w-4" />
-              Admin Control Center
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold leading-tight tracking-tight text-on-surface sm:text-3xl">
-                Welcome, {displayName}
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm text-on-surface-variant sm:text-base">
-                Monitor platform health, manage user access, and keep clinic operations aligned from one shared administrative workspace.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs text-on-surface-variant sm:gap-3 sm:text-sm">
-              <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Total submissions: <span className="font-semibold text-on-surface">{analytics?.totalSubmissions || 0}</span>
-              </span>
-              <span className="rounded-full bg-surface-container px-3 py-1.5">
-                Approved records: <span className="font-semibold text-on-surface">{analytics?.approvedRecords || 0}</span>
-              </span>
-            </div>
+      <PortalPageIntro
+        eyebrow={(
+          <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
+            <ShieldCheck className="h-4 w-4" />
+            Admin Control Center
           </div>
-
+        )}
+        title={`Welcome, ${displayName}`}
+        description="Monitor platform health, manage user access, and keep clinic operations aligned from one shared administrative workspace."
+        actions={(
           <div className="grid gap-3 min-[440px]:grid-cols-2 lg:min-w-[24rem]">
             <button
               onClick={() => navigate('/admin/users')}
@@ -277,8 +263,17 @@ export default function AdminDashboard() {
               </div>
             </button>
           </div>
+        )}
+      >
+        <div className="flex flex-wrap gap-2 text-xs text-on-surface-variant sm:gap-3 sm:text-sm">
+          <span className="rounded-full bg-surface-container px-3 py-1.5">
+            Total submissions: <span className="font-semibold text-on-surface">{analytics?.totalSubmissions || 0}</span>
+          </span>
+          <span className="rounded-full bg-surface-container px-3 py-1.5">
+            Approved records: <span className="font-semibold text-on-surface">{analytics?.approvedRecords || 0}</span>
+          </span>
         </div>
-      </div>
+      </PortalPageIntro>
 
       <div className="grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         {summaryCards.map((card) => {
