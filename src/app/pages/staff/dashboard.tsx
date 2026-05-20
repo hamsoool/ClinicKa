@@ -9,14 +9,42 @@ import {
   FileWarning,
   ShieldCheck,
 } from 'lucide-react';
+import {
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  type TooltipProps,
+} from 'recharts';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getRoleLabel } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import type { SubmissionSummaryRecord } from '../../lib/record-types';
+import type { DepartmentBreakdownItem, SubmissionSummaryRecord } from '../../lib/record-types';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import { useStaffDashboardOverviewQuery } from './staff-workflow-query';
+
+const DEPARTMENT_COLORS: Record<string, string> = {
+  CCS: '#f97316',
+  CBA: '#facc15',
+  CEAS: '#3b82f6',
+  CHTM: '#ec4899',
+  CAHS: '#ef4444',
+};
+
+type DepartmentChartDatum = DepartmentBreakdownItem & {
+  fill: string;
+  share: number;
+};
+
+type PieChartSegment = {
+  department: string;
+  count: number;
+  fill: string;
+  share: number;
+};
 
 function formatEmailName(email?: string | null) {
   if (!email) return '';
@@ -97,6 +125,23 @@ function getActiveReviewerMessage(
   }
 
   return 'Assigned reviewer: Another clinic staff member';
+}
+
+function DepartmentBreakdownTooltip({ active, payload }: TooltipProps<number, string>) {
+  const entry = payload?.[0]?.payload as DepartmentChartDatum | undefined;
+
+  if (!active || !entry) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 shadow-sm">
+      <p className="text-sm font-semibold text-on-surface">{entry.department}</p>
+      <p className="mt-1 text-xs text-on-surface-variant">
+        {entry.count} records ({entry.share.toFixed(1)}%)
+      </p>
+    </div>
+  );
 }
 
 export default function StaffDashboard() {
@@ -223,6 +268,26 @@ export default function StaffDashboard() {
       href: '/staff/records',
     },
   ] as const;
+  const departmentChartData = (overview.departmentBreakdown || []).map((item) => ({
+    ...item,
+    fill: DEPARTMENT_COLORS[item.department] || '#94a3b8',
+  }));
+  const departmentTotal = departmentChartData.reduce((total, item) => total + item.count, 0);
+  const departmentBreakdown = departmentChartData.map((item) => ({
+    ...item,
+    share: departmentTotal > 0 ? (item.count / departmentTotal) * 100 : 0,
+  }));
+  const hasDepartmentData = departmentTotal > 0;
+  const pieChartSegments: PieChartSegment[] = hasDepartmentData
+    ? departmentBreakdown
+    : [
+        {
+          department: 'No data',
+          count: 1,
+          fill: 'rgba(148, 163, 184, 0.22)',
+          share: 0,
+        },
+      ];
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8">
@@ -380,25 +445,69 @@ export default function StaffDashboard() {
 
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-6">
-            <h2 className="text-lg font-semibold text-on-surface">Today&apos;s Focus</h2>
+            <h2 className="text-lg font-semibold text-on-surface">Report Graph</h2>
             <p className="mt-1 text-sm text-on-surface-variant">
-              Suggested order to reduce missed steps and backlogs.
+              Department distribution across submitted clinic records.
             </p>
           </div>
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-amber-200/60 bg-amber-50/70 p-4">
-              <p className="text-sm font-semibold text-amber-900">1. Review pending first</p>
-              <p className="mt-1 text-sm text-amber-800">{pendingQueue.length} records are waiting for first review.</p>
+          <div className="space-y-4">
+            <div className="relative h-64 rounded-2xl border border-dashed border-outline-variant/30 bg-surface-container-low/40">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieChartSegments}
+                    dataKey="count"
+                    nameKey="department"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="58%"
+                    outerRadius="82%"
+                    paddingAngle={hasDepartmentData ? 3 : 0}
+                    strokeWidth={0}
+                    isAnimationActive={false}
+                  >
+                    {pieChartSegments.map((entry) => (
+                      <Cell key={entry.department} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  {hasDepartmentData ? <Tooltip content={<DepartmentBreakdownTooltip />} /> : null}
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-3xl font-bold leading-none text-on-surface">{departmentTotal}</p>
+                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-on-surface-variant">
+                  Records
+                </p>
+                {!hasDepartmentData ? (
+                  <p className="mt-2 max-w-[12rem] text-center text-xs text-on-surface-variant">
+                    Waiting for department data
+                  </p>
+                ) : null}
+              </div>
             </div>
-            <div className="rounded-2xl border border-orange-200/60 bg-orange-50/70 p-4">
-              <p className="text-sm font-semibold text-orange-900">2. Follow up returned and resubmitted</p>
-              <p className="mt-1 text-sm text-orange-800">
-                {(overview.returnedRecords || 0) + (overview.resubmittedRecords || 0)} records need correction checks.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-sky-200/60 bg-sky-50/70 p-4">
-              <p className="text-sm font-semibold text-sky-900">3. Continue active reviews</p>
-              <p className="mt-1 text-sm text-sky-800">{overview.inReviewRecords || 0} records are currently in progress.</p>
+
+            <div className="grid gap-2">
+              {departmentBreakdown.map((item) => (
+                <div
+                  key={item.department}
+                  className="flex items-center justify-between rounded-2xl border border-outline-variant/20 bg-surface-container-low px-3 py-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: item.fill }}
+                      aria-hidden="true"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-on-surface">{item.department}</p>
+                      <p className="text-xs text-on-surface-variant">
+                        {hasDepartmentData ? `${item.share.toFixed(1)}% of department records` : '0 records'}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-sm font-semibold text-on-surface">{item.count}</p>
+                </div>
+              ))}
             </div>
             <button
               type="button"

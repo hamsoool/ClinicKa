@@ -173,6 +173,11 @@ export type ApprovedStudentSummary = {
   records: ApprovedStudentRecordSummary[];
 };
 
+export type DepartmentBreakdownItem = {
+  department: string;
+  count: number;
+};
+
 export type StaffDashboardOverview = {
   totalSubmissions: number;
   approvedRecords: number;
@@ -187,4 +192,5 @@ export type StaffDashboardOverview = {
   inReviewQueueItems: SubmissionSummaryRecord[];
   returnedQueueItems: SubmissionSummaryRecord[];
   resubmittedQueueItems: SubmissionSummaryRecord[];
+  departmentBreakdown: DepartmentBreakdownItem[];
 };
