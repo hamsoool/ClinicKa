@@ -1828,7 +1828,7 @@ async function listProfileAssetsFromStorage(studentId: string, token?: string | 
   const targetStudentId = String(studentId || '').trim();
   if (!targetStudentId || !supabaseUrl || !publicAnonKey) return [] as any[];
 
-  const prefix = `profiles/${targetStudentId}/`;
+  const prefixes = [`${targetStudentId}/`, `profiles/${targetStudentId}/`];
   const assetConfigs = [
     { type: 'photo', bucket: 'profile' },
     { type: 'signature', bucket: 'student_signature' },
@@ -1837,48 +1837,54 @@ async function listProfileAssetsFromStorage(studentId: string, token?: string | 
   try {
     const results = await Promise.all(
       assetConfigs.map(async ({ type, bucket }) => {
-        const response = await fetch(
-          `${supabaseUrl}/storage/v1/object/list/${bucket}`,
-          {
-            method: 'POST',
-            headers: {
-              apikey: publicAnonKey,
-              Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              prefix,
-              limit: 20,
-              offset: 0,
-            }),
-          },
+        const rowsByPrefix = await Promise.all(
+          prefixes.map(async (prefix) => {
+            const response = await fetch(
+              `${supabaseUrl}/storage/v1/object/list/${bucket}`,
+              {
+                method: 'POST',
+                headers: {
+                  apikey: publicAnonKey,
+                  Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  prefix,
+                  limit: 50,
+                  offset: 0,
+                }),
+              },
+            );
+
+            const payload = await response.json().catch(() => []);
+            if (!response.ok || !Array.isArray(payload)) return [] as any[];
+
+            const mapped = await Promise.all(
+              payload
+                .filter((item: any) => item?.name)
+                .map(async (item: any) => {
+                  const storagePath = `${prefix}${String(item.name)}`;
+                  const signedUrl = await createSignedStorageUrl(storagePath, token, bucket);
+                  return {
+                    id: `profile-${bucket}-${targetStudentId}-${prefix}-${item.name}`,
+                    submission_id: null,
+                    type,
+                    file_name: String(item.name),
+                    storage_bucket: bucket,
+                    storage_path: storagePath,
+                    mime_type: null,
+                    uploaded_at: String(item?.updated_at || item?.created_at || item?.last_accessed_at || new Date().toISOString()),
+                    uploaded_by: null,
+                    url: signedUrl || null,
+                  };
+                }),
+            );
+
+            return mapped.filter((item) => item.url);
+          }),
         );
 
-        const payload = await response.json().catch(() => []);
-        if (!response.ok || !Array.isArray(payload)) return [] as any[];
-
-        const mapped = await Promise.all(
-          payload
-            .filter((item: any) => item?.name)
-            .map(async (item: any) => {
-              const storagePath = `${prefix}${String(item.name)}`;
-              const signedUrl = await createSignedStorageUrl(storagePath, token, bucket);
-              return {
-                id: `profile-${bucket}-${targetStudentId}-${item.name}`,
-                submission_id: null,
-                type,
-                file_name: String(item.name),
-                storage_bucket: bucket,
-                storage_path: storagePath,
-                mime_type: null,
-                uploaded_at: new Date().toISOString(),
-                uploaded_by: null,
-                url: signedUrl || null,
-              };
-            }),
-        );
-
-        return mapped.filter((item) => item.url);
+        return rowsByPrefix.flat();
       }),
     );
 
@@ -3656,7 +3662,7 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
 }
 
 export async function uploadStudentProfileAsset(file: File, studentId: string, fileType: 'photo' | 'signature') {
-    const targetStudentId = String(studentId || '').trim();
+  const targetStudentId = String(studentId || '').trim();
   if (!targetStudentId) {
     throw new Error('Student ID is required to upload profile assets.');
   }
@@ -3667,20 +3673,104 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
     throw new Error('You must be signed in to upload files.');
   }
 
-  const objectName = buildStorageObjectName(fileType, file);
-  const storagePath = `profiles/${targetStudentId}/${objectName}`;
-  const uploadResponse = await fetch(
-    `${supabaseUrl}/storage/v1/object/${storageBucket}/${storagePath}`,
-    {
+  const objectName = fileType;
+  const storagePrefix = `${targetStudentId}/`;
+  const storagePath = `${storagePrefix}${objectName}`;
+
+  try {
+    const prefixesToScan = [storagePrefix, `profiles/${targetStudentId}/`];
+    const removablePaths: string[] = [];
+
+    for (const prefix of prefixesToScan) {
+      const listResponse = await fetch(
+        `${supabaseUrl}/storage/v1/object/list/${storageBucket}`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: publicAnonKey,
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prefix,
+            limit: 100,
+            offset: 0,
+            sortBy: { column: 'name', order: 'desc' },
+          }),
+        },
+      );
+
+      const listed = await listResponse.json().catch(() => []);
+      const matched = (Array.isArray(listed) ? listed : [])
+        .map((item) => String(item?.name || '').trim())
+        .filter((name) => name === fileType || name.startsWith(`${fileType}.`) || name.startsWith(`${fileType}_`))
+        .map((name) => `${prefix}${name}`);
+      removablePaths.push(...matched);
+    }
+
+    if (removablePaths.length) {
+      const uniquePaths = [...new Set(removablePaths)].filter((path) => path !== storagePath);
+      await Promise.all(
+        uniquePaths.map((targetPath) =>
+          fetch(`${supabaseUrl}/storage/v1/object/${storageBucket}/${targetPath}`, {
+            method: 'DELETE',
+            headers: {
+              apikey: publicAnonKey,
+              Authorization: `Bearer ${token}`,
+            },
+          }).catch(() => null),
+        ),
+      );
+    }
+  } catch {
+    // Ignore cleanup failures; upload still proceeds and latest metadata wins.
+  }
+
+  try {
+    const legacyPrefixes = [`profiles/${targetStudentId}/${fileType}`, `${targetStudentId}/${fileType}`];
+    await Promise.all(
+      legacyPrefixes.map((path) =>
+        fetch(`${supabaseUrl}/storage/v1/object/${storageBucket}/${path}`, {
+          method: 'DELETE',
+          headers: {
+            apikey: publicAnonKey,
+            Authorization: `Bearer ${token}`,
+          },
+        }).catch(() => null),
+      ),
+    );
+  } catch {
+    // Ignore best-effort legacy cleanup
+  }
+
+  const uploadWithPath = async (path: string) =>
+    fetch(`${supabaseUrl}/storage/v1/object/${storageBucket}/${path}`, {
       method: 'POST',
       headers: {
         apikey: publicAnonKey,
         Authorization: `Bearer ${token}`,
         'Content-Type': file.type || 'application/octet-stream',
+        'x-upsert': 'true',
       },
       body: file,
-    },
-  );
+    });
+
+  let finalStoragePath = storagePath;
+  let uploadResponse = await uploadWithPath(finalStoragePath);
+
+  if (!uploadResponse.ok) {
+    const failedRaw = await uploadResponse.text().catch(() => '');
+    const lower = failedRaw.toLowerCase();
+    const isRlsError = lower.includes('row-level security') || lower.includes('rls');
+    if (isRlsError) {
+      const fallbackObjectName = buildStorageObjectName(fileType, file);
+      finalStoragePath = `${targetStudentId}/${fallbackObjectName}`;
+      uploadResponse = await uploadWithPath(finalStoragePath);
+    } else {
+      // Recreate response-like payload behavior below
+      uploadResponse = new Response(failedRaw, { status: uploadResponse.status, statusText: uploadResponse.statusText });
+    }
+  }
 
   if (!uploadResponse.ok) {
     const raw = await uploadResponse.text().catch(() => '');
@@ -3700,7 +3790,7 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
   }
 
   const signedResponse = await fetch(
-    `${supabaseUrl}/storage/v1/object/sign/${storageBucket}/${storagePath}`,
+    `${supabaseUrl}/storage/v1/object/sign/${storageBucket}/${finalStoragePath}`,
     {
       method: 'POST',
       headers: {
@@ -3738,11 +3828,22 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
           mime_type: file.type,
           url: null,
           storage_bucket: storageBucket,
-          storage_path: storagePath,
+          storage_path: finalStoragePath,
           uploaded_by: authUser.id,
         }),
       },
     );
+
+    await restRequest(
+      'files',
+      `uploaded_by=eq.${encodeURIComponent(authUser.id)}&submission_id=is.null&type=eq.${encodeURIComponent(fileType)}&storage_path=like.${encodeURIComponent(`${targetStudentId}/${fileType}%`)}&storage_path=neq.${encodeURIComponent(finalStoragePath)}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Prefer: 'return=minimal',
+        },
+      },
+    ).catch(() => {});
   } catch {
     // Storage is the source of truth for profile assets; metadata is best-effort
     // so older schemas can still function.
@@ -3751,7 +3852,7 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
   return {
     success: true as const,
     url: fileUrl || undefined,
-    fileName: storagePath,
+    fileName: finalStoragePath,
   };
 }
 
