@@ -68,7 +68,8 @@ type RouteSkeletonVariant =
   | 'portal-shell'
   | 'portal-page'
   | 'portal-table'
-  | 'portal-certificate';
+  | 'portal-certificate'
+  | 'portal-year-selection';
 
 function renderSkeleton(variant: RouteSkeletonVariant) {
   if (variant === 'marketing' || variant === 'auth') {
@@ -85,6 +86,10 @@ function renderSkeleton(variant: RouteSkeletonVariant) {
 
   if (variant === 'portal-certificate') {
     return <PortalPageSkeleton variant="certificate" />;
+  }
+
+  if (variant === 'portal-year-selection') {
+    return <PortalPageSkeleton variant="year-selection" />;
   }
 
   return <PortalPageSkeleton variant="dashboard" />;
@@ -133,7 +138,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: withSuspense(StudentDashboard) },
       { path: "records", element: <Navigate to="/student/clearance?tab=history" replace /> },
-      { path: "year-selection", element: withSuspense(StudentYearSelection) },
+      { path: "year-selection", element: withSuspense(StudentYearSelection, 'portal-year-selection') },
       { path: "privacy-waiver/:year", element: withSuspense(StudentPrivacyWaiver) },
       { path: "medical-form/:year", element: withSuspense(StudentMedicalForm) },
       { path: "announcements", element: withSuspense(StudentAnnouncements) },

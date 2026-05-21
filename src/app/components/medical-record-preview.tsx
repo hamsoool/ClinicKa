@@ -95,7 +95,7 @@ const S = {
     fontSize: '10.5px',
   },
   line: {
-    borderBottom: '1px solid #000',
+    borderBottom: '1.2px solid #000',
     minWidth: '30px',
     height: '18px',
     display: 'inline-flex',
@@ -117,11 +117,13 @@ const S = {
   table: {
     width: '100%',
     borderCollapse: 'collapse' as const,
+    tableLayout: 'fixed' as const,
     marginBottom: '8px',
     fontSize: '10px',
+    border: '1.5px solid #000',
   },
   th: {
-    border: '1px solid #000',
+    border: '1.5px solid #000',
     padding: '3px 5px',
     verticalAlign: 'middle' as const,
     fontWeight: 'bold' as const,
@@ -129,7 +131,7 @@ const S = {
     textAlign: 'left' as const,
   },
   td: {
-    border: '1px solid #000',
+    border: '1.5px solid #000',
     padding: '4px 5px',
     verticalAlign: 'middle' as const,
     lineHeight: '1.35',
@@ -237,16 +239,28 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
       return (
         <span
           style={{
+            position: 'relative',
             display: 'inline-block',
-            borderBottom: '1px solid #000',
             minWidth,
-            lineHeight: '1.1',
-            padding: '0 1px',
+            height: '14px',
+            lineHeight: '10px',
+            padding: '0 1px 3px 1px',
             verticalAlign: 'baseline',
             whiteSpace: 'nowrap',
+            boxSizing: 'border-box',
           }}
         >
-          {text || '\u00A0'}
+          <span style={{ position: 'relative', zIndex: 1 }}>{text || '\u00A0'}</span>
+          <span
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: -1,
+              borderBottom: '1.2px solid #000',
+              zIndex: 0,
+            }}
+          />
         </span>
       );
     };
@@ -479,7 +493,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
         <div
           style={{ fontWeight: 'bold', margin: '8px 0 5px 0', fontSize: '10.5px' }}
         >
-          • MEDICAL HISTORY: place a CHECK (∁E if you have or had.
+          • MEDICAL HISTORY: place a CHECK (✔) if you have or had.
         </div>
         <div
           style={{
@@ -569,7 +583,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <div style={{ ...S.line, minWidth: '160px' }}>
             {record.emergencyContact?.name || ''}
           </div>
-          <span style={{ ...S.fieldLabel, marginLeft: '14px' }}>Relationship:</span>
+          <span style={{ ...S.fieldLabel, marginLeft: '95px' }}>Relationship:</span>
           <div style={{ ...S.line, minWidth: '140px' }}>
             {record.emergencyContact?.relationship || ''}
           </div>
@@ -610,9 +624,10 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <div
             style={{
               display: 'inline-block',
-              borderBottom: '1px solid #000',
+              borderBottom: '1.2px solid #000',
               minWidth: '180px',
               minHeight: '26px',
+              textAlign: 'center',
             }}
           >
             {signatureUrl ? (
@@ -620,10 +635,13 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                 src={signatureUrl}
                 alt="Student signature"
                 style={{
-                  width: '170px',
-                  height: '24px',
+                  maxWidth: '170px',
+                  maxHeight: '24px',
+                  width: 'auto',
+                  height: 'auto',
                   objectFit: 'contain',
                   verticalAlign: 'middle',
+                  display: 'inline-block',
                 }}
               />
             ) : (
@@ -828,6 +846,3 @@ MedicalRecordPreviewBase.displayName = 'MedicalRecordPreviewBase';
 const MedicalRecordPreview = memo(MedicalRecordPreviewBase);
 MedicalRecordPreview.displayName = 'MedicalRecordPreview';
 export default MedicalRecordPreview;
-
-
-

@@ -1,42 +1,48 @@
 import { forwardRef, memo } from 'react';
 import type { SubmissionRecord } from '../lib/record-types';
 
-/* ───────── inline styles ───────── */
 const S = {
   page: {
     fontFamily: "'Arial', 'Helvetica', sans-serif",
-    fontSize: '10px',
-    lineHeight: '1.3',
+    fontSize: '11px',
+    lineHeight: '1.4',
     color: '#000',
     background: '#fff',
-    width: '100%',
-    maxWidth: '794px',
+    width: '794px',
+    height: '1123px',
     margin: '0 auto',
-    padding: '12px 24px',
+    padding: '10px 18px 10px 18px',
     boxSizing: 'border-box' as const,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '6px',
   },
   copy: {
     border: '1px solid #555',
-    padding: '10px 14px',
-    marginBottom: '8px',
+    padding: '12px 16px 14px 16px',
     position: 'relative' as const,
     pageBreakInside: 'avoid' as const,
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    boxSizing: 'border-box' as const,
   },
   schoolName: {
-    fontSize: '15px',
+    fontSize: '16px',
     fontWeight: 'bold' as const,
     letterSpacing: '2px',
     marginBottom: '1px',
   },
   schoolAddr: {
-    fontSize: '7.5px',
+    fontSize: '8px',
     color: '#222',
     marginBottom: '1px',
+    lineHeight: '1.5',
   },
   bodyText: {
-    fontSize: '9px',
-    lineHeight: '1.7',
-    marginBottom: '3px',
+    fontSize: '10.5px',
+    lineHeight: '1.9',
+    marginBottom: '0px',
   },
   underlineField: (minW = '100px') => ({
     borderBottom: '1px solid #000',
@@ -44,36 +50,35 @@ const S = {
     minWidth: minW,
     textAlign: 'center' as const,
     paddingBottom: '1px',
-    fontSize: '9px',
+    fontSize: '10.5px',
   }),
   checkbox: (checked: boolean) => ({
     display: 'inline-block' as const,
-    width: '9px',
-    height: '9px',
+    width: '10px',
+    height: '10px',
     border: '1px solid #000',
     marginRight: '2px',
     verticalAlign: 'middle' as const,
     background: checked ? '#000' : '#fff',
-    fontSize: '6px',
+    fontSize: '7px',
     textAlign: 'center' as const,
-    lineHeight: '9px',
+    lineHeight: '10px',
     color: '#fff',
     flexShrink: 0,
   }),
   sigBlock: {
     textAlign: 'right' as const,
-    fontSize: '9px',
+    fontSize: '10.5px',
   },
   sigName: {
     fontWeight: 'bold' as const,
-    fontSize: '10px',
+    fontSize: '11px',
   },
 };
 
 const COPY_TYPES = ["STUDENT'S COPY", "COORDINATOR'S COPY", "REGISTRAR'S COPY"] as const;
 
-/* ───────── Logos ───────── */
-function GordonCollegeLogo({ size = 36 }: { size?: number }) {
+function GordonCollegeLogo({ size = 44 }: { size?: number }) {
   return (
     <img
       src="/gordon-college-logo.png"
@@ -83,7 +88,7 @@ function GordonCollegeLogo({ size = 36 }: { size?: number }) {
   );
 }
 
-function AcademicAffairsLogo({ size = 36 }: { size?: number }) {
+function AcademicAffairsLogo({ size = 44 }: { size?: number }) {
   return (
     <img
       src="/gordon_college_academicaffairs.png"
@@ -93,7 +98,7 @@ function AcademicAffairsLogo({ size = 36 }: { size?: number }) {
   );
 }
 
-function HSULogo({ size = 36 }: { size?: number }) {
+function HSULogo({ size = 44 }: { size?: number }) {
   return (
     <img
       src="/gordonhsc.png"
@@ -103,7 +108,6 @@ function HSULogo({ size = 36 }: { size?: number }) {
   );
 }
 
-/* ───────── single copy ───────── */
 function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyType: string }) {
   const cl = record.clearanceInfo || {};
   const purpose = cl.purpose || 'enrolment';
@@ -118,71 +122,76 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
 
   return (
     <div style={S.copy}>
-      {/* HEADER */}
-      <div
-        style={{
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '8px',
-        }}
-      >
-        <div style={{ display: 'flex', gap: '2px', flexShrink: 0, paddingTop: '2px' }}>
-          <GordonCollegeLogo size={34} />
-          <AcademicAffairsLogo size={34} />
+
+      {/* HEADER — original logo positions: Gordon+Academic LEFT, HSU RIGHT */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+
+        {/* LEFT: Gordon + Academic logos */}
+        <div style={{ display: 'flex', gap: '4px', flexShrink: 0, paddingTop: '2px' }}>
+          <GordonCollegeLogo size={44} />
+          <AcademicAffairsLogo size={44} />
         </div>
 
+        {/* CENTER: school info */}
         <div style={{ flex: 1, textAlign: 'center' }}>
           <div style={S.schoolName}>GORDON COLLEGE</div>
           <div style={S.schoolAddr}>
             Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City
           </div>
           <div style={S.schoolAddr}>Tel. No.: (047) 222-4080</div>
-
-          <div style={{ marginTop: '3px' }}>
-            <div style={{ fontSize: '8.5px', fontWeight: 'bold' }}>
+          <div style={{ marginTop: '4px' }}>
+            <div style={{ fontSize: '9px', fontWeight: 'bold' }}>
               Office of Student Welfare and Services
             </div>
-            <div style={{ fontSize: '8.5px', fontWeight: 'bold' }}>
+            <div style={{ fontSize: '9px', fontWeight: 'bold' }}>
               Health Services Unit
             </div>
           </div>
         </div>
 
-        <div style={{ flexShrink: 0, paddingTop: '2px' }}>
-          <HSULogo size={34} />
-        </div>
-
+        {/* RIGHT: HSU logo + copy-type badge */}
         <div
           style={{
-            position: 'absolute',
-            top: '26px',
-            right: '42px',
-            border: '1.5px solid #000',
-            padding: '2px 6px',
-            fontSize: '7.5px',
-            fontWeight: 'bold',
-            whiteSpace: 'nowrap',
-            background: '#fff',
+            flexShrink: 0,
+            paddingTop: '2px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '3px',
+            minWidth: '60px',
           }}
         >
-          {copyType}
+          <HSULogo size={44} />
+          <div
+            style={{
+              border: '1.5px solid #000',
+              padding: '2px 5px',
+              fontSize: '7px',
+              fontWeight: 'bold',
+              whiteSpace: 'nowrap',
+              background: '#fff',
+              lineHeight: 1,
+              textAlign: 'center',
+            }}
+          >
+            {copyType}
+          </div>
         </div>
       </div>
 
       {/* TITLE */}
-      <div style={{ textAlign: 'center', margin: '5px 0 4px' }}>
+      <div style={{ textAlign: 'center', margin: '10px 0 8px' }}>
         {'MEDICALCERTIFICATE'.split('').map((ch, i) => (
           <span
             key={i}
             style={{
               display: 'inline-block',
-              fontSize: '11.5px',
+              fontSize: '13px',
               fontWeight: 'bold',
               borderBottom: '1.5px solid #000',
               paddingBottom: '1px',
-              marginRight: '2px',
-              minWidth: '8px',
+              marginRight: '2.5px',
+              minWidth: '9px',
               textAlign: 'center',
             }}
           >
@@ -191,126 +200,111 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
         ))}
       </div>
 
-      {/* BODY */}
-      <div style={S.bodyText}>
-        This is to certify that Mr/ Ms{' '}
-        <span style={S.underlineField('140px')}>
-          {record.firstName} {record.middleInitial ? record.middleInitial + '. ' : ''}
-          {record.lastName}
-        </span>{' '}
-        Age <span style={S.underlineField('28px')}>{record.age || ''}</span> Sex{' '}
-        <span style={S.underlineField('18px')}>
-          {record.sex === 'female' ? 'F' : 'M'}
-        </span>{' '}
-        has submitted all required medical requirements and upon physical examination.
-      </div>
+      {/* CONTENT — grows to fill available space, sections spread out */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
 
-      {/* FINDINGS */}
-      <div style={{ ...S.bodyText, display: 'flex', gap: '4px', alignItems: 'flex-start' }}>
-        <span
-          style={{
-            fontWeight: 'bold',
-            whiteSpace: 'nowrap',
-            marginRight: '4px',
-          }}
-        >
-          Findings:
-        </span>
+        {/* TOP CONTENT */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
-            <span style={S.checkbox(cl.findingsNormal === true)}>
-              {cl.findingsNormal ? '?' : ''}
-            </span>
-            <span>Essentially normal physical findings at the time of evaluation</span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={S.checkbox(!!cl.diagnosis)}>{cl.diagnosis ? '?' : ''}</span>
-            <span>Diagnosis:</span>
-            <span style={{ ...S.underlineField('550px'), width: '550px' }}>
-              {cl.diagnosis || ''}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* REMARKS + SIGNATURE */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: '8px',
-          marginTop: '2px',
-        }}
-      >
-        <div style={{ flex: 1, fontSize: '9px' }}>
-          <div style={{ marginBottom: '2px' }}>
-            <span style={{ fontWeight: 'bold' }}>Remarks: </span>
-            <span style={S.underlineField('400px')}>{cl.remarks || ''}</span>
-          </div>
-
-          <div style={{ marginBottom: '2px' }}>
-            This was issued on{' '}
-            <span style={S.underlineField('90px')}>
-              {cl.issuedDate
-                ? new Date(cl.issuedDate).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })
-                : ''}
+          {/* Certification line */}
+          <div style={S.bodyText}>
+            This is to certify that Mr/ Ms{' '}
+            <span style={S.underlineField('150px')}>
+              {record.firstName} {record.middleInitial ? record.middleInitial + '. ' : ''}
+              {record.lastName}
             </span>{' '}
-            {remarksEnding}
+            Age <span style={S.underlineField('30px')}>{record.age || ''}</span> Sex{' '}
+            <span style={S.underlineField('20px')}>
+              {record.sex === 'female' ? 'F' : 'M'}
+            </span>{' '}
+            has submitted all required medical requirements and upon physical examination.
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginBottom: '6px',
-              flexWrap: 'wrap',
-            }}
-          >
+          {/* Findings */}
+          <div style={{ fontSize: '10.5px', lineHeight: '2', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+            <span style={{ fontWeight: 'bold', whiteSpace: 'nowrap', marginRight: '4px' }}>
+              Findings:
+            </span>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}>
+                <span style={S.checkbox(cl.findingsNormal === true)}>
+                  {cl.findingsNormal ? '?' : ''}
+                </span>
+                <span>Essentially normal physical findings at the time of evaluation</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={S.checkbox(!!cl.diagnosis)}>{cl.diagnosis ? '?' : ''}</span>
+                <span>Diagnosis:</span>
+                <span style={{ ...S.underlineField('490px'), width: '490px' }}>
+                  {cl.diagnosis || ''}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Remarks */}
+          <div style={{ fontSize: '10.5px', lineHeight: '2', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div>
+              <span style={{ fontWeight: 'bold' }}>Remarks: </span>
+              <span style={S.underlineField('550px')}>{cl.remarks || ''}</span>
+            </div>
+            <div>
+              This was issued on{' '}
+              <span style={S.underlineField('100px')}>
+                {cl.issuedDate
+                  ? new Date(cl.issuedDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })
+                  : ''}
+              </span>{' '}
+              {remarksEnding}
+            </div>
+          </div>
+
+          {/* Purpose */}
+          <div style={{ fontSize: '10.5px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontWeight: 'bold' }}>Purpose:</span>
             <span><span style={S.checkbox(purpose === 'enrolment')}></span> Enrolment</span>
             <span><span style={S.checkbox(purpose === 'ojt')}></span> OJT / Internship</span>
             <span><span style={S.checkbox(purpose === 'rle')}></span> R.L.E</span>
           </div>
+        </div>
 
-          <div style={{ marginTop: '35px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        {/* BOTTOM ROW: Control/Student No. LEFT, Signatory RIGHT */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            gap: '8px',
+            paddingTop: '8px',
+          }}
+        >
+          <div style={{ fontSize: '10.5px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
             <div>
               <span style={{ fontWeight: 'bold' }}>Control No.: </span>
-              <span style={S.underlineField('100px')}>{cl.controlNo || ''}</span>
+              <span style={S.underlineField('120px')}>{cl.controlNo || ''}</span>
             </div>
             <div>
               <span style={{ fontWeight: 'bold' }}>Student No.: </span>
-              <span style={S.underlineField('100px')}>{record.studentId}</span>
+              <span style={S.underlineField('120px')}>{record.studentId}</span>
             </div>
+          </div>
+
+          <div style={{ ...S.sigBlock, flexShrink: 0, minWidth: '190px' }}>
+            <div style={S.sigName}>{signatoryName}</div>
+            <div>{signatoryTitle}</div>
+            <div>License No. 008455</div>
           </div>
         </div>
 
-        <div
-          style={{
-            ...S.sigBlock,
-            flexShrink: 0,
-            alignSelf: 'flex-end',
-            marginBottom: '6px',
-            minWidth: '180px',
-          }}
-        >
-          <div style={S.sigName}>{signatoryName}</div>
-          <div>{signatoryTitle}</div>
-          <div>License No. 008455</div>
-        </div>
       </div>
     </div>
   );
 }
 
-/* MAIN */
 interface Props {
   record: SubmissionRecord;
 }

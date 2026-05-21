@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router';
 import { ArrowLeft, ArrowRight, GraduationCap, Lock } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
-import StudentPageIntro from '../../components/student-page-intro';
 import { useStudentRecordsQuery } from './student-records-query';
 
 const years = [
@@ -50,9 +49,8 @@ export default function StudentYearSelection() {
     });
     return map;
   }, [records]);
-
   if (isLoading && studentId) {
-    return <PortalPageSkeleton variant="table" />;
+    return <PortalPageSkeleton variant="year-selection" />;
   }
 
   return (
@@ -66,12 +64,7 @@ export default function StudentYearSelection() {
         Back to Dashboard
       </button>
 
-      <StudentPageIntro
-        title="Select Year Level"
-        description="Choose the academic year corresponding to the medical records you are preparing to submit. Your progress is automatically saved."
-      />
-
-      <div className="grid gap-3 sm:grid-cols-2 sm:gap-6 xl:grid-cols-4">
+      <div className="mx-auto grid max-w-[78rem] gap-5 md:grid-cols-2 xl:gap-6">
         {years.map((year) => {
           const isFutureYearLocked = year.level > studentYearLevel;
           const latestYearStatus = latestByYear.get(year.level)?.status || '';
@@ -79,89 +72,126 @@ export default function StudentYearSelection() {
           const isPendingLocked = latestYearStatus === 'pending' || latestYearStatus === 'in_review' || latestYearStatus === 'resubmitted';
           const isInReview = latestYearStatus === 'in_review';
           const isReturned = latestYearStatus === 'returned';
-          const isLocked = isFutureYearLocked || isApprovedLocked || isPendingLocked;
+          const isLocked = isFutureYearLocked || isPendingLocked;
           const isCurrent = year.level === studentYearLevel;
+          const destination = isApprovedLocked
+            ? `/student/clearance?tab=medical-clearance&year=${year.level}`
+            : `/student/privacy-waiver/${year.level}`;
+          const cardStatusLabel = isApprovedLocked
+            ? 'Approved'
+            : isPendingLocked
+              ? isInReview
+                ? 'In Review'
+                : 'Pending Review'
+              : isReturned
+                ? 'Returned'
+                : isFutureYearLocked
+                  ? 'Locked'
+                : isCurrent
+                  ? 'Current Year'
+                  : 'Available';
+          const cardHelperText = isApprovedLocked
+            ? 'Already approved. Further submissions are locked.'
+            : isPendingLocked
+              ? 'Submission is under review. Please wait for clinic feedback.'
+              : isReturned
+                ? 'Returned by clinic staff. You may edit and resubmit.'
+                : isFutureYearLocked
+                  ? 'This year is not yet available.'
+                  : year.description;
+          const statusClasses = isApprovedLocked
+            ? 'bg-primary-container/20 text-on-primary-container'
+            : isPendingLocked
+              ? isInReview
+                ? 'bg-sky-100 text-sky-800'
+                : 'bg-amber-100 text-amber-800'
+              : isReturned
+                ? 'bg-error-container/70 text-on-error-container'
+                : isCurrent
+                  ? 'bg-primary/10 text-primary'
+                  : 'bg-surface-variant text-on-surface-variant';
+          const cardClasses = isLocked
+            ? isCurrent
+              ? 'cursor-not-allowed border-primary bg-[#1fbd6b] text-on-surface'
+              : 'cursor-not-allowed border-primary/10 bg-primary/5 text-on-surface-variant'
+            : isCurrent
+              ? 'border-primary bg-[#1fbd6b] text-on-surface hover:border-primary/90 hover:bg-[#19b463]'
+              : 'border-primary/15 bg-primary/5 text-on-surface hover:border-primary/25 hover:bg-primary/10';
+          const iconClasses = isLocked
+            ? isCurrent
+              ? 'bg-primary/10 text-[#064e2b]'
+              : 'bg-primary/10 text-primary/50'
+            : isCurrent
+              ? 'bg-primary/10 text-[#064e2b]'
+              : 'bg-primary/10 text-primary';
+          const titleClasses = isCurrent ? 'text-[#08331d]' : 'text-primary';
+          const subtitleClasses = isCurrent ? 'text-[#0d5a34]' : 'text-primary/80';
+          const bodyClasses = isCurrent ? 'text-[#0d5a34]' : 'text-primary/75';
+          const actionClasses = isLocked
+            ? isCurrent
+              ? 'text-[#0b6a3d]'
+              : 'text-primary/50'
+            : isCurrent
+              ? 'text-[#064e2b]'
+              : 'text-primary';
 
           return (
             <button
               key={year.level}
               type="button"
               disabled={isLocked}
-              onClick={() => !isLocked && navigate(`/student/privacy-waiver/${year.level}`)}
-              className={`group relative flex min-h-[130px] flex-col items-center justify-center overflow-hidden rounded-[1.25rem] p-5 text-center transition-all duration-300 sm:min-h-[220px] sm:p-8 lg:min-h-[240px] lg:p-10 ${
-                isLocked
-                  ? 'cursor-not-allowed bg-surface-container-high text-on-surface-variant/60'
-                  : isCurrent
-                    ? 'border-2 border-primary bg-primary-container text-on-primary-container shadow-[0_4px_6px_-2px_rgba(16,24,40,0.03)]'
-                    : 'border border-outline-variant bg-surface-container-lowest text-on-surface shadow-[0_4px_6px_-2px_rgba(16,24,40,0.03)] hover:-translate-y-1 hover:shadow-lg'
-              }`}
+              onClick={() => !isLocked && navigate(destination)}
+              className={`group relative flex min-h-[250px] flex-col overflow-hidden rounded-2xl border p-5 text-center shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] transition-all sm:p-6 ${cardClasses}`}
             >
-              {isApprovedLocked ? (
-                <span className="absolute left-0 top-0 rounded-br-xl bg-emerald-600 px-3 py-1 text-xs font-semibold text-white">
-                  Already Approved
-                </span>
-              ) : isPendingLocked ? (
-                <span className={`absolute left-0 top-0 rounded-br-xl px-3 py-1 text-xs font-semibold text-white ${isInReview ? 'bg-sky-600' : 'bg-amber-600'}`}>
-                  {isInReview ? 'In Review' : 'Pending Review'}
-                </span>
-              ) : isReturned ? (
-                <span className="absolute left-0 top-0 rounded-br-xl bg-red-600 px-3 py-1 text-xs font-semibold text-white">
-                  Returned
-                </span>
-              ) : null}
-              {isCurrent ? (
-                <span className="absolute right-0 top-0 rounded-bl-xl bg-primary px-3 py-1 text-xs font-semibold text-white">
-                  Current Year
-                </span>
-              ) : null}
+              <div className="flex items-start justify-between gap-3">
+                <div className={`inline-flex w-fit items-center rounded-b-xl rounded-t-md px-3 py-1 text-xs font-semibold ${statusClasses}`}>
+                  {cardStatusLabel}
+                </div>
+                {isCurrent ? (
+                  <div className="inline-flex w-fit items-center rounded-b-xl rounded-t-md bg-[#0a7f49] px-3 py-1 text-xs font-semibold text-white">
+                    Current Year
+                  </div>
+                ) : isLocked ? (
+                  <span className="text-outline">
+                    <Lock className="h-4 w-4" />
+                  </span>
+                ) : (
+                  <span className="text-primary opacity-70 transition-all group-hover:translate-x-0.5 group-hover:opacity-100">
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
+                )}
+              </div>
 
-              {isLocked ? (
-                <span className={`absolute right-4 text-outline ${isCurrent ? 'top-10' : 'top-4'}`}>
-                  <Lock className="h-4 w-4" />
+              <div className="mt-7 flex h-full flex-col items-center justify-center">
+                <span
+                  className={`mx-auto flex h-12 w-12 items-center justify-center rounded-xl ${iconClasses}`}
+                >
+                  <GraduationCap className="h-6 w-6" />
                 </span>
-              ) : !isCurrent ? (
-                <span className="absolute right-4 top-4 text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                  <ArrowRight className="h-4 w-4" />
-                </span>
-              ) : null}
 
-              <GraduationCap
-                className={`mb-2 h-7 w-7 transition-transform duration-300 group-hover:scale-110 sm:mb-4 sm:h-10 sm:w-10 ${
-                  isLocked
-                    ? 'text-outline'
-                    : isCurrent
-                      ? 'text-on-primary-container'
-                      : 'text-on-surface-variant'
-                }`}
-              />
-              <h3
-                className={`text-xl font-semibold sm:text-2xl ${
-                  isLocked
-                    ? 'text-on-surface-variant'
-                    : isCurrent
-                      ? 'text-on-primary-container'
-                      : 'text-on-surface'
-                }`}
-              >
-                {year.name}
-              </h3>
-              <p
-                className={`mt-1 text-xs sm:mt-2 sm:text-sm ${
-                  isLocked
-                    ? 'text-outline'
-                    : isCurrent
-                      ? 'text-on-primary-container/80'
-                      : 'text-on-surface-variant'
-                }`}
-              >
-                {isApprovedLocked
-                  ? 'Already approved. Further submissions are locked.'
-                  : isPendingLocked
-                    ? 'Submission is under review. Please wait for clinic feedback.'
-                    : isReturned
-                      ? 'Returned by clinic staff. You may edit and resubmit.'
-                      : year.description}
-              </p>
+                <div className="mt-4 space-y-2">
+                  <h3 className={`text-xl font-semibold sm:text-2xl ${titleClasses}`}>{year.name}</h3>
+                  {!isApprovedLocked && !isPendingLocked && !isReturned ? (
+                    <p className={`text-sm font-medium ${subtitleClasses}`}>{year.description}</p>
+                  ) : null}
+                </div>
+
+                <p className={`mt-4 max-w-[18rem] text-sm leading-6 ${bodyClasses}`}>{cardHelperText}</p>
+
+                <div className="mt-auto pt-6">
+                  <p className={`text-sm font-semibold ${actionClasses}`}>
+                    {isPendingLocked
+                      ? 'Unavailable right now'
+                      : isFutureYearLocked
+                        ? 'Unavailable right now'
+                        : isApprovedLocked
+                          ? 'Open clearance form'
+                          : isReturned
+                            ? 'Open returned record'
+                            : 'Continue to waiver'}
+                  </p>
+                </div>
+              </div>
             </button>
           );
         })}

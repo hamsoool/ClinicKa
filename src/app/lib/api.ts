@@ -692,6 +692,34 @@ async function restRequest<T>(
   return apiRequest<T>(path, options);
 }
 
+async function restCount(table: string, query = '', token?: string | null) {
+  if (!supabaseUrl || !publicAnonKey) {
+    throw new Error(PUBLIC_SUPABASE_CONFIG_ERROR);
+  }
+
+  const encodedTable = encodeURIComponent(table);
+  const path = `/rest/v1/${encodedTable}${query ? `?${query}` : ''}`;
+  const resolvedToken = token ?? (await getValidAccessToken());
+  const response = await fetch(`${supabaseUrl}${path}`, {
+    method: 'GET',
+    headers: {
+      apikey: publicAnonKey,
+      Authorization: `Bearer ${resolvedToken || publicAnonKey}`,
+      Prefer: 'count=exact',
+      Range: '0-0',
+    },
+  });
+
+  if (!response.ok) {
+    const raw = await response.text().catch(() => '');
+    throw new Error(raw || `Count request failed (${response.status})`);
+  }
+
+  const contentRange = response.headers.get('content-range') || '';
+  const total = Number.parseInt(contentRange.split('/')[1] || '0', 10);
+  return Number.isFinite(total) ? total : 0;
+}
+
 async function authRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error(PUBLIC_SUPABASE_CONFIG_ERROR);
@@ -1859,28 +1887,36 @@ async function listProfileAssetsFromStorage(studentId: string, token?: string | 
             const payload = await response.json().catch(() => []);
             if (!response.ok || !Array.isArray(payload)) return [] as any[];
 
-            const mapped = await Promise.all(
-              payload
-                .filter((item: any) => item?.name)
-                .map(async (item: any) => {
-                  const storagePath = `${prefix}${String(item.name)}`;
-                  const signedUrl = await createSignedStorageUrl(storagePath, token, bucket);
-                  return {
-                    id: `profile-${bucket}-${targetStudentId}-${prefix}-${item.name}`,
-                    submission_id: null,
-                    type,
-                    file_name: String(item.name),
-                    storage_bucket: bucket,
-                    storage_path: storagePath,
-                    mime_type: null,
-                    uploaded_at: String(item?.updated_at || item?.created_at || item?.last_accessed_at || new Date().toISOString()),
-                    uploaded_by: null,
-                    url: signedUrl || null,
-                  };
-                }),
-            );
+            const candidates = payload
+              .filter((item: any) => item?.name)
+              .filter((item: any) => {
+                const name = String(item?.name || '').trim().toLowerCase();
+                return name === type || name.startsWith(`${type}.`) || name.startsWith(`${type}_`);
+              })
+              .sort((a: any, b: any) => {
+                const aTime = new Date(String(a?.updated_at || a?.created_at || a?.last_accessed_at || 0)).getTime();
+                const bTime = new Date(String(b?.updated_at || b?.created_at || b?.last_accessed_at || 0)).getTime();
+                return bTime - aTime;
+              });
+            const latest = candidates[0];
+            if (!latest?.name) return [] as any[];
 
-            return mapped.filter((item) => item.url);
+            const storagePath = `${prefix}${String(latest.name)}`;
+            const signedUrl = await createSignedStorageUrl(storagePath, token, bucket);
+            if (!signedUrl) return [] as any[];
+
+            return [{
+              id: `profile-${bucket}-${targetStudentId}-${prefix}-${latest.name}`,
+              submission_id: null,
+              type,
+              file_name: String(latest.name),
+              storage_bucket: bucket,
+              storage_path: storagePath,
+              mime_type: null,
+              uploaded_at: String(latest?.updated_at || latest?.created_at || latest?.last_accessed_at || new Date().toISOString()),
+              uploaded_by: null,
+              url: signedUrl,
+            }];
           }),
         );
 
@@ -2989,7 +3025,7 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
   if (resolvedProfileId) {
     assetRows = await restRequest<any[]>(
       'files',
-      `uploaded_by=eq.${encodeURIComponent(resolvedProfileId)}&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc`,
+      `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url&uploaded_by=eq.${encodeURIComponent(resolvedProfileId)}&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc&limit=20`,
     ).catch(() => []);
   }
 
@@ -3031,7 +3067,7 @@ export async function getStudentProfilePhoto(studentId?: string) {
   const token = getAccessToken();
   const photoFiles = await restRequest<any[]>(
     'files',
-    `submission_id=in.(${idList})&type=eq.photo&order=uploaded_at.desc`,
+    `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url&submission_id=in.(${idList})&type=eq.photo&order=uploaded_at.desc&limit=20`,
   );
 
   for (const file of photoFiles || []) {
@@ -3873,21 +3909,20 @@ export async function getAnalytics() {
     }
   }
 
-  const [students, submissionStatuses] = await Promise.all([
-    restRequest<any[]>('students', 'select=student_id'),
-    restRequest<any[]>('submissions', 'select=status'),
+  const [totalStudents, totalSubmissions, pendingRecords, approvedRecords, returnedRecords] = await Promise.all([
+    restCount('students'),
+    restCount('submissions'),
+    restCount('submissions', 'status=in.(pending,in_review)'),
+    restCount('submissions', 'status=eq.approved'),
+    restCount('submissions', 'status=eq.returned'),
   ]);
 
-  const pendingRecords = (submissionStatuses || []).filter((row) => row.status === 'pending' || row.status === 'in_review').length;
-  const approvedRecords = (submissionStatuses || []).filter((row) => row.status === 'approved').length;
-  const returnedRecords = (submissionStatuses || []).filter((row) => row.status === 'returned').length;
-
   return {
-    totalStudents: students?.length || 0,
+    totalStudents,
     pendingRecords,
     approvedRecords,
     returnedRecords,
-    totalSubmissions: submissionStatuses?.length || 0,
+    totalSubmissions,
   };
 }
 

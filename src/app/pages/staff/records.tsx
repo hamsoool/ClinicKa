@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
+import ListPagination from '../../components/list-pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { ChevronDown, Search, X } from 'lucide-react';
@@ -18,7 +19,8 @@ const YEAR_LABELS: Record<string, string> = {
   '3': '3rd Year',
   '4': '4th Year',
 };
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [20];
 
 type StaffRecordsProps = {
   embedded?: boolean;
@@ -39,6 +41,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
@@ -47,7 +50,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
   useEffect(() => {
     setCurrentPage(1);
     setExpandedStudentId(null);
-  }, [deferredSearchQuery, departmentFilter, yearFilter, courseFilter, fromDate, toDate]);
+  }, [deferredSearchQuery, departmentFilter, yearFilter, courseFilter, fromDate, toDate, pageSize]);
 
   const {
     data,
@@ -62,7 +65,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
     fromDate,
     toDate,
     page: currentPage,
-    pageSize: PAGE_SIZE,
+    pageSize,
   });
 
   const students = useMemo(
@@ -70,7 +73,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
     [data?.students],
   );
   const total = data?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const availableCourses = useMemo(
     () => (data?.availableCourses || []).slice().sort((a, b) => a.localeCompare(b)),
@@ -307,32 +310,17 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
             </div>
           )}
 
-          {!loading && totalPages > 1 ? (
-            <div className="mt-6 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
+          {!loading ? (
+            <ListPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={total}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              itemLabel="students"
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           ) : null}
         </CardContent>
       </Card>

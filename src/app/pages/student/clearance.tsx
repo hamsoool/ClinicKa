@@ -51,7 +51,7 @@ export default function StudentClearance() {
   const clearanceRef = useRef<HTMLDivElement>(null);
   const activeTab = normalizeClearanceTab(searchParams.get('tab'));
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
-  const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [selectedYear, setSelectedYear] = useState<string>(searchParams.get('year') || 'all');
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
 
@@ -80,6 +80,13 @@ export default function StudentClearance() {
       setSelectedYear('all');
     }
   }, [selectedYear, yearOptions]);
+
+  useEffect(() => {
+    const requestedYear = searchParams.get('year') || 'all';
+    if (requestedYear !== selectedYear) {
+      setSelectedYear(requestedYear);
+    }
+  }, [searchParams, selectedYear]);
 
   const filteredRecords = useMemo(
     () => (selectedYear === 'all' ? records : records.filter((entry) => String(entry.year || '') === selectedYear)),
@@ -182,17 +189,52 @@ export default function StudentClearance() {
         useCORS: true,
         backgroundColor: '#ffffff',
         width: CLEARANCE_PREVIEW_BASE_WIDTH,
+        height: clone.scrollHeight,
         windowWidth: CLEARANCE_PREVIEW_BASE_WIDTH,
+        windowHeight: clone.scrollHeight,
       });
       document.body.removeChild(exportRoot);
 
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      // Trim trailing white rows from capture to avoid excess blank space in PDF.
+      const ctx = canvas.getContext('2d');
+      let cropHeight = canvas.height;
+      if (ctx) {
+        const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const rowHasInk = (row: number) => {
+          const start = row * width * 4;
+          const end = start + width * 4;
+          for (let i = start; i < end; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            if (r < 245 || g < 245 || b < 245) return true;
+          }
+          return false;
+        };
+        for (let row = height - 1; row >= 0; row -= 1) {
+          if (rowHasInk(row)) {
+            cropHeight = Math.min(height, row + 4);
+            break;
+          }
+        }
+      }
+      const renderCanvas = document.createElement('canvas');
+      renderCanvas.width = canvas.width;
+      renderCanvas.height = cropHeight;
+      const renderCtx = renderCanvas.getContext('2d');
+      if (renderCtx) {
+        renderCtx.fillStyle = '#ffffff';
+        renderCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
+        renderCtx.drawImage(canvas, 0, 0, canvas.width, cropHeight, 0, 0, canvas.width, cropHeight);
+      }
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 5;
+      const margin = 0;
       const usableWidth = pageWidth - margin * 2;
       const usableHeight = pageHeight - margin * 2;
-      const canvasRatio = canvas.width / canvas.height;
+      const canvasRatio = renderCanvas.width / renderCanvas.height;
       const pageRatio = usableWidth / usableHeight;
 
       let renderWidth = usableWidth;
@@ -203,9 +245,9 @@ export default function StudentClearance() {
       }
 
       const x = (pageWidth - renderWidth) / 2;
-      const y = (pageHeight - renderHeight) / 2;
+      const y = margin;
 
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
+      pdf.addImage(renderCanvas.toDataURL('image/png'), 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
       pdf.save(`medical_clearance_${record.lastName}_${record.firstName}.pdf`);
       toast.success('Medical clearance PDF downloaded.');
     } catch (error) {
@@ -262,6 +304,17 @@ export default function StudentClearance() {
       nextParams.set('tab', nextTab);
     }
 
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleYearChange = (value: string) => {
+    setSelectedYear(value);
+    const nextParams = new URLSearchParams(searchParams);
+    if (value === 'all') {
+      nextParams.delete('year');
+    } else {
+      nextParams.set('year', value);
+    }
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -478,7 +531,7 @@ export default function StudentClearance() {
             <CardContent className="pt-6">
               <div className="flex flex-col gap-2 sm:max-w-xs">
                 <p className="text-sm font-medium">Filter by Year</p>
-                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <Select value={selectedYear} onValueChange={handleYearChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select year" />
                   </SelectTrigger>
