@@ -189,17 +189,52 @@ export default function StudentClearance() {
         useCORS: true,
         backgroundColor: '#ffffff',
         width: CLEARANCE_PREVIEW_BASE_WIDTH,
+        height: clone.scrollHeight,
         windowWidth: CLEARANCE_PREVIEW_BASE_WIDTH,
+        windowHeight: clone.scrollHeight,
       });
       document.body.removeChild(exportRoot);
 
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      // Trim trailing white rows from capture to avoid excess blank space in PDF.
+      const ctx = canvas.getContext('2d');
+      let cropHeight = canvas.height;
+      if (ctx) {
+        const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const rowHasInk = (row: number) => {
+          const start = row * width * 4;
+          const end = start + width * 4;
+          for (let i = start; i < end; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            if (r < 245 || g < 245 || b < 245) return true;
+          }
+          return false;
+        };
+        for (let row = height - 1; row >= 0; row -= 1) {
+          if (rowHasInk(row)) {
+            cropHeight = Math.min(height, row + 4);
+            break;
+          }
+        }
+      }
+      const renderCanvas = document.createElement('canvas');
+      renderCanvas.width = canvas.width;
+      renderCanvas.height = cropHeight;
+      const renderCtx = renderCanvas.getContext('2d');
+      if (renderCtx) {
+        renderCtx.fillStyle = '#ffffff';
+        renderCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
+        renderCtx.drawImage(canvas, 0, 0, canvas.width, cropHeight, 0, 0, canvas.width, cropHeight);
+      }
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 5;
+      const margin = 0;
       const usableWidth = pageWidth - margin * 2;
       const usableHeight = pageHeight - margin * 2;
-      const canvasRatio = canvas.width / canvas.height;
+      const canvasRatio = renderCanvas.width / renderCanvas.height;
       const pageRatio = usableWidth / usableHeight;
 
       let renderWidth = usableWidth;
@@ -210,9 +245,9 @@ export default function StudentClearance() {
       }
 
       const x = (pageWidth - renderWidth) / 2;
-      const y = (pageHeight - renderHeight) / 2;
+      const y = margin;
 
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
+      pdf.addImage(renderCanvas.toDataURL('image/png'), 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
       pdf.save(`medical_clearance_${record.lastName}_${record.firstName}.pdf`);
       toast.success('Medical clearance PDF downloaded.');
     } catch (error) {
