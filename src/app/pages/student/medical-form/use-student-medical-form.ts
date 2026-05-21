@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { SubmissionRecord } from '../../../lib/record-types';
+import { getYearLevelLabel, isCurrentSubmissionYear, resolveStudentYearLevel } from '../../../lib/student-year';
 import { getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import { invalidateStudentRecordsQuery } from '../student-records-query';
 import {
@@ -153,6 +154,7 @@ export function useStudentMedicalForm({
 }: UseStudentMedicalFormArgs) {
   const queryClient = useQueryClient();
   const student = me?.student;
+  const currentYearLabel = getYearLevelLabel(resolveStudentYearLevel(me));
   const [profileAssetUrls, setProfileAssetUrls] = useState<{ photoUrl: string | null; signatureUrl: string | null }>({
     photoUrl: null,
     signatureUrl: null,
@@ -574,6 +576,10 @@ export function useStudentMedicalForm({
       toast.error('Please fix invalid fields before submitting. Student ID must be 9 digits, age must be valid, and text fields must follow format rules.');
       return;
     }
+    if (!isCurrentSubmissionYear(me, formData.yearLevel)) {
+      toast.error(`Only your current year level (${currentYearLabel}) can be submitted.`);
+      return;
+    }
 
     // Final file size check before submission
     const files = [formData.xrayFile, formData.cbcFile, formData.urinalysisFile];
@@ -684,7 +690,7 @@ export function useStudentMedicalForm({
     } finally {
       setUploading(false);
     }
-  }, [activeSubmissionId, canSubmit, formData, originalSubmissionStatus, queryClient, uploading]);
+  }, [activeSubmissionId, canSubmit, currentYearLabel, formData, me, originalSubmissionStatus, queryClient, uploading]);
 
   return {
     step,

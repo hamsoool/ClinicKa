@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { ArrowLeft, ArrowRight, GraduationCap, Lock } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import { getYearLevelLabel, resolveStudentYearLevel } from '../../lib/student-year';
 import { useStudentRecordsQuery } from './student-records-query';
 
 const years = [
@@ -12,23 +13,12 @@ const years = [
   { level: 4, name: '4th Year', description: 'Senior Requirements' },
 ];
 
-function getStudentYearLevel(studentId: string) {
-  const now = new Date();
-  const enrollmentYear = studentId ? Number.parseInt(studentId.slice(0, 4), 10) : now.getFullYear();
-  const academicYearOffset = now.getMonth() >= 6 ? 1 : 0;
-
-  if (Number.isNaN(enrollmentYear)) {
-    return 1;
-  }
-
-  return Math.min(4, Math.max(1, now.getFullYear() - enrollmentYear + academicYearOffset));
-}
-
 export default function StudentYearSelection() {
   const navigate = useNavigate();
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
-  const studentYearLevel = me?.student?.year_level || getStudentYearLevel(studentId);
+  const studentYearLevel = resolveStudentYearLevel(me);
+  const currentYearLabel = getYearLevelLabel(studentYearLevel);
   const { data = [], isLoading } = useStudentRecordsQuery(studentId);
   const records = data;
   const latestByYear = useMemo(() => {
@@ -66,14 +56,14 @@ export default function StudentYearSelection() {
 
       <div className="mx-auto grid max-w-[78rem] gap-5 md:grid-cols-2 xl:gap-6">
         {years.map((year) => {
-          const isFutureYearLocked = year.level > studentYearLevel;
           const latestYearStatus = latestByYear.get(year.level)?.status || '';
           const isApprovedLocked = latestYearStatus === 'approved';
           const isPendingLocked = latestYearStatus === 'pending' || latestYearStatus === 'in_review' || latestYearStatus === 'resubmitted';
           const isInReview = latestYearStatus === 'in_review';
           const isReturned = latestYearStatus === 'returned';
-          const isLocked = isFutureYearLocked || isPendingLocked;
           const isCurrent = year.level === studentYearLevel;
+          const isNonCurrentLocked = !isCurrent && !isApprovedLocked;
+          const isLocked = isPendingLocked || isNonCurrentLocked;
           const destination = isApprovedLocked
             ? `/student/clearance?tab=medical-clearance&year=${year.level}`
             : `/student/privacy-waiver/${year.level}`;
@@ -83,9 +73,9 @@ export default function StudentYearSelection() {
               ? isInReview
                 ? 'In Review'
                 : 'Pending Review'
-              : isReturned
+              : isReturned && isCurrent
                 ? 'Returned'
-                : isFutureYearLocked
+                : isNonCurrentLocked
                   ? 'Locked'
                 : isCurrent
                   ? 'Current Year'
@@ -94,10 +84,10 @@ export default function StudentYearSelection() {
             ? 'Already approved. Further submissions are locked.'
             : isPendingLocked
               ? 'Submission is under review. Please wait for clinic feedback.'
-              : isReturned
+              : isReturned && isCurrent
                 ? 'Returned by clinic staff. You may edit and resubmit.'
-                : isFutureYearLocked
-                  ? 'This year is not yet available.'
+                : isNonCurrentLocked
+                  ? `Only your current year level (${currentYearLabel}) can be submitted.`
                   : year.description;
           const statusClasses = isApprovedLocked
             ? 'bg-primary-container/20 text-on-primary-container'
@@ -105,7 +95,7 @@ export default function StudentYearSelection() {
               ? isInReview
                 ? 'bg-sky-100 text-sky-800'
                 : 'bg-amber-100 text-amber-800'
-              : isReturned
+              : isReturned && isCurrent
                 ? 'bg-error-container/70 text-on-error-container'
                 : isCurrent
                   ? 'bg-primary/10 text-primary'
@@ -171,7 +161,7 @@ export default function StudentYearSelection() {
 
                 <div className="mt-4 space-y-2">
                   <h3 className={`text-xl font-semibold sm:text-2xl ${titleClasses}`}>{year.name}</h3>
-                  {!isApprovedLocked && !isPendingLocked && !isReturned ? (
+                  {!isApprovedLocked && !isPendingLocked && !(isReturned && isCurrent) ? (
                     <p className={`text-sm font-medium ${subtitleClasses}`}>{year.description}</p>
                   ) : null}
                 </div>
@@ -182,11 +172,11 @@ export default function StudentYearSelection() {
                   <p className={`text-sm font-semibold ${actionClasses}`}>
                     {isPendingLocked
                       ? 'Unavailable right now'
-                      : isFutureYearLocked
-                        ? 'Unavailable right now'
+                      : isNonCurrentLocked
+                        ? 'Current year only'
                         : isApprovedLocked
                           ? 'Open clearance form'
-                          : isReturned
+                          : isReturned && isCurrent
                             ? 'Open returned record'
                             : 'Continue to waiver'}
                   </p>

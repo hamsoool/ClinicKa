@@ -161,8 +161,12 @@ export default function StudentDashboard() {
     return record.age || '--';
   };
 
-  const getRecordAgeLabel = (record?: SubmissionRecord) =>
-    record?.status === 'approved' ? 'Age on approval' : 'Age on submission';
+  const getRecordAgeSummary = (record?: SubmissionRecord) => {
+    if (!record) return null;
+    const age = getRecordAge(record);
+    if (!age || age === '--') return null;
+    return `Age ${age}`;
+  };
 
   const { latestRecord, yearlyRecords } = useMemo(() => {
     const sorted = [...records].sort((a, b) => {
@@ -435,7 +439,14 @@ export default function StudentDashboard() {
               className="border-b border-outline-variant/20 px-4 py-3 last:border-b-0"
             >
               <div className="flex items-center justify-between gap-2">
-                <p className={`text-sm font-medium ${record ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>{label}</p>
+                <div className="min-w-0">
+                  <p className={`text-sm font-medium ${record ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>{label}</p>
+                  {record ? (
+                    <span className="mt-1 block text-[10px] font-normal tracking-normal text-on-surface-variant/80">
+                      {getRecordAgeSummary(record)}
+                    </span>
+                  ) : null}
+                </div>
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${getStatusStyles(record?.status)}`}
                 >
@@ -444,9 +455,6 @@ export default function StudentDashboard() {
               </div>
               <p className={`mt-1 text-xs ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
                 Last action: {formatDate(record?.updatedAt || record?.submittedAt)}
-              </p>
-              <p className={`mt-1 text-xs ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
-                {getRecordAgeLabel(record)}: {getRecordAge(record)}
               </p>
             </div>
           ))}
@@ -458,14 +466,20 @@ export default function StudentDashboard() {
                 <th className="px-4 py-3 font-semibold sm:px-6">Year Level</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Status</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Last Action Date</th>
-                <th className="px-4 py-3 font-semibold sm:px-6">Age</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/20">
               {yearlyRecords.map(({ label, record }) => (
                 <tr key={label} className="transition-colors hover:bg-surface-container-lowest">
                   <td className={`px-4 py-4 text-sm sm:px-6 ${record ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
-                    {label}
+                    <div className="min-w-0">
+                      <span className="block">{label}</span>
+                      {record ? (
+                        <span className="mt-1 block text-[11px] font-normal text-on-surface-variant/80">
+                          {getRecordAgeSummary(record)}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-4 py-4 sm:px-6">
                     <span
@@ -480,13 +494,6 @@ export default function StudentDashboard() {
                     }`}
                   >
                     {formatDate(record?.updatedAt || record?.submittedAt)}
-                  </td>
-                  <td
-                    className={`px-4 py-4 text-sm sm:px-6 ${
-                      record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'
-                    }`}
-                  >
-                    {record ? `${getRecordAge(record)} (${record.status === 'approved' ? 'approved' : 'submitted'})` : '--'}
                   </td>
                 </tr>
               ))}

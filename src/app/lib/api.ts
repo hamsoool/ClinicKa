@@ -23,6 +23,7 @@ import {
   PUBLIC_SUPABASE_CONFIG_ERROR,
   supabaseUrl,
 } from './supabase-config';
+import { getYearLevelLabel, normalizeYearLevel, resolveStudentYearLevel } from './student-year';
 
 export { createDefaultAdminSystemSettings } from './admin-system-settings';
 export type { AdminSystemSettings } from './admin-system-settings';
@@ -2190,10 +2191,15 @@ export async function submitMedicalRecord(data: any) {
   if (!studentId) {
     throw new Error('Student ID is required.');
   }
-  const yearLevel = String(data.yearLevel || '').trim();
-  if (!yearLevel) {
+  const requestedYearLevel = normalizeYearLevel(data.yearLevel);
+  if (!requestedYearLevel) {
     throw new Error('Year level is required.');
   }
+  const currentYearLevel = resolveStudentYearLevel(me);
+  if (requestedYearLevel !== currentYearLevel) {
+    throw new Error(`You can only submit records for your current year level (${getYearLevelLabel(currentYearLevel)}).`);
+  }
+  const yearLevel = String(requestedYearLevel);
 
   const existingForYear = await restRequest<any[]>(
     'submissions',
@@ -2363,6 +2369,34 @@ export async function updateMedicalRecord(recordId: string, data: any) {
   if (!studentId) {
     throw new Error('Student ID is required.');
   }
+  const requestedYearLevel = normalizeYearLevel(data.yearLevel);
+  if (!requestedYearLevel) {
+    throw new Error('Year level is required.');
+  }
+  const currentYearLevel = resolveStudentYearLevel(me);
+  if (requestedYearLevel !== currentYearLevel) {
+    throw new Error(`You can only submit records for your current year level (${getYearLevelLabel(currentYearLevel)}).`);
+  }
+
+  const existingSubmission = await restRequest<any[]>(
+    'submissions',
+    `select=id,student_id,year_level&id=eq.${encodeURIComponent(recordId)}&limit=1`,
+  );
+  const submissionRow = existingSubmission?.[0];
+  if (!submissionRow) {
+    throw new Error('Medical record not found.');
+  }
+  if (String(submissionRow.student_id || '').trim() !== studentId) {
+    throw new Error('You can only update your own medical record.');
+  }
+
+  const existingYearLevel = normalizeYearLevel(submissionRow.year_level);
+  if (existingYearLevel && existingYearLevel !== currentYearLevel) {
+    throw new Error(`Only your current year level (${getYearLevelLabel(currentYearLevel)}) can be updated.`);
+  }
+  if (existingYearLevel && existingYearLevel !== requestedYearLevel) {
+    throw new Error('The year level for an existing submission cannot be changed.');
+  }
 
   const studentPayload = {
     student_id: studentId,
@@ -2395,7 +2429,7 @@ export async function updateMedicalRecord(recordId: string, data: any) {
 
   const submissionPatchPayload = {
     status: data.status || undefined,
-    year_level: String(data.yearLevel || ''),
+    year_level: String(requestedYearLevel),
     first_name: data.firstName || null,
     last_name: data.lastName || null,
     middle_initial: data.middleInitial || null,
