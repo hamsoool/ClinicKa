@@ -1543,12 +1543,17 @@ export async function authenticateWithPassword(email: string, password: string) 
   }
 
   if (!response.ok) {
-    throw new Error(
+    const message =
       payload.msg ||
       payload.error_description ||
       payload.error ||
-      `Failed to sign in (${response.status})`,
-    );
+      `Failed to sign in (${response.status})`;
+
+    if (String(message).trim().toLowerCase().includes('user is banned')) {
+      throw new Error('This account is not available. Contact the administrator for assistance.');
+    }
+
+    throw new Error(message);
   }
 
   if (!payload?.access_token) {

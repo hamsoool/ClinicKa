@@ -299,6 +299,8 @@ export default function AuthAccessPage() {
       ? `Only @${GC_DOMAIN} Google accounts are allowed. Non-Gordon Google accounts are blocked and not registered in the system.`
       : googleError === 'invalid_token'
         ? 'Google sign-in failed. Please try again.'
+        : googleError === 'archived_account'
+          ? 'This account is not available. Contact the administrator for assistance.'
         : googleError === 'account_load_failed'
           ? 'Google sign-in succeeded, but your account could not be loaded from the database. Please try again.'
         : null;
