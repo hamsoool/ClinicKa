@@ -1082,7 +1082,7 @@ export default function StaffRecordReview() {
   const previousReviewStep = currentReviewStepIndex > 0 ? REVIEW_STEPS[currentReviewStepIndex - 1] : null;
   const nextReviewStep =
     currentReviewStepIndex < REVIEW_STEPS.length - 1 ? REVIEW_STEPS[currentReviewStepIndex + 1] : null;
-  const finalDecisionLabel = isDoctorWorkspace ? 'Final Decision' : 'Clearance';
+  const finalDecisionLabel = 'Clearance';
   const getReviewStepLabel = (step: ReviewStep) => {
     switch (step) {
       case 'record':
