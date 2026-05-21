@@ -229,4 +229,4 @@ export const DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT =
   'I have read and understood this Data Privacy Consent pursuant to Republic Act No. 10173, and I agree to the collection and processing of my personal and medical information for clinic record processing and related health services.';
 
 export const DATA_PRIVACY_PREVIEW_TEXT =
-  'Data Privacy Consent: Under Republic Act No. 10173, I consent to the collection, use, and processing of my personal and health-related information by the Gordon College Clinic for clinic record processing and related health services, subject to my rights as a data subject and the clinic’s duty to protect my information.';
+  'Data Privacy Waiver: I am willing to disclose my personal information with the GC clinic. I have the right to access my personal data in a timely manner (5days request). The clinic respect patients privacy and accountable to protect my personal information.';
