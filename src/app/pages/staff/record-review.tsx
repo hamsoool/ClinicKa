@@ -48,6 +48,14 @@ import {
   invalidateStaffWorkflowQueries,
   useStaffSubmissionDetailQuery,
 } from './staff-workflow-query';
+import {
+  EMERGENCY_CONTACT_RELATIONSHIPS,
+  formatPhilippinePhoneInput,
+  getProgramOptionsForSelect,
+  isValidPhilippinePhoneNumber,
+  normalizeProgramForDepartment,
+  resolveDepartmentValue,
+} from '../student/medical-form/constants';
 
 type SubmissionDetails = SubmissionRecord & {
   photoUrl?: string;
@@ -167,6 +175,24 @@ const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'
 const BLOOD_PRESSURE_PATTERN = /^\d{2,3}\/\d{2,3}$/;
 const VISUAL_ACUITY_PATTERN = /^\d{1,2}\/\d{1,3}$/;
 const REVIEW_STEPS = ['record', 'labs', 'assessment', 'decision'] as const;
+const MAX_FIRST_NAME_LENGTH = 30;
+const MAX_LAST_NAME_LENGTH = 20;
+const MAX_MIDDLE_INITIAL_LENGTH = 1;
+const MAX_AGE_LENGTH = 2;
+const MAX_SEX_OTHER_LENGTH = 15;
+const MAX_ADDRESS_LENGTH = 180;
+const MAX_EMERGENCY_NAME_LENGTH = 40;
+const MAX_ALLERGY_DETAILS_LENGTH = 100;
+const MAX_OPERATION_HISTORY_LENGTH = 100;
+const MAX_FINDINGS_LENGTH = 100;
+const MAX_PHYSICAL_EXAM_FIELD_LENGTH = 100;
+const MAX_PHYSICAL_EXAM_NOTES_LENGTH = 150;
+const MAX_EXAMINED_BY_LENGTH = 40;
+const MAX_CLINIC_NOTES_LENGTH = 100;
+const MAX_CLEARANCE_DIAGNOSIS_LENGTH = 50;
+const MAX_CLEARANCE_REMARKS_LENGTH = 50;
+const SEX_BASE_OPTIONS = ['male', 'female'] as const;
+const CIVIL_STATUS_OPTIONS = ['Single', 'Married'] as const;
 
 type ReviewStep = (typeof REVIEW_STEPS)[number];
 
@@ -253,7 +279,9 @@ function isValidBloodPressure(value: string) {
 
 function isValidVisualAcuity(value: string) {
   const trimmedValue = value.trim();
-  return !trimmedValue || VISUAL_ACUITY_PATTERN.test(trimmedValue);
+  if (!trimmedValue) return true;
+  if (VISUAL_ACUITY_PATTERN.test(trimmedValue)) return true;
+  return /^(OD|OS)\s\d{1,2}\/\d{1,3}$/i.test(trimmedValue);
 }
 
 function normalizeDateInputValue(value?: string | null) {
@@ -279,6 +307,100 @@ function getTodayDateInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function sanitizeNumericWithLimits(value: string, maxIntegerDigits: number, maxDecimalPlaces = 2) {
+  const sanitized = String(value).replace(/[^\d.]/g, '');
+  const [integerPartRaw = '', ...decimalParts] = sanitized.split('.');
+  const integerPart = integerPartRaw.slice(0, maxIntegerDigits);
+  const decimalPart = decimalParts.join('').slice(0, maxDecimalPlaces);
+
+  if (!sanitized.includes('.')) return integerPart;
+  return `${integerPart}.${decimalPart}`;
+}
+
+function trimTrailingDecimalZeros(value: string) {
+  return value.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+}
+
+function normalizeCountToX10Power9(value: string) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return value;
+  if (numericValue <= 1000) return value;
+  const converted = (numericValue / 1000).toFixed(2);
+  return trimTrailingDecimalZeros(converted);
+}
+
+function normalizeCountToX10Power9Whole(value: string) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return value;
+  if (numericValue <= 1000) return sanitizeNumericWithLimits(value, 4, 0);
+  return String(Math.round(numericValue / 1000));
+}
+
+function sanitizeLettersOnly(value: string, maxLength: number) {
+  return String(value).replace(/[^A-Za-z\s]/g, '').slice(0, maxLength);
+}
+
+function sanitizeMiddleInitial(value: string) {
+  return String(value).replace(/[^A-Za-z]/g, '').slice(0, MAX_MIDDLE_INITIAL_LENGTH);
+}
+
+function sanitizeSexOther(value: string) {
+  return String(value).replace(/[^A-Za-z\s]/g, '').slice(0, MAX_SEX_OTHER_LENGTH);
+}
+
+function sanitizeAddress(value: string) {
+  return String(value)
+    .replace(/[<>`]/g, '')
+    .replace(/--|\/\*|\*\//g, '')
+    .slice(0, MAX_ADDRESS_LENGTH);
+}
+
+function sanitizeSafeText(value: string, maxLength: number) {
+  return String(value)
+    .replace(/[<>`]/g, '')
+    .replace(/--|\/\*|\*\//g, '')
+    .replace(/;/g, '')
+    .slice(0, maxLength);
+}
+
+function sanitizeVisualAcuityText(value: string) {
+  return String(value)
+    .replace(/[^A-Za-z0-9/\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 20);
+}
+
+function sanitizeContactNumber(value: string) {
+  return formatPhilippinePhoneInput(String(value));
+}
+
+function sanitizeEmergencyName(value: string) {
+  return String(value).replace(/[^A-Za-z\s]/g, '').slice(0, MAX_EMERGENCY_NAME_LENGTH);
+}
+
+function normalizeSexValue(value: string) {
+  const trimmed = String(value || '').trim();
+  const lowered = trimmed.toLowerCase();
+  if (!trimmed) return '';
+  if ((SEX_BASE_OPTIONS as readonly string[]).includes(lowered)) return lowered;
+  if (lowered === 'others') return 'others';
+  return sanitizeSexOther(trimmed);
+}
+
+function getSexSelectValue(value: string) {
+  const lowered = String(value || '').trim().toLowerCase();
+  if ((SEX_BASE_OPTIONS as readonly string[]).includes(lowered)) return lowered;
+  if (lowered === 'others') return 'others';
+  if (lowered) return 'others';
+  return 'unassigned';
+}
+
+function getSexOtherInputValue(value: string) {
+  const lowered = String(value || '').trim().toLowerCase();
+  if (!lowered || lowered === 'others' || (SEX_BASE_OPTIONS as readonly string[]).includes(lowered)) return '';
+  return value;
+}
+
 function generateClearanceControlNo(submission?: SubmissionDetails | null) {
   const yearTag = String(submission?.year || '').trim() || 'Y';
   const studentTag = String(submission?.studentId || '').trim() || 'STUDENT';
@@ -287,20 +409,23 @@ function generateClearanceControlNo(submission?: SubmissionDetails | null) {
 }
 
 function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
+  const department = resolveDepartmentValue(submission?.department || '');
   return {
     studentId: submission?.studentId || '',
-    firstName: submission?.firstName || '',
-    lastName: submission?.lastName || '',
-    middleInitial: submission?.middleInitial || '',
-    department: submission?.department || '',
-    course: submission?.course || '',
+    firstName: sanitizeLettersOnly(submission?.firstName || '', MAX_FIRST_NAME_LENGTH),
+    lastName: sanitizeLettersOnly(submission?.lastName || '', MAX_LAST_NAME_LENGTH),
+    middleInitial: sanitizeMiddleInitial(submission?.middleInitial || ''),
+    department,
+    course: normalizeProgramForDepartment(department, submission?.course || ''),
     year: submission?.year || '',
-    age: submission?.age || '',
-    sex: submission?.sex || '',
+    age: String(submission?.age || '').replace(/\D/g, '').slice(0, MAX_AGE_LENGTH),
+    sex: normalizeSexValue(submission?.sex || ''),
     birthday: normalizeDateInputValue(submission?.birthday),
-    civilStatus: submission?.civilStatus || '',
-    contactNumber: submission?.contactNumber || '',
-    address: submission?.address || '',
+    civilStatus: CIVIL_STATUS_OPTIONS.includes((submission?.civilStatus || '') as (typeof CIVIL_STATUS_OPTIONS)[number])
+      ? String(submission?.civilStatus)
+      : '',
+    contactNumber: sanitizeContactNumber(submission?.contactNumber || ''),
+    address: sanitizeAddress(submission?.address || ''),
     allergyDetails: submission?.allergyDetails || '',
     hadOperation: submission?.hadOperation || 'no',
     operationDetails: submission?.operationDetails || '',
@@ -308,10 +433,12 @@ function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
     height: submission?.height || '',
     bmi: submission?.bmi || calculateBmi(submission?.weight || '', submission?.height || ''),
     emergencyContact: {
-      name: submission?.emergencyContact?.name || '',
-      relationship: submission?.emergencyContact?.relationship || '',
-      phone: submission?.emergencyContact?.phone || '',
-      address: submission?.emergencyContact?.address || '',
+      name: sanitizeEmergencyName(submission?.emergencyContact?.name || ''),
+      relationship: EMERGENCY_CONTACT_RELATIONSHIPS.includes((submission?.emergencyContact?.relationship || '') as any)
+        ? String(submission?.emergencyContact?.relationship || '')
+        : '',
+      phone: sanitizeContactNumber(submission?.emergencyContact?.phone || ''),
+      address: sanitizeAddress(submission?.emergencyContact?.address || ''),
     },
     medicalHistory: {
       ...createEmptyMedicalHistory(),
@@ -343,7 +470,7 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
     abdomen: submission?.staffMeasurements?.abdomen || '',
     extremities: submission?.staffMeasurements?.extremities || '',
     others: submission?.staffMeasurements?.others || '',
-    examinedBy: submission?.staffMeasurements?.examinedBy || '',
+    examinedBy: sanitizeSafeText(submission?.staffMeasurements?.examinedBy || '', MAX_EXAMINED_BY_LENGTH),
     xrayDate: normalizeDateInputValue(submission?.labResults?.xrayDate) || getTodayDateInputValue(),
     xrayResult: submission?.labResults?.xrayResult || 'normal',
     xrayFindings: submission?.labResults?.xrayFindings || '',
@@ -362,11 +489,14 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
 }
 
 function createClearanceForm(submission?: SubmissionDetails | null): ClearanceForm {
+  const normalizedPurpose = String(submission?.clearanceInfo?.purpose || '').toLowerCase() === 'enrollment'
+    ? 'enrolment'
+    : (submission?.clearanceInfo?.purpose || 'enrolment');
   return {
     findingsNormal: submission?.clearanceInfo?.findingsNormal ?? true,
-    diagnosis: submission?.clearanceInfo?.diagnosis || '',
-    remarks: submission?.clearanceInfo?.remarks || '',
-    purpose: submission?.clearanceInfo?.purpose || 'enrolment',
+    diagnosis: sanitizeSafeText(submission?.clearanceInfo?.diagnosis || '', MAX_CLEARANCE_DIAGNOSIS_LENGTH),
+    remarks: sanitizeSafeText(submission?.clearanceInfo?.remarks || '', MAX_CLEARANCE_REMARKS_LENGTH),
+    purpose: (normalizedPurpose as ClearanceForm['purpose']),
     controlNo: submission?.clearanceInfo?.controlNo || generateClearanceControlNo(submission),
     issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate) || getTodayDateInputValue(),
   };
@@ -510,8 +640,34 @@ export default function StaffRecordReview() {
       const normalizedValue =
         field === 'birthday'
           ? (normalizeDateInputValue(String(value)) as RecordForm[K])
+          : field === 'firstName'
+          ? (sanitizeLettersOnly(String(value), MAX_FIRST_NAME_LENGTH) as RecordForm[K])
+          : field === 'lastName'
+          ? (sanitizeLettersOnly(String(value), MAX_LAST_NAME_LENGTH) as RecordForm[K])
+          : field === 'middleInitial'
+          ? (sanitizeMiddleInitial(String(value)) as RecordForm[K])
+          : field === 'age'
+          ? (String(value).replace(/\D/g, '').slice(0, MAX_AGE_LENGTH) as RecordForm[K])
+          : field === 'sex'
+          ? (normalizeSexValue(String(value)) as RecordForm[K])
+          : field === 'civilStatus'
+          ? ((CIVIL_STATUS_OPTIONS.includes(String(value) as (typeof CIVIL_STATUS_OPTIONS)[number]) ? value : '') as RecordForm[K])
+          : field === 'contactNumber'
+          ? (sanitizeContactNumber(String(value)) as RecordForm[K])
+          : field === 'address'
+          ? (sanitizeAddress(String(value)) as RecordForm[K])
+          : field === 'allergyDetails'
+          ? (String(value).slice(0, MAX_ALLERGY_DETAILS_LENGTH) as RecordForm[K])
+          : field === 'operationDetails'
+          ? (String(value).slice(0, MAX_OPERATION_HISTORY_LENGTH) as RecordForm[K])
           : value;
       const next = { ...prev, [field]: normalizedValue };
+
+      if (field === 'department') {
+        const nextDepartment = resolveDepartmentValue(String(normalizedValue));
+        next.department = nextDepartment;
+        next.course = normalizeProgramForDepartment(nextDepartment, '');
+      }
 
       if (field === 'weight' || field === 'height') {
         next.bmi = calculateBmi(
@@ -529,11 +685,22 @@ export default function StaffRecordReview() {
   }
 
   function updateEmergencyContact(field: keyof RecordForm['emergencyContact'], value: string) {
+    const normalizedValue =
+      field === 'name'
+        ? sanitizeEmergencyName(value)
+        : field === 'phone'
+        ? sanitizeContactNumber(value)
+        : field === 'address'
+        ? sanitizeAddress(value)
+        : field === 'relationship'
+        ? (EMERGENCY_CONTACT_RELATIONSHIPS.includes(value as any) ? value : '')
+        : value;
+
     setRecordForm((prev) => ({
       ...prev,
       emergencyContact: {
         ...prev.emergencyContact,
-        [field]: value,
+        [field]: normalizedValue,
       },
     }));
   }
@@ -558,22 +725,45 @@ export default function StaffRecordReview() {
 
       if (field === 'xrayDate' || field === 'cbcDate' || field === 'urinalysisDate') {
         normalizedValue = normalizeDateInputValue(String(value)) as AssessmentForm[K];
+      } else if (field === 'xrayFindings') {
+        normalizedValue = sanitizeSafeText(String(value), MAX_FINDINGS_LENGTH) as AssessmentForm[K];
+      } else if (field === 'hemoglobin') {
+        normalizedValue = sanitizeNumericWithLimits(String(value), 2, 1) as AssessmentForm[K];
+      } else if (field === 'hematocrit') {
+        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 1) as AssessmentForm[K];
+      } else if (field === 'wbc') {
+        const safeValue = sanitizeNumericWithLimits(String(value), 6, 2);
+        normalizedValue = normalizeCountToX10Power9(safeValue) as AssessmentForm[K];
+      } else if (field === 'plateletCount') {
+        const safeValue = sanitizeNumericWithLimits(String(value), 7, 0);
+        normalizedValue = normalizeCountToX10Power9Whole(safeValue) as AssessmentForm[K];
       } else if (
-        field === 'hemoglobin'
-        || field === 'hematocrit'
-        || field === 'wbc'
-        || field === 'plateletCount'
-        || field === 'temperature'
-        || field === 'weight'
-        || field === 'height'
-        || field === 'cardiacRate'
-        || field === 'respiratoryRate'
+        field === 'skin'
+        || field === 'heent'
+        || field === 'chestLungs'
+        || field === 'heart'
+        || field === 'abdomen'
+        || field === 'extremities'
       ) {
-        normalizedValue = sanitizeNumericInput(String(value)) as AssessmentForm[K];
+        normalizedValue = sanitizeSafeText(String(value), MAX_PHYSICAL_EXAM_FIELD_LENGTH) as AssessmentForm[K];
+      } else if (field === 'examinedBy') {
+        normalizedValue = sanitizeSafeText(String(value), MAX_EXAMINED_BY_LENGTH) as AssessmentForm[K];
+      } else if (field === 'others') {
+        normalizedValue = sanitizeSafeText(String(value), MAX_PHYSICAL_EXAM_NOTES_LENGTH) as AssessmentForm[K];
+      } else if (field === 'cardiacRate') {
+        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 0) as AssessmentForm[K];
+      } else if (field === 'respiratoryRate') {
+        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 0) as AssessmentForm[K];
+      } else if (field === 'temperature') {
+        normalizedValue = sanitizeNumericWithLimits(String(value), 2, 1) as AssessmentForm[K];
+      } else if (field === 'weight') {
+        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 1) as AssessmentForm[K];
+      } else if (field === 'height') {
+        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 1) as AssessmentForm[K];
       } else if (field === 'bloodPressure') {
         normalizedValue = sanitizeFractionLikeInput(String(value), 3, 3) as AssessmentForm[K];
       } else if (field === 'visualAcuity') {
-        normalizedValue = sanitizeFractionLikeInput(String(value), 2, 3) as AssessmentForm[K];
+        normalizedValue = sanitizeVisualAcuityText(String(value)) as AssessmentForm[K];
       }
 
       const next = { ...prev, [field]: normalizedValue };
@@ -603,6 +793,12 @@ export default function StaffRecordReview() {
       [field]:
         field === 'issuedDate'
           ? normalizeDateInputValue(String(value))
+          : field === 'diagnosis'
+          ? sanitizeSafeText(String(value), MAX_CLEARANCE_DIAGNOSIS_LENGTH)
+          : field === 'remarks'
+          ? sanitizeSafeText(String(value), MAX_CLEARANCE_REMARKS_LENGTH)
+          : field === 'purpose'
+          ? (String(value) === 'enrollment' ? 'enrolment' : value)
           : value,
     }));
   }
@@ -676,6 +872,18 @@ export default function StaffRecordReview() {
 
   async function persistReview(nextStatus?: ReviewStatus, customNotes?: string) {
     if (!submissionId || !submission) return;
+    if (!/^\d{2}$/.test(recordForm.age)) {
+      toast.error('Age must be exactly 2 digits.');
+      return;
+    }
+    if (recordForm.contactNumber && !isValidPhilippinePhoneNumber(recordForm.contactNumber)) {
+      toast.error('Contact number must follow (+63) 9XXXXXXXXX.');
+      return;
+    }
+    if (recordForm.emergencyContact.phone && !isValidPhilippinePhoneNumber(recordForm.emergencyContact.phone)) {
+      toast.error('Emergency contact phone must follow (+63) 9XXXXXXXXX.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -882,7 +1090,7 @@ export default function StaffRecordReview() {
       case 'assessment':
         return 'Assessment';
       case 'decision':
-        return 'Final Decision';
+        return 'Clearance';
       default:
         return step;
     }
@@ -1091,7 +1299,7 @@ export default function StaffRecordReview() {
         <CardContent className="pt-5">
           <p className="text-sm font-semibold text-foreground">Recommended workflow</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            1) Confirm student record, 2) verify labs, 3) complete assessment, 4) finalize the clinic decision.
+            1) Confirm student record, 2) verify labs, 3) complete assessment, 4) finalize the clearance.
           </p>
         </CardContent>
       </Card>
@@ -1108,7 +1316,7 @@ export default function StaffRecordReview() {
             Assessment
           </TabsTrigger>
           <TabsTrigger value="decision" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
-            Final Decision
+            Clearance
           </TabsTrigger>
         </TabsList>
 
@@ -1151,6 +1359,7 @@ export default function StaffRecordReview() {
                       id="firstName"
                       value={recordForm.firstName}
                       onChange={(event) => updateRecordField('firstName', event.target.value)}
+                      maxLength={MAX_FIRST_NAME_LENGTH}
                       className="mt-2"
                     />
                   </div>
@@ -1160,6 +1369,7 @@ export default function StaffRecordReview() {
                       id="lastName"
                       value={recordForm.lastName}
                       onChange={(event) => updateRecordField('lastName', event.target.value)}
+                      maxLength={MAX_LAST_NAME_LENGTH}
                       className="mt-2"
                     />
                   </div>
@@ -1169,6 +1379,7 @@ export default function StaffRecordReview() {
                       id="middleInitial"
                       value={recordForm.middleInitial}
                       onChange={(event) => updateRecordField('middleInitial', event.target.value)}
+                      maxLength={MAX_MIDDLE_INITIAL_LENGTH}
                       className="mt-2"
                     />
                   </div>
@@ -1190,12 +1401,23 @@ export default function StaffRecordReview() {
                   </div>
                   <div>
                     <Label htmlFor="course">Course</Label>
-                    <Input
-                      id="course"
-                      value={recordForm.course}
-                      onChange={(event) => updateRecordField('course', event.target.value)}
-                      className="mt-2"
-                    />
+                    <Select
+                      value={recordForm.course || 'unassigned'}
+                      onValueChange={(value) => updateRecordField('course', value === 'unassigned' ? '' : value)}
+                      disabled={!recordForm.department}
+                    >
+                      <SelectTrigger id="course" className="mt-2">
+                        <SelectValue placeholder={recordForm.department ? 'Select course' : 'Select department first'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Not set</SelectItem>
+                        {getProgramOptionsForSelect(recordForm.department, recordForm.course).map((course) => (
+                          <SelectItem key={course} value={course}>
+                            {course}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label htmlFor="year">Year Level</Label>
@@ -1219,17 +1441,49 @@ export default function StaffRecordReview() {
                       id="age"
                       value={recordForm.age}
                       onChange={(event) => updateRecordField('age', event.target.value)}
+                      inputMode="numeric"
+                      pattern="\d{2}"
+                      maxLength={MAX_AGE_LENGTH}
                       className="mt-2"
                     />
                   </div>
                   <div>
                     <Label htmlFor="sex">Sex</Label>
-                    <Input
-                      id="sex"
-                      value={recordForm.sex}
-                      onChange={(event) => updateRecordField('sex', event.target.value)}
-                      className="mt-2"
-                    />
+                    <Select
+                      value={getSexSelectValue(recordForm.sex)}
+                      onValueChange={(value) => {
+                        if (value === 'unassigned') {
+                          updateRecordField('sex', '');
+                          return;
+                        }
+                        if (value === 'others') {
+                          const existingOtherValue = getSexOtherInputValue(recordForm.sex);
+                          updateRecordField('sex', existingOtherValue || 'others');
+                          return;
+                        }
+                        updateRecordField('sex', value);
+                      }}
+                    >
+                      <SelectTrigger id="sex" className="mt-2">
+                        <SelectValue placeholder="Select sex" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Not set</SelectItem>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="others">Others, specify</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {getSexSelectValue(recordForm.sex) === 'others' ? (
+                      <Input
+                        id="sexOthersSpecify"
+                        value={getSexOtherInputValue(recordForm.sex)}
+                        onChange={(event) => updateRecordField('sex', sanitizeSexOther(event.target.value))}
+                        maxLength={MAX_SEX_OTHER_LENGTH}
+                        placeholder="Specify (letters only)"
+                        className="mt-2"
+                      />
+                    ) : null}
                   </div>
                   <div>
                     <Label htmlFor="birthday">Birthday</Label>
@@ -1243,12 +1497,16 @@ export default function StaffRecordReview() {
                   </div>
                   <div>
                     <Label htmlFor="civilStatus">Civil Status</Label>
-                    <Input
-                      id="civilStatus"
-                      value={recordForm.civilStatus}
-                      onChange={(event) => updateRecordField('civilStatus', event.target.value)}
-                      className="mt-2"
-                    />
+                    <Select value={recordForm.civilStatus || 'unassigned'} onValueChange={(value) => updateRecordField('civilStatus', value === 'unassigned' ? '' : value)}>
+                      <SelectTrigger id="civilStatus" className="mt-2">
+                        <SelectValue placeholder="Select civil status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Not set</SelectItem>
+                        <SelectItem value="Single">Single</SelectItem>
+                        <SelectItem value="Married">Married</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label htmlFor="contactNumber">Contact Number</Label>
@@ -1256,6 +1514,8 @@ export default function StaffRecordReview() {
                       id="contactNumber"
                       value={recordForm.contactNumber}
                       onChange={(event) => updateRecordField('contactNumber', event.target.value)}
+                      inputMode="numeric"
+                      placeholder="(+63) 9123456789"
                       className="mt-2"
                     />
                   </div>
@@ -1265,7 +1525,8 @@ export default function StaffRecordReview() {
                       id="address"
                       value={recordForm.address}
                       onChange={(event) => updateRecordField('address', event.target.value)}
-                      className="mt-2"
+                      maxLength={MAX_ADDRESS_LENGTH}
+                      className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
                       rows={3}
                     />
                   </div>
@@ -1304,7 +1565,8 @@ export default function StaffRecordReview() {
                       id="allergyDetails"
                       value={recordForm.allergyDetails}
                       onChange={(event) => updateRecordField('allergyDetails', event.target.value)}
-                      className="mt-2"
+                      className="mt-2 h-24 resize-none overflow-y-auto break-words whitespace-pre-wrap"
+                      maxLength={MAX_ALLERGY_DETAILS_LENGTH}
                       rows={3}
                       placeholder="Specify allergy type or trigger"
                       disabled={!recordForm.medicalHistory.allergy}
@@ -1329,7 +1591,8 @@ export default function StaffRecordReview() {
                     <Textarea
                       value={recordForm.operationDetails}
                       onChange={(event) => updateRecordField('operationDetails', event.target.value)}
-                      className="mt-3"
+                      className="mt-3 h-24 resize-none overflow-y-auto break-words whitespace-pre-wrap"
+                      maxLength={MAX_OPERATION_HISTORY_LENGTH}
                       rows={3}
                       placeholder="Document operation details when applicable"
                       disabled={recordForm.hadOperation !== 'yes'}
@@ -1351,17 +1614,28 @@ export default function StaffRecordReview() {
                       id="emergencyName"
                       value={recordForm.emergencyContact.name}
                       onChange={(event) => updateEmergencyContact('name', event.target.value)}
+                      maxLength={MAX_EMERGENCY_NAME_LENGTH}
                       className="mt-2"
                     />
                   </div>
                   <div>
                     <Label htmlFor="emergencyRelationship">Relationship</Label>
-                    <Input
-                      id="emergencyRelationship"
-                      value={recordForm.emergencyContact.relationship}
-                      onChange={(event) => updateEmergencyContact('relationship', event.target.value)}
-                      className="mt-2"
-                    />
+                    <Select
+                      value={recordForm.emergencyContact.relationship || 'unassigned'}
+                      onValueChange={(value) => updateEmergencyContact('relationship', value === 'unassigned' ? '' : value)}
+                    >
+                      <SelectTrigger id="emergencyRelationship" className="mt-2">
+                        <SelectValue placeholder="Select relationship" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Not set</SelectItem>
+                        {EMERGENCY_CONTACT_RELATIONSHIPS.map((relationship) => (
+                          <SelectItem key={relationship} value={relationship}>
+                            {relationship}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label htmlFor="emergencyPhone">Phone Number</Label>
@@ -1369,6 +1643,8 @@ export default function StaffRecordReview() {
                       id="emergencyPhone"
                       value={recordForm.emergencyContact.phone}
                       onChange={(event) => updateEmergencyContact('phone', event.target.value)}
+                      inputMode="numeric"
+                      placeholder="(+63) 9123456789"
                       className="mt-2"
                     />
                   </div>
@@ -1378,7 +1654,8 @@ export default function StaffRecordReview() {
                       id="emergencyAddress"
                       value={recordForm.emergencyContact.address}
                       onChange={(event) => updateEmergencyContact('address', event.target.value)}
-                      className="mt-2"
+                      className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                      maxLength={MAX_ADDRESS_LENGTH}
                       rows={3}
                     />
                   </div>
@@ -1434,7 +1711,8 @@ export default function StaffRecordReview() {
                     id="xrayFindings"
                     value={assessmentForm.xrayFindings}
                     onChange={(event) => updateAssessmentField('xrayFindings', event.target.value)}
-                    className="mt-2"
+                    className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                    maxLength={MAX_FINDINGS_LENGTH}
                     rows={4}
                   />
                 </div>
@@ -1466,48 +1744,56 @@ export default function StaffRecordReview() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="hemoglobin">Hemoglobin</Label>
+                  <Label htmlFor="hemoglobin">Hemoglobin (g/dL)</Label>
                   <Input
                     id="hemoglobin"
                     value={assessmentForm.hemoglobin}
                     onChange={(event) => updateAssessmentField('hemoglobin', event.target.value)}
                     inputMode="decimal"
                     placeholder="13.5"
+                    maxLength={4}
                     className="mt-2"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">Decimal value, e.g. 13.5</p>
                 </div>
                 <div>
-                  <Label htmlFor="hematocrit">Hematocrit</Label>
+                  <Label htmlFor="hematocrit">Hematocrit (%)</Label>
                   <Input
                     id="hematocrit"
                     value={assessmentForm.hematocrit}
                     onChange={(event) => updateAssessmentField('hematocrit', event.target.value)}
                     inputMode="decimal"
-                    placeholder="42"
+                    placeholder="40.2"
+                    maxLength={5}
                     className="mt-2"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">Decimal value, e.g. 40.2</p>
                 </div>
                 <div>
-                  <Label htmlFor="wbc">White Blood Cell Count</Label>
+                  <Label htmlFor="wbc">White Blood Cell Count (x10⁹/L)</Label>
                   <Input
                     id="wbc"
                     value={assessmentForm.wbc}
                     onChange={(event) => updateAssessmentField('wbc', event.target.value)}
                     inputMode="decimal"
-                    placeholder="7000"
+                    placeholder="7.8"
+                    maxLength={9}
                     className="mt-2"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">If value is over 1000, it auto-converts to x10⁹/L</p>
                 </div>
                 <div>
-                  <Label htmlFor="plateletCount">Platelet Count</Label>
+                  <Label htmlFor="plateletCount">Platelet Count (x10⁹/L)</Label>
                   <Input
                     id="plateletCount"
                     value={assessmentForm.plateletCount}
                     onChange={(event) => updateAssessmentField('plateletCount', event.target.value)}
                     inputMode="decimal"
-                    placeholder="250000"
+                    placeholder="250"
+                    maxLength={10}
                     className="mt-2"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">Whole number preferred; values over 1000 auto-convert</p>
                 </div>
                 <div>
                   <Label htmlFor="bloodType">Blood Type</Label>
@@ -1631,28 +1917,31 @@ export default function StaffRecordReview() {
                     onChange={(event) => updateAssessmentField('cardiacRate', event.target.value)}
                     inputMode="decimal"
                     placeholder="72"
+                    maxLength={3}
                     className="mt-2"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="respiratoryRate">Respiratory Rate</Label>
+                  <Label htmlFor="respiratoryRate">Respiratory Rate (breaths/min)</Label>
                   <Input
                     id="respiratoryRate"
                     value={assessmentForm.respiratoryRate}
                     onChange={(event) => updateAssessmentField('respiratoryRate', event.target.value)}
                     inputMode="decimal"
                     placeholder="16"
+                    maxLength={3}
                     className="mt-2"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="temperature">Temperature (C)</Label>
+                  <Label htmlFor="temperature">Temperature (°C)</Label>
                   <Input
                     id="temperature"
                     value={assessmentForm.temperature}
                     onChange={(event) => updateAssessmentField('temperature', event.target.value)}
                     inputMode="decimal"
                     placeholder="36.8"
+                    maxLength={4}
                     className="mt-2"
                   />
                 </div>
@@ -1664,6 +1953,7 @@ export default function StaffRecordReview() {
                     onChange={(event) => updateAssessmentField('weight', event.target.value)}
                     inputMode="decimal"
                     placeholder="60.5"
+                    maxLength={5}
                     className="mt-2"
                   />
                 </div>
@@ -1675,6 +1965,7 @@ export default function StaffRecordReview() {
                     onChange={(event) => updateAssessmentField('height', event.target.value)}
                     inputMode="decimal"
                     placeholder="170"
+                    maxLength={5}
                     className="mt-2"
                   />
                 </div>
@@ -1686,12 +1977,15 @@ export default function StaffRecordReview() {
                   <Label htmlFor="visualAcuity">Visual Acuity</Label>
                   <Input
                     id="visualAcuity"
+                    type="text"
                     value={assessmentForm.visualAcuity}
                     onChange={(event) => updateAssessmentField('visualAcuity', event.target.value)}
-                    inputMode="numeric"
+                    inputMode="text"
                     placeholder="20/20"
+                    maxLength={20}
                     className="mt-2"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">Examples: 20/20, 20/40, 6/6, OD 20/20, OS 20/40</p>
                 </div>
               </div>
             </CardContent>
@@ -1708,7 +2002,9 @@ export default function StaffRecordReview() {
                   id="skin"
                   value={assessmentForm.skin}
                   onChange={(event) => updateAssessmentField('skin', event.target.value)}
-                  className="mt-2"
+                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
+                  placeholder="Normal / With rashes"
                   rows={3}
                 />
               </div>
@@ -1718,7 +2014,9 @@ export default function StaffRecordReview() {
                   id="heent"
                   value={assessmentForm.heent}
                   onChange={(event) => updateAssessmentField('heent', event.target.value)}
-                  className="mt-2"
+                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
+                  placeholder="Normal HEENT"
                   rows={3}
                 />
               </div>
@@ -1728,7 +2026,9 @@ export default function StaffRecordReview() {
                   id="chestLungs"
                   value={assessmentForm.chestLungs}
                   onChange={(event) => updateAssessmentField('chestLungs', event.target.value)}
-                  className="mt-2"
+                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
+                  placeholder="Clear breath sounds"
                   rows={3}
                 />
               </div>
@@ -1738,7 +2038,9 @@ export default function StaffRecordReview() {
                   id="heart"
                   value={assessmentForm.heart}
                   onChange={(event) => updateAssessmentField('heart', event.target.value)}
-                  className="mt-2"
+                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
+                  placeholder="Regular rate and rhythm"
                   rows={3}
                 />
               </div>
@@ -1748,7 +2050,9 @@ export default function StaffRecordReview() {
                   id="abdomen"
                   value={assessmentForm.abdomen}
                   onChange={(event) => updateAssessmentField('abdomen', event.target.value)}
-                  className="mt-2"
+                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
+                  placeholder="Soft, non-tender"
                   rows={3}
                 />
               </div>
@@ -1758,7 +2062,9 @@ export default function StaffRecordReview() {
                   id="extremities"
                   value={assessmentForm.extremities}
                   onChange={(event) => updateAssessmentField('extremities', event.target.value)}
-                  className="mt-2"
+                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
+                  placeholder="No edema"
                   rows={3}
                 />
               </div>
@@ -1768,7 +2074,8 @@ export default function StaffRecordReview() {
                   id="otherFindings"
                   value={assessmentForm.others}
                   onChange={(event) => updateAssessmentField('others', event.target.value)}
-                  className="mt-2"
+                  className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  maxLength={MAX_PHYSICAL_EXAM_NOTES_LENGTH}
                   rows={4}
                   placeholder="Document additional observations, recommendations, or restrictions."
                 />
@@ -1779,6 +2086,7 @@ export default function StaffRecordReview() {
                   id="examinedBy"
                   value={assessmentForm.examinedBy}
                   onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
+                  maxLength={MAX_EXAMINED_BY_LENGTH}
                   className="mt-2"
                   placeholder="Doctor name"
                 />
@@ -1798,8 +2106,9 @@ export default function StaffRecordReview() {
                 <Textarea
                   id="staffNotes"
                   value={staffNotes}
-                  onChange={(event) => setStaffNotes(event.target.value)}
-                  className="mt-2"
+                  onChange={(event) => setStaffNotes(sanitizeSafeText(event.target.value, MAX_CLINIC_NOTES_LENGTH))}
+                  className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  maxLength={MAX_CLINIC_NOTES_LENGTH}
                   rows={6}
                   placeholder="Add review notes, feedback to the student, follow-up instructions, or clinic observations."
                 />
@@ -1817,7 +2126,7 @@ export default function StaffRecordReview() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="enrolment">Enrolment</SelectItem>
+                      <SelectItem value="enrolment">Enrollment</SelectItem>
                       <SelectItem value="ojt">OJT</SelectItem>
                       <SelectItem value="rle">RLE</SelectItem>
                     </SelectContent>
@@ -1899,7 +2208,8 @@ export default function StaffRecordReview() {
                     id="diagnosis"
                     value={clearanceForm.diagnosis}
                     onChange={(event) => updateClearanceField('diagnosis', event.target.value)}
-                    className="mt-2"
+                    className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                    maxLength={MAX_CLEARANCE_DIAGNOSIS_LENGTH}
                     rows={4}
                   />
                 </div>
@@ -1912,7 +2222,8 @@ export default function StaffRecordReview() {
                     id="remarks"
                     value={clearanceForm.remarks}
                     onChange={(event) => updateClearanceField('remarks', event.target.value)}
-                    className="mt-2"
+                    className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                    maxLength={MAX_CLEARANCE_REMARKS_LENGTH}
                     rows={4}
                     placeholder="State whether the student is fit, fit with recommendations, or needs follow-up."
                   />
