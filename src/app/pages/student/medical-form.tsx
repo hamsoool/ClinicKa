@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 import { ArrowLeft, ArrowRight, Upload } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Progress } from '../../components/ui/progress';
 import StudentPageIntro from '../../components/student-page-intro';
 import { useAuth } from '../../lib/auth';
+import { getYearLevelLabel, isCurrentSubmissionYear, resolveStudentYearLevel } from '../../lib/student-year';
 import { MedicalFormStepContent } from './medical-form/medical-form-step-content';
 import { useStudentMedicalForm } from './medical-form/use-student-medical-form';
 
@@ -16,6 +18,8 @@ export default function StudentMedicalForm() {
   const { me } = useAuth();
   const editSubmissionId = searchParams.get('edit');
   const hasDataPrivacyConsent = searchParams.get('consent') === '1';
+  const canAccessSelectedYear = isCurrentSubmissionYear(me, year);
+  const currentYearLabel = getYearLevelLabel(resolveStudentYearLevel(me));
 
   const {
     step,
@@ -40,6 +44,17 @@ export default function StudentMedicalForm() {
     if (!submitted) return;
     navigate('/student/year-selection', { replace: true });
   }, [navigate, submitted]);
+
+  useEffect(() => {
+    if (canAccessSelectedYear) return;
+
+    toast.error(`Only your current year level (${currentYearLabel}) can open the medical form.`);
+    navigate('/student/year-selection', { replace: true });
+  }, [canAccessSelectedYear, currentYearLabel, navigate]);
+
+  if (!canAccessSelectedYear) {
+    return null;
+  }
 
   return (
     <div className="mx-auto w-full max-w-[100rem]">

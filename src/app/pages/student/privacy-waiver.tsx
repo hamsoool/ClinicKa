@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, BadgeCheck, ChevronRight, FileText, ShieldCheck } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Checkbox } from '../../components/ui/checkbox';
 import StudentPageIntro from '../../components/student-page-intro';
 import { Label } from '../../components/ui/label';
+import { useAuth } from '../../lib/auth';
+import { getYearLevelLabel, isCurrentSubmissionYear, resolveStudentYearLevel } from '../../lib/student-year';
 import {
   DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT,
   DATA_PRIVACY_CONSENT_BODY,
@@ -14,25 +17,28 @@ import {
 
 export default function StudentPrivacyWaiver() {
   const navigate = useNavigate();
+  const { me } = useAuth();
   const { year } = useParams();
   const [searchParams] = useSearchParams();
   const [dataPrivacyConsent, setDataPrivacyConsent] = useState(false);
   const canContinue = dataPrivacyConsent;
   const editSubmissionId = searchParams.get('edit');
+  const canAccessSelectedYear = isCurrentSubmissionYear(me, year);
+  const currentYearLabel = getYearLevelLabel(resolveStudentYearLevel(me));
   const yearLabel = useMemo(() => {
-    switch (year) {
-      case '1':
-        return '1st Year';
-      case '2':
-        return '2nd Year';
-      case '3':
-        return '3rd Year';
-      case '4':
-        return '4th Year';
-      default:
-        return `Year ${year || ''}`.trim();
-    }
+    return getYearLevelLabel(year);
   }, [year]);
+
+  useEffect(() => {
+    if (canAccessSelectedYear) return;
+
+    toast.error(`Only your current year level (${currentYearLabel}) can open the submission waiver.`);
+    navigate('/student/year-selection', { replace: true });
+  }, [canAccessSelectedYear, currentYearLabel, navigate]);
+
+  if (!canAccessSelectedYear) {
+    return null;
+  }
 
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-8">
