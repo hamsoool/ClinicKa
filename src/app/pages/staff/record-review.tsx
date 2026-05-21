@@ -1385,35 +1385,6 @@ export default function StaffRecordReview() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Student-Submitted Measurements</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="submittedWeight">Weight (kg)</Label>
-                    <Input
-                      id="submittedWeight"
-                      value={recordForm.weight}
-                      onChange={(event) => updateRecordField('weight', event.target.value)}
-                      className="mt-2"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="submittedHeight">Height (cm)</Label>
-                    <Input
-                      id="submittedHeight"
-                      value={recordForm.height}
-                      onChange={(event) => updateRecordField('height', event.target.value)}
-                      className="mt-2"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="submittedBmi">BMI</Label>
-                    <Input id="submittedBmi" value={recordForm.bmi} readOnly className="mt-2 bg-muted/40" />
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </div>
         </TabsContent>
