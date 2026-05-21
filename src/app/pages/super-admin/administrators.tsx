@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  Archive,
   CalendarClock,
   Mail,
+  RefreshCcw,
   Search,
   ShieldCheck,
-  Trash2,
   UserPlus,
   Users,
 } from 'lucide-react';
@@ -26,20 +27,14 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { Textarea } from '../../components/ui/textarea';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../../components/ui/alert-dialog';
-import {
+  archiveSuperAdminAdministrator,
   createSuperAdminAdministrator,
-  deleteSuperAdminAdministrator,
+  restoreSuperAdminAdministrator,
   type SuperAdminAdministrator,
+  type SuperAdminArchivedAdministrator,
 } from '../../lib/api';
 import {
   invalidateSuperAdminWorkflowQueries,
@@ -73,17 +68,22 @@ function prettifyEmailName(email?: string | null) {
     .join(' ');
 }
 
-function getDisplayName(account: Pick<SuperAdminAdministrator, 'name' | 'email' | 'id'>) {
+function getDisplayName(
+  account: Pick<SuperAdminAdministrator | SuperAdminArchivedAdministrator, 'name' | 'email' | 'id'>,
+) {
   const rawName = String(account.name || '').trim();
   if (rawName && !rawName.includes('@')) return rawName;
   return prettifyEmailName(account.email) || rawName || account.id;
 }
 
-function matchesSearch(account: SuperAdminAdministrator, query: string) {
+function matchesSearch(
+  account: SuperAdminAdministrator | SuperAdminArchivedAdministrator,
+  query: string,
+) {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
 
-  return [account.id, account.name, account.email || '', account.role]
+  return [account.id, account.name, account.email || '', account.role, account.status]
     .join(' ')
     .toLowerCase()
     .includes(needle);
@@ -93,11 +93,16 @@ export default function SuperAdminAdministrators() {
   const queryClient = useQueryClient();
   const { data, isError, isFetching } = useSuperAdminAdministratorsQuery();
   const administrators = data?.administrators || [];
+  const archivedAdministrators = data?.archivedAdministrators || [];
+  const [tab, setTab] = useState<'active' | 'archived'>('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [openCreate, setOpenCreate] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<SuperAdminAdministrator | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<SuperAdminAdministrator | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<SuperAdminArchivedAdministrator | null>(null);
+  const [archiveReason, setArchiveReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -114,6 +119,11 @@ export default function SuperAdminAdministrators() {
   const filteredAdministrators = useMemo(
     () => administrators.filter((administrator) => matchesSearch(administrator, searchQuery)),
     [administrators, searchQuery],
+  );
+
+  const filteredArchivedAdministrators = useMemo(
+    () => archivedAdministrators.filter((administrator) => matchesSearch(administrator, searchQuery)),
+    [archivedAdministrators, searchQuery],
   );
 
   const recentlyAdded = useMemo(
@@ -159,21 +169,48 @@ export default function SuperAdminAdministrators() {
     }
   };
 
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
+  const confirmArchive = async () => {
+    if (!archiveTarget) return;
 
     try {
-      setIsDeleting(true);
-      await deleteSuperAdminAdministrator(deleteTarget.userId);
-      toast.success(`${getDisplayName(deleteTarget)} was removed from administrators`);
-      setDeleteTarget(null);
+      setIsArchiving(true);
+      await archiveSuperAdminAdministrator({
+        userId: archiveTarget.userId,
+        reason: archiveReason.trim() || undefined,
+      });
+      toast.success(`${getDisplayName(archiveTarget)} was archived`);
+      setArchiveTarget(null);
+      setArchiveReason('');
+      setTab('archived');
       await invalidateSuperAdminWorkflowQueries(queryClient);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to remove administrator');
+      toast.error(error instanceof Error ? error.message : 'Failed to archive administrator');
     } finally {
-      setIsDeleting(false);
+      setIsArchiving(false);
     }
   };
+
+  const confirmRestore = async () => {
+    if (!restoreTarget) return;
+
+    try {
+      setIsRestoring(true);
+      await restoreSuperAdminAdministrator(restoreTarget.archiveId);
+      toast.success(`${getDisplayName(restoreTarget)} was restored`);
+      setRestoreTarget(null);
+      setTab('active');
+      await invalidateSuperAdminWorkflowQueries(queryClient);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to restore administrator');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const searchPlaceholder =
+    tab === 'active'
+      ? 'Search active administrators'
+      : 'Search archived administrators';
 
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-6">
@@ -185,7 +222,7 @@ export default function SuperAdminAdministrators() {
           </div>
         )}
         title="Administrator Management"
-        description="Create administrator access for system operators and permanently delete admin sign-in accounts that should no longer control the clinic portal."
+        description="Create administrator access for system operators, archive accounts that should no longer sign in, and restore them when access needs to be returned."
         actions={(
           <Button className="w-full sm:w-fit" onClick={() => setOpenCreate(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
@@ -200,7 +237,7 @@ export default function SuperAdminAdministrators() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
-                  Administrators
+                  Active Admins
                 </p>
                 <p className="mt-3 text-3xl font-bold leading-none text-on-surface">{administrators.length}</p>
               </div>
@@ -208,7 +245,7 @@ export default function SuperAdminAdministrators() {
                 <Users className="h-5 w-5" />
               </div>
             </div>
-            <p className="mt-4 text-sm text-on-surface-variant">Active accounts with admin portal access</p>
+            <p className="mt-4 text-sm text-on-surface-variant">Accounts with current admin portal access</p>
           </CardContent>
         </Card>
 
@@ -217,17 +254,15 @@ export default function SuperAdminAdministrators() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
-                  Status
+                  Archived Admins
                 </p>
-                <p className="mt-3 text-3xl font-bold leading-none text-on-surface">
-                  {isFetching ? 'Syncing' : 'Active'}
-                </p>
+                <p className="mt-3 text-3xl font-bold leading-none text-on-surface">{archivedAdministrators.length}</p>
               </div>
-              <div className="rounded-2xl bg-surface-container p-3 text-emerald-700">
-                <ShieldCheck className="h-5 w-5" />
+              <div className="rounded-2xl bg-surface-container p-3 text-amber-700">
+                <Archive className="h-5 w-5" />
               </div>
             </div>
-            <p className="mt-4 text-sm text-on-surface-variant">Administrator list refreshes automatically</p>
+            <p className="mt-4 text-sm text-on-surface-variant">Accounts kept inactive until restored</p>
           </CardContent>
         </Card>
 
@@ -242,128 +277,231 @@ export default function SuperAdminAdministrators() {
                   {recentlyAdded ? getDisplayName(recentlyAdded) : 'None yet'}
                 </p>
               </div>
-              <div className="rounded-2xl bg-surface-container p-3 text-amber-700">
+              <div className="rounded-2xl bg-surface-container p-3 text-emerald-700">
                 <CalendarClock className="h-5 w-5" />
               </div>
             </div>
             <p className="mt-4 text-sm text-on-surface-variant">
-              {recentlyAdded ? formatDateTime(recentlyAdded.createdAt) : 'Create the first administrator account'}
+              {recentlyAdded ? formatDateTime(recentlyAdded.createdAt) : isFetching ? 'Syncing administrator list' : 'Create the first administrator account'}
             </p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.45fr)_minmax(28rem,0.75fr)] 2xl:items-start">
-      <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle className="text-xl font-semibold text-on-surface">System Administrators</CardTitle>
-            <p className="mt-1 text-sm text-on-surface-variant">
-              These users can access the normal administrator portal.
-            </p>
-          </div>
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search administrators"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-            />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {filteredAdministrators.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
-              No administrators matched your search.
+        <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-xl font-semibold text-on-surface">System Administrators</CardTitle>
+              <p className="mt-1 text-sm text-on-surface-variant">
+                Archive administrators to suspend access, then restore them when needed.
+              </p>
             </div>
-          ) : null}
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder={searchPlaceholder}
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Tabs value={tab} onValueChange={(value) => setTab(value as 'active' | 'archived')} className="space-y-4">
+              <TabsList className="w-full sm:w-fit">
+                <TabsTrigger value="active">Active</TabsTrigger>
+                <TabsTrigger value="archived">Archived</TabsTrigger>
+              </TabsList>
 
-          <div className="space-y-3 md:hidden">
-            {filteredAdministrators.map((administrator) => (
-              <Card key={administrator.userId} className="border-outline-variant/40">
-                <CardContent className="space-y-3 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-on-surface">{getDisplayName(administrator)}</p>
-                      <p className="break-all text-xs text-muted-foreground">{administrator.email || '-'}</p>
-                    </div>
-                    <Badge className="bg-purple-100 text-purple-700">Admin</Badge>
+              <TabsContent value="active" className="space-y-4">
+                {filteredAdministrators.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                    No active administrators matched your search.
                   </div>
+                ) : null}
 
-                  <div className="space-y-1 text-sm">
-                    <p>
-                      <span className="font-medium text-on-surface">Created:</span> {formatDateTime(administrator.createdAt)}
-                    </p>
-                    <p>
-                      <span className="font-medium text-on-surface">Last Active:</span> {formatDateTime(administrator.lastActive)}
-                    </p>
+                <div className="space-y-3 md:hidden">
+                  {filteredAdministrators.map((administrator) => (
+                    <Card key={administrator.userId} className="border-outline-variant/40">
+                      <CardContent className="space-y-3 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-on-surface">{getDisplayName(administrator)}</p>
+                            <p className="break-all text-xs text-muted-foreground">{administrator.email || '-'}</p>
+                          </div>
+                          <Badge className="bg-purple-100 text-purple-700">Admin</Badge>
+                        </div>
+
+                        <div className="space-y-1 text-sm">
+                          <p>
+                            <span className="font-medium text-on-surface">Created:</span> {formatDateTime(administrator.createdAt)}
+                          </p>
+                          <p>
+                            <span className="font-medium text-on-surface">Last Active:</span> {formatDateTime(administrator.lastActive)}
+                          </p>
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => setArchiveTarget(administrator)}
+                        >
+                          <Archive className="mr-2 h-4 w-4" />
+                          Archive Account
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead>Last Active</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAdministrators.map((administrator) => (
+                        <TableRow key={administrator.userId}>
+                          <TableCell className="font-medium">{getDisplayName(administrator)}</TableCell>
+                          <TableCell className="whitespace-normal break-all">
+                            <span className="inline-flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-muted-foreground" />
+                              {administrator.email || '-'}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className="bg-purple-100 text-purple-700">Administrator</Badge>
+                          </TableCell>
+                          <TableCell>{formatDateTime(administrator.createdAt)}</TableCell>
+                          <TableCell>{formatDateTime(administrator.lastActive)}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setArchiveTarget(administrator)}
+                            >
+                              <Archive className="mr-2 h-4 w-4" />
+                              Archive
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="archived" className="space-y-4">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  Archived administrators cannot sign in until you restore their account.
+                </div>
+
+                {filteredArchivedAdministrators.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                    No archived administrators matched your search.
                   </div>
+                ) : null}
 
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setDeleteTarget(administrator)}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Admin Account
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                <div className="space-y-3 md:hidden">
+                  {filteredArchivedAdministrators.map((administrator) => (
+                    <Card key={administrator.archiveId} className="border-outline-variant/40">
+                      <CardContent className="space-y-3 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-on-surface">{getDisplayName(administrator)}</p>
+                            <p className="break-all text-xs text-muted-foreground">{administrator.email || '-'}</p>
+                          </div>
+                          <Badge className="bg-amber-100 text-amber-700">Archived</Badge>
+                        </div>
 
-          <div className="hidden overflow-x-auto md:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last Active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAdministrators.map((administrator) => (
-                  <TableRow key={administrator.userId}>
-                    <TableCell className="font-medium">{getDisplayName(administrator)}</TableCell>
-                    <TableCell className="whitespace-normal break-all">
-                      <span className="inline-flex items-center gap-2">
-                        <Mail className="h-4 w-4 text-muted-foreground" />
-                        {administrator.email || '-'}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className="bg-purple-100 text-purple-700">Administrator</Badge>
-                    </TableCell>
-                    <TableCell>{formatDateTime(administrator.createdAt)}</TableCell>
-                    <TableCell>{formatDateTime(administrator.lastActive)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => setDeleteTarget(administrator)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete Account
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                        <div className="space-y-1 text-sm">
+                          <p>
+                            <span className="font-medium text-on-surface">Archived On:</span> {formatDateTime(administrator.archivedAt)}
+                          </p>
+                          <p className="break-words">
+                            <span className="font-medium text-on-surface">Note:</span> {administrator.archivedReason || '-'}
+                          </p>
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => setRestoreTarget(administrator)}
+                        >
+                          <RefreshCcw className="mr-2 h-4 w-4" />
+                          Restore Account
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Archived On</TableHead>
+                        <TableHead>Note</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredArchivedAdministrators.map((administrator) => (
+                        <TableRow key={administrator.archiveId}>
+                          <TableCell className="font-medium">{getDisplayName(administrator)}</TableCell>
+                          <TableCell className="whitespace-normal break-all">
+                            <span className="inline-flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-muted-foreground" />
+                              {administrator.email || '-'}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className="bg-amber-100 text-amber-700">Archived</Badge>
+                          </TableCell>
+                          <TableCell>{formatDateTime(administrator.archivedAt)}</TableCell>
+                          <TableCell>
+                            <span className="inline-block max-w-60 truncate align-bottom">
+                              {administrator.archivedReason || '-'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setRestoreTarget(administrator)}
+                            >
+                              <RefreshCcw className="mr-2 h-4 w-4" />
+                              Restore
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
 
         <div className="space-y-6 2xl:sticky 2xl:top-24">
-      <PasswordChangeCard
-        title="Super Admin Password"
-        description="Update the password for your super administrator account."
-      />
+          <PasswordChangeCard
+            title="Super Admin Password"
+            description="Update the password for your super administrator account."
+          />
         </div>
       </div>
 
@@ -430,38 +568,87 @@ export default function SuperAdminAdministrators() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
-        open={Boolean(deleteTarget)}
+      <Dialog
+        open={Boolean(archiveTarget)}
         onOpenChange={(open) => {
-          if (!open && !isDeleting) {
-            setDeleteTarget(null);
+          if (!open && !isArchiving) {
+            setArchiveTarget(null);
+            setArchiveReason('');
           }
         }}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Admin Account?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget
-                ? `${getDisplayName(deleteTarget)} will lose administrator access and their sign-in account will be deleted.`
-                : 'This administrator will be removed from the system.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                void confirmDelete();
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Archive Administrator</DialogTitle>
+            <DialogDescription>
+              {archiveTarget
+                ? `Archive ${getDisplayName(archiveTarget)}? The account will lose administrator access until it is restored.`
+                : 'Archive this administrator account.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Archiving keeps the profile in the system, but blocks sign-in and moves the account to the archived tab.
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="sa-archive-reason">Archive note (optional)</Label>
+              <Textarea
+                id="sa-archive-reason"
+                placeholder="Add context for why this administrator is being archived"
+                value={archiveReason}
+                onChange={(event) => setArchiveReason(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setArchiveTarget(null);
+                setArchiveReason('');
               }}
-              disabled={isDeleting}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={isArchiving}
             >
-              {isDeleting ? 'Deleting...' : 'Delete Admin Account'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void confirmArchive()} disabled={isArchiving}>
+              {isArchiving ? 'Archiving...' : 'Archive Administrator'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(restoreTarget)}
+        onOpenChange={(open) => {
+          if (!open && !isRestoring) {
+            setRestoreTarget(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restore Administrator</DialogTitle>
+            <DialogDescription>
+              {restoreTarget
+                ? `Restore ${getDisplayName(restoreTarget)} to active administrator access?`
+                : 'Restore this administrator account.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+            Restoring will reactivate sign-in access and move the account back to the active administrators list.
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRestoreTarget(null)} disabled={isRestoring}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void confirmRestore()} disabled={isRestoring}>
+              {isRestoring ? 'Restoring...' : 'Restore Administrator'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

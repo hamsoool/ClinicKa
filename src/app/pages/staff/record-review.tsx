@@ -531,10 +531,11 @@ export default function StaffRecordReview() {
   const queryClient = useQueryClient();
   const { me } = useAuth();
   const currentStaffId = String(me?.staff?.id || '').trim();
-  const hasFullClinicReviewAccess =
+  const isDoctorWorkspace =
     ['clinic doctor', 'doctor'].includes(String(me?.staff?.position || '').trim().toLowerCase())
-    || me?.profile.role === 'admin'
-    || me?.profile.role === 'staff';
+    || me?.profile.role === 'admin';
+  const hasFullClinicReviewAccess =
+    isDoctorWorkspace || me?.profile.role === 'staff';
   const canFinalizeClearance = hasFullClinicReviewAccess;
   const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1081,6 +1082,7 @@ export default function StaffRecordReview() {
   const previousReviewStep = currentReviewStepIndex > 0 ? REVIEW_STEPS[currentReviewStepIndex - 1] : null;
   const nextReviewStep =
     currentReviewStepIndex < REVIEW_STEPS.length - 1 ? REVIEW_STEPS[currentReviewStepIndex + 1] : null;
+  const finalDecisionLabel = isDoctorWorkspace ? 'Final Decision' : 'Clearance';
   const getReviewStepLabel = (step: ReviewStep) => {
     switch (step) {
       case 'record':
@@ -1090,7 +1092,7 @@ export default function StaffRecordReview() {
       case 'assessment':
         return 'Assessment';
       case 'decision':
-        return 'Clearance';
+        return finalDecisionLabel;
       default:
         return step;
     }
@@ -1178,7 +1180,7 @@ export default function StaffRecordReview() {
 
       <PortalPageIntro
         title="Clinic Review"
-        description="Review, verify, and update the student medical record before finalizing the clinic decision."
+        description={`Review, verify, and update the student medical record before finalizing the ${isDoctorWorkspace ? 'clinic decision' : 'clearance'}.`}
         actions={(
           <div className="rounded-xl border bg-card px-4 py-3 text-sm shadow-sm">
             <p className="font-medium text-foreground">Current recommendation</p>
@@ -1299,7 +1301,7 @@ export default function StaffRecordReview() {
         <CardContent className="pt-5">
           <p className="text-sm font-semibold text-foreground">Recommended workflow</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            1) Confirm student record, 2) verify labs, 3) complete assessment, 4) finalize the clearance.
+            1) Confirm student record, 2) verify labs, 3) complete assessment, 4) finalize the {isDoctorWorkspace ? 'clinic decision' : 'clearance'}.
           </p>
         </CardContent>
       </Card>
@@ -1316,7 +1318,7 @@ export default function StaffRecordReview() {
             Assessment
           </TabsTrigger>
           <TabsTrigger value="decision" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
-            Clearance
+            {finalDecisionLabel}
           </TabsTrigger>
         </TabsList>
 
@@ -2244,7 +2246,7 @@ export default function StaffRecordReview() {
             <p className="text-sm text-muted-foreground">
               {nextReviewStep
                 ? `Continue to ${getReviewStepLabel(nextReviewStep)} when this section is complete.`
-                : 'You are on the final review step. Finalize the clinic decision below.'}
+                : `You are on the final review step. Finalize the ${isDoctorWorkspace ? 'clinic decision' : 'clearance'} below.`}
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -2270,13 +2272,15 @@ export default function StaffRecordReview() {
       <Card className="border-primary/20">
         <CardContent className="flex flex-col gap-4 pt-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1">
-            <p className="font-semibold text-foreground">Finalize the clinic review</p>
+            <p className="font-semibold text-foreground">
+              {isDoctorWorkspace ? 'Finalize the clinic review' : 'Finalize the clearance'}
+            </p>
             <p className="text-sm text-muted-foreground">
               {isApprovedLocked
                 ? 'This submission is already approved. Actions are locked to prevent accidental changes.'
                 : canFinalizeClearance
-                  ? 'Save draft edits at any time, return the record for correction when needed, or approve the clearance once everything is complete.'
-                  : 'Save draft edits at any time or return the record for correction when updates are needed.'}
+                  ? `Save draft edits at any time, mark the record pending when needed, or ${isDoctorWorkspace ? 'mark it cleared' : 'mark the record cleared'} once everything is complete.`
+                  : 'Save draft edits at any time or mark the record pending when updates are needed.'}
             </p>
           </div>
 
@@ -2290,7 +2294,7 @@ export default function StaffRecordReview() {
               setReturnReason(staffNotes);
               setShowReturnDialog(true);
             }} disabled={saving}>
-              Return for Correction
+              Pending
             </Button>
             {canFinalizeClearance ? (
               <Button
@@ -2299,7 +2303,7 @@ export default function StaffRecordReview() {
                 className="bg-green-600 text-white hover:bg-green-700"
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                Approve Clearance
+                Cleared
               </Button>
             ) : null}
           </div>
@@ -2312,9 +2316,9 @@ export default function StaffRecordReview() {
       <Dialog open={showReturnDialog} onOpenChange={setShowReturnDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Return for Correction</DialogTitle>
+            <DialogTitle>Pending</DialogTitle>
             <DialogDescription>
-              Provide clear instructions or reasons for returning this medical record. The student will see this note on their dashboard.
+              Provide clear instructions or reasons for marking this medical record as pending. The student will see this note on their dashboard.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -2339,7 +2343,7 @@ export default function StaffRecordReview() {
               }}
               disabled={!returnReason.trim() || saving}
             >
-              {saving ? 'Returning...' : 'Confirm Return'}
+              {saving ? 'Saving Pending...' : 'Confirm Pending'}
             </Button>
           </DialogFooter>
         </DialogContent>

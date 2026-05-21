@@ -17,7 +17,7 @@ const navItems = [
   {
     path: '/super-admin',
     label: 'Administrators',
-    subLabel: 'Add or remove system admins',
+    subLabel: 'Add, archive, and restore system admins',
     mobileLabel: 'Admins',
     icon: UserRoundCog,
     mobileEmphasis: true,
