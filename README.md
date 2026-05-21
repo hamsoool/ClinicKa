@@ -11,7 +11,7 @@ ClinicKa has four role-based portals:
 - Student portal (`/student`): profile management, yearly medical form submission, requirements tracking, and certificate viewing.
 - Staff portal (`/staff`): submission queue, detailed record review, status updates (`pending`, `returned`, `physical_exam_done`, `approved`, `resubmitted`), and certificate workflows.
 - Admin portal (`/admin`): user account management, staff management, archived account lifecycle, and reports.
-- Super admin portal (`/super-admin`): add and remove administrator accounts only.
+- Super admin portal (`/super-admin`): add, archive, and restore administrator accounts.
 
 ## System Overview (End-to-End)
 

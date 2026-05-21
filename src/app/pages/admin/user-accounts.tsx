@@ -25,14 +25,13 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui/table';
-import { Archive, Download, Printer, Search, Trash2, UserCog, UserPlus, Users, ArrowUpDown, RefreshCcw } from 'lucide-react';
+import { Archive, Download, Printer, Search, UserCog, UserPlus, Users, ArrowUpDown, RefreshCcw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import {
   archiveUserAccount,
   createAdminAccount,
   createAdminStaff,
-  deleteArchivedUserAccount,
   restoreArchivedUserAccount,
   type AdminUserAccount,
   type ArchivedUserAccount,
@@ -68,7 +67,6 @@ export default function AdminUserAccounts() {
   const [roleFilter, setRoleFilter] = useState(urlRoleFilter);
   const [openCreate, setOpenCreate] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<AdminUserAccount | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<ArchivedUserAccount | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<ArchivedUserAccount | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,7 +74,6 @@ export default function AdminUserAccounts() {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [bulkArchiveOpen, setBulkArchiveOpen] = useState(false);
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkRestoreOpen, setBulkRestoreOpen] = useState(false);
   const [form, setForm] = useState({
     email: '',
@@ -275,22 +272,6 @@ export default function AdminUserAccounts() {
     }
   };
 
-  const confirmPermanentDelete = async () => {
-    if (!deleteTarget) return;
-
-    try {
-      setIsActionPending(true);
-      await deleteArchivedUserAccount(deleteTarget.archiveId);
-      toast.success(`${deleteTarget.name} was permanently deleted`);
-      setDeleteTarget(null);
-      await invalidateAdminWorkflowQueries(queryClient);
-    } catch (error: any) {
-      toast.error(error?.message || 'Failed to permanently delete account');
-    } finally {
-      setIsActionPending(false);
-    }
-  };
-
   const confirmRestore = async () => {
     if (!restoreTarget) return;
 
@@ -322,24 +303,6 @@ export default function AdminUserAccounts() {
       await invalidateAdminWorkflowQueries(queryClient);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to archive some accounts');
-    } finally {
-      setIsActionPending(false);
-    }
-  };
-
-  const confirmBulkDelete = async () => {
-    try {
-      setIsActionPending(true);
-      const promises = Array.from(selectedUserIds).map(archiveId => 
-        deleteArchivedUserAccount(archiveId)
-      );
-      await Promise.all(promises);
-      toast.success(`${selectedUserIds.size} accounts were permanently deleted`);
-      setBulkDeleteOpen(false);
-      setSelectedUserIds(new Set());
-      await invalidateAdminWorkflowQueries(queryClient);
-    } catch (error: any) {
-      toast.error(error?.message || 'Failed to permanently delete some accounts');
     } finally {
       setIsActionPending(false);
     }
@@ -418,7 +381,7 @@ export default function AdminUserAccounts() {
     <div className="mx-auto w-full max-w-[100rem] space-y-6">
       <PortalPageIntro
         title="User Accounts"
-        description="Archive student and clinic staff accounts first, then permanently delete them from the archive when they should be removed from the system. Administrator account deletion stays reserved for the super admin console."
+        description="Archive student and clinic staff accounts to remove them from active access, then restore them from the archive when they need access again. Administrator accounts remain protected here."
         actions={(
           <Button className="w-full sm:w-fit md:self-auto" onClick={() => setOpenCreate(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
@@ -548,7 +511,7 @@ export default function AdminUserAccounts() {
             <DialogTitle>Archive Account</DialogTitle>
             <DialogDescription>
               {archiveTarget
-                ? `Archive ${archiveTarget.name}? The user will be removed from active lists and blocked from accessing the system until an admin permanently deletes the archived record.`
+                ? `Archive ${archiveTarget.name}? The user will be removed from active lists and blocked from accessing the system until an admin restores the account.`
                 : 'Archive this account.'}
             </DialogDescription>
           </DialogHeader>
@@ -573,32 +536,6 @@ export default function AdminUserAccounts() {
             }} disabled={isActionPending}>Cancel</Button>
             <Button variant="destructive" onClick={confirmArchive} disabled={isActionPending}>
               {isActionPending ? 'Archiving...' : 'Archive Account'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => {
-        if (!open) {
-          setDeleteTarget(null);
-        }
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Permanently Delete Archived Account</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
-                ? `Permanently delete ${deleteTarget.name}? This removes the archived account from the database, deletes the system account, and frees the user to register again later.`
-                : 'Permanently delete this archived account.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            This action is irreversible. Student submissions, linked files, staff links, and the sign-in account are deleted from the system.
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isActionPending}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmPermanentDelete} disabled={isActionPending}>
-              {isActionPending ? 'Deleting...' : 'Delete Permanently'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -638,26 +575,6 @@ export default function AdminUserAccounts() {
             }} disabled={isActionPending}>Cancel</Button>
             <Button variant="destructive" onClick={confirmBulkArchive} disabled={isActionPending}>
               {isActionPending ? 'Archiving...' : 'Archive Accounts'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Bulk Delete Accounts</DialogTitle>
-            <DialogDescription>
-              Permanently delete {selectedUserIds.size} selected account{selectedUserIds.size === 1 ? '' : 's'}?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            This action is irreversible. All linked data will be deleted from the system.
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={isActionPending}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmBulkDelete} disabled={isActionPending}>
-              {isActionPending ? 'Deleting...' : 'Delete Permanently'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -721,14 +638,9 @@ export default function AdminUserAccounts() {
                     <Archive className="mr-2 h-4 w-4" /> Bulk Archive
                   </Button>
                 ) : (
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <Button variant="outline" size="sm" onClick={() => setBulkRestoreOpen(true)} className="h-8 w-full sm:w-auto">
-                      <RefreshCcw className="mr-2 h-4 w-4" /> Bulk Restore
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)} className="h-8 w-full sm:w-auto">
-                      <Trash2 className="mr-2 h-4 w-4" /> Bulk Delete
-                    </Button>
-                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setBulkRestoreOpen(true)} className="h-8 w-full sm:w-auto">
+                    <RefreshCcw className="mr-2 h-4 w-4" /> Bulk Restore
+                  </Button>
                 )}
               </div>
             )}
@@ -972,8 +884,8 @@ export default function AdminUserAccounts() {
               <CardTitle>Archived Accounts</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                Permanently deleting an archived account removes its system access and linked database data so the same user can register again later.
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                Archived accounts stay inactive until you restore them. Their records remain preserved while they are in the archive.
               </div>
               {sortedArchivedUsers.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -1021,10 +933,6 @@ export default function AdminUserAccounts() {
                         <Button variant="outline" size="sm" onClick={() => setRestoreTarget(user)} className="w-full">
                           <RefreshCcw className="mr-2 h-4 w-4" />
                           Restore Account
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(user)} className="w-full">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete Permanently
                         </Button>
                       </div>
                     </CardContent>
@@ -1103,16 +1011,10 @@ export default function AdminUserAccounts() {
                           <span className="inline-block max-w-60 truncate align-bottom">{user.archivedReason || '-'}</span>
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setRestoreTarget(user)}>
-                              <RefreshCcw className="mr-2 h-4 w-4" />
-                              Restore
-                            </Button>
-                            <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(user)}>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </Button>
-                          </div>
+                          <Button variant="outline" size="sm" onClick={() => setRestoreTarget(user)}>
+                            <RefreshCcw className="mr-2 h-4 w-4" />
+                            Restore
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
