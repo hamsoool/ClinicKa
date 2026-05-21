@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { getStudentAnnouncements, getStudentProfileAssets } from '../../lib/api';
 import { useStudentRecordsQuery } from './student-records-query';
+import type { SubmissionRecord } from '../../lib/record-types';
 
 const yearLabels = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 const dashboardDateFormatter = new Intl.DateTimeFormat('en-US', {
@@ -126,6 +127,43 @@ export default function StudentDashboard() {
     if (Number.isNaN(date.getTime())) return '--';
     return dashboardDateFormatter.format(date);
   };
+
+  const getRecordReferenceDate = (record?: SubmissionRecord) =>
+    record?.status === 'approved'
+      ? record.clearanceInfo?.issuedDate || record.updatedAt || record.submittedAt
+      : record?.submittedAt;
+
+  const calculateAgeAtDate = (birthday?: string, referenceDate?: string) => {
+    if (!birthday || !referenceDate) return null;
+
+    const birth = new Date(birthday);
+    const reference = new Date(referenceDate);
+
+    if (Number.isNaN(birth.getTime()) || Number.isNaN(reference.getTime())) {
+      return null;
+    }
+
+    let age = reference.getFullYear() - birth.getFullYear();
+    const monthDiff = reference.getMonth() - birth.getMonth();
+    const dayDiff = reference.getDate() - birth.getDate();
+
+    if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+      age -= 1;
+    }
+
+    return age >= 0 ? age : null;
+  };
+
+  const getRecordAge = (record?: SubmissionRecord) => {
+    if (!record) return '--';
+    const calculatedAge = calculateAgeAtDate(record.birthday, getRecordReferenceDate(record));
+    if (calculatedAge !== null) return String(calculatedAge);
+    return record.age || '--';
+  };
+
+  const getRecordAgeLabel = (record?: SubmissionRecord) =>
+    record?.status === 'approved' ? 'Age on approval' : 'Age on submission';
+
   const { latestRecord, yearlyRecords } = useMemo(() => {
     const sorted = [...records].sort((a, b) => {
       const aTime = new Date(a.updatedAt || a.submittedAt || 0).getTime();
@@ -407,6 +445,9 @@ export default function StudentDashboard() {
               <p className={`mt-1 text-xs ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
                 Last action: {formatDate(record?.updatedAt || record?.submittedAt)}
               </p>
+              <p className={`mt-1 text-xs ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
+                {getRecordAgeLabel(record)}: {getRecordAge(record)}
+              </p>
             </div>
           ))}
         </div>
@@ -417,6 +458,7 @@ export default function StudentDashboard() {
                 <th className="px-4 py-3 font-semibold sm:px-6">Year Level</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Status</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Last Action Date</th>
+                <th className="px-4 py-3 font-semibold sm:px-6">Age</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/20">
@@ -438,6 +480,13 @@ export default function StudentDashboard() {
                     }`}
                   >
                     {formatDate(record?.updatedAt || record?.submittedAt)}
+                  </td>
+                  <td
+                    className={`px-4 py-4 text-sm sm:px-6 ${
+                      record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'
+                    }`}
+                  >
+                    {record ? `${getRecordAge(record)} (${record.status === 'approved' ? 'approved' : 'submitted'})` : '--'}
                   </td>
                 </tr>
               ))}

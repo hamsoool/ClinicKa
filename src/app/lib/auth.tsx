@@ -8,6 +8,8 @@ const GC_DOMAIN = 'gordoncollege.edu.ph';
 const PASSWORD_SETUP_MARKER_KEY = 'gc_password_setup_accounts';
 const ACCOUNT_LOAD_ERROR_MESSAGE =
   'We could not load your account from the database. Please try signing in again.';
+const ARCHIVED_ACCOUNT_MESSAGE =
+  'This account is not available. Contact the administrator for assistance.';
 
 function isGCDomain(email?: string | null) {
   return !!email?.toLowerCase().endsWith(`@${GC_DOMAIN}`);
@@ -20,7 +22,12 @@ function normalizeEmail(email?: string | null) {
 function isArchivedAccountError(error: unknown) {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
-  return message.includes('archived') || message.includes('administrator for assistance');
+  return (
+    message.includes('archived') ||
+    message.includes('administrator for assistance') ||
+    message.includes('user is banned') ||
+    message.includes('not available')
+  );
 }
 
 function getPasswordSetupMarkers() {
@@ -128,9 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   function toAccountLoadError(error: unknown) {
     if (isArchivedAccountError(error)) {
-      return error instanceof Error
-        ? error
-        : new Error('Your account has been archived. Please contact the administrator for assistance.');
+      return new Error(ARCHIVED_ACCOUNT_MESSAGE);
     }
     return new Error(ACCOUNT_LOAD_ERROR_MESSAGE);
   }

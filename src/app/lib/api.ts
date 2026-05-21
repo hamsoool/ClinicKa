@@ -305,6 +305,19 @@ export type SuperAdminAdministrator = {
   lastActive?: string;
 };
 
+export type SuperAdminArchivedAdministrator = {
+  archiveId: string;
+  userId: string;
+  id: string;
+  name: string;
+  email?: string;
+  role: 'Administrator';
+  roleKey: 'admin';
+  status: 'Archived';
+  archivedAt: string;
+  archivedReason?: string;
+};
+
 type RequestOptions = {
   method?: string;
   token?: string | null;
@@ -1530,12 +1543,17 @@ export async function authenticateWithPassword(email: string, password: string) 
   }
 
   if (!response.ok) {
-    throw new Error(
+    const message =
       payload.msg ||
       payload.error_description ||
       payload.error ||
-      `Failed to sign in (${response.status})`,
-    );
+      `Failed to sign in (${response.status})`;
+
+    if (String(message).trim().toLowerCase().includes('user is banned')) {
+      throw new Error('This account is not available. Contact the administrator for assistance.');
+    }
+
+    throw new Error(message);
   }
 
   if (!payload?.access_token) {
@@ -4059,9 +4077,33 @@ type SuperAdminCreateAdministratorInput = {
 };
 
 export async function getSuperAdminAdministrators() {
-  return apiRequest<{ administrators: SuperAdminAdministrator[] }>(
+  const data = await apiRequest<{
+    administrators: SuperAdminAdministrator[];
+    archivedAdministrators?: SuperAdminArchivedAdministrator[];
+  }>(
     '/functions/v1/server/super-admin/administrators',
   );
+
+  if (Array.isArray(data.archivedAdministrators)) {
+    return {
+      administrators: data.administrators || [],
+      archivedAdministrators: data.archivedAdministrators,
+    };
+  }
+
+  try {
+    const archived = await apiRequest<{ users: any[] }>('/functions/v1/server/archived-accounts');
+
+    return {
+      administrators: data.administrators || [],
+      archivedAdministrators: (archived.users || []).filter((user) => user?.roleKey === 'admin'),
+    };
+  } catch {
+    return {
+      administrators: data.administrators || [],
+      archivedAdministrators: [],
+    };
+  }
 }
 
 export async function createSuperAdminAdministrator(input: SuperAdminCreateAdministratorInput) {
@@ -4077,11 +4119,54 @@ export async function createSuperAdminAdministrator(input: SuperAdminCreateAdmin
   );
 }
 
-export async function deleteSuperAdminAdministrator(userId: string) {
-  return apiRequest<{ success: boolean }>(
-    `/functions/v1/server/super-admin/administrators/${encodeURIComponent(userId)}`,
-    {
-      method: 'DELETE',
-    },
-  );
+export async function archiveSuperAdminAdministrator(input: { userId: string; reason?: string }) {
+  try {
+    return await apiRequest<{ success: boolean }>(
+      '/functions/v1/server/admin/archive-account',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const shouldFallback = message.includes('forbidden') || message.includes('not found') || message.includes('404');
+    if (!shouldFallback) throw error;
+
+    return apiRequest<{ success: boolean }>(
+      `/functions/v1/server/super-admin/administrators/${encodeURIComponent(input.userId)}/archive`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason: input.reason }),
+      },
+    );
+  }
+}
+
+export async function restoreSuperAdminAdministrator(archiveId: string) {
+  try {
+    return await apiRequest<{ success: boolean }>(
+      `/functions/v1/server/admin/restore-account/${encodeURIComponent(archiveId)}`,
+      {
+        method: 'POST',
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const shouldFallback = message.includes('forbidden') || message.includes('not found') || message.includes('404');
+    if (!shouldFallback) throw error;
+
+    return apiRequest<{ success: boolean }>(
+      `/functions/v1/server/super-admin/administrators/${encodeURIComponent(archiveId)}/restore`,
+      {
+        method: 'POST',
+      },
+    );
+  }
 }

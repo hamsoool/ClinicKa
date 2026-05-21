@@ -50,8 +50,6 @@ import {
   normalizeStudentNotificationState,
 } from "./settings.ts";
 import {
-  deleteStoredFiles,
-  deleteStoragePrefixes,
   ensureBucket,
 } from "./storage.ts";
 import {
@@ -963,17 +961,46 @@ app.get("/super-admin/administrators", async (c) => {
   if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
 
   try {
-    const [{ data: profiles, error }, archivedState] = await Promise.all([
+    const [{ data: profiles, error }, archiveState] = await Promise.all([
       supabase
         .from('profiles')
         .select('id,first_name,last_name,email,role,created_at,updated_at')
         .eq('role', 'admin')
         .order('created_at', { ascending: false }),
-      getArchivedUserIds(),
+      getArchivedAccountsTableState(),
     ]);
 
     if (error) throw new Error(error.message);
-    const archivedUserIds = archivedState.userIds;
+    let archivedAdministrators: any[] = [];
+    let archivedUserIds = new Set<string>();
+
+    if (archiveState.available) {
+      const { data: archivedAccounts, error: archivedError } = await supabase
+        .from('archived_accounts')
+        .select('id,user_id,account_identifier,display_name,email,archive_reason,archived_at')
+        .eq('role', 'admin')
+        .order('archived_at', { ascending: false });
+
+      if (archivedError) throw new Error(archivedError.message);
+
+      archivedAdministrators = (archivedAccounts || []).map((account) => ({
+        archiveId: account.id,
+        userId: account.user_id,
+        id: account.account_identifier || account.user_id,
+        name: account.display_name || account.email || 'Archived Administrator',
+        email: account.email || '',
+        role: 'Administrator',
+        roleKey: 'admin',
+        status: 'Archived',
+        archivedAt: account.archived_at,
+        archivedReason: account.archive_reason || '',
+      }));
+      archivedUserIds = new Set(
+        (archivedAccounts || [])
+          .map((account) => String(account.user_id || '').trim())
+          .filter(Boolean),
+      );
+    }
 
     return c.json({
       administrators: (profiles || [])
@@ -995,6 +1022,7 @@ app.get("/super-admin/administrators", async (c) => {
             lastActive: profile.updated_at || profile.created_at,
           };
         }),
+      archivedAdministrators,
     });
   } catch (error) {
     console.log('Error fetching administrators:', error);
@@ -1052,7 +1080,7 @@ app.post("/super-admin/administrators", async (c) => {
   }
 });
 
-app.delete("/super-admin/administrators/:userId", async (c) => {
+app.post("/super-admin/administrators/:userId/archive", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
@@ -1061,37 +1089,123 @@ app.delete("/super-admin/administrators/:userId", async (c) => {
   try {
     const userId = c.req.param('userId');
     if (!userId) return badRequest('userId is required');
-    if (userId === requester.profile.id) return badRequest('You cannot remove your own super administrator account.');
+    if (userId === requester.profile.id) return badRequest('You cannot archive your own super administrator account.');
+
+    const archiveState = await getArchivedAccountsTableState();
+    if (!archiveState.available) return archivedAccountsMigrationRequired();
+
+    let reason: string | undefined;
+    try {
+      const body = await c.req.json();
+      reason = body?.reason;
+    } catch {
+      reason = undefined;
+    }
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id,role,email,first_name,last_name')
+      .select('id,role,email,first_name,last_name,created_at,updated_at')
       .eq('id', userId)
       .maybeSingle();
 
     if (profileError) throw new Error(profileError.message);
     if (!profile) return badRequest('Administrator account not found.');
     if (!isAdminRole(profile.role)) {
-      return badRequest('Only administrator accounts can be removed here.');
+      return badRequest('Only administrator accounts can be archived here.');
     }
 
     await reassignAdministratorOwnedRows(userId, requester.profile.id);
 
-    const { error: staffDeleteError } = await supabase.from('staff_users').delete().eq('profile_id', userId);
-    if (staffDeleteError) throw new Error(staffDeleteError.message);
+    const displayName =
+      [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim()
+      || profile.email
+      || 'Unnamed Administrator';
 
-    const { error: profileDeleteError } = await supabase.from('profiles').delete().eq('id', userId);
-    if (profileDeleteError) throw new Error(profileDeleteError.message);
+    const { error: archiveError } = await supabase
+      .from('archived_accounts')
+      .upsert({
+        user_id: userId,
+        role: profile.role,
+        email: profile.email || null,
+        display_name: displayName,
+        account_identifier: profile.id,
+        archived_by: requester.profile.id,
+        archive_reason: reason?.trim() || null,
+        snapshot: {
+          profile: {
+            role: profile.role,
+            first_name: profile.first_name || null,
+            last_name: profile.last_name || null,
+            created_at: profile.created_at || null,
+            updated_at: profile.updated_at || null,
+          },
+        },
+        archived_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
 
-    const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId);
-    if (authDeleteError) throw new Error(authDeleteError.message);
+    if (archiveError) throw new Error(archiveError.message);
 
+    await setArchivedAuthState(userId);
+    invalidateArchivedCaches();
     invalidateDashboardReadCaches();
     return c.json({ success: true });
   } catch (error) {
-    console.log('Error removing administrator:', error);
-    return internalServerError(c, 'Failed to remove administrator', error);
+    console.log('Error archiving administrator:', error);
+    return internalServerError(c, 'Failed to archive administrator', error);
   }
+});
+
+app.post("/super-admin/administrators/:archiveId/restore", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
+
+  try {
+    const archiveId = c.req.param('archiveId');
+    if (!archiveId) return badRequest('archiveId is required');
+
+    const archiveState = await getArchivedAccountsTableState();
+    if (!archiveState.available) return archivedAccountsMigrationRequired();
+
+    const { data: archivedAccount, error: archiveLookupError } = await supabase
+      .from('archived_accounts')
+      .select('*')
+      .eq('id', archiveId)
+      .maybeSingle();
+
+    if (archiveLookupError) throw new Error(archiveLookupError.message);
+    if (!archivedAccount) return badRequest('Archived administrator not found.');
+    if (!isAdminRole(archivedAccount.role)) {
+      return badRequest('Only archived administrator accounts can be restored here.');
+    }
+
+    const userId = archivedAccount.user_id;
+
+    const { error: archiveDeleteError } = await supabase
+      .from('archived_accounts')
+      .delete()
+      .eq('id', archiveId);
+
+    if (archiveDeleteError) throw new Error(archiveDeleteError.message);
+
+    await clearArchivedAuthState(userId);
+    invalidateArchivedCaches();
+    invalidateDashboardReadCaches();
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error restoring administrator:', error);
+    return internalServerError(c, 'Failed to restore administrator', error);
+  }
+});
+
+app.delete("/super-admin/administrators/:userId", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
+  return forbidden('Administrator accounts can no longer be deleted. Archive the account instead.');
 });
 
 app.get("/admin/system-settings", async (c) => {
@@ -1143,7 +1257,7 @@ app.get("/archived-accounts", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
-  if (requester.profile.role !== 'admin') return forbidden();
+  if (!isAdminRole(requester.profile.role) && !isSuperAdminRole(requester.profile.role)) return forbidden();
 
   try {
     const archiveState = await getArchivedAccountsTableState();
@@ -1182,7 +1296,7 @@ app.post("/admin/archive-account", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
-  if (requester.profile.role !== 'admin') return forbidden();
+  if (!isAdminRole(requester.profile.role) && !isSuperAdminRole(requester.profile.role)) return forbidden();
 
   try {
     const archiveState = await getArchivedAccountsTableState();
@@ -1190,7 +1304,13 @@ app.post("/admin/archive-account", async (c) => {
 
     const { userId, reason } = await c.req.json();
     if (!userId) return badRequest('userId is required');
-    if (userId === requester.profile.id) return badRequest('You cannot archive your own administrator account.');
+    if (userId === requester.profile.id) {
+      return badRequest(
+        isSuperAdminRole(requester.profile.role)
+          ? 'You cannot archive your own super administrator account.'
+          : 'You cannot archive your own administrator account.',
+      );
+    }
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -1200,7 +1320,12 @@ app.post("/admin/archive-account", async (c) => {
 
     if (profileError) throw new Error(profileError.message);
     if (!profile) return badRequest('User account not found.');
-    if (!['student', 'staff'].includes(profile.role)) {
+    if (isSuperAdminRole(requester.profile.role)) {
+      if (!isAdminRole(profile.role)) {
+        return badRequest('Only administrator accounts can be archived here.');
+      }
+      await reassignAdministratorOwnedRows(userId, requester.profile.id);
+    } else if (!['student', 'staff'].includes(profile.role)) {
       return badRequest('Only student and clinic staff accounts can be archived.');
     }
 
@@ -1295,7 +1420,7 @@ app.post("/admin/restore-account/:archiveId", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
-  if (requester.profile.role !== 'admin') return forbidden();
+  if (!isAdminRole(requester.profile.role) && !isSuperAdminRole(requester.profile.role)) return forbidden();
 
   try {
     const archiveState = await getArchivedAccountsTableState();
@@ -1312,6 +1437,13 @@ app.post("/admin/restore-account/:archiveId", async (c) => {
 
     if (archiveLookupError) throw new Error(archiveLookupError.message);
     if (!archivedAccount) return badRequest('Archived account not found.');
+    if (isSuperAdminRole(requester.profile.role)) {
+      if (!isAdminRole(archivedAccount.role)) {
+        return badRequest('Only archived administrator accounts can be restored here.');
+      }
+    } else if (isAdminRole(archivedAccount.role)) {
+      return badRequest('Administrator accounts can only be restored by a super administrator.');
+    }
 
     const userId = archivedAccount.user_id;
 
@@ -1342,166 +1474,7 @@ app.delete("/admin/archive-account/:archiveId", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
-  if (requester.profile.role !== 'admin') return forbidden();
-
-  try {
-    const archiveState = await getArchivedAccountsTableState();
-    if (!archiveState.available) return archivedAccountsMigrationRequired();
-
-    const archiveId = c.req.param('archiveId');
-    if (!archiveId) return badRequest('archiveId is required');
-
-    const { data: archivedAccount, error: archiveLookupError } = await supabase
-      .from('archived_accounts')
-      .select('*')
-      .eq('id', archiveId)
-      .maybeSingle();
-
-    if (archiveLookupError) throw new Error(archiveLookupError.message);
-    if (!archivedAccount) return badRequest('Archived account not found.');
-
-    const userId = archivedAccount.user_id;
-    const role = archivedAccount.role;
-
-    const [{ data: profile }, { data: linkedStaff }] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      supabase.from('staff_users').select('*').eq('profile_id', userId).maybeSingle(),
-    ]);
-
-    if (role === 'student') {
-      const studentId =
-        profile?.student_id
-        || archivedAccount.snapshot?.student?.student_id
-        || archivedAccount.snapshot?.profile?.student_id
-        || null;
-
-      if (studentId) {
-        const { data: profileAssetFiles, error: profileAssetError } = await supabase
-          .from('files')
-          .select('*')
-          .eq('uploaded_by', userId)
-          .is('submission_id', null);
-
-        if (profileAssetError) throw new Error(profileAssetError.message);
-        await deleteStoredFiles(profileAssetFiles || []);
-        await deleteStoragePrefixes(['profile', 'student_signature'], [`profiles/${studentId}/`]);
-
-        const { data: submissions, error: submissionsError } = await supabase
-          .from('submissions')
-          .select('id')
-          .eq('student_id', studentId);
-
-        if (submissionsError) throw new Error(submissionsError.message);
-
-        const submissionIds = (submissions || []).map((entry) => entry.id).filter(Boolean);
-
-        if (submissionIds.length) {
-          const { data: files, error: filesLookupError } = await supabase
-            .from('files')
-            .select('*')
-            .in('submission_id', submissionIds);
-
-          if (filesLookupError) throw new Error(filesLookupError.message);
-
-          await deleteStoredFiles(files || []);
-          await deleteStoragePrefixes(
-            storageBuckets,
-            submissionIds.map((id) => `${id}/`),
-          );
-
-          const deletionTables = [
-            'emergency_contacts',
-            'medical_history',
-            'staff_measurements',
-            'lab_chest_xray',
-            'lab_cbc',
-            'lab_urinalysis',
-            'certificates',
-            'files',
-          ];
-
-          for (const tableName of deletionTables) {
-            const { error } = await supabase.from(tableName).delete().in('submission_id', submissionIds);
-            if (error) throw new Error(error.message);
-          }
-        }
-
-        const { error: profileAssetDeleteError } = await supabase
-          .from('files')
-          .delete()
-          .eq('uploaded_by', userId)
-          .is('submission_id', null);
-
-        if (profileAssetDeleteError) throw new Error(profileAssetDeleteError.message);
-
-        const { error: submissionDeleteError } = await supabase
-          .from('submissions')
-          .delete()
-          .eq('student_id', studentId);
-
-        if (submissionDeleteError) throw new Error(submissionDeleteError.message);
-
-        const studentDeleteBuilder = supabase.from('students').delete().eq('student_id', studentId);
-        const { error: studentDeleteError } = await studentDeleteBuilder;
-        if (studentDeleteError) throw new Error(studentDeleteError.message);
-      }
-    }
-
-    if (role === 'staff' || linkedStaff?.id) {
-      const staffId = linkedStaff?.id || null;
-
-      if (staffId) {
-        const updates = [
-          supabase.from('submissions').update({ reviewed_by: null }).eq('reviewed_by', staffId),
-          supabase.from('staff_measurements').update({ updated_by: null }).eq('updated_by', staffId),
-          supabase.from('certificates').update({ issued_by: null }).eq('issued_by', staffId),
-        ];
-
-        for (const updatePromise of updates) {
-          const { error } = await updatePromise;
-          if (error) throw new Error(error.message);
-        }
-      }
-
-      const { error: staffDeleteError } = await supabase.from('staff_users').delete().eq('profile_id', userId);
-      if (staffDeleteError) throw new Error(staffDeleteError.message);
-    }
-
-    if (role === 'staff') {
-      const { data: staffFiles, error: staffFilesError } = await supabase
-        .from('files')
-        .select('*')
-        .eq('uploaded_by', userId)
-        .is('submission_id', null);
-
-      if (staffFilesError) throw new Error(staffFilesError.message);
-      await deleteStoredFiles(staffFiles || []);
-
-      const { error: staffFileDeleteError } = await supabase
-        .from('files')
-        .delete()
-        .eq('uploaded_by', userId)
-        .is('submission_id', null);
-
-      if (staffFileDeleteError) throw new Error(staffFileDeleteError.message);
-    }
-
-    const { error: profileDeleteError } = await supabase.from('profiles').delete().eq('id', userId);
-    if (profileDeleteError) throw new Error(profileDeleteError.message);
-
-    const { error: authDeleteError } = await supabase.auth.admin.deleteUser(userId);
-    if (authDeleteError) throw new Error(authDeleteError.message);
-
-    const { error: archiveDeleteError } = await supabase.from('archived_accounts').delete().eq('id', archiveId);
-    if (archiveDeleteError) throw new Error(archiveDeleteError.message);
-    invalidateArchivedCaches();
-    invalidateDashboardReadCaches();
-
-    return c.json({ success: true });
-  } catch (error) {
-    console.log('Error permanently deleting archived account:', error);
-    return internalServerError(c, 'Failed to permanently delete archived account', error);
-  }
+  return forbidden('Permanent deletion of archived accounts is no longer available. Restore the account instead.');
 });
 
 app.post("/admin/create-account", async (c) => {
