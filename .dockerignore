@@ -1,4 +1,7 @@
 .react-router
 build
+dist
 node_modules
 README.md
+.git
+.env.local

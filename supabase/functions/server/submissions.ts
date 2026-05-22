@@ -18,8 +18,10 @@ import { normalizeFileRows } from "./storage.ts";
 
 const ANALYTICS_CACHE_TTL_MS = 30_000;
 const SUBMISSIONS_CACHE_TTL_MS = 15_000;
+const REPORT_SUBMISSIONS_CACHE_TTL_MS = 20_000;
 const STUDENT_RECORDS_CACHE_TTL_MS = 20_000;
 const STAFF_DASHBOARD_OVERVIEW_TTL_MS = 15_000;
+const ACTIONABLE_STATUS_COUNTS_TTL_MS = 15_000;
 const STAFF_SUBMISSION_SUMMARIES_TTL_MS = 20_000;
 const STAFF_APPROVED_STUDENTS_TTL_MS = 30_000;
 const STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS = 20;
@@ -78,14 +80,34 @@ const SUBMISSION_SUMMARY_COLUMNS = [
   "updated_at",
 ].join(",");
 
+const REPORT_SUBMISSION_COLUMNS = [
+  "id",
+  "student_id",
+  "first_name",
+  "last_name",
+  "middle_initial",
+  "course",
+  "department",
+  "year_level",
+  "status",
+  "submitted_at",
+  "updated_at",
+  "sex",
+  "submission_category",
+].join(",");
+
 let analyticsReadCache: TimedValue<Record<string, number>> | null = null;
 let analyticsReadPromise: Promise<Record<string, number>> | null = null;
 let submissionsReadCache: TimedValue<any[]> | null = null;
 let submissionsReadPromise: Promise<any[]> | null = null;
+let reportSubmissionsReadCache: TimedValue<any[]> | null = null;
+let reportSubmissionsReadPromise: Promise<any[]> | null = null;
 const studentRecordsReadCache = new Map<string, TimedValue<any[]>>();
 const studentRecordsReadPromises = new Map<string, Promise<any[]>>();
 let staffDashboardOverviewCache: TimedValue<any> | null = null;
 let staffDashboardOverviewPromise: Promise<any> | null = null;
+let actionableStatusCountsCache: TimedValue<any> | null = null;
+let actionableStatusCountsPromise: Promise<any> | null = null;
 const staffSubmissionSummariesCache = new Map<string, TimedValue<any>>();
 const staffSubmissionSummariesPromises = new Map<string, Promise<any>>();
 const staffApprovedStudentsCache = new Map<string, TimedValue<any>>();
@@ -96,10 +118,14 @@ export function invalidateDashboardReadCaches() {
   analyticsReadPromise = null;
   submissionsReadCache = null;
   submissionsReadPromise = null;
+  reportSubmissionsReadCache = null;
+  reportSubmissionsReadPromise = null;
   studentRecordsReadCache.clear();
   studentRecordsReadPromises.clear();
   staffDashboardOverviewCache = null;
   staffDashboardOverviewPromise = null;
+  actionableStatusCountsCache = null;
+  actionableStatusCountsPromise = null;
   staffSubmissionSummariesCache.clear();
   staffSubmissionSummariesPromises.clear();
   staffApprovedStudentsCache.clear();
@@ -421,6 +447,34 @@ function mapSubmissionSummary(row: any, reviewers: Record<string, any> = {}) {
   };
 }
 
+function mapReportSubmission(row: any, related: Record<string, any>) {
+  const student = related.students[row.student_id] || {};
+  const medicalHistory = related.medicalHistory[row.id];
+  const certificate = related.certificates[row.id];
+
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    firstName: row.first_name || student.first_name || "",
+    lastName: row.last_name || student.last_name || "",
+    middleInitial: row.middle_initial || student.middle_initial || "",
+    course: row.course || student.course || "",
+    department: row.department || student.department || "",
+    year: String(row.year_level || student.year_level || ""),
+    status: row.status,
+    submittedAt: row.submitted_at,
+    updatedAt: row.updated_at,
+    sex: row.sex || student.sex || "",
+    submissionCategory: row.submission_category || undefined,
+    medicalHistory: mapMedicalHistory(medicalHistory),
+    clearanceInfo: certificate
+      ? {
+          issuedDate: certificate.issued_date || certificate.issued_at,
+        }
+      : undefined,
+  };
+}
+
 async function mapSubmissionSummaries(
   rows: any[],
   reviewerDirectory?: Record<string, any>,
@@ -431,6 +485,62 @@ async function mapSubmissionSummaries(
     );
 
   return (rows || []).map((row) => mapSubmissionSummary(row, resolvedReviewerDirectory));
+}
+
+async function loadReportRelatedData(rows: any[]) {
+  const submissionIds = rows.map((row) => row.id);
+  const studentIds = [...new Set(rows.map((row) => row.student_id).filter(Boolean))];
+
+  const [studentsRes, medicalHistoryRes, certificatesRes] = await Promise.all([
+    studentIds.length
+      ? supabase
+          .from("students")
+          .select(
+            "student_id,first_name,last_name,middle_initial,department,course,year_level,sex",
+          )
+          .in("student_id", studentIds)
+      : Promise.resolve({ data: [] as any[] }),
+    submissionIds.length
+      ? supabase
+          .from("medical_history")
+          .select(
+            "submission_id,allergy,asthma,chicken_pox,diabetes,dysmenorrhea,epilepsy_seizure,heart_disorder,hepatitis,hypertension,measles,mumps,anxiety_disorder,panic_attack,pneumonia,ptb_primary_complex,typhoid_fever,covid19,uti",
+          )
+          .in("submission_id", submissionIds)
+      : Promise.resolve({ data: [] as any[] }),
+    submissionIds.length
+      ? supabase
+          .from("certificates")
+          .select("submission_id,issued_date,issued_at")
+          .in("submission_id", submissionIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
+  const byKey = (rowsData: any[] | null | undefined, key: string) =>
+    (rowsData || []).reduce((acc, item) => {
+      acc[item[key]] = item;
+      return acc;
+    }, {} as Record<string, any>);
+
+  return {
+    students: byKey(studentsRes.data, "student_id"),
+    medicalHistory: byKey(medicalHistoryRes.data, "submission_id"),
+    certificates: byKey(certificatesRes.data, "submission_id"),
+  };
+}
+
+async function getMappedReportSubmissions(queryBuilder: any) {
+  const { data, error } = await queryBuilder.order("submitted_at", {
+    ascending: false,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = data || [];
+  const related = await loadReportRelatedData(rows);
+  return rows.map((row: any) => mapReportSubmission(row, related));
 }
 
 function normalizeIlikeValue(value: string) {
@@ -607,6 +717,52 @@ async function loadStudentDepartmentDirectory(studentIds: string[]) {
   }, {} as Record<string, any>);
 }
 
+async function loadActionableStatusCounts() {
+  const [
+    { count: pending, error: pendingError },
+    { count: inReview, error: inReviewError },
+    { count: returned, error: returnedError },
+    { count: resubmitted, error: resubmittedError },
+  ] = await Promise.all([
+    supabase.from("submissions").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).eq("status", "in_review"),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).eq("status", "returned"),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).eq("status", "resubmitted"),
+  ]);
+
+  if (pendingError) throw new Error(pendingError.message);
+  if (inReviewError) throw new Error(inReviewError.message);
+  if (returnedError) throw new Error(returnedError.message);
+  if (resubmittedError) throw new Error(resubmittedError.message);
+
+  return {
+    pending: pending || 0,
+    inReview: inReview || 0,
+    returned: returned || 0,
+    resubmitted: resubmitted || 0,
+    actionNeeded: (pending || 0) + (inReview || 0) + (returned || 0) + (resubmitted || 0),
+  };
+}
+
+async function getCachedActionableStatusCounts() {
+  const cached = getValidCachedValue(actionableStatusCountsCache);
+  if (cached) return cached;
+  if (actionableStatusCountsPromise) return actionableStatusCountsPromise;
+
+  actionableStatusCountsPromise = (async () => {
+    const counts = await loadActionableStatusCounts();
+    actionableStatusCountsCache = createTimedValue(
+      counts,
+      ACTIONABLE_STATUS_COUNTS_TTL_MS,
+    );
+    return counts;
+  })().finally(() => {
+    actionableStatusCountsPromise = null;
+  });
+
+  return actionableStatusCountsPromise;
+}
+
 async function loadStaffDashboardOverview() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -639,9 +795,11 @@ async function loadStaffDashboardOverview() {
     { count: submittedThisWeek, error: weekError },
     { count: submittedThisMonth, error: monthError },
     { count: submittedThisAcademicYear, error: academicYearError },
-    { data: actionableRows, error: actionableRowsError },
-    { data: latestRowsUniverse, error: latestRowsUniverseError },
-    { data: departmentSourceRows, error: departmentSourceError },
+    actionableCounts,
+    { data: pendingQueueRows, error: pendingQueueError },
+    { data: inReviewQueueRows, error: inReviewQueueError },
+    { data: returnedQueueRows, error: returnedQueueError },
+    { data: resubmittedQueueRows, error: resubmittedQueueError },
   ] = await Promise.all([
     supabase.from("submissions").select("id", { count: "exact", head: true }),
     supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
@@ -668,18 +826,31 @@ async function loadStaffDashboardOverview() {
       "submitted_at",
       academicYearStartDate.toISOString(),
     ).lt("submitted_at", academicYearEndDate.toISOString()),
+    getCachedActionableStatusCounts(),
     supabase
       .from("submissions")
       .select(SUBMISSION_SUMMARY_COLUMNS)
-      .in("status", ACTIONABLE_SUBMISSION_STATUSES)
+      .eq("status", "pending")
       .order("submitted_at", { ascending: false })
-      .limit(2000),
+      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
     supabase
       .from("submissions")
       .select(SUBMISSION_SUMMARY_COLUMNS)
+      .eq("status", "in_review")
       .order("submitted_at", { ascending: false })
-      .limit(5000),
-    supabase.from("submissions").select("student_id,department,course"),
+      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+    supabase
+      .from("submissions")
+      .select(SUBMISSION_SUMMARY_COLUMNS)
+      .eq("status", "returned")
+      .order("submitted_at", { ascending: false })
+      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+    supabase
+      .from("submissions")
+      .select(SUBMISSION_SUMMARY_COLUMNS)
+      .eq("status", "resubmitted")
+      .order("submitted_at", { ascending: false })
+      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
   ]);
 
   if (totalSubmissionsError) throw new Error(totalSubmissionsError.message);
@@ -689,62 +860,21 @@ async function loadStaffDashboardOverview() {
   if (weekError) throw new Error(weekError.message);
   if (monthError) throw new Error(monthError.message);
   if (academicYearError) throw new Error(academicYearError.message);
-  if (actionableRowsError) throw new Error(actionableRowsError.message);
-  if (latestRowsUniverseError) throw new Error(latestRowsUniverseError.message);
-  if (departmentSourceError) throw new Error(departmentSourceError.message);
+  if (pendingQueueError) throw new Error(pendingQueueError.message);
+  if (inReviewQueueError) throw new Error(inReviewQueueError.message);
+  if (returnedQueueError) throw new Error(returnedQueueError.message);
+  if (resubmittedQueueError) throw new Error(resubmittedQueueError.message);
 
-  const latestByStudentYear = new Map<string, any>();
-  for (const row of latestRowsUniverse || []) {
-    const key = `${String(row?.student_id || "").trim()}:${String(row?.year_level || "").trim()}`;
-    if (!key || key === ":") continue;
-    const existing = latestByStudentYear.get(key);
-    if (!existing) {
-      latestByStudentYear.set(key, row);
-      continue;
-    }
-    const existingTs = new Date(existing.updated_at || existing.submitted_at || 0).getTime();
-    const nextTs = new Date(row.updated_at || row.submitted_at || 0).getTime();
-    if (nextTs >= existingTs) {
-      latestByStudentYear.set(key, row);
-    }
-  }
+  const pendingRecords = actionableCounts.pending || 0;
+  const inReviewRecords = actionableCounts.inReview || 0;
+  const returnedRecords = actionableCounts.returned || 0;
+  const resubmittedRecords = actionableCounts.resubmitted || 0;
 
-  const latestActionableRows = [...latestByStudentYear.values()].filter((row) =>
-    ACTIONABLE_SUBMISSION_STATUSES.includes(String(row?.status || "")),
-  );
-  const pendingRowsAll = latestActionableRows
-    .filter((row) => row.status === "pending")
-    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
-  const inReviewRowsAll = latestActionableRows
-    .filter((row) => row.status === "in_review")
-    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
-  const returnedRowsAll = latestActionableRows
-    .filter((row) => row.status === "returned")
-    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
-  const resubmittedRowsAll = latestActionableRows
-    .filter((row) => row.status === "resubmitted")
-    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
-
-  const pendingQueueRows = pendingRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
-  const inReviewQueueRows = inReviewRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
-  const returnedQueueRows = returnedRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
-  const resubmittedQueueRows = resubmittedRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
-
-  const pendingRecords = pendingRowsAll.length;
-  const inReviewRecords = inReviewRowsAll.length;
-  const returnedRecords = returnedRowsAll.length;
-  const resubmittedRecords = resubmittedRowsAll.length;
-
-  const [reviewerDirectory, studentDepartmentDirectory] = await Promise.all([
-    loadStaffUsersByIds([
-      ...(pendingQueueRows || []).map((row: any) => row.reviewed_by),
-      ...(inReviewQueueRows || []).map((row: any) => row.reviewed_by),
-      ...(returnedQueueRows || []).map((row: any) => row.reviewed_by),
-      ...(resubmittedQueueRows || []).map((row: any) => row.reviewed_by),
-    ]),
-    loadStudentDepartmentDirectory(
-      (departmentSourceRows || []).map((row: any) => row.student_id),
-    ),
+  const reviewerDirectory = await loadStaffUsersByIds([
+    ...(pendingQueueRows || []).map((row: any) => row.reviewed_by),
+    ...(inReviewQueueRows || []).map((row: any) => row.reviewed_by),
+    ...(returnedQueueRows || []).map((row: any) => row.reviewed_by),
+    ...(resubmittedQueueRows || []).map((row: any) => row.reviewed_by),
   ]);
 
   const [
@@ -758,23 +888,10 @@ async function loadStaffDashboardOverview() {
     mapSubmissionSummaries(returnedQueueRows || [], reviewerDirectory),
     mapSubmissionSummaries(resubmittedQueueRows || [], reviewerDirectory),
   ]);
-  const departmentCounts = STAFF_DASHBOARD_DEPARTMENTS.reduce((acc, department) => {
-    acc[department] = 0;
-    return acc;
-  }, {} as Record<string, number>);
-
-  (departmentSourceRows || []).forEach((row: any) => {
-    const department = resolveDashboardDepartmentForRow(
-      row,
-      studentDepartmentDirectory,
-    );
-    if (!department) return;
-    departmentCounts[department] = (departmentCounts[department] || 0) + 1;
-  });
 
   const departmentBreakdown = STAFF_DASHBOARD_DEPARTMENTS.map((department) => ({
     department,
-    count: departmentCounts[department] || 0,
+    count: 0,
   }));
 
   return {
@@ -784,8 +901,7 @@ async function loadStaffDashboardOverview() {
     inReviewRecords: inReviewRecords || 0,
     returnedRecords: returnedRecords || 0,
     resubmittedRecords: resubmittedRecords || 0,
-    actionableRecords: (pendingRecords || 0) + (inReviewRecords || 0) +
-      (returnedRecords || 0) + (resubmittedRecords || 0),
+    actionableRecords: actionableCounts.actionNeeded || 0,
     submittedToday: submittedToday || 0,
     submittedYesterday: submittedYesterday || 0,
     submittedThisWeek: submittedThisWeek || 0,
@@ -838,9 +954,9 @@ async function loadStaffSubmissionSummaries(options: any = {}) {
     ascending: sortOrder === "asc",
   }).range(from, to);
 
-  const [{ data, error, count }, overview] = await Promise.all([
+  const [{ data, error, count }, actionableCounts] = await Promise.all([
     query,
-    getCachedStaffDashboardOverview(),
+    getCachedActionableStatusCounts(),
   ]);
 
   if (error) throw new Error(error.message);
@@ -852,11 +968,11 @@ async function loadStaffSubmissionSummaries(options: any = {}) {
     page,
     pageSize,
     counts: {
-      pending: (overview.pendingRecords || 0) + (overview.inReviewRecords || 0),
-      inReview: overview.inReviewRecords,
-      returned: overview.returnedRecords,
-      resubmitted: overview.resubmittedRecords,
-      actionNeeded: overview.actionableRecords,
+      pending: (actionableCounts.pending || 0) + (actionableCounts.inReview || 0),
+      inReview: actionableCounts.inReview || 0,
+      returned: actionableCounts.returned || 0,
+      resubmitted: actionableCounts.resubmitted || 0,
+      actionNeeded: actionableCounts.actionNeeded || 0,
     },
   };
 }
@@ -1145,21 +1261,24 @@ export async function getCachedAnalyticsSummary() {
 }
 
 export async function getCachedSubmissionsList() {
-  const cached = getValidCachedValue(submissionsReadCache);
+  const cached = getValidCachedValue(reportSubmissionsReadCache);
   if (cached) return cached;
-  if (submissionsReadPromise) return submissionsReadPromise;
+  if (reportSubmissionsReadPromise) return reportSubmissionsReadPromise;
 
-  submissionsReadPromise = (async () => {
-    const submissions = await getMappedSubmissions(
-      supabase.from("submissions").select(SUBMISSION_LIST_COLUMNS),
+  reportSubmissionsReadPromise = (async () => {
+    const submissions = await getMappedReportSubmissions(
+      supabase.from("submissions").select(REPORT_SUBMISSION_COLUMNS),
     );
-    submissionsReadCache = createTimedValue(submissions, SUBMISSIONS_CACHE_TTL_MS);
+    reportSubmissionsReadCache = createTimedValue(
+      submissions,
+      REPORT_SUBMISSIONS_CACHE_TTL_MS,
+    );
     return submissions;
   })().finally(() => {
-    submissionsReadPromise = null;
+    reportSubmissionsReadPromise = null;
   });
 
-  return submissionsReadPromise;
+  return reportSubmissionsReadPromise;
 }
 
 export async function getCachedStudentRecords(studentId: string) {
