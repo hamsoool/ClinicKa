@@ -434,23 +434,13 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </div>
             </CardContent>
           </Card>
-          <div
-            className={`rounded-lg border p-4 ${
-              formData.dataPrivacyConsent ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'
-            }`}
-          >
-            <p className={`text-sm ${formData.dataPrivacyConsent ? 'text-emerald-900' : 'text-amber-900'}`}>
-              {formData.dataPrivacyConsent ? (
-                <>
-                  Data Privacy Consent has been acknowledged in the <span className="font-semibold">Before You Continue</span> step.
-                </>
-              ) : (
-                <>
-                  Data Privacy Consent is still required. Please return to <span className="font-semibold">Before You Continue</span> and check the consent box before submitting.
-                </>
-              )}
-            </p>
-          </div>
+          {!formData.dataPrivacyConsent ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm text-amber-900">
+                Data Privacy Consent is still required. Please return to <span className="font-semibold">Before You Continue</span> and check the consent box before submitting.
+              </p>
+            </div>
+          ) : null}
           <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
             <div className="flex items-start gap-3">
               <Checkbox
