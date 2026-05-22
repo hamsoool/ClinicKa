@@ -564,6 +564,22 @@ app.get("/reporting-term", async (c) => {
   }
 });
 
+app.get("/session-policy", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+
+  try {
+    const settings = await getSafeAdminSystemSettings();
+    return c.json({
+      sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
+    });
+  } catch (error) {
+    console.log('Error fetching session policy:', error);
+    return internalServerError(c, 'Failed to fetch session policy', error);
+  }
+});
+
 app.get("/staff/submission-summaries", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);

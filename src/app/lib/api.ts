@@ -4117,6 +4117,23 @@ export async function getReportingTermSettings() {
   }
 }
 
+export async function getSessionPolicy() {
+  try {
+    const policy = await apiRequest<{ sessionTimeoutMinutes?: number | null }>('/functions/v1/server/session-policy');
+    const normalized = normalizeAdminSystemSettings({
+      sessionTimeoutMinutes: Number(policy?.sessionTimeoutMinutes),
+    });
+    return {
+      sessionTimeoutMinutes: normalized.sessionTimeoutMinutes,
+    };
+  } catch {
+    const fallback = readStoredAdminSystemSettings();
+    return {
+      sessionTimeoutMinutes: fallback.sessionTimeoutMinutes,
+    };
+  }
+}
+
 export async function updateAdminSystemSettings(input: AdminSystemSettings) {
   const payload = normalizeAdminSystemSettings(input);
 

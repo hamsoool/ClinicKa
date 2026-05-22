@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { authenticateWithPassword, clearStoredSession, getMe, getStoredSession, getUserByToken, hasServerPasswordSetupCompleted, markServerPasswordSetupCompleted, rejectUnauthorizedGoogleAccount, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
+import { authenticateWithPassword, clearStoredSession, createDefaultAdminSystemSettings, getMe, getSessionPolicy, getStoredSession, getUserByToken, hasServerPasswordSetupCompleted, markServerPasswordSetupCompleted, rejectUnauthorizedGoogleAccount, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
 import { flushPendingStudentNotificationSaves } from './student-notification-save-queue';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
@@ -10,6 +10,8 @@ const ACCOUNT_LOAD_ERROR_MESSAGE =
   'We could not load your account from the database. Please try signing in again.';
 const ARCHIVED_ACCOUNT_MESSAGE =
   'This account is not available. Contact the administrator for assistance.';
+const ELEVATED_TIMEOUT_ROLES: UserRole[] = ['admin', 'staff', 'super_admin'];
+const ACTIVITY_THROTTLE_MS = 1000;
 
 function isGCDomain(email?: string | null) {
   return !!email?.toLowerCase().endsWith(`@${GC_DOMAIN}`);
@@ -124,6 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [me, setMe] = useState<AuthMe | null>(null);
   const [requiresPasswordSetup, setRequiresPasswordSetup] = useState(false);
+  const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState<number | null>(null);
+  const inactivityLogoutInFlightRef = useRef(false);
 
   function resetAuthState() {
     clearStoredSession();
@@ -131,6 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setMe(null);
     setRole(null);
     setRequiresPasswordSetup(false);
+    setSessionTimeoutMinutes(null);
   }
 
   function toAccountLoadError(error: unknown) {
@@ -170,6 +175,100 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [requiresPasswordSetup, session]);
+
+  useEffect(() => {
+    if (!session?.access_token || !role || !ELEVATED_TIMEOUT_ROLES.includes(role)) {
+      setSessionTimeoutMinutes(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const defaults = createDefaultAdminSystemSettings();
+      try {
+        const policy = await getSessionPolicy();
+        if (!cancelled) {
+          setSessionTimeoutMinutes(policy.sessionTimeoutMinutes || defaults.sessionTimeoutMinutes);
+        }
+      } catch {
+        if (!cancelled) {
+          setSessionTimeoutMinutes(defaults.sessionTimeoutMinutes);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role, session?.access_token]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!session?.access_token || !role || !ELEVATED_TIMEOUT_ROLES.includes(role) || !sessionTimeoutMinutes) {
+      return;
+    }
+
+    let timeoutId = 0;
+    let lastTrackedActivityAt = 0;
+
+    const timeoutMs = sessionTimeoutMinutes * 60 * 1000;
+
+    const forceLogoutForInactivity = async () => {
+      if (inactivityLogoutInFlightRef.current) return;
+      inactivityLogoutInFlightRef.current = true;
+
+      try {
+        await signOut();
+      } catch {
+        // Best effort sign out; local session is cleared either way.
+      } finally {
+        clearStoredSession();
+        setSession(null);
+        setMe(null);
+        setRole(null);
+        setRequiresPasswordSetup(false);
+        setSessionTimeoutMinutes(null);
+        inactivityLogoutInFlightRef.current = false;
+        window.location.replace('/auth?mode=signin&reason=idle_timeout');
+      }
+    };
+
+    const scheduleLogout = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        void forceLogoutForInactivity();
+      }, timeoutMs);
+    };
+
+    const markActivity = () => {
+      const now = Date.now();
+      if (now - lastTrackedActivityAt < ACTIVITY_THROTTLE_MS) return;
+      lastTrackedActivityAt = now;
+      scheduleLogout();
+    };
+
+    const activityEvents: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'mousemove', 'scroll', 'focus'];
+    for (const eventName of activityEvents) {
+      window.addEventListener(eventName, markActivity, { passive: true });
+    }
+    window.addEventListener('touchstart', markActivity, { passive: true });
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        markActivity();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    scheduleLogout();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      for (const eventName of activityEvents) {
+        window.removeEventListener(eventName, markActivity);
+      }
+      window.removeEventListener('touchstart', markActivity);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [role, session?.access_token, sessionTimeoutMinutes]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

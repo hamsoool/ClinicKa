@@ -65,6 +65,7 @@ export default function AuthAccessPage() {
   const startsInSignInMode = query.get('mode') === 'signin';
   const verifiedFromEmail = query.get('verified') === '1';
   const googleError = query.get('google_error');
+  const authReason = query.get('reason');
 
   const [mode, setMode] = useState<'signin' | 'signup'>(startsInSignInMode ? 'signin' : 'signup');
   const [showSignInPassword, setShowSignInPassword] = useState(false);
@@ -116,6 +117,12 @@ export default function AuthAccessPage() {
       setSuccessMessage('Email verified. You can now sign in with your account.');
     }
   }, [verifiedFromEmail]);
+
+  useEffect(() => {
+    if (authReason !== 'idle_timeout') return;
+    setMode('signin');
+    setError('Your session expired due to inactivity. Please sign in again.');
+  }, [authReason]);
 
   useEffect(() => {
     if (!forgotPasswordDialogOpen) return;
