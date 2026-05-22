@@ -257,46 +257,29 @@ export default function StudentDashboard() {
       return reminders;
     }
 
-    const latestRecordDetails = latestRecord as typeof latestRecord & {
-      xrayFileUrl?: string | null;
-      cbcFileUrl?: string | null;
-      urinalysisFileUrl?: string | null;
-    };
+    const latestRecordStatus = String(latestRecord.status || '').toLowerCase();
+    const shouldCheckLatestSubmission = latestRecordStatus !== 'approved' && latestRecordStatus !== 'physical_exam_done';
     const editPath = `/student/privacy-waiver/${latestRecord.year || '1'}?edit=${encodeURIComponent(latestRecord.id)}`;
-    const missingSubmissionInfo = [
-      !hasValue(latestRecord.hadOperation) ? 'operation history' : '',
-      !hasValue(latestRecord.emergencyContact?.name) ||
-      !hasValue(latestRecord.emergencyContact?.relationship) ||
-      !hasValue(latestRecord.emergencyContact?.phone) ||
-      !hasValue(latestRecord.emergencyContact?.address)
-        ? 'emergency contact'
-        : '',
-      !hasValue(latestRecord.weight) || !hasValue(latestRecord.height) ? 'height and weight' : '',
-      !hasValue(latestRecord.labTestLocation) ? 'lab test location' : '',
-      latestRecord.labTestLocation === 'other' && !hasValue(latestRecord.otherClinicName) ? 'clinic name' : '',
-    ].filter(Boolean);
 
-    if (missingSubmissionInfo.length > 0) {
-      reminders.push({
-        title: 'Complete latest submission',
-        detail: `Missing ${joinMissingItems(missingSubmissionInfo)}.`,
-        actionLabel: 'Continue record',
-        actionPath: editPath,
-      });
-    }
-
-    if (latestRecord.labTestLocation === 'other') {
-      const missingDocuments = [
-        !latestRecordDetails.xrayFileUrl ? 'Chest X-Ray' : '',
-        !latestRecordDetails.cbcFileUrl ? 'CBC' : '',
-        !latestRecordDetails.urinalysisFileUrl ? 'Urinalysis' : '',
+    if (shouldCheckLatestSubmission) {
+      const missingSubmissionInfo = [
+        !hasValue(latestRecord.hadOperation) ? 'operation history' : '',
+        !hasValue(latestRecord.emergencyContact?.name) ||
+        !hasValue(latestRecord.emergencyContact?.relationship) ||
+        !hasValue(latestRecord.emergencyContact?.phone) ||
+        !hasValue(latestRecord.emergencyContact?.address)
+          ? 'emergency contact'
+          : '',
+        !hasValue(latestRecord.cbcTestClinic) ? 'CBC test clinic/lab' : '',
+        !hasValue(latestRecord.urinalysisTestClinic) ? 'Urinalysis test clinic/lab' : '',
+        !hasValue(latestRecord.xrayTestClinic) ? 'X-Ray test clinic/lab' : '',
       ].filter(Boolean);
 
-      if (missingDocuments.length > 0) {
+      if (missingSubmissionInfo.length > 0) {
         reminders.push({
-          title: 'Upload required lab documents',
-          detail: `Missing ${joinMissingItems(missingDocuments)}.`,
-          actionLabel: 'Upload documents',
+          title: 'Complete latest submission',
+          detail: `Missing ${joinMissingItems(missingSubmissionInfo)}.`,
+          actionLabel: 'Continue record',
           actionPath: editPath,
         });
       }
