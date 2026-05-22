@@ -86,11 +86,17 @@ type ReportsSummary = {
 };
 
 type SubmissionBreakdownView = 'department' | 'program' | 'year' | 'gender';
-type DateRangePreset = 'today' | 'lastWeek' | 'lastMonth' | 'schoolYear';
+type SubmissionBreakdownDatePreset = 'today' | 'thisWeek' | 'thisMonth' | 'schoolYear';
 type SubmissionBreakdownDatum = {
   label: string;
   count: number;
   fill: string;
+};
+type PresetDateRange = {
+  value: SubmissionBreakdownDatePreset;
+  label: string;
+  from: string;
+  to: string;
 };
 type ReportingTermRange = {
   label: string;
@@ -224,17 +230,28 @@ function getLocalDateEndTimestamp(value?: string) {
   return new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
 }
 
-function getDateDaysAgo(days: number) {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() - days);
-  return date;
+function getStartOfCurrentWeek(date = new Date()) {
+  const nextDate = new Date(date);
+  nextDate.setHours(0, 0, 0, 0);
+
+  const day = nextDate.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  nextDate.setDate(nextDate.getDate() + diff);
+  return nextDate;
+}
+
+function getStartOfCurrentMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
 }
 
 function clampDateToToday(date: Date) {
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   return date.getTime() > today.getTime() ? today : date;
+}
+
+function getLaterDate(left: Date, right: Date) {
+  return left.getTime() >= right.getTime() ? left : right;
 }
 
 function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRange {
@@ -248,9 +265,32 @@ function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRa
 
   return {
     label: settings.academicYear,
-    startMs: Date.UTC(startYear, 6, 1),
-    endMs: Date.UTC(endYear, 6, 1),
+    startMs: new Date(startYear, 6, 1, 0, 0, 0, 0).getTime(),
+    endMs: new Date(endYear, 6, 1, 0, 0, 0, 0).getTime(),
   };
+}
+
+function dedupeSubmissions(submissions: any[]) {
+  const seen = new Set<string>();
+  const deduped: any[] = [];
+
+  for (const submission of submissions) {
+    const signature = [
+      submission.studentId || '',
+      (submission.firstName || '').trim().toLowerCase(),
+      (submission.lastName || '').trim().toLowerCase(),
+      submission.year || '',
+      submission.status || '',
+      submission.course || '',
+      submission.submittedAt ? new Date(submission.submittedAt).toISOString().slice(0, 10) : '',
+    ].join('|');
+
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    deduped.push(submission);
+  }
+
+  return deduped;
 }
 
 async function imagePathToDataUrl(path: string, options?: { maxDimension?: number }) {
@@ -586,6 +626,7 @@ function DepartmentBarValueLabel(props: any) {
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) {
+  const isStaffMode = mode === 'staff';
   const analyticsQueryKey = mode === 'admin' ? ['adminAnalytics'] : ['staffAnalytics'];
   const submissionsQueryKey = mode === 'admin' ? ['adminSubmissions'] : ['staffSubmissions'];
   const reportingTermQueryKey = ['reportingTermSettings'];
@@ -598,6 +639,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const [genderFilter, setGenderFilter] = useState('all');
   const [studentBatchFilter, setStudentBatchFilter] = useState('all');
   const [submissionBreakdownView, setSubmissionBreakdownView] = useState<SubmissionBreakdownView>('department');
+  const [submissionBreakdownDatePreset, setSubmissionBreakdownDatePreset] = useState<SubmissionBreakdownDatePreset>('schoolYear');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [statusOverviewFromDate, setStatusOverviewFromDate] = useState('');
@@ -688,7 +730,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     return [...batches].sort();
   }, [normalizedSubmissions]);
 
-  const filteredSubmissions = useMemo(
+  const baseFilteredSubmissions = useMemo(
     () =>
       normalizedSubmissions.filter((sub) => {
         if (departmentFilter !== 'all' && !(sub.department === departmentFilter || sub.course?.includes(departmentFilter))) return false;
@@ -712,33 +754,24 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           const id = String(sub.studentId || '');
           if (!id.startsWith(studentBatchFilter)) return false;
         }
+        return true;
+      }),
+    [normalizedSubmissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, genderFilter, studentBatchFilter],
+  );
+
+  const filteredSubmissions = useMemo(
+    () =>
+      baseFilteredSubmissions.filter((sub) => {
         const subDate = sub.submittedAt ? new Date(sub.submittedAt) : null;
         if (fromDate && subDate && subDate.getTime() < getLocalDateStartTimestamp(fromDate)) return false;
         if (toDate && subDate && subDate.getTime() > getLocalDateEndTimestamp(toDate)) return false;
         return true;
       }),
-    [normalizedSubmissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, genderFilter, studentBatchFilter, fromDate, toDate],
+    [baseFilteredSubmissions, fromDate, toDate],
   );
 
-  const dedupedFilteredSubmissions = useMemo(() => {
-    const seen = new Set<string>();
-    const out: any[] = [];
-    for (const s of filteredSubmissions) {
-      const signature = [
-        s.studentId || '',
-        (s.firstName || '').trim().toLowerCase(),
-        (s.lastName || '').trim().toLowerCase(),
-        s.year || '',
-        s.status || '',
-        s.course || '',
-        s.submittedAt ? new Date(s.submittedAt).toISOString().slice(0, 10) : '',
-      ].join('|');
-      if (seen.has(signature)) continue;
-      seen.add(signature);
-      out.push(s);
-    }
-    return out;
-  }, [filteredSubmissions]);
+  const dedupedBaseFilteredSubmissions = useMemo(() => dedupeSubmissions(baseFilteredSubmissions), [baseFilteredSubmissions]);
+  const dedupedFilteredSubmissions = useMemo(() => dedupeSubmissions(filteredSubmissions), [filteredSubmissions]);
 
   const dateRange = useMemo(() => {
     const timestamps = normalizedSubmissions
@@ -833,66 +866,76 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     () => buildReportingTermRange(reportingTermSettings),
     [reportingTermSettings],
   );
-  const dateRangePresets = useMemo(
+  const dashboardDateRangeLabel = `${fromDate || '-'} to ${toDate || '-'}`;
+  const submissionBreakdownDateRanges = useMemo<PresetDateRange[]>(
     () => {
-      const schoolYearEnd = new Date(reportingTermRange.endMs - 1);
+      const academicYearStart = new Date(reportingTermRange.startMs);
+      const academicYearEnd = clampDateToToday(new Date(reportingTermRange.endMs - 1));
+      const currentDate = new Date();
+      currentDate.setHours(23, 59, 59, 999);
+
+      const constrainedEnd = academicYearEnd.getTime() < currentDate.getTime() ? academicYearEnd : currentDate;
+      const buildPresetRange = (value: SubmissionBreakdownDatePreset, label: string, startDate: Date): PresetDateRange => {
+        const constrainedStart = getLaterDate(academicYearStart, startDate);
+        const safeStart = constrainedStart.getTime() > constrainedEnd.getTime() ? new Date(constrainedEnd) : constrainedStart;
+
+        return {
+          value,
+          label,
+          from: getLocalDateInputValue(safeStart),
+          to: getLocalDateInputValue(constrainedEnd),
+        };
+      };
+
       return [
+        buildPresetRange('today', 'Today', new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 0, 0, 0, 0)),
+        buildPresetRange('thisWeek', 'This Week', getStartOfCurrentWeek(currentDate)),
+        buildPresetRange('thisMonth', 'This Month', getStartOfCurrentMonth(currentDate)),
         {
-          value: 'today' as const,
-          label: 'Today',
-          from: today,
-          to: today,
-        },
-        {
-          value: 'lastWeek' as const,
-          label: 'Last Week',
-          from: getLocalDateInputValue(getDateDaysAgo(6)),
-          to: today,
-        },
-        {
-          value: 'lastMonth' as const,
-          label: 'Last Month',
-          from: getLocalDateInputValue(getDateDaysAgo(29)),
-          to: today,
-        },
-        {
-          value: 'schoolYear' as const,
+          value: 'schoolYear',
           label: 'School Year',
-          from: getLocalDateInputValue(new Date(reportingTermRange.startMs)),
-          to: getLocalDateInputValue(clampDateToToday(schoolYearEnd)),
+          from: getLocalDateInputValue(academicYearStart),
+          to: getLocalDateInputValue(academicYearEnd),
         },
       ];
     },
-    [reportingTermRange.endMs, reportingTermRange.startMs, today],
+    [reportingTermRange.endMs, reportingTermRange.startMs],
   );
-  const activeDateRangePreset = useMemo(
+  const activeSubmissionBreakdownDateRange = useMemo(
     () =>
-      dateRangePresets.find((preset) => preset.from === fromDate && preset.to === toDate)?.value || null,
-    [dateRangePresets, fromDate, toDate],
+      submissionBreakdownDateRanges.find((preset) => preset.value === submissionBreakdownDatePreset)
+      || submissionBreakdownDateRanges[submissionBreakdownDateRanges.length - 1],
+    [submissionBreakdownDatePreset, submissionBreakdownDateRanges],
   );
-  const activeDateRangeLabel =
-    dateRangePresets.find((preset) => preset.value === activeDateRangePreset)?.label ||
-    `${fromDate || '-'} to ${toDate || '-'}`;
-  const applyDateRangePreset = (preset: DateRangePreset) => {
-    const range = dateRangePresets.find((item) => item.value === preset);
-    if (!range) return;
-    setFromDate(range.from);
-    setToDate(range.to);
-  };
-  const currentTermSubmissions = useMemo(
-    () =>
-      dedupedFilteredSubmissions.filter((submission) => {
+  const submissionBreakdownSubmissions = useMemo(
+    () => {
+      if (isStaffMode) {
+        if (!activeSubmissionBreakdownDateRange) return [];
+
+        const selectedStart = getLocalDateStartTimestamp(activeSubmissionBreakdownDateRange.from);
+        const selectedEnd = getLocalDateEndTimestamp(activeSubmissionBreakdownDateRange.to);
+
+        if (!Number.isFinite(selectedStart) || !Number.isFinite(selectedEnd)) return [];
+
+        return dedupedBaseFilteredSubmissions.filter((submission) => {
+          const submittedTimestamp = new Date(submission.submittedAt || 0).getTime();
+          return Number.isFinite(submittedTimestamp) && submittedTimestamp >= selectedStart && submittedTimestamp <= selectedEnd;
+        });
+      }
+
+      return dedupedFilteredSubmissions.filter((submission) => {
         const submittedTimestamp = new Date(submission.submittedAt || 0).getTime();
         return Number.isFinite(submittedTimestamp)
           && submittedTimestamp >= reportingTermRange.startMs
           && submittedTimestamp < reportingTermRange.endMs;
-      }),
-    [dedupedFilteredSubmissions, reportingTermRange.endMs, reportingTermRange.startMs],
+      });
+    },
+    [activeSubmissionBreakdownDateRange, dedupedBaseFilteredSubmissions, dedupedFilteredSubmissions, isStaffMode, reportingTermRange.endMs, reportingTermRange.startMs],
   );
 
   // ── Chart data ─────────────────────────────────────────────────────────
   const departmentChartData = useMemo(() => {
-    const counts = currentTermSubmissions.reduce((acc, sub) => {
+    const counts = submissionBreakdownSubmissions.reduce((acc, sub) => {
       const department = resolveDepartmentValue(sub.department, sub.course);
       if (!department) return acc;
 
@@ -906,10 +949,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         count: counts[department] || 0,
         fill: DEPARTMENT_COLORS[department] || '#94a3b8',
       }));
-  }, [currentTermSubmissions]);
+  }, [submissionBreakdownSubmissions]);
   const programChartData = useMemo(
     () => {
-      const programCounts = currentTermSubmissions.reduce((acc, sub) => {
+      const programCounts = submissionBreakdownSubmissions.reduce((acc, sub) => {
         const program = abbreviateCourse(sub.course);
         if (!program || program === '-') return acc;
 
@@ -938,10 +981,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           fill: DEPARTMENT_COLORS[details.department] || 'hsl(var(--primary))',
         }));
     },
-    [currentTermSubmissions],
+    [submissionBreakdownSubmissions],
   );
   const yearChartData = useMemo(() => {
-    const yearCounts = currentTermSubmissions.reduce((acc, sub) => {
+    const yearCounts = submissionBreakdownSubmissions.reduce((acc, sub) => {
       const year = String(sub.year || '').trim();
       acc[year] = (acc[year] || 0) + 1;
       return acc;
@@ -978,9 +1021,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     }
 
     return data;
-  }, [currentTermSubmissions]);
+  }, [submissionBreakdownSubmissions]);
   const genderChartData = useMemo(() => {
-    const genderCounts = currentTermSubmissions.reduce((acc, sub) => {
+    const genderCounts = submissionBreakdownSubmissions.reduce((acc, sub) => {
       const gender = normalizeSubmissionGenderValue(sub.gender || sub.sex);
       acc[gender] = (acc[gender] || 0) + 1;
       return acc;
@@ -1012,7 +1055,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     }
 
     return data;
-  }, [currentTermSubmissions]);
+  }, [submissionBreakdownSubmissions]);
   const submissionBreakdownLabel = formatSubmissionBreakdownLabel(submissionBreakdownView);
   const submissionBreakdownData: SubmissionBreakdownDatum[] =
     submissionBreakdownView === 'department'
@@ -1351,7 +1394,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         <Card className="border-outline-variant/30">
           <CardHeader className="pb-0 pt-5 px-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
+              <div>
                 <CardTitle className="text-base font-semibold">
                   Submissions by {submissionBreakdownLabel}
                 </CardTitle>
@@ -1359,32 +1402,57 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                   Total medical clearance forms for the selected date range.
                 </p>
                 <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
-                  Range: {activeDateRangeLabel} | Academic Year: {reportingTermRange.label}
+                  {isStaffMode
+                    ? `Date Range: ${activeSubmissionBreakdownDateRange?.label || 'School Year'} | Academic Year: ${reportingTermRange.label}`
+                    : `Range: ${dashboardDateRangeLabel} | Academic Year: ${reportingTermRange.label}`}
                 </p>
               </div>
-              <div className="w-full sm:w-44">
-                <p className="mb-1 text-xs font-medium text-muted-foreground">Sort by</p>
-                <Select
-                  value={submissionBreakdownView}
-                  onValueChange={(value) => setSubmissionBreakdownView(value as SubmissionBreakdownView)}
-                >
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Choose chart view" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="department">Department</SelectItem>
-                    <SelectItem value="program">Program</SelectItem>
-                    <SelectItem value="year">Year Level</SelectItem>
-                    <SelectItem value="gender">Gender</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className={`grid w-full gap-3 sm:w-auto ${isStaffMode ? 'sm:grid-cols-2' : ''}`}>
+                {isStaffMode && (
+                  <div className="w-full sm:w-44">
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">Date Range</p>
+                    <Select
+                      value={submissionBreakdownDatePreset}
+                      onValueChange={(value) => setSubmissionBreakdownDatePreset(value as SubmissionBreakdownDatePreset)}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Choose chart range" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="thisWeek">This Week</SelectItem>
+                        <SelectItem value="thisMonth">This Month</SelectItem>
+                        <SelectItem value="schoolYear">School Year</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="w-full sm:w-44">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">View by</p>
+                  <Select
+                    value={submissionBreakdownView}
+                    onValueChange={(value) => setSubmissionBreakdownView(value as SubmissionBreakdownView)}
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Choose chart view" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="department">Department</SelectItem>
+                      <SelectItem value="program">Program</SelectItem>
+                      <SelectItem value="year">Year Level</SelectItem>
+                      <SelectItem value="gender">Gender</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-5 pt-4">
             {submissionBreakdownView === 'program' && submissionBreakdownData.length === 0 ? (
               <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
-                No current academic year program submissions are available for the selected filters.
+                {isStaffMode
+                  ? 'No program submissions are available for the selected chart date range and filters.'
+                  : 'No current academic year program submissions are available for the selected filters.'}
               </div>
             ) : (
               <div className="h-64">
