@@ -147,7 +147,21 @@ export type AuthSession = {
 type SupabaseAuthUser = {
   id: string;
   email?: string;
-  identities?: Array<{ id?: string; provider?: string }>;
+  app_metadata?: {
+    provider?: string | null;
+  } | null;
+  identities?: Array<{
+    id?: string;
+    provider?: string;
+    identity_data?: {
+      given_name?: string | null;
+      family_name?: string | null;
+      first_name?: string | null;
+      last_name?: string | null;
+      full_name?: string | null;
+      name?: string | null;
+    } | null;
+  }>;
   user_metadata?: {
     first_name?: string | null;
     last_name?: string | null;
@@ -342,7 +356,76 @@ function normalizeNamePart(value?: string | null) {
   return normalized || null;
 }
 
+function splitFullNameParts(fullName?: string | null) {
+  const parts = String(fullName || '').split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return { firstName: null, lastName: null };
+  }
+  if (parts.length === 1) {
+    return { firstName: parts[0] || null, lastName: null };
+  }
+  return {
+    firstName: parts.slice(0, -1).join(' ').trim() || null,
+    lastName: parts.slice(-1).join(' ').trim() || null,
+  };
+}
+
+function nameTokensMatchSuffix(value: string, suffix: string) {
+  const valueParts = String(value || '').split(/\s+/).filter(Boolean);
+  const suffixParts = String(suffix || '').split(/\s+/).filter(Boolean);
+  if (!valueParts.length || !suffixParts.length || suffixParts.length >= valueParts.length) {
+    return false;
+  }
+  return suffixParts.every((part, index) => (
+    valueParts[valueParts.length - suffixParts.length + index]?.toLowerCase() === part.toLowerCase()
+  ));
+}
+
+function isGoogleAuthUser(user?: SupabaseAuthUser | null) {
+  const providers = [
+    user?.app_metadata?.provider,
+    ...(Array.isArray(user?.identities) ? user.identities.map((identity) => identity?.provider) : []),
+  ];
+  return providers.some(
+    (provider) => String(provider || '').trim().toLowerCase() === 'google',
+  );
+}
+
 function deriveNamePartsFromUser(user?: SupabaseAuthUser | null) {
+  const isGoogleUser = isGoogleAuthUser(user);
+  const googleIdentityData =
+    (Array.isArray(user?.identities)
+      ? user.identities.find((identity) => String(identity?.provider || '').trim().toLowerCase() === 'google')?.identity_data
+      : null) || null;
+  const identityFirstName = normalizeNamePart(
+    googleIdentityData?.given_name
+    || googleIdentityData?.first_name,
+  );
+  const identityLastName = normalizeNamePart(
+    googleIdentityData?.family_name
+    || googleIdentityData?.last_name,
+  );
+  const fullName = normalizeNamePart(
+    user?.user_metadata?.full_name
+    || user?.user_metadata?.name
+    || googleIdentityData?.full_name
+    || googleIdentityData?.name,
+  );
+  if (isGoogleUser && fullName) {
+    if (identityLastName && nameTokensMatchSuffix(fullName, identityLastName)) {
+      const fullNameParts = fullName.split(/\s+/).filter(Boolean);
+      const lastNameParts = identityLastName.split(/\s+/).filter(Boolean);
+      return {
+        firstName: fullNameParts.slice(0, fullNameParts.length - lastNameParts.length).join(' ').trim() || identityFirstName,
+        lastName: identityLastName,
+      };
+    }
+    if (identityFirstName && identityLastName) {
+      return { firstName: identityFirstName, lastName: identityLastName };
+    }
+    return splitFullNameParts(fullName);
+  }
+
   const firstName = normalizeNamePart(
     user?.user_metadata?.first_name
     || user?.user_metadata?.given_name,
@@ -356,18 +439,14 @@ function deriveNamePartsFromUser(user?: SupabaseAuthUser | null) {
     return { firstName, lastName };
   }
 
-  const fullName = normalizeNamePart(
-    user?.user_metadata?.full_name
-    || user?.user_metadata?.name,
-  );
   if (!fullName) {
     return { firstName: null, lastName: null };
   }
 
-  const parts = fullName.split(/\s+/).filter(Boolean);
+  const splitNames = splitFullNameParts(fullName);
   return {
-    firstName: parts[0] || null,
-    lastName: parts.slice(1).join(' ').trim() || null,
+    firstName: splitNames.firstName || firstName,
+    lastName: splitNames.lastName || lastName,
   };
 }
 
@@ -1830,6 +1909,13 @@ export async function getMe(token?: string | null) {
           || resolvedProfile.email !== normalizedEmail
           || (firstName && !resolvedProfile.first_name)
           || (lastName && !resolvedProfile.last_name)
+          || (
+            isGoogleAuthUser(user)
+            && (
+              (firstName && normalizeNamePart(resolvedProfile.first_name) !== firstName)
+              || (lastName && normalizeNamePart(resolvedProfile.last_name) !== lastName)
+            )
+          )
         )
       ) {
         resolvedProfile = (
@@ -1846,8 +1932,16 @@ export async function getMe(token?: string | null) {
               body: JSON.stringify({
                 email: normalizedEmail,
                 student_id: derivedStudentId,
-                first_name: resolvedProfile.first_name || firstName,
-                last_name: resolvedProfile.last_name || lastName,
+                first_name: (
+                  isGoogleAuthUser(user)
+                    ? (firstName || resolvedProfile.first_name || null)
+                    : (resolvedProfile.first_name || firstName || null)
+                ),
+                last_name: (
+                  isGoogleAuthUser(user)
+                    ? (lastName || resolvedProfile.last_name || null)
+                    : (resolvedProfile.last_name || lastName || null)
+                ),
               }),
             },
           )
@@ -1869,9 +1963,44 @@ export async function getMe(token?: string | null) {
         restRequest<any[]>('staff_users', `profile_id=eq.${user.id}&select=*`, { token }),
       ]);
 
+      let resolvedStudent = studentRows[0] || null;
+      if (
+        resolvedStudent &&
+        resolvedProfile.role === 'student' &&
+        canSelfProvisionStudent &&
+        isGoogleAuthUser(user) &&
+        (
+          (firstName && normalizeNamePart(resolvedStudent.first_name) !== firstName)
+          || (lastName && normalizeNamePart(resolvedStudent.last_name) !== lastName)
+          || (!resolvedStudent.profile_id && resolvedStudent.student_id === derivedStudentId)
+        )
+      ) {
+        const studentMatchQuery = resolvedStudent.profile_id
+          ? `profile_id=eq.${user.id}`
+          : `student_id=eq.${encodeURIComponent(derivedStudentId || '')}`;
+        const patchedStudents = await restRequest<any[]>(
+          'students',
+          `${studentMatchQuery}&select=*`,
+          {
+            method: 'PATCH',
+            token,
+            headers: {
+              'Content-Type': 'application/json',
+              Prefer: 'return=representation',
+            },
+            body: JSON.stringify({
+              profile_id: resolvedStudent.profile_id || user.id,
+              first_name: firstName || resolvedStudent.first_name || null,
+              last_name: lastName || resolvedStudent.last_name || null,
+            }),
+          },
+        );
+        resolvedStudent = patchedStudents[0] || resolvedStudent;
+      }
+
       resolvedMe = {
         profile: resolvedProfile,
-        student: studentRows[0] || null,
+        student: resolvedStudent,
         staff: staffRows[0] || null,
       } satisfies AuthMe;
     }
