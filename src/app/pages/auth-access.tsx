@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../components/ui/dialog';
+import PasswordStrengthMeter from '../components/password-strength-meter';
 import {
   getPasswordResetCooldownRemaining,
   PASSWORD_RESET_COOLDOWN_SECONDS,
@@ -32,9 +33,12 @@ import {
   prefetchPortalExperience,
 } from '../lib/login-prefetch';
 import {
-  getPasswordLengthMessage,
-  isPasswordLongEnough,
+  getPasswordPolicyMessage,
+  getPasswordStrengthResult,
+  getRegistrationPasswordMessage,
   MIN_PASSWORD_LENGTH,
+  MIN_REGISTRATION_PASSWORD_LENGTH,
+  isRegistrationPasswordLongEnough,
 } from '../lib/password-policy';
 import { useAuth } from '../lib/auth';
 import { LegalDialog } from './auth/legal-dialog';
@@ -61,6 +65,7 @@ export default function AuthAccessPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const {
+    me,
     signIn,
     signUp,
     loading,
@@ -112,6 +117,28 @@ export default function AuthAccessPage() {
   const [forgotPasswordDialogOpen, setForgotPasswordDialogOpen] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [resetCooldown, setResetCooldown] = useState(0);
+  const signUpPasswordInputs = useMemo(
+    () => ({
+      email: signUpForm.email,
+      firstName: signUpForm.firstName,
+      lastName: signUpForm.lastName,
+      studentId: deriveStudentIdFromEmail(signUpForm.email),
+    }),
+    [signUpForm.email, signUpForm.firstName, signUpForm.lastName],
+  );
+  const passwordSetupInputs = useMemo(
+    () => ({
+      email: me?.profile?.email,
+      firstName: me?.profile?.first_name,
+      lastName: me?.profile?.last_name,
+      studentId: me?.profile?.student_id,
+    }),
+    [me],
+  );
+  const passwordSetupResult = useMemo(
+    () => getPasswordStrengthResult(passwordSetupForm.password, passwordSetupInputs),
+    [passwordSetupForm.password, passwordSetupInputs],
+  );
 
   const fromPath = useMemo(() => {
     const state = location.state as { from?: string } | null;
@@ -263,8 +290,8 @@ export default function AuthAccessPage() {
       setError(`Use your 9-digit school ID email in the format yourschoolid@${GC_DOMAIN}.`);
       return;
     }
-    if (!isPasswordLongEnough(signUpForm.password)) {
-      setError(getPasswordLengthMessage());
+    if (!isRegistrationPasswordLongEnough(signUpForm.password)) {
+      setError(getRegistrationPasswordMessage());
       return;
     }
     if (signUpForm.password !== signUpForm.confirmPassword) {
@@ -303,8 +330,8 @@ export default function AuthAccessPage() {
     setError(null);
     setSuccessMessage(null);
 
-    if (!isPasswordLongEnough(passwordSetupForm.password)) {
-      setError(getPasswordLengthMessage());
+    if (!passwordSetupResult.isStrongEnough) {
+      setError(getPasswordPolicyMessage(passwordSetupResult));
       return;
     }
     if (passwordSetupForm.password !== passwordSetupForm.confirmPassword) {
@@ -326,8 +353,8 @@ export default function AuthAccessPage() {
     setError(null);
     setSuccessMessage(null);
 
-    if (!isPasswordLongEnough(passwordSetupForm.password)) {
-      setError(getPasswordLengthMessage());
+    if (!passwordSetupResult.isStrongEnough) {
+      setError(getPasswordPolicyMessage(passwordSetupResult));
       return;
     }
     if (passwordSetupForm.password !== passwordSetupForm.confirmPassword) {
@@ -457,6 +484,11 @@ export default function AuthAccessPage() {
                     }
                     placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                     className={inputClassName}
+                  />
+                  <PasswordStrengthMeter
+                    password={passwordSetupForm.password}
+                    userInputs={passwordSetupInputs}
+                    className="mt-3"
                   />
                 </div>
 
@@ -889,7 +921,7 @@ export default function AuthAccessPage() {
                         onChange={(event) =>
                           setSignUpForm((prev) => ({ ...prev, password: event.target.value }))
                         }
-                        placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                        placeholder={`At least ${MIN_REGISTRATION_PASSWORD_LENGTH} characters`}
                         className={`${iconInputClassName} pr-12`}
                       />
                       <button
@@ -901,6 +933,12 @@ export default function AuthAccessPage() {
                         {showSignUpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
+                    <PasswordStrengthMeter
+                      password={signUpForm.password}
+                      userInputs={signUpPasswordInputs}
+                      mode="registration"
+                      className="mt-2"
+                    />
                   </div>
 
                   <div>

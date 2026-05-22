@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { LockKeyhole } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../lib/auth';
+import PasswordStrengthMeter from './password-strength-meter';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import {
-  getPasswordLengthMessage,
-  isPasswordLongEnough,
+  getPasswordPolicyMessage,
+  getPasswordStrengthResult,
   MIN_PASSWORD_LENGTH,
 } from '../lib/password-policy';
 
@@ -21,13 +22,19 @@ export default function PasswordChangeCard({
   title = 'Password',
   description = 'Update the password for your signed-in Gordon College account.',
 }: PasswordChangeCardProps) {
-  const { changePassword } = useAuth();
+  const { changePassword, me } = useAuth();
   const [form, setForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
   const [saving, setSaving] = useState(false);
+  const passwordResult = getPasswordStrengthResult(form.newPassword, {
+    email: me?.profile?.email,
+    firstName: me?.profile?.first_name,
+    lastName: me?.profile?.last_name,
+    studentId: me?.profile?.student_id,
+  });
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -37,8 +44,8 @@ export default function PasswordChangeCard({
       return;
     }
 
-    if (!isPasswordLongEnough(form.newPassword)) {
-      toast.error(getPasswordLengthMessage());
+    if (!passwordResult.isStrongEnough) {
+      toast.error(getPasswordPolicyMessage(passwordResult));
       return;
     }
 
@@ -104,6 +111,17 @@ export default function PasswordChangeCard({
               value={form.confirmPassword}
               onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
               placeholder="Re-enter your new password"
+            />
+          </div>
+          <div className="min-w-0 md:col-span-2">
+            <PasswordStrengthMeter
+              password={form.newPassword}
+              userInputs={{
+                email: me?.profile?.email,
+                firstName: me?.profile?.first_name,
+                lastName: me?.profile?.last_name,
+                studentId: me?.profile?.student_id,
+              }}
             />
           </div>
           <div className="md:col-span-2">

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { toast } from 'sonner';
+import PasswordStrengthMeter from '../../components/password-strength-meter';
 import PasswordChangeCard from '../../components/password-change-card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -40,7 +41,7 @@ import {
   invalidateSuperAdminWorkflowQueries,
   useSuperAdminAdministratorsQuery,
 } from './super-admin-workflow-query';
-import { getPasswordLengthMessage, isPasswordLongEnough } from '../../lib/password-policy';
+import { getPasswordPolicyMessage, getPasswordStrengthResult } from '../../lib/password-policy';
 
 function formatDateTime(value?: string) {
   if (!value) return '-';
@@ -109,6 +110,18 @@ export default function SuperAdminAdministrators() {
     firstName: '',
     lastName: '',
   });
+  const passwordInputs = useMemo(
+    () => ({
+      email: form.email,
+      firstName: form.firstName,
+      lastName: form.lastName,
+    }),
+    [form.email, form.firstName, form.lastName],
+  );
+  const passwordResult = useMemo(
+    () => getPasswordStrengthResult(form.password, passwordInputs),
+    [form.password, passwordInputs],
+  );
 
   useEffect(() => {
     if (isError) {
@@ -140,8 +153,8 @@ export default function SuperAdminAdministrators() {
       toast.error('Email and password are required');
       return;
     }
-    if (!isPasswordLongEnough(form.password)) {
-      toast.error(getPasswordLengthMessage());
+    if (!passwordResult.isStrongEnough) {
+      toast.error(getPasswordPolicyMessage(passwordResult));
       return;
     }
 
@@ -537,6 +550,7 @@ export default function SuperAdminAdministrators() {
                 value={form.password}
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
               />
+              <PasswordStrengthMeter password={form.password} userInputs={passwordInputs} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">

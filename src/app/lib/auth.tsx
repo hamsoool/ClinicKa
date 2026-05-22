@@ -111,7 +111,12 @@ async function applyPasswordChange(
   setStoredSession(verifiedSession);
   setSession(verifiedSession);
 
-  await updateUserPassword(newPassword, verifiedSession.access_token);
+  await updateUserPassword(newPassword, verifiedSession.access_token, {
+    email,
+    firstName: me?.profile?.first_name,
+    lastName: me?.profile?.last_name,
+    studentId: me?.profile?.student_id,
+  });
   await markServerPasswordSetupCompleted(verifiedSession.access_token);
   markPasswordSetupComplete(email);
   const resolvedMe = await getMe(verifiedSession.access_token);
@@ -520,7 +525,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!session?.access_token) {
         throw new Error('No active session found. Please sign in with Google again.');
       }
-      await updateUserPassword(newPassword, session.access_token);
+      await updateUserPassword(newPassword, session.access_token, {
+        email: session.user?.email || me?.profile?.email,
+        firstName: me?.profile?.first_name,
+        lastName: me?.profile?.last_name,
+        studentId: me?.profile?.student_id,
+      });
       await markServerPasswordSetupCompleted(session.access_token);
       markPasswordSetupComplete(session.user?.email || me?.profile?.email || null);
       const resolvedMe = await getMe(session.access_token);
@@ -533,7 +543,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!session?.access_token) {
         throw new Error('Your reset link is no longer active. Request a new password reset email.');
       }
-      await updateUserPassword(newPassword, session.access_token);
+      await updateUserPassword(newPassword, session.access_token, {
+        email: session.user?.email || me?.profile?.email,
+        firstName: me?.profile?.first_name,
+        lastName: me?.profile?.last_name,
+        studentId: me?.profile?.student_id,
+      });
       await markServerPasswordSetupCompleted(session.access_token);
       markPasswordSetupComplete(session.user?.email || me?.profile?.email || null);
       try {

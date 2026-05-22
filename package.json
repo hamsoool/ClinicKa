@@ -47,6 +47,7 @@
     "@supabase/supabase-js": "^2.43.0",
     "@tanstack/react-query": "^5.100.6",
     "@types/nodemailer": "^6.4.17",
+    "@types/zxcvbn": "^4.4.5",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "@vitejs/plugin-react": "^4.3.4",
@@ -80,7 +81,8 @@
     "sonner": "2.0.3",
     "tailwind-merge": "3.2.0",
     "tw-animate-css": "1.3.8",
-    "vaul": "1.1.2"
+    "vaul": "1.1.2",
+    "zxcvbn": "^4.4.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",

@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Label } from '../../components/ui/label';
+import PasswordStrengthMeter from '../../components/password-strength-meter';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { Textarea } from '../../components/ui/textarea';
 import {
@@ -36,7 +37,7 @@ import {
   type AdminUserAccount,
   type ArchivedUserAccount,
 } from '../../lib/api';
-import { getPasswordLengthMessage, isPasswordLongEnough } from '../../lib/password-policy';
+import { getPasswordPolicyMessage, getPasswordStrengthResult } from '../../lib/password-policy';
 import {
   invalidateAdminWorkflowQueries,
   useAdminArchivedAccountsQuery,
@@ -86,6 +87,19 @@ export default function AdminUserAccounts() {
     course: '',
     staffPosition: 'Clinic Staff',
   });
+  const createPasswordInputs = useMemo(
+    () => ({
+      email: form.email,
+      firstName: form.firstName,
+      lastName: form.lastName,
+      studentId: form.role === 'student' ? form.studentId : undefined,
+    }),
+    [form.email, form.firstName, form.lastName, form.role, form.studentId],
+  );
+  const createPasswordResult = useMemo(
+    () => getPasswordStrengthResult(form.password, createPasswordInputs),
+    [form.password, createPasswordInputs],
+  );
 
   const { data: activeData, isError: isErrorActive } = useAdminUserAccountsQuery();
   const { data: archivedData, isError: isErrorArchived } = useAdminArchivedAccountsQuery();
@@ -195,8 +209,8 @@ export default function AdminUserAccounts() {
       toast.error('Email and password are required');
       return;
     }
-    if (!isPasswordLongEnough(form.password)) {
-      toast.error(getPasswordLengthMessage());
+    if (!createPasswordResult.isStrongEnough) {
+      toast.error(getPasswordPolicyMessage(createPasswordResult));
       return;
     }
     if (form.role === 'student' && !form.studentId.trim()) {
@@ -439,6 +453,7 @@ export default function AdminUserAccounts() {
             <div className="grid gap-1.5">
               <Label htmlFor="ua-password">Password</Label>
               <Input id="ua-password" type="password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} />
+              <PasswordStrengthMeter password={form.password} userInputs={createPasswordInputs} />
             </div>
             <div className="grid gap-1.5">
               <Label>Role</Label>

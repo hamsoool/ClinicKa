@@ -15,7 +15,13 @@ import {
   writeStoredAdminSystemSettings,
 } from './admin-system-settings';
 import type { AdminSystemSettings } from './admin-system-settings';
-import { getPasswordLengthMessage, isPasswordLongEnough } from './password-policy';
+import {
+  getPasswordPolicyMessage,
+  getRegistrationPasswordMessage,
+  getPasswordStrengthResult,
+  isRegistrationPasswordLongEnough,
+  type PasswordPolicyUserInputs,
+} from './password-policy';
 import {
   assertPublicSupabaseConfig,
   configuredSiteUrl,
@@ -907,10 +913,15 @@ export async function getUserByToken(token: string | null) {
   return authRequest<SupabaseAuthUser>('/auth/v1/user', { token });
 }
 
-export async function updateUserPassword(newPassword: string, token?: string | null) {
-  const password = newPassword?.trim();
-  if (!password || !isPasswordLongEnough(password)) {
-    throw new Error(getPasswordLengthMessage());
+export async function updateUserPassword(
+  newPassword: string,
+  token?: string | null,
+  userInputs?: PasswordPolicyUserInputs,
+) {
+  const password = String(newPassword || '');
+  const result = getPasswordStrengthResult(password, userInputs);
+  if (!result.isStrongEnough) {
+    throw new Error(getPasswordPolicyMessage(result));
   }
 
   return authRequest<{ id: string; email?: string | null }>('/auth/v1/user', {
@@ -1708,6 +1719,10 @@ export async function signUpWithPassword(
   }
   if (!isValidStudentRegistrationEmail(email)) {
     throw new Error(`Use your 9-digit student email, for example 202311165@${GC_DOMAIN}.`);
+  }
+
+  if (!isRegistrationPasswordLongEnough(password)) {
+    throw new Error(getRegistrationPasswordMessage());
   }
 
   const normalizedFirstName = normalizeNamePart(firstName);
@@ -4101,7 +4116,17 @@ type AdminCreateAccountInput = {
 };
 
 export async function createAdminAccount(input: AdminCreateAccountInput) {
-    return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-account', {
+  const passwordResult = getPasswordStrengthResult(input.password, {
+    email: input.email,
+    firstName: input.firstName,
+    lastName: input.lastName,
+    studentId: input.studentId,
+  });
+  if (!passwordResult.isStrongEnough) {
+    throw new Error(getPasswordPolicyMessage(passwordResult));
+  }
+
+  return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-account', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -4119,7 +4144,16 @@ type AdminCreateStaffInput = {
 };
 
 export async function createAdminStaff(input: AdminCreateStaffInput) {
-    return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-staff', {
+  const passwordResult = getPasswordStrengthResult(input.password, {
+    email: input.email,
+    firstName: input.firstName,
+    lastName: input.lastName,
+  });
+  if (!passwordResult.isStrongEnough) {
+    throw new Error(getPasswordPolicyMessage(passwordResult));
+  }
+
+  return apiRequest<{ success: boolean; userId?: string }>('/functions/v1/server/admin/create-staff', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -4263,6 +4297,15 @@ export async function getSuperAdminAdministrators() {
 }
 
 export async function createSuperAdminAdministrator(input: SuperAdminCreateAdministratorInput) {
+  const passwordResult = getPasswordStrengthResult(input.password, {
+    email: input.email,
+    firstName: input.firstName,
+    lastName: input.lastName,
+  });
+  if (!passwordResult.isStrongEnough) {
+    throw new Error(getPasswordPolicyMessage(passwordResult));
+  }
+
   return apiRequest<{ success: boolean; userId?: string }>(
     '/functions/v1/server/super-admin/administrators',
     {

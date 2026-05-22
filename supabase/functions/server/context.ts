@@ -1,11 +1,13 @@
 // @ts-nocheck
 import { createClient } from "npm:@supabase/supabase-js@2";
+import zxcvbn from "npm:zxcvbn@4.4.2";
 
 export const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 export const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 export const requestLoggingEnabled = Deno.env.get("ENABLE_REQUEST_LOGGING") === "true";
 export const debugErrorsEnabled = Deno.env.get("DEBUG_ERRORS") === "true";
-export const minPasswordLength = 12;
+export const minPasswordLength = 15;
+export const minPasswordScore = 3;
 const configuredSignedUrlSeconds = Number(
   Deno.env.get("SIGNED_STORAGE_URL_EXPIRES_SECONDS") || "900",
 );
@@ -74,6 +76,81 @@ export function internalServerError(c: any, message: string, error: unknown) {
 
 export function passwordLengthError() {
   return `password must be at least ${minPasswordLength} characters`;
+}
+
+function normalizePasswordValue(value?: string | null) {
+  return String(value || "").trim();
+}
+
+function normalizePasswordToken(value?: string | null) {
+  return normalizePasswordValue(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function getPasswordCharacterCount(password?: string | null) {
+  return Array.from(String(password || "")).length;
+}
+
+function buildPasswordTokens(input?: {
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  studentId?: string | null;
+}) {
+  const email = normalizePasswordValue(input?.email).toLowerCase();
+  const emailLocalPart = email.split("@")[0] || "";
+  const rawTokens = [
+    email,
+    emailLocalPart,
+    normalizePasswordValue(input?.firstName),
+    normalizePasswordValue(input?.lastName),
+    normalizePasswordValue(input?.studentId),
+  ];
+  const tokens = new Set<string>();
+
+  for (const rawToken of rawTokens) {
+    const parts = rawToken.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+    for (const part of [rawToken, ...parts]) {
+      const normalized = normalizePasswordToken(part);
+      if (normalized.length >= 3) {
+        tokens.add(normalized);
+      }
+    }
+  }
+
+  return [...tokens];
+}
+
+export function getManagedPasswordPolicyError(
+  password?: string | null,
+  input?: {
+    email?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    studentId?: string | null;
+  },
+) {
+  const resolvedPassword = String(password || "");
+  if (!/\S/u.test(resolvedPassword)) {
+    return "password cannot be blank or only spaces";
+  }
+  if (getPasswordCharacterCount(resolvedPassword) < minPasswordLength) {
+    return passwordLengthError();
+  }
+
+  const userTokens = buildPasswordTokens(input);
+  const normalizedPassword = normalizePasswordToken(resolvedPassword);
+  if (userTokens.some((token) => normalizedPassword.includes(token))) {
+    return "password must not include the user's name, email, or student ID";
+  }
+
+  const strength = zxcvbn(resolvedPassword, userTokens);
+  if ((strength?.score ?? 0) < minPasswordScore) {
+    return "password is too easy to guess; choose a longer and more unique passphrase";
+  }
+
+  return null;
 }
 
 export const supabase = createClient(supabaseUrl, serviceRoleKey);

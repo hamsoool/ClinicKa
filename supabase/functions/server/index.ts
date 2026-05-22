@@ -7,15 +7,14 @@ import {
   bucketName,
   buildCorsHeaders,
   forbidden,
+  getManagedPasswordPolicyError,
   internalServerError,
   isAdminRole,
   isDoctorOrAdmin,
   isDoctorPosition,
   isStaffRole,
   isSuperAdminRole,
-  minPasswordLength,
   normalizeEmail,
-  passwordLengthError,
   requestLoggingEnabled,
   resolveCorsOrigin,
   signedStorageUrlExpiresSeconds,
@@ -1423,7 +1422,12 @@ app.post("/super-admin/administrators", async (c) => {
     const { email, password, firstName, lastName } = await c.req.json();
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail || !password) return badRequest('email and password are required');
-    if (String(password).trim().length < minPasswordLength) return badRequest(passwordLengthError());
+    const passwordError = getManagedPasswordPolicyError(password, {
+      email: normalizedEmail,
+      firstName,
+      lastName,
+    });
+    if (passwordError) return badRequest(passwordError);
 
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
       email: normalizedEmail,
@@ -1869,7 +1873,13 @@ app.post("/admin/create-account", async (c) => {
   try {
     const { email, password, role = 'student', firstName, lastName, studentId, department, course } = await c.req.json();
     if (!email || !password) return badRequest('email and password are required');
-    if (String(password).trim().length < minPasswordLength) return badRequest(passwordLengthError());
+    const passwordError = getManagedPasswordPolicyError(password, {
+      email,
+      firstName,
+      lastName,
+      studentId,
+    });
+    if (passwordError) return badRequest(passwordError);
     if (!['student', 'staff'].includes(role)) {
       return badRequest('Only super administrators can create administrator accounts.');
     }
@@ -1929,7 +1939,12 @@ app.post("/admin/create-staff", async (c) => {
   try {
     const { email, password, firstName, lastName, position = 'Clinic Staff' } = await c.req.json();
     if (!email || !password || !firstName || !lastName) return badRequest('email, password, firstName, and lastName are required');
-    if (String(password).trim().length < minPasswordLength) return badRequest(passwordLengthError());
+    const passwordError = getManagedPasswordPolicyError(password, {
+      email,
+      firstName,
+      lastName,
+    });
+    if (passwordError) return badRequest(passwordError);
     if (!['Clinic Staff', 'Clinic Doctor'].includes(position)) return badRequest('position must be either Clinic Staff or Clinic Doctor');
 
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
