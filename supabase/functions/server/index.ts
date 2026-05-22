@@ -53,6 +53,7 @@ import {
   deleteStoragePrefixes,
   ensureBucket,
   ensureStorageBucket,
+  normalizeFileRows,
 } from "./storage.ts";
 import {
   getCachedAnalyticsSummary,
@@ -324,35 +325,36 @@ app.post("/student-profile-asset", async (c) => {
       throw new Error(uploadError.message);
     }
 
-    try {
-      const { data: insertedFile, error: fileInsertError } = await supabase
-        .from('files')
-        .insert({
-          submission_id: null,
-          type: fileType,
-          file_name: file.name,
-          mime_type: file.type || 'application/octet-stream',
-          url: null,
-          storage_bucket: targetBucket,
-          storage_path: storagePath,
-          uploaded_by: requester.profile.id,
-        })
-        .select('*')
-        .single();
+    const { data: insertedFile, error: fileInsertError } = await supabase
+      .from('files')
+      .insert({
+        submission_id: null,
+        type: fileType,
+        file_name: file.name,
+        mime_type: file.type || 'application/octet-stream',
+        url: null,
+        storage_bucket: targetBucket,
+        storage_path: storagePath,
+        uploaded_by: requester.profile.id,
+      })
+      .select('*')
+      .single();
 
-      if (fileInsertError || !insertedFile) {
-        console.log('Profile asset metadata warning:', fileInsertError?.message || 'Missing inserted metadata row');
-      } else {
-        await supabase
-          .from('files')
-          .delete()
-          .eq('uploaded_by', requester.profile.id)
-          .is('submission_id', null)
-          .eq('type', fileType)
-          .neq('id', insertedFile.id);
-      }
-    } catch (metadataError) {
-      console.log('Profile asset metadata warning:', metadataError);
+    if (fileInsertError || !insertedFile) {
+      await supabase.storage.from(targetBucket).remove([storagePath]).catch(() => null);
+      throw new Error(fileInsertError?.message || 'Failed to save profile asset metadata.');
+    }
+
+    try {
+      await supabase
+        .from('files')
+        .delete()
+        .eq('uploaded_by', requester.profile.id)
+        .is('submission_id', null)
+        .eq('type', fileType)
+        .neq('id', insertedFile.id);
+    } catch (metadataCleanupError) {
+      console.log('Profile asset cleanup warning:', metadataCleanupError);
     }
 
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
@@ -371,6 +373,65 @@ app.post("/student-profile-asset", async (c) => {
   } catch (error) {
     console.log('Error uploading student profile asset:', error);
     return internalServerError(c, 'Failed to upload student profile asset', error);
+  }
+});
+
+app.get("/student-profile-assets", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+
+  try {
+    const requestedStudentId = String(c.req.query("studentId") || "").trim();
+    const requesterStudentId =
+      requester.profile.student_id || requester.student?.student_id || "";
+    const targetStudentId = requestedStudentId || requesterStudentId;
+
+    if (requester.profile.role === "student" && targetStudentId !== requesterStudentId) {
+      return forbidden();
+    }
+
+    const targetProfileId = requester.student?.profile_id || requester.profile.id;
+    if (!targetProfileId) {
+      return c.json({
+        success: true,
+        photoUrl: null,
+        signatureUrl: null,
+        photoFileName: null,
+        signatureFileName: null,
+      });
+    }
+
+    const { data: assetRows, error: assetError } = await supabase
+      .from("files")
+      .select("id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url")
+      .eq("uploaded_by", targetProfileId)
+      .is("submission_id", null)
+      .in("type", ["photo", "signature"])
+      .order("uploaded_at", { ascending: false })
+      .limit(20);
+
+    if (assetError) {
+      throw new Error(assetError.message);
+    }
+
+    const normalizedRows = await normalizeFileRows(assetRows || []);
+    const latestByType = (normalizedRows || []).reduce((acc, row) => {
+      const type = String(row?.type || "").trim().toLowerCase();
+      if (!type || acc[type]) return acc;
+      acc[type] = row;
+      return acc;
+    }, {} as Record<string, any>);
+
+    return c.json({
+      success: true,
+      photoUrl: latestByType.photo?.url || null,
+      signatureUrl: latestByType.signature?.url || null,
+      photoFileName: latestByType.photo?.file_name || null,
+      signatureFileName: latestByType.signature?.file_name || null,
+    });
+  } catch (error) {
+    return internalServerError(c, "Failed to load student profile assets", error);
   }
 });
 

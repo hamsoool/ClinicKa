@@ -40,6 +40,8 @@ const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
   cbc: 'lab_cbc',
   urinalysis: 'lab_urinalysis',
 };
+let studentProfileAssetsRouteUnavailable = false;
+const disabledStorageListBuckets = new Set<string>();
 let authClient: SupabaseClient | null = null;
 
 function getAuthClient() {
@@ -1801,7 +1803,7 @@ export async function sendPasswordResetEmail(email: string) {
     throw new Error(`Please wait ${formatted} before requesting another password reset email.`);
   }
 
-  const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin');
+  const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin&recovery=1');
   const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
     redirectTo: emailRedirectTo,
   });
@@ -2033,6 +2035,9 @@ async function listProfileAssetsFromStorage(studentId: string, token?: string | 
   try {
     const results = await Promise.all(
       assetConfigs.map(async ({ type, bucket }) => {
+        if (disabledStorageListBuckets.has(bucket)) {
+          return [] as any[];
+        }
         const rowsByPrefix = await Promise.all(
           prefixes.map(async (prefix) => {
             const response = await fetch(
@@ -2053,7 +2058,13 @@ async function listProfileAssetsFromStorage(studentId: string, token?: string | 
             );
 
             const payload = await response.json().catch(() => []);
-            if (!response.ok || !Array.isArray(payload)) return [] as any[];
+            if (!response.ok) {
+              if (response.status >= 500) {
+                disabledStorageListBuckets.add(bucket);
+              }
+              return [] as any[];
+            }
+            if (!Array.isArray(payload)) return [] as any[];
 
             const candidates = payload
               .filter((item: any) => item?.name)
@@ -3303,10 +3314,38 @@ export async function saveStudentNotificationState(
 }
 
 export async function getStudentProfileAssets(studentId?: string, profileId?: string | null) {
-    const me = await getMe();
+  const me = await getMe();
   const resolvedStudentId = studentId || me.student?.student_id || me.profile.student_id || '';
   const resolvedProfileId = profileId || me.student?.profile_id || me.profile.id || '';
   const token = getAccessToken();
+
+  if (!studentProfileAssetsRouteUnavailable) {
+    try {
+      const query = resolvedStudentId ? `?studentId=${encodeURIComponent(resolvedStudentId)}` : '';
+      const payload = await apiRequest<{
+        success: boolean;
+        photoUrl?: string | null;
+        signatureUrl?: string | null;
+        photoFileName?: string | null;
+        signatureFileName?: string | null;
+      }>(`/functions/v1/server/student-profile-assets${query}`);
+
+      if (payload?.success) {
+        return {
+          photoUrl: normalizeStorageFileUrl(payload.photoUrl) || null,
+          signatureUrl: normalizeStorageFileUrl(payload.signatureUrl) || null,
+          photoFileName: payload.photoFileName || null,
+          signatureFileName: payload.signatureFileName || null,
+        } satisfies StudentProfileAssets;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      if (message.includes('404') || message.includes('not found')) {
+        studentProfileAssetsRouteUnavailable = true;
+      }
+      // Fall back to legacy REST + storage lookup below when the route is unavailable.
+    }
+  }
 
   let assetRows: any[] = [];
   if (resolvedProfileId) {
@@ -4003,7 +4042,7 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
 
   return {
     success: true as const,
-    url: payload.url || undefined,
+    url: normalizeStorageFileUrl(payload.url || null) || undefined,
     fileName: payload.fileName || undefined,
   };
 }

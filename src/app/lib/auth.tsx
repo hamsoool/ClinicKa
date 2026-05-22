@@ -67,6 +67,7 @@ type AuthContextValue = {
   session: AuthSession | null;
   me: AuthMe | null;
   role: UserRole | null;
+  isPasswordRecovery: boolean;
   signIn: (email: string, password: string) => Promise<AuthMe>;
   signUp: (firstName: string, lastName: string, email: string, password: string) => Promise<{
     me: AuthMe | null;
@@ -76,6 +77,7 @@ type AuthContextValue = {
   refresh: () => Promise<AuthMe | null>;
   requiresPasswordSetup: boolean;
   completePasswordSetup: (newPassword: string) => Promise<void>;
+  completePasswordRecovery: (newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 };
 
@@ -126,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [me, setMe] = useState<AuthMe | null>(null);
   const [requiresPasswordSetup, setRequiresPasswordSetup] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState<number | null>(null);
   const inactivityLogoutInFlightRef = useRef(false);
 
@@ -135,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setMe(null);
     setRole(null);
     setRequiresPasswordSetup(false);
+    setIsPasswordRecovery(false);
     setSessionTimeoutMinutes(null);
   }
 
@@ -147,6 +151,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!session?.access_token) {
+      setMe(null);
+      setRole(null);
+      return;
+    }
+
+    if (isPasswordRecovery) {
       setMe(null);
       setRole(null);
       return;
@@ -174,7 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [requiresPasswordSetup, session]);
+  }, [isPasswordRecovery, requiresPasswordSetup, session]);
 
   useEffect(() => {
     if (!session?.access_token || !role || !ELEVATED_TIMEOUT_ROLES.includes(role)) {
@@ -307,6 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setMe(null);
           setRole(null);
           setRequiresPasswordSetup(false);
+          setIsPasswordRecovery(false);
           const url = new URL(window.location.href);
           url.hash = '';
           url.searchParams.set('mode', 'signin');
@@ -327,6 +338,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
         };
 
+        if (authType === 'recovery') {
+          setStoredSession(nextSession);
+          setSession(nextSession);
+          setMe(null);
+          setRole(null);
+          setRequiresPasswordSetup(false);
+          setIsPasswordRecovery(true);
+          const url = new URL(window.location.href);
+          url.hash = '';
+          url.searchParams.set('mode', 'signin');
+          url.searchParams.set('recovery', '1');
+          window.history.replaceState({}, document.title, url.pathname + url.search);
+          return;
+        }
+
         const hasPasswordIdentity = (authUser.identities || []).some(
           (identity) => identity.provider === 'email',
         );
@@ -337,6 +363,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setStoredSession(nextSession);
         setSession(nextSession);
         setRequiresPasswordSetup(!hasExistingPassword);
+        setIsPasswordRecovery(false);
         try {
           const resolvedMe = await getMe(redirectAccessToken);
           setMe(resolvedMe);
@@ -372,6 +399,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setMe(null);
         setRole(null);
         setRequiresPasswordSetup(false);
+        setIsPasswordRecovery(false);
         const url = new URL(window.location.href);
         url.hash = '';
         url.searchParams.set('mode', 'signin');
@@ -388,11 +416,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     me,
     role,
+    isPasswordRecovery,
     signIn: async (email: string, password: string) => {
       setLoading(true);
       try {
         const nextSession = await signInWithPassword(email, password);
         setSession(nextSession);
+        setIsPasswordRecovery(false);
         try {
           const resolvedMe = await getMe(nextSession.access_token);
           setMe(resolvedMe);
@@ -421,6 +451,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setMe(null);
           setRole(null);
           setRequiresPasswordSetup(false);
+          setIsPasswordRecovery(false);
           return {
             me: null,
             emailConfirmationRequired,
@@ -429,6 +460,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setSession(nextSession);
         setRequiresPasswordSetup(false);
+        setIsPasswordRecovery(false);
         try {
           const resolvedMe = await getMe(nextSession.access_token);
           setMe(resolvedMe);
@@ -456,6 +488,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setMe(null);
         setRole(null);
         setRequiresPasswordSetup(false);
+        setIsPasswordRecovery(false);
         setLoading(false);
       }
     },
@@ -464,12 +497,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setMe(null);
         setRole(null);
         setRequiresPasswordSetup(false);
+        setIsPasswordRecovery(false);
         return null;
       }
       try {
         const refreshedMe = await getMe(session.access_token);
         setMe(refreshedMe);
         setRole(refreshedMe.profile.role);
+        setIsPasswordRecovery(false);
         return refreshedMe;
       } catch (error) {
         if (isArchivedAccountError(error)) {
@@ -492,11 +527,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setMe(resolvedMe);
       setRole(resolvedMe.profile.role);
       setRequiresPasswordSetup(false);
+      setIsPasswordRecovery(false);
+    },
+    completePasswordRecovery: async (newPassword: string) => {
+      if (!session?.access_token) {
+        throw new Error('Your reset link is no longer active. Request a new password reset email.');
+      }
+      await updateUserPassword(newPassword, session.access_token);
+      await markServerPasswordSetupCompleted(session.access_token);
+      markPasswordSetupComplete(session.user?.email || me?.profile?.email || null);
+      try {
+        await signOut();
+      } finally {
+        clearStoredSession();
+        setSession(null);
+        setMe(null);
+        setRole(null);
+        setRequiresPasswordSetup(false);
+        setIsPasswordRecovery(false);
+        setSessionTimeoutMinutes(null);
+      }
     },
     changePassword: async (currentPassword: string, newPassword: string) => {
       await applyPasswordChange(session, me, setSession, setMe, setRole, setRequiresPasswordSetup, currentPassword, newPassword);
+      setIsPasswordRecovery(false);
     },
-  }), [loading, me, requiresPasswordSetup, role, session]);
+  }), [isPasswordRecovery, loading, me, requiresPasswordSetup, role, session]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -547,9 +603,9 @@ export function RequireAuth({
 }
 
 export function RedirectIfAuthenticated({ children }: { children: React.ReactNode }) {
-  const { role, requiresPasswordSetup } = useAuth();
+  const { role, requiresPasswordSetup, isPasswordRecovery } = useAuth();
 
-  if (role && !requiresPasswordSetup) {
+  if (role && !requiresPasswordSetup && !isPasswordRecovery) {
     return <Navigate to={getHomePath(role)} replace />;
   }
 
