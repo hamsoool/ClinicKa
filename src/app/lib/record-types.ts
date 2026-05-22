@@ -135,6 +135,9 @@ export type SubmissionRecord = {
   signatureUrl?: string;
   labTestLocation?: 'jlgh' | 'other' | '';
   otherClinicName?: string;
+  cbcTestClinic?: string;
+  urinalysisTestClinic?: string;
+  xrayTestClinic?: string;
 };
 
 export type SubmissionSummaryRecord = {
@@ -152,6 +155,7 @@ export type SubmissionSummaryRecord = {
   reviewedByStaffId?: string;
   reviewedByName?: string;
   reviewedByPosition?: string;
+  submissionCategory?: 'regular' | 'returning' | 'repeater_irregular';
 };
 
 export type ApprovedStudentRecordSummary = {

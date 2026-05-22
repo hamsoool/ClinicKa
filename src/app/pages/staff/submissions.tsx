@@ -72,6 +72,18 @@ function getStatusFilterLabel(status: string) {
   }
 }
 
+function getSubmissionCategoryLabel(category?: SubmissionSummaryRecord['submissionCategory']) {
+  if (category === 'returning') return 'Returning';
+  if (category === 'repeater_irregular') return 'Irregular/Repeater';
+  return 'Regular';
+}
+
+function getSubmissionCategoryBadgeClass(category?: SubmissionSummaryRecord['submissionCategory']) {
+  if (category === 'returning') return 'bg-blue-100 text-blue-800 border-blue-200';
+  if (category === 'repeater_irregular') return 'bg-violet-100 text-violet-800 border-violet-200';
+  return 'bg-slate-100 text-slate-800 border-slate-200';
+}
+
 export default function StaffSubmissions() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -397,6 +409,12 @@ export default function StaffSubmissions() {
                         </h4>
                         <Badge variant="outline" className="bg-secondary/50 text-secondary-foreground">
                           Year {submission.year || '--'}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={getSubmissionCategoryBadgeClass(submission.submissionCategory)}
+                        >
+                          {getSubmissionCategoryLabel(submission.submissionCategory)}
                         </Badge>
                         {getStatusBadge(submission.status)}
                       </div>

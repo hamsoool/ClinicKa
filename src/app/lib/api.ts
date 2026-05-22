@@ -182,6 +182,8 @@ export type AuthMe = {
     civil_status?: string | null;
     contact_number?: string | null;
     address?: string | null;
+    submission_category?: string | null;
+    submission_target_year_level?: number | null;
   } | null;
   staff?: {
     id: string;
@@ -259,6 +261,8 @@ export type StudentProfileUpdateInput = {
   civilStatus: string;
   contactNumber: string;
   address: string;
+  submissionCategory?: string | null;
+  submissionTargetYearLevel?: number | null;
 };
 
 export type StaffProfileUpdateInput = {
@@ -1226,6 +1230,9 @@ function mapSubmission(row: any, related: Record<string, any>) {
     certificatePdfUrl: normalizeStorageFileUrl(files.certificate?.url || certificate?.pdf_url),
     labTestLocation: row.lab_test_location || '',
     otherClinicName: row.lab_test_clinic || '',
+    cbcTestClinic: row.cbc_test_clinic || '',
+    urinalysisTestClinic: row.urinalysis_test_clinic || '',
+    xrayTestClinic: row.xray_test_clinic || '',
   };
 }
 
@@ -1991,6 +1998,8 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     civilStatus: data.civilStatus || '',
     contactNumber: data.contactNumber || '',
     address: data.address || '',
+    submissionCategory: data.submissionCategory || null,
+    submissionTargetYearLevel: data.submissionTargetYearLevel ?? null,
   };
 
   const me = await getMe();
@@ -2019,32 +2028,58 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     },
   );
 
-  await restRequest<any[]>(
-    'students',
-    'on_conflict=student_id',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates',
+  const studentPayload = {
+    student_id: studentId,
+    profile_id: me.profile.id,
+    first_name: payload.firstName || null,
+    last_name: payload.lastName || null,
+    middle_initial: payload.middleInitial || null,
+    department: payload.department || null,
+    course: payload.course || null,
+    age: payload.age ? Number.parseInt(payload.age, 10) : null,
+    sex: payload.sex || null,
+    birthday: payload.birthday || null,
+    civil_status: payload.civilStatus || null,
+    contact_number: payload.contactNumber || null,
+    address: payload.address || null,
+    submission_category: payload.submissionCategory || null,
+    submission_target_year_level: payload.submissionTargetYearLevel || null,
+  };
+
+  try {
+    await restRequest<any[]>(
+      'students',
+      'on_conflict=student_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(studentPayload),
       },
-      body: JSON.stringify({
-        student_id: studentId,
-        profile_id: me.profile.id,
-        first_name: payload.firstName || null,
-        last_name: payload.lastName || null,
-        middle_initial: payload.middleInitial || null,
-        department: payload.department || null,
-        course: payload.course || null,
-        age: payload.age ? Number.parseInt(payload.age, 10) : null,
-        sex: payload.sex || null,
-        birthday: payload.birthday || null,
-        civil_status: payload.civilStatus || null,
-        contact_number: payload.contactNumber || null,
-        address: payload.address || null,
-      }),
-    },
-  );
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const hasMissingColumns = message.includes('submission_category') || message.includes('submission_target_year_level');
+    if (!hasMissingColumns) throw error;
+    await restRequest<any[]>(
+      'students',
+      'on_conflict=student_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          ...studentPayload,
+          submission_category: undefined,
+          submission_target_year_level: undefined,
+        }),
+      },
+    );
+  }
 
   const updatedStudentRows = await restRequest<any[]>(
     'students',
@@ -2076,6 +2111,61 @@ function splitNameParts(fullName?: string | null) {
     firstName: parts.slice(0, -1).join(' '),
     lastName: parts.slice(-1).join(' '),
   };
+}
+
+function getLocalSubmissionOverrideYearLevel(studentId?: string | null) {
+  if (typeof window === 'undefined') return null;
+  const normalizedStudentId = String(studentId || '').trim();
+  if (!normalizedStudentId) return null;
+  try {
+    const raw = window.localStorage.getItem(`gc_student_submission_profile_${normalizedStudentId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const category = String(parsed?.category || '').trim().toLowerCase();
+    if (category !== 'returning' && category !== 'repeater_irregular') return null;
+    return normalizeYearLevel(parsed?.targetYearLevel);
+  } catch {
+    return null;
+  }
+}
+
+function resolveAllowedSubmissionYearLevel(me: AuthMe) {
+  const dbCategory = String((me.student as any)?.submission_category || '').trim().toLowerCase();
+  const dbYear = normalizeYearLevel((me.student as any)?.submission_target_year_level);
+  if ((dbCategory === 'returning' || dbCategory === 'repeater_irregular') && dbYear) {
+    return dbYear;
+  }
+  const localYear = getLocalSubmissionOverrideYearLevel(me.profile.student_id || me.student?.student_id);
+  if (localYear) return localYear;
+  return resolveStudentYearLevel(me);
+}
+
+function normalizeSubmissionCategory(value: unknown): 'regular' | 'returning' | 'repeater_irregular' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'returning') return 'returning';
+  if (normalized === 'repeater_irregular') return 'repeater_irregular';
+  return 'regular';
+}
+
+function resolveSubmissionCategorySnapshot(me: AuthMe, data?: any) {
+  const direct = normalizeSubmissionCategory(data?.submissionCategory);
+  if (direct !== 'regular') return direct;
+  const dbCategory = normalizeSubmissionCategory((me.student as any)?.submission_category);
+  if (dbCategory !== 'regular') return dbCategory;
+  const localProfile = (() => {
+    if (typeof window === 'undefined') return null;
+    const studentId = String(me.profile.student_id || me.student?.student_id || '').trim();
+    if (!studentId) return null;
+    try {
+      const raw = window.localStorage.getItem(`gc_student_submission_profile_${studentId}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      return normalizeSubmissionCategory(parsed?.category);
+    } catch {
+      return null;
+    }
+  })();
+  return localProfile || 'regular';
 }
 
 export async function updateStaffProfile(data: StaffProfileUpdateInput) {
@@ -2196,11 +2286,12 @@ export async function submitMedicalRecord(data: any) {
   if (!requestedYearLevel) {
     throw new Error('Year level is required.');
   }
-  const currentYearLevel = resolveStudentYearLevel(me);
-  if (requestedYearLevel !== currentYearLevel) {
-    throw new Error(`You can only submit records for your current year level (${getYearLevelLabel(currentYearLevel)}).`);
+  const allowedYearLevel = resolveAllowedSubmissionYearLevel(me);
+  if (requestedYearLevel !== allowedYearLevel) {
+    throw new Error(`You can only submit records for the allowed year level (${getYearLevelLabel(allowedYearLevel)}).`);
   }
   const yearLevel = String(requestedYearLevel);
+  const submissionCategory = resolveSubmissionCategorySnapshot(me, data);
 
   const existingForYear = await restRequest<any[]>(
     'submissions',
@@ -2262,6 +2353,11 @@ export async function submitMedicalRecord(data: any) {
     height: data.height || null,
     bmi: data.bmi || null,
     data_privacy_consent: Boolean(data.dataPrivacyConsent),
+    submission_category: submissionCategory,
+    submission_target_year_level: requestedYearLevel,
+    cbc_test_clinic: data.cbcTestClinic || null,
+    urinalysis_test_clinic: data.urinalysisTestClinic || null,
+    xray_test_clinic: data.xrayTestClinic || null,
     lab_test_location: data.labTestLocation || null,
     lab_test_clinic: data.labTestLocation === 'other' ? data.otherClinicName || null : null,
   };
@@ -2282,7 +2378,11 @@ export async function submitMedicalRecord(data: any) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
-    const hasMissingColumns = message.includes('lab_test_location') || message.includes('lab_test_clinic');
+    const hasMissingColumns =
+      message.includes('lab_test_location') ||
+      message.includes('lab_test_clinic') ||
+      message.includes('submission_category') ||
+      message.includes('submission_target_year_level');
     if (!hasMissingColumns) throw error;
 
     insertedSubmission = await restRequest<any[]>(
@@ -2296,6 +2396,8 @@ export async function submitMedicalRecord(data: any) {
         },
         body: JSON.stringify({
           ...submissionInsertPayload,
+          submission_category: undefined,
+          submission_target_year_level: undefined,
           lab_test_location: undefined,
           lab_test_clinic: undefined,
         }),
@@ -2374,9 +2476,9 @@ export async function updateMedicalRecord(recordId: string, data: any) {
   if (!requestedYearLevel) {
     throw new Error('Year level is required.');
   }
-  const currentYearLevel = resolveStudentYearLevel(me);
-  if (requestedYearLevel !== currentYearLevel) {
-    throw new Error(`You can only submit records for your current year level (${getYearLevelLabel(currentYearLevel)}).`);
+  const allowedYearLevel = resolveAllowedSubmissionYearLevel(me);
+  if (requestedYearLevel !== allowedYearLevel) {
+    throw new Error(`You can only submit records for the allowed year level (${getYearLevelLabel(allowedYearLevel)}).`);
   }
 
   const existingSubmission = await restRequest<any[]>(
@@ -2392,8 +2494,8 @@ export async function updateMedicalRecord(recordId: string, data: any) {
   }
 
   const existingYearLevel = normalizeYearLevel(submissionRow.year_level);
-  if (existingYearLevel && existingYearLevel !== currentYearLevel) {
-    throw new Error(`Only your current year level (${getYearLevelLabel(currentYearLevel)}) can be updated.`);
+  if (existingYearLevel && existingYearLevel !== allowedYearLevel) {
+    throw new Error(`Only the allowed year level (${getYearLevelLabel(allowedYearLevel)}) can be updated.`);
   }
   if (existingYearLevel && existingYearLevel !== requestedYearLevel) {
     throw new Error('The year level for an existing submission cannot be changed.');
@@ -2449,6 +2551,11 @@ export async function updateMedicalRecord(recordId: string, data: any) {
     height: data.height || null,
     bmi: data.bmi || null,
     data_privacy_consent: Boolean(data.dataPrivacyConsent),
+    submission_category: resolveSubmissionCategorySnapshot(me, data),
+    submission_target_year_level: requestedYearLevel,
+    cbc_test_clinic: data.cbcTestClinic || null,
+    urinalysis_test_clinic: data.urinalysisTestClinic || null,
+    xray_test_clinic: data.xrayTestClinic || null,
     lab_test_location: data.labTestLocation || undefined,
     lab_test_clinic: data.labTestLocation === 'other' ? data.otherClinicName || null : null,
     updated_at: new Date().toISOString(),
@@ -2472,14 +2579,17 @@ export async function updateMedicalRecord(recordId: string, data: any) {
       String(data.status || '').toLowerCase() === 'resubmitted' &&
       message.includes('submissions_status_check');
     const hasMissingLabSourceColumns = message.includes('lab_test_location') || message.includes('lab_test_clinic');
+    const hasMissingSubmissionCategoryColumns =
+      message.includes('submission_category') || message.includes('submission_target_year_level');
 
-    if (!isResubmittedConstraintError && !hasMissingLabSourceColumns) {
+    if (!isResubmittedConstraintError && !hasMissingLabSourceColumns && !hasMissingSubmissionCategoryColumns) {
       throw error;
     }
 
     // Backward-compatible fallback for databases where either:
     // 1) status check does not include "resubmitted"
     // 2) lab source columns are not migrated yet
+    // Note: Test clinic columns (cbc_test_clinic, urinalysis_test_clinic, xray_test_clinic) should always exist
     await restRequest(
       'submissions',
       `id=eq.${recordId}`,
@@ -2491,6 +2601,8 @@ export async function updateMedicalRecord(recordId: string, data: any) {
         body: JSON.stringify({
           ...submissionPatchPayload,
           status: isResubmittedConstraintError ? 'pending' : submissionPatchPayload.status,
+          submission_category: undefined,
+          submission_target_year_level: undefined,
           lab_test_location: undefined,
           lab_test_clinic: undefined,
         }),
@@ -2808,7 +2920,7 @@ export async function getStaffSubmissionSummaries(filters: StaffSubmissionSummar
   params.set('page', String(page));
   params.set('pageSize', String(pageSize));
 
-  return apiRequest<{
+  const response = await apiRequest<{
     items: SubmissionSummaryRecord[];
     total: number;
     page: number;
@@ -2821,6 +2933,53 @@ export async function getStaffSubmissionSummaries(filters: StaffSubmissionSummar
       actionNeeded: number;
     };
   }>(`/functions/v1/server/staff/submission-summaries?${params.toString()}`);
+
+  const submissionIds = [
+    ...new Set(
+      (response?.items || [])
+        .map((item) => String(item?.id || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (!submissionIds.length) return response;
+
+  const submissionIdList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
+  let submissionsById: Record<string, any> = {};
+  try {
+    const submissionRows = await restRequest<any[]>(
+      'submissions',
+      `id=in.(${submissionIdList})&select=id,submission_category`,
+    );
+    submissionsById = (submissionRows || []).reduce((acc, row) => {
+      const key = String(row?.id || '').trim();
+      if (key) acc[key] = row;
+      return acc;
+    }, {} as Record<string, any>);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const hasMissingColumn = message.includes('submission_category');
+    if (!hasMissingColumn) {
+      throw error;
+    }
+  }
+
+  const enrichedItems = (response.items || []).map((item) => {
+    const submissionRow = submissionsById[String(item.id || '').trim()];
+    const rawCategory = String(submissionRow?.submission_category || '').trim().toLowerCase();
+    const normalizedCategory =
+      rawCategory === 'returning' || rawCategory === 'repeater_irregular'
+        ? rawCategory
+        : 'regular';
+    return {
+      ...item,
+      submissionCategory: normalizedCategory as SubmissionSummaryRecord['submissionCategory'],
+    };
+  });
+
+  return {
+    ...response,
+    items: enrichedItems,
+  };
 }
 
 async function loadActiveStudentDirectory(studentIds: string[]) {

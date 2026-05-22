@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Check, CheckCircle2, PenLine, UserRound, XCircle } from 'lucide-react';
+import { CheckCircle2, PenLine, UserRound, XCircle } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Checkbox } from '../../../components/ui/checkbox';
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../../components/ui/textarea';
 import {
   EMERGENCY_CONTACT_RELATIONSHIPS,
+  LAB_TEST_SITE_OPTIONS,
   MEDICAL_CONDITIONS,
   YEAR_LEVELS,
 } from './constants';
@@ -22,7 +23,6 @@ type Props = {
   onFieldChange: <K extends keyof MedicalFormData>(field: K, value: MedicalFormData[K]) => void;
   onEmergencyContactChange: (field: 'name' | 'relationship' | 'phone' | 'address', value: string) => void;
   onMedicalConditionChange: (condition: MedicalConditionKey, checked: boolean) => void;
-  onFileChange: (field: 'xrayFile' | 'cbcFile' | 'urinalysisFile', file: File | null) => void;
   hasRequiredProfileFields: boolean;
   hasProfilePhoto: boolean;
   hasProfileSignature: boolean;
@@ -36,36 +36,12 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   onFieldChange,
   onEmergencyContactChange,
   onMedicalConditionChange,
-  onFileChange,
   hasRequiredProfileFields,
   hasProfilePhoto,
   hasProfileSignature,
   submitBlockers,
   onGoToProfile,
 }: Props) {
-  const showLabUploads = formData.labTestLocation === 'other';
-  const allUploadsRequired = formData.labTestLocation === 'other';
-  const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
-  const uploadedFileEntries = [
-    formData.xrayFile || formData.existingXrayFileUrl
-      ? {
-          label: 'Chest X-Ray',
-          value: formData.xrayFile?.name || getUploadedFileName(formData.existingXrayFileUrl),
-        }
-      : null,
-    formData.cbcFile || formData.existingCbcFileUrl
-      ? {
-          label: 'CBC',
-          value: formData.cbcFile?.name || getUploadedFileName(formData.existingCbcFileUrl),
-        }
-      : null,
-    formData.urinalysisFile || formData.existingUrinalysisFileUrl
-      ? {
-          label: 'Urinalysis',
-          value: formData.urinalysisFile?.name || getUploadedFileName(formData.existingUrinalysisFileUrl),
-        }
-      : null,
-  ].filter((entry): entry is { label: string; value: string } => Boolean(entry));
   const stepOneReady = hasRequiredProfileFields && hasProfilePhoto && hasProfileSignature;
   const stepThreeMissingRequired = [
     !formData.hadOperation,
@@ -84,50 +60,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     )
       ? [formData.emergencyContact.relationship, ...EMERGENCY_CONTACT_RELATIONSHIPS]
       : EMERGENCY_CONTACT_RELATIONSHIPS;
-
-  function getUploadedFileName(url?: string) {
-    if (!url) return 'Uploaded file';
-    try {
-      const cleaned = url.split('?')[0] || url;
-      const rawName = cleaned.split('/').pop() || 'Uploaded file';
-      return decodeURIComponent(rawName);
-    } catch {
-      return 'Uploaded file';
-    }
-  }
-
-  function getFileExtension(url?: string) {
-    if (!url) return '';
-    const cleaned = (url.split('?')[0] || '').toLowerCase();
-    return cleaned.split('.').pop() || '';
-  }
-
-  function renderExistingFilePreview(url?: string) {
-    if (!url) return null;
-    const ext = getFileExtension(url);
-
-    if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
-      return (
-        <img
-          src={url}
-          alt="Current uploaded file"
-          className="mt-2 max-h-48 w-full rounded-md border border-emerald-200 object-contain bg-white"
-        />
-      );
-    }
-
-    if (ext === 'pdf') {
-      return (
-        <iframe
-          src={url}
-          title="Current uploaded PDF"
-          className="mt-2 h-56 w-full rounded-md border border-emerald-200 bg-white"
-        />
-      );
-    }
-
-    return null;
-  }
 
   switch (step) {
     case 1:
@@ -344,160 +276,94 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     case 4:
       return (
         <div className="space-y-4">
-          <h3 className="mb-4 text-xl font-semibold">Laboratory Results Upload</h3>
-          <div className="rounded-lg border bg-surface-container-low p-4">
-            <Label>Did you take your tests at James L. Gordon Hospital? *</Label>
-            <RadioGroup
-              value={formData.labTestLocation}
-              onValueChange={(value) => onFieldChange('labTestLocation', value as '' | 'jlgh' | 'other')}
-              className="mt-3 grid gap-3 sm:grid-cols-2"
-            >
-              <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
-                <RadioGroupItem value="jlgh" id="test-jlgh" />
-                <span>Yes, at James L. Gordon Hospital</span>
-              </label>
-              <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
-                <RadioGroupItem value="other" id="test-other" />
-                <span>No, from another clinic/lab</span>
-              </label>
-            </RadioGroup>
-          </div>
-
-          {showLabUploads ? (
-            <>
-              {formData.labTestLocation === 'other' ? (
-                <div>
-                  <Label htmlFor="otherClinicName">Clinic/Laboratory Name *</Label>
-                  <Input
-                    id="otherClinicName"
-                    value={formData.otherClinicName}
-                    onChange={(event) => onFieldChange('otherClinicName', event.target.value)}
-                    placeholder="Enter clinic or laboratory name"
-                    className="mt-2"
-                    maxLength={60}
-                  />
-                </div>
+          <h3 className="mb-4 text-xl font-semibold">Laboratory Test Sources</h3>
+          <p className="text-sm text-muted-foreground">
+            Select where each test was performed. Choose <span className="font-medium">Others</span> to type a custom clinic/lab name (max 50 letters and numbers).
+          </p>
+          <div className="grid gap-4">
+            <div>
+              <Label>Where did you do your CBC test? *</Label>
+              <Select value={formData.cbcTestSite} onValueChange={(value) => onFieldChange('cbcTestSite', value)}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue placeholder="Select clinic/lab" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LAB_TEST_SITE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                  ))}
+                  <SelectItem value="Others">Others</SelectItem>
+                </SelectContent>
+              </Select>
+              {formData.cbcTestSite === 'Others' ? (
+                <Input
+                  value={formData.cbcTestSiteOther}
+                  onChange={(event) => onFieldChange('cbcTestSiteOther', event.target.value)}
+                  className="mt-2"
+                  maxLength={50}
+                  placeholder="Enter clinic/lab"
+                />
               ) : null}
-
-              <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low/50 px-4 py-3 text-sm">
-                <p className="font-medium text-on-surface">Upload your laboratory results</p>
-                <p className="mt-1 text-muted-foreground">
-                  Upload PDF, PNG, or JPG files up to 2MB each. Chest X-Ray is required to continue.
-                  {allUploadsRequired ? ' CBC and Urinalysis are also required for results from another clinic/lab.' : ' CBC and Urinalysis are optional for James L. Gordon Hospital submissions.'}
-                </p>
-              </div>
-              <div className="space-y-4">
-                <Card>
-                  <CardContent className="pt-6">
-                    <Label htmlFor="xray">Chest X-Ray *</Label>
-                    <Input
-                      id="xray"
-                      type="file"
-                      accept=".pdf,.png,.jpg,.jpeg"
-                      aria-label="Upload chest X-ray result"
-                      onChange={(event) => onFileChange('xrayFile', event.target.files?.[0] || null)}
-                      className={`mt-2 cursor-pointer ${!hasXray ? 'border-red-500 ring-1 ring-red-200' : ''}`}
-                    />
-                    {formData.xrayFile && (
-                      <div className="mt-2 flex items-center text-sm text-green-600">
-                        <Check className="mr-2 h-4 w-4" />
-                        {formData.xrayFile.name}
-                      </div>
-                    )}
-                    {!formData.xrayFile && formData.existingXrayFileUrl && (
-                      <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                        <p className="font-medium">Current file: {getUploadedFileName(formData.existingXrayFileUrl)}</p>
-                        <p className="mt-1 text-xs text-emerald-700">
-                          Choose a new file above if you want to replace this upload.
-                        </p>
-                        <a
-                          href={formData.existingXrayFileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
-                        >
-                          View current file
-                        </a>
-                        {renderExistingFilePreview(formData.existingXrayFileUrl)}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <Label htmlFor="cbc">Complete Blood Count (CBC) {allUploadsRequired ? '*' : '(optional)'}</Label>
-                    <Input
-                      id="cbc"
-                      type="file"
-                      accept=".pdf,.png,.jpg,.jpeg"
-                      aria-label="Upload complete blood count result"
-                      onChange={(event) => onFileChange('cbcFile', event.target.files?.[0] || null)}
-                      className="mt-2 cursor-pointer"
-                    />
-                    {formData.cbcFile && (
-                      <div className="mt-2 flex items-center text-sm text-green-600">
-                        <Check className="mr-2 h-4 w-4" />
-                        {formData.cbcFile.name}
-                      </div>
-                    )}
-                    {!formData.cbcFile && formData.existingCbcFileUrl && (
-                      <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                        <p className="font-medium">Current file: {getUploadedFileName(formData.existingCbcFileUrl)}</p>
-                        <p className="mt-1 text-xs text-emerald-700">
-                          Choose a new file above if you want to replace this upload.
-                        </p>
-                        <a
-                          href={formData.existingCbcFileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
-                        >
-                          View current file
-                        </a>
-                        {renderExistingFilePreview(formData.existingCbcFileUrl)}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <Label htmlFor="urinalysis">Urinalysis (U/A) {allUploadsRequired ? '*' : '(optional)'}</Label>
-                    <Input
-                      id="urinalysis"
-                      type="file"
-                      accept=".pdf,.png,.jpg,.jpeg"
-                      aria-label="Upload urinalysis result"
-                      onChange={(event) => onFileChange('urinalysisFile', event.target.files?.[0] || null)}
-                      className="mt-2 cursor-pointer"
-                    />
-                    {formData.urinalysisFile && (
-                      <div className="mt-2 flex items-center text-sm text-green-600">
-                        <Check className="mr-2 h-4 w-4" />
-                        {formData.urinalysisFile.name}
-                      </div>
-                    )}
-                    {!formData.urinalysisFile && formData.existingUrinalysisFileUrl && (
-                      <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                        <p className="font-medium">Current file: {getUploadedFileName(formData.existingUrinalysisFileUrl)}</p>
-                        <p className="mt-1 text-xs text-emerald-700">
-                          Choose a new file above if you want to replace this upload.
-                        </p>
-                        <a
-                          href={formData.existingUrinalysisFileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-block text-xs font-semibold underline underline-offset-2"
-                        >
-                          View current file
-                        </a>
-                        {renderExistingFilePreview(formData.existingUrinalysisFileUrl)}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </>
-          ) : null}
+            </div>
+            <div>
+              <Label>Where did you do your Urinalysis test? *</Label>
+              <Select value={formData.urinalysisTestSite} onValueChange={(value) => onFieldChange('urinalysisTestSite', value)}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue placeholder="Select clinic/lab" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LAB_TEST_SITE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                  ))}
+                  <SelectItem value="Others">Others</SelectItem>
+                </SelectContent>
+              </Select>
+              {formData.urinalysisTestSite === 'Others' ? (
+                <Input
+                  value={formData.urinalysisTestSiteOther}
+                  onChange={(event) => onFieldChange('urinalysisTestSiteOther', event.target.value)}
+                  className="mt-2"
+                  maxLength={50}
+                  placeholder="Enter clinic/lab"
+                />
+              ) : null}
+            </div>
+            <div>
+              <Label>Where did you do your X-Ray test? *</Label>
+              <Select value={formData.xrayTestSite} onValueChange={(value) => onFieldChange('xrayTestSite', value)}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue placeholder="Select clinic/lab" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LAB_TEST_SITE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                  ))}
+                  <SelectItem value="Others">Others</SelectItem>
+                </SelectContent>
+              </Select>
+              {formData.xrayTestSite === 'Others' ? (
+                <Input
+                  value={formData.xrayTestSiteOther}
+                  onChange={(event) => onFieldChange('xrayTestSiteOther', event.target.value)}
+                  className="mt-2"
+                  maxLength={50}
+                  placeholder="Enter clinic/lab"
+                />
+              ) : null}
+            </div>
+          </div>
+          <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="physicalCopyAgreement"
+                checked={formData.physicalCopyAgreement}
+                onCheckedChange={(checked) => onFieldChange('physicalCopyAgreement', checked === true)}
+                className="mt-1"
+              />
+              <Label htmlFor="physicalCopyAgreement" className="text-sm leading-6 font-normal">
+                I agree to bring the physical copies of my CBC, Urinalysis, and X-ray test results during the day of my physical examination for verification and encoding by the clinic staff.
+              </Label>
+            </div>
+          </div>
         </div>
       );
     case 5:
@@ -555,28 +421,17 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Uploaded Files</CardTitle>
+              <CardTitle className="text-lg">Laboratory Test Sources</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
-                <span className="break-words">
-                  Test Location:{' '}
-                  {formData.labTestLocation === 'jlgh'
-                    ? 'James L. Gordon Hospital'
-                    : formData.labTestLocation === 'other'
-                    ? formData.otherClinicName || 'Other clinic/lab'
-                    : 'Not specified'}
-                </span>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <p className="text-muted-foreground">CBC:</p>
+                <p className="font-medium">{formData.cbcTestSite === 'Others' ? formData.cbcTestSiteOther || 'Others' : formData.cbcTestSite || '--'}</p>
+                <p className="text-muted-foreground">Urinalysis:</p>
+                <p className="font-medium">{formData.urinalysisTestSite === 'Others' ? formData.urinalysisTestSiteOther || 'Others' : formData.urinalysisTestSite || '--'}</p>
+                <p className="text-muted-foreground">X-Ray:</p>
+                <p className="font-medium">{formData.xrayTestSite === 'Others' ? formData.xrayTestSiteOther || 'Others' : formData.xrayTestSite || '--'}</p>
               </div>
-              {uploadedFileEntries.map((file) => (
-                <div key={file.label} className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-600" />
-                  <span className="break-words">
-                    {file.label}: {file.value}
-                  </span>
-                </div>
-              ))}
             </CardContent>
           </Card>
           <div
@@ -605,7 +460,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 className="mt-1"
               />
               <Label htmlFor="submissionConfirmed" className="text-sm leading-6 font-normal">
-                I confirm that all details and attached laboratory results are complete and true. I understand that
+                I confirm that all details and laboratory test source information are complete and true. I understand that
                 inaccurate information may delay medical clearance.
               </Label>
             </div>

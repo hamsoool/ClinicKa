@@ -8,7 +8,8 @@ import { Checkbox } from '../../components/ui/checkbox';
 import StudentPageIntro from '../../components/student-page-intro';
 import { Label } from '../../components/ui/label';
 import { useAuth } from '../../lib/auth';
-import { getYearLevelLabel, isCurrentSubmissionYear, resolveStudentYearLevel } from '../../lib/student-year';
+import { getYearLevelLabel, resolveStudentYearLevel } from '../../lib/student-year';
+import { resolveStudentSubmissionProfile } from '../../lib/student-submission-profile';
 import {
   DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT,
   DATA_PRIVACY_CONSENT_BODY,
@@ -23,8 +24,14 @@ export default function StudentPrivacyWaiver() {
   const [dataPrivacyConsent, setDataPrivacyConsent] = useState(false);
   const canContinue = dataPrivacyConsent;
   const editSubmissionId = searchParams.get('edit');
-  const canAccessSelectedYear = isCurrentSubmissionYear(me, year);
-  const currentYearLabel = getYearLevelLabel(resolveStudentYearLevel(me));
+  const submissionProfile = resolveStudentSubmissionProfile(me);
+  const allowedYearLevel =
+    (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') &&
+    submissionProfile.targetYearLevel
+      ? submissionProfile.targetYearLevel
+      : resolveStudentYearLevel(me);
+  const canAccessSelectedYear = Number.parseInt(String(year || ''), 10) === allowedYearLevel;
+  const currentYearLabel = getYearLevelLabel(allowedYearLevel);
   const yearLabel = useMemo(() => {
     return getYearLevelLabel(year);
   }, [year]);
@@ -32,7 +39,7 @@ export default function StudentPrivacyWaiver() {
   useEffect(() => {
     if (canAccessSelectedYear) return;
 
-    toast.error(`Only your current year level (${currentYearLabel}) can open the submission waiver.`);
+    toast.error(`Only your allowed year level (${currentYearLabel}) can open the submission waiver.`);
     navigate('/student/year-selection', { replace: true });
   }, [canAccessSelectedYear, currentYearLabel, navigate]);
 

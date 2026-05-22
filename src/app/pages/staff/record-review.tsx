@@ -1268,12 +1268,13 @@ export default function StaffRecordReview() {
                 Clearance: {clearanceStatus}
               </Badge>
               <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
-                Lab Source:{' '}
-                {submission.labTestLocation === 'jlgh'
-                  ? 'James L. Gordon Hospital'
-                  : submission.labTestLocation === 'other'
-                  ? submission.otherClinicName || 'External Clinic/Lab'
-                  : 'Not specified'}
+                CBC: {submission.cbcTestClinic || 'Not specified'}
+              </Badge>
+              <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
+                Urinalysis: {submission.urinalysisTestClinic || 'Not specified'}
+              </Badge>
+              <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
+                X-Ray: {submission.xrayTestClinic || 'Not specified'}
               </Badge>
             </div>
           </div>
@@ -1340,8 +1341,8 @@ export default function StaffRecordReview() {
                 <FileCheck2 className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Uploaded lab files</p>
-                <p className="font-semibold">{labUploadsCount} of 3 received</p>
+                <p className="text-sm text-muted-foreground">Lab test sources</p>
+                <p className="font-semibold">CBC, Urinalysis, and X-Ray clinic/lab captured</p>
               </div>
             </div>
           </CardContent>
@@ -1739,13 +1740,10 @@ export default function StaffRecordReview() {
               <CardTitle>Chest X-Ray Review</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <SubmittedFilePreview title="Chest X-Ray" fileUrl={submission.xrayFileUrl} alt="Chest X-Ray" />
-              <LabUploadActions
-                title="Chest X-Ray"
-                isUploading={uploadingLabFile.xray}
-                onChooseImage={() => openLabImagePicker('xray', 'library')}
-                onOpenCamera={() => openLabImagePicker('xray', 'camera')}
-              />
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <span className="font-medium">Submitted test location: </span>
+                {submission.xrayTestClinic || 'Not specified'}
+              </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor="xrayDate">Date</Label>
@@ -1792,13 +1790,10 @@ export default function StaffRecordReview() {
               <CardTitle>Complete Blood Count (CBC)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <SubmittedFilePreview title="CBC" fileUrl={submission.cbcFileUrl} alt="CBC" />
-              <LabUploadActions
-                title="CBC"
-                isUploading={uploadingLabFile.cbc}
-                onChooseImage={() => openLabImagePicker('cbc', 'library')}
-                onOpenCamera={() => openLabImagePicker('cbc', 'camera')}
-              />
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <span className="font-medium">Submitted test location: </span>
+                {submission.cbcTestClinic || 'Not specified'}
+              </div>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <Label htmlFor="cbcDate">Date</Label>
@@ -1889,13 +1884,10 @@ export default function StaffRecordReview() {
               <CardTitle>Urinalysis Review</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <SubmittedFilePreview title="Urinalysis" fileUrl={submission.urinalysisFileUrl} alt="Urinalysis" />
-              <LabUploadActions
-                title="Urinalysis"
-                isUploading={uploadingLabFile.urinalysis}
-                onChooseImage={() => openLabImagePicker('urinalysis', 'library')}
-                onOpenCamera={() => openLabImagePicker('urinalysis', 'camera')}
-              />
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <span className="font-medium">Submitted test location: </span>
+                {submission.urinalysisTestClinic || 'Not specified'}
+              </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <Label htmlFor="urinalysisDate">Date</Label>

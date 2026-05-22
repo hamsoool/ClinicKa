@@ -168,6 +168,21 @@ export const YEAR_LEVELS = [
   { value: '4', label: '4th Year' },
 ] as const;
 
+export const LAB_TEST_SITE_OPTIONS = [
+  'Hi-Precision Diagnostics Plus - Subic Bay Branch',
+  'Lab1 Diagnostic Center',
+  'MEDHUB Multispecialty Clinic and Diagnostic Laboratory',
+  'Bioline Diagnostic Laboratory & Medical Clinic',
+  'Health Scan Laboratory And Diagnostic Center',
+  'Olongapo HealthCare Specialists',
+  'Laceda Medical Clinic',
+  'Ulticare Medical Center',
+  'Tubban-Lab Ob Gyne And Medical Diagnostic Center',
+  'ZMMG COOP Hospital',
+  'Holy Infant Clinic',
+  'James L. Gordon Hospital',
+] as const;
+
 export const EMERGENCY_CONTACT_RELATIONSHIPS = [
   'Parent',
   'Sibling',

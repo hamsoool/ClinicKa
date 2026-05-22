@@ -58,6 +58,9 @@ export const SUBMISSION_LIST_COLUMNS = [
   "bmi",
   "lab_test_location",
   "lab_test_clinic",
+  "cbc_test_clinic",
+  "urinalysis_test_clinic",
+  "xray_test_clinic",
 ].join(",");
 
 const SUBMISSION_SUMMARY_COLUMNS = [

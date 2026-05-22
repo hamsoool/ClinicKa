@@ -7,6 +7,7 @@ import StudentPageIntro from '../../components/student-page-intro';
 import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { getStudentAnnouncements, getStudentProfileAssets } from '../../lib/api';
+import { resolveStudentSubmissionProfile, toCategoryLabel } from '../../lib/student-submission-profile';
 import { useStudentRecordsQuery } from './student-records-query';
 import type { SubmissionRecord } from '../../lib/record-types';
 
@@ -90,9 +91,9 @@ export default function StudentDashboard() {
   const getStatusBadge = (status?: string) => {
     switch (status) {
       case 'pending':
-        return 'Pending Review';
+        return 'Pending';
       case 'in_review':
-        return 'In Review';
+        return 'Pending';
       case 'resubmitted':
         return 'Resubmitted';
       case 'approved':
@@ -111,7 +112,7 @@ export default function StudentDashboard() {
       case 'pending':
         return 'bg-amber-100 text-amber-800';
       case 'in_review':
-        return 'bg-sky-100 text-sky-800';
+        return 'bg-amber-100 text-amber-800';
       case 'resubmitted':
         return 'bg-orange-100 text-orange-800';
       case 'returned':
@@ -201,6 +202,7 @@ export default function StudentDashboard() {
       yearlyRecords: yearly,
     };
   }, [records]);
+  const submissionProfile = useMemo(() => resolveStudentSubmissionProfile(me), [me]);
   const completionReminders = useMemo<CompletionReminder[]>(() => {
     const reminders: CompletionReminder[] = [];
     const student = me?.student;
@@ -447,11 +449,19 @@ export default function StudentDashboard() {
                     </span>
                   ) : null}
                 </div>
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${getStatusStyles(record?.status)}`}
-                >
-                  {getStatusBadge(record?.status)}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {record && submissionProfile.targetYearLevel === Number.parseInt(label, 10) &&
+                  (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') ? (
+                    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-800">
+                      {toCategoryLabel(submissionProfile.category)}
+                    </span>
+                  ) : null}
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${getStatusStyles(record?.status)}`}
+                  >
+                    {getStatusBadge(record?.status)}
+                  </span>
+                </div>
               </div>
               <p className={`mt-1 text-xs ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
                 Last action: {formatDate(record?.updatedAt || record?.submittedAt)}
@@ -465,6 +475,7 @@ export default function StudentDashboard() {
               <tr className="border-b border-outline-variant/30 bg-surface-container-low text-xs uppercase tracking-[0.16em] text-on-surface-variant">
                 <th className="px-4 py-3 font-semibold sm:px-6">Year Level</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Status</th>
+                <th className="px-4 py-3 font-semibold sm:px-6">Category</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Last Action Date</th>
               </tr>
             </thead>
@@ -487,6 +498,16 @@ export default function StudentDashboard() {
                     >
                       {getStatusBadge(record?.status)}
                     </span>
+                  </td>
+                  <td className={`px-4 py-4 text-sm sm:px-6 ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
+                    {record && submissionProfile.targetYearLevel === Number.parseInt(label, 10) &&
+                    (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') ? (
+                      <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-800">
+                        {toCategoryLabel(submissionProfile.category)}
+                      </span>
+                    ) : (
+                      '--'
+                    )}
                   </td>
                   <td
                     className={`px-4 py-4 text-sm sm:px-6 ${

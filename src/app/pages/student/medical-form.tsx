@@ -7,7 +7,8 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Progress } from '../../components/ui/progress';
 import StudentPageIntro from '../../components/student-page-intro';
 import { useAuth } from '../../lib/auth';
-import { getYearLevelLabel, isCurrentSubmissionYear, resolveStudentYearLevel } from '../../lib/student-year';
+import { getYearLevelLabel, resolveStudentYearLevel } from '../../lib/student-year';
+import { resolveStudentSubmissionProfile } from '../../lib/student-submission-profile';
 import { MedicalFormStepContent } from './medical-form/medical-form-step-content';
 import { useStudentMedicalForm } from './medical-form/use-student-medical-form';
 
@@ -18,8 +19,14 @@ export default function StudentMedicalForm() {
   const { me } = useAuth();
   const editSubmissionId = searchParams.get('edit');
   const hasDataPrivacyConsent = searchParams.get('consent') === '1';
-  const canAccessSelectedYear = isCurrentSubmissionYear(me, year);
-  const currentYearLabel = getYearLevelLabel(resolveStudentYearLevel(me));
+  const submissionProfile = resolveStudentSubmissionProfile(me);
+  const allowedYearLevel =
+    (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') &&
+    submissionProfile.targetYearLevel
+      ? submissionProfile.targetYearLevel
+      : resolveStudentYearLevel(me);
+  const canAccessSelectedYear = Number.parseInt(String(year || ''), 10) === allowedYearLevel;
+  const currentYearLabel = getYearLevelLabel(allowedYearLevel);
 
   const {
     step,
@@ -37,7 +44,6 @@ export default function StudentMedicalForm() {
     updateField,
     updateEmergencyContact,
     updateMedicalCondition,
-    handleFileChange,
     submit,
   } = useStudentMedicalForm({ year, me, editSubmissionId, initialDataPrivacyConsent: hasDataPrivacyConsent });
 
@@ -87,7 +93,6 @@ export default function StudentMedicalForm() {
                 onFieldChange={updateField}
                 onEmergencyContactChange={updateEmergencyContact}
                 onMedicalConditionChange={updateMedicalCondition}
-                onFileChange={handleFileChange}
                 hasRequiredProfileFields={hasRequiredProfileFields}
                 hasProfilePhoto={hasProfilePhoto}
                 hasProfileSignature={hasProfileSignature}
