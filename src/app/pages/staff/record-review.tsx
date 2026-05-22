@@ -150,7 +150,7 @@ const CLEARANCE_PURPOSE_OPTIONS: Array<{ value: ClearancePurpose; label: string 
   { value: 'ojt', label: 'OJT' },
   { value: 'rle', label: 'RLE' },
 ];
-const DEFAULT_LICENSE_NO = '008455';
+const DEFAULT_LICENSE_NO = '0084558';
 const CLEARANCE_LICENSE_OPTIONS = [
   { value: DEFAULT_LICENSE_NO, label: `Current License No. ${DEFAULT_LICENSE_NO}` },
   { value: 'manual', label: 'Manual license no.' },
@@ -2181,12 +2181,12 @@ export default function StaffRecordReview() {
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">
                 {canFinalizeClearance ? (
-                <div className="xl:col-span-2">
+                <div className="md:col-span-2 xl:col-span-4">
                   <Label>Purpose *</Label>
                   <div
-                    className={`mt-2 grid gap-2 rounded-lg border px-3 py-3 sm:grid-cols-3 xl:grid-cols-1 ${
+                    className={`mt-2 grid gap-2 rounded-lg border px-3 py-3 sm:grid-cols-3 ${
                       clearanceForm.purpose.length === 0 ? 'border-red-300 bg-red-50/50' : 'border-outline-variant/50'
                     }`}
                   >
@@ -2208,7 +2208,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {canFinalizeClearance ? (
-                <div className="xl:col-span-2">
+                <div className="xl:col-span-4">
                   <Label htmlFor="controlNo">Control Number</Label>
                   <Input
                     id="controlNo"
@@ -2220,7 +2220,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {canFinalizeClearance ? (
-                <div className="xl:col-span-2">
+                <div className="xl:col-span-4">
                   <Label htmlFor="issuedDate">Issued Date</Label>
                   <Input
                     id="issuedDate"
@@ -2233,7 +2233,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {canFinalizeClearance ? (
-                <div className="md:col-span-1 xl:col-span-3">
+                <div className="md:col-span-2 xl:col-span-6">
                   <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
                   <Select
                     value={assessmentForm.examinedBy || CLEARANCE_DOCTORS[0]}
@@ -2255,7 +2255,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {canFinalizeClearance ? (
-                <div className="md:col-span-1 xl:col-span-3">
+                <div className="md:col-span-2 xl:col-span-6">
                   <Label htmlFor="licenseNoSelect">License No.</Label>
                   <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
                     <Select
@@ -2293,7 +2293,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {canFinalizeClearance ? (
-                <div className="md:col-span-1 xl:col-span-3">
+                <div className="md:col-span-2 xl:col-span-6">
                   <Label>General Findings</Label>
                   <RadioGroup
                     value={clearanceForm.findingsNormal ? 'normal' : 'with-findings'}
@@ -2313,7 +2313,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {canFinalizeClearance ? (
-                <div className="md:col-span-1 xl:col-span-3">
+                <div className="md:col-span-2 xl:col-span-6">
                   <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
                   <Textarea
                     id="diagnosis"
@@ -2327,7 +2327,7 @@ export default function StaffRecordReview() {
                 ) : null}
 
                 {canFinalizeClearance ? (
-                <div className="md:col-span-1 xl:col-span-3">
+                <div className="md:col-span-2 xl:col-span-6">
                   <Label htmlFor="remarks">Clearance Remarks</Label>
                   <Textarea
                     id="remarks"

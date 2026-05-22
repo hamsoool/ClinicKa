@@ -318,8 +318,8 @@ export default function StaffDashboard() {
     staffRoleLabel;
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>(workspacePreferences.reviewSortOrder);
-  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>(
-    workspacePreferences.dashboardQueueTab,
+  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'returned' | 'resubmitted'>(
+    workspacePreferences.dashboardQueueTab === 'in_review' ? 'pending' : workspacePreferences.dashboardQueueTab,
   );
   const [reportRange, setReportRange] = useState<SubmissionRangeKey>('today');
   const [reportGroupBy, setReportGroupBy] = useState<ReportGroupKey>('department');
@@ -354,7 +354,7 @@ export default function StaffDashboard() {
 
   useEffect(() => {
     setQueueSortOrder(workspacePreferences.reviewSortOrder);
-    setQueueTab(workspacePreferences.dashboardQueueTab);
+    setQueueTab(workspacePreferences.dashboardQueueTab === 'in_review' ? 'pending' : workspacePreferences.dashboardQueueTab);
   }, [workspacePreferences]);
 
   const queueGroups = {
@@ -376,12 +376,7 @@ export default function StaffDashboard() {
     const timeB = new Date(b.submittedAt).getTime();
     return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
   });
-  const pendingQueue = [...queueGroups.pending].sort((a, b) => {
-    const timeA = new Date(a.submittedAt).getTime();
-    const timeB = new Date(b.submittedAt).getTime();
-    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
-  });
-  const inReviewQueue = [...queueGroups.in_review].sort((a, b) => {
+  const pendingQueue = [...queueGroups.pending, ...queueGroups.in_review].sort((a, b) => {
     const timeA = new Date(a.submittedAt).getTime();
     const timeB = new Date(b.submittedAt).getTime();
     return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
@@ -399,8 +394,6 @@ export default function StaffDashboard() {
   const visibleQueue =
     queueTab === 'pending'
       ? pendingQueue
-      : queueTab === 'in_review'
-      ? inReviewQueue
       : queueTab === 'returned'
       ? returnedQueue
       : queueTab === 'resubmitted'
@@ -410,7 +403,7 @@ export default function StaffDashboard() {
   const summaryCards = [
     {
       label: 'Pending',
-      value: overview?.pendingRecords || 0,
+      value: (overview?.pendingRecords || 0) + (overview?.inReviewRecords || 0),
       icon: ClipboardCheck,
       tone: 'text-primary',
       href: '/staff/submissions?status=pending',
@@ -684,16 +677,13 @@ export default function StaffDashboard() {
           </div>
           <Tabs
             value={queueTab}
-            onValueChange={(value) => setQueueTab(value as 'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted')}
+            onValueChange={(value) => setQueueTab(value as 'all' | 'pending' | 'returned' | 'resubmitted')}
             className="mb-5"
           >
             <div className="pb-1">
-              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-5">
+              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-4">
                 <TabsTrigger value="pending" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
-                  Pending ({overview.pendingRecords || 0})
-                </TabsTrigger>
-                <TabsTrigger value="in_review" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
-                  In Review ({overview.inReviewRecords || 0})
+                  Pending ({(overview.pendingRecords || 0) + (overview.inReviewRecords || 0)})
                 </TabsTrigger>
                 <TabsTrigger value="returned" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
                   Returned ({overview.returnedRecords || 0})

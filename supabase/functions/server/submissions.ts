@@ -484,6 +484,8 @@ function applySubmissionSummaryFilters(queryBuilder: any, options: any = {}) {
 
   if (statusFilter === "action_needed") {
     query = query.in("status", ACTIONABLE_SUBMISSION_STATUSES);
+  } else if (statusFilter === "pending") {
+    query = query.in("status", ["pending", "in_review"]);
   } else if (statusFilter !== "all") {
     query = query.eq("status", statusFilter);
   }
@@ -844,7 +846,7 @@ async function loadStaffSubmissionSummaries(options: any = {}) {
     page,
     pageSize,
     counts: {
-      pending: overview.pendingRecords,
+      pending: (overview.pendingRecords || 0) + (overview.inReviewRecords || 0),
       inReview: overview.inReviewRecords,
       returned: overview.returnedRecords,
       resubmitted: overview.resubmittedRecords,

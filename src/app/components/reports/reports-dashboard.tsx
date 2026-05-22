@@ -39,7 +39,7 @@ const YEAR_LABELS: Record<string, string> = { '1': '1st Year', '2': '2nd Year', 
 const YEAR_LEVEL_ORDER = ['1', '2', '3', '4'];
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
-  in_review: 'In Review',
+  in_review: 'Pending',
   approved: 'Approved',
   returned: 'Returned',
   physical_exam_done: 'Physical Exam Done',
@@ -48,7 +48,6 @@ const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', is
 const STATUS_COLORS: Record<string, string> = {
   Approved: '#3b6d11',
   Pending: '#ba7517',
-  'In Review': '#2f6fa3',
   Returned: '#a32d2d',
   'Exam Done': '#185fa5',
 };
@@ -76,7 +75,6 @@ type ReportsSummary = {
   total: number;
   approved: number;
   pending: number;
-  inReview: number;
   returned: number;
   physicalExamDone: number;
   firstYears: number;
@@ -695,7 +693,13 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       normalizedSubmissions.filter((sub) => {
         if (departmentFilter !== 'all' && !(sub.department === departmentFilter || sub.course?.includes(departmentFilter))) return false;
         if (yearFilter !== 'all' && String(sub.year) !== yearFilter) return false;
-        if (statusFilter !== 'all' && sub.status !== statusFilter) return false;
+        if (statusFilter !== 'all') {
+          if (statusFilter === 'pending') {
+            if (!(sub.status === 'pending' || sub.status === 'in_review')) return false;
+          } else if (sub.status !== statusFilter) {
+            return false;
+          }
+        }
         if (courseFilter !== 'all' && normalizeCourseValue(sub.course) !== normalizeCourseValue(courseFilter)) return false;
         if (conditionFilter !== 'all' && !sub.medicalHistory?.[conditionFilter]) return false;
         if (certificateFilter === 'issued' && !sub.clearanceInfo?.issuedDate) return false;
@@ -795,8 +799,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const summary = useMemo<ReportsSummary>(() => {
     const total = dedupedFilteredSubmissions.length;
     const approved = dedupedFilteredSubmissions.filter((s) => s.status === 'approved').length;
-    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending').length;
-    const inReview = dedupedFilteredSubmissions.filter((s) => s.status === 'in_review').length;
+    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending' || s.status === 'in_review').length;
     const returned = dedupedFilteredSubmissions.filter((s) => s.status === 'returned').length;
     const physicalExamDone = dedupedFilteredSubmissions.filter((s) => s.status === 'physical_exam_done').length;
     const firstYears = dedupedFilteredSubmissions.filter((s) => String(s.year) === '1');
@@ -816,7 +819,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       total,
       approved,
       pending,
-      inReview,
       returned,
       physicalExamDone,
       firstYears: firstYears.length,
@@ -1041,7 +1043,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     () =>
       [
         { name: 'Approved', value: statusOverviewSubmissions.filter((s) => s.status === 'approved').length },
-        { name: 'Pending', value: statusOverviewSubmissions.filter((s) => s.status === 'pending').length },
+        {
+          name: 'Pending',
+          value: statusOverviewSubmissions.filter((s) => s.status === 'pending' || s.status === 'in_review').length,
+        },
         { name: 'Returned', value: statusOverviewSubmissions.filter((s) => s.status === 'returned').length },
         { name: 'Exam Done', value: statusOverviewSubmissions.filter((s) => s.status === 'physical_exam_done').length },
       ].filter((d) => d.value > 0),
@@ -1087,7 +1092,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         { label: 'Total submissions', value: String(summary.total) },
         { label: 'Approved', value: String(summary.approved) },
         { label: 'Pending', value: String(summary.pending) },
-        { label: 'In review', value: String(summary.inReview) },
         { label: 'Approval rate', value: `${summary.approvalRate}%` },
         { label: 'With medical certificate', value: String(summary.withCertificate) },
         {
@@ -1281,7 +1285,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               <LabeledSelect label="Status" value={statusFilter} onValueChange={setStatusFilter} placeholder="Status">
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in_review">In Review</SelectItem>
                 <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="returned">Returned</SelectItem>
@@ -1312,24 +1315,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
           {/* ── Group 3: Date Range ────────────────────────────────────── */}
           <FilterSection label="Date Range">
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                {dateRangePresets.map((preset) => (
-                  <Button
-                    key={preset.value}
-                    type="button"
-                    variant={activeDateRangePreset === preset.value ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-9 justify-center"
-                    onClick={() => applyDateRangePreset(preset.value)}
-                  >
-                    {preset.label}
-                  </Button>
-                ))}
-              </div>
-              <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-sm sm:grid-cols-2">
+            <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-xl sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground font-medium">From</span>
+                <span className="text-xs font-medium text-muted-foreground">From</span>
                 <Input
                   type="date"
                   className="h-9 text-sm"
@@ -1340,7 +1328,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground font-medium">To</span>
+                <span className="text-xs font-medium text-muted-foreground">To</span>
                 <Input
                   type="date"
                   className="h-9 text-sm"
@@ -1349,7 +1337,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                   value={toDate}
                   onChange={(e) => handleToDateChange(e.target.value)}
                 />
-              </div>
               </div>
             </div>
           </FilterSection>
