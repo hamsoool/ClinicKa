@@ -9,6 +9,8 @@ import {
   ShieldCheck,
   UserPlus,
   Users,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { toast } from 'sonner';
@@ -107,9 +109,12 @@ export default function SuperAdminAdministrators() {
   const [form, setForm] = useState({
     email: '',
     password: '',
+    confirmPassword: '',
     firstName: '',
     lastName: '',
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const passwordInputs = useMemo(
     () => ({
       email: form.email,
@@ -153,6 +158,10 @@ export default function SuperAdminAdministrators() {
       toast.error('Email and password are required');
       return;
     }
+    if (form.password !== form.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
     if (!passwordResult.isStrongEnough) {
       toast.error(getPasswordPolicyMessage(passwordResult));
       return;
@@ -171,6 +180,7 @@ export default function SuperAdminAdministrators() {
       setForm({
         email: '',
         password: '',
+        confirmPassword: '',
         firstName: '',
         lastName: '',
       });
@@ -544,12 +554,43 @@ export default function SuperAdminAdministrators() {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="sa-password">Password</Label>
-              <Input
-                id="sa-password"
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-              />
+              <div className="relative">
+                <Input
+                  id="sa-password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="sa-confirm-password">Confirm Password</Label>
+                <div className="relative">
+                  <Input
+                    id="sa-confirm-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={form.confirmPassword}
+                    onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    aria-label={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
               <PasswordStrengthMeter password={form.password} userInputs={passwordInputs} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
