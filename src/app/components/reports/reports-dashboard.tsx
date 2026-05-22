@@ -374,28 +374,28 @@ async function buildPdfWithAutoTable(
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
-  const summaryTableData = summaryRows.map((row) => [row.label, row.value]);
+  const summaryBoxData = summaryRows.map((row) => [`${row.label}: ${row.value}`]);
 
   autoTable(doc, {
     startY: currentY,
     head: [],
-    body: summaryTableData,
+    body: summaryBoxData,
     margin: { left: margin, right: margin },
-    theme: 'plain',
+    theme: 'grid',
     styles: {
-      fontSize: 8,
-      cellPadding: 1.5,
+      fontSize: 8.5,
+      cellPadding: 2,
       textColor: [0, 0, 0],
       lineColor: [0, 0, 0],
       lineWidth: 0.2,
+      halign: 'left',
     },
     columnStyles: {
-      0: { halign: 'left', fontStyle: 'bold', cellWidth: 70 },
-      1: { halign: 'right' },
+      0: { cellWidth: pageWidth - margin * 2 },
     },
   });
 
-  currentY = doc.lastAutoTable.finalY + 5;
+  currentY = doc.lastAutoTable.finalY + 4;
 
   // ── Students Table ──
   doc.setFont('helvetica', 'bold');
@@ -1040,14 +1040,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               .join(' | ') || '-',
         },
       ];
-
-      if (yearFilter === '1' || summary.firstYears > 0) {
-        summaryRows.splice(5, 0,
-          { label: '1st year submitted', value: String(summary.firstYears) },
-          { label: '1st year under review', value: String(summary.firstYearUnderReview) },
-          { label: '1st year not under review', value: String(summary.firstYearNotUnderReview) },
-        );
-      }
 
       const studentRows = dedupedFilteredSubmissions.map((s) => {
         const middle = s.middleInitial ? ` ${String(s.middleInitial).charAt(0)}.` : '';
