@@ -1602,7 +1602,7 @@ app.post("/issue-certificate", async (c) => {
   }
 
   try {
-    const { submissionId, findingsNormal, diagnosis, remarks, purpose, controlNo } = await c.req.json();
+    const { submissionId, findingsNormal, diagnosis, remarks, purpose, controlNo, licenseNo } = await c.req.json();
 
     if (!submissionId) return badRequest('submissionId is required');
 
@@ -1613,6 +1613,7 @@ app.post("/issue-certificate", async (c) => {
       remarks: remarks || null,
       purpose: purpose || null,
       control_no: controlNo || null,
+      license_no: licenseNo || null,
       issued_by: requester.staff?.id || null,
       issued_at: new Date().toISOString(),
     }, { onConflict: 'submission_id' });

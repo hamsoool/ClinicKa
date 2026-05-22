@@ -196,6 +196,7 @@ export const MEDICAL_CONDITIONS = [
   { key: 'typhoidFever', label: 'Typhoid Fever' },
   { key: 'covid19', label: 'COVID-19' },
   { key: 'uti', label: 'Urinary Tract Infection' },
+  { key: 'others', label: 'Others' },
 ] as const;
 
 export const DEFAULT_MEDICAL_HISTORY: MedicalHistoryState = {
@@ -217,6 +218,7 @@ export const DEFAULT_MEDICAL_HISTORY: MedicalHistoryState = {
   typhoidFever: false,
   covid19: false,
   uti: false,
+  others: false,
 };
 
 export const DATA_PRIVACY_CONSENT_BODY =

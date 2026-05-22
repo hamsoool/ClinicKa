@@ -26,6 +26,7 @@ type Props = {
   hasRequiredProfileFields: boolean;
   hasProfilePhoto: boolean;
   hasProfileSignature: boolean;
+  submitBlockers: string[];
   onGoToProfile: () => void;
 };
 
@@ -39,6 +40,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   hasRequiredProfileFields,
   hasProfilePhoto,
   hasProfileSignature,
+  submitBlockers,
   onGoToProfile,
 }: Props) {
   const showLabUploads = formData.labTestLocation === 'other';
@@ -198,9 +200,25 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 <Label htmlFor={key} className="text-sm font-normal">
                   {label}
                 </Label>
+                {key === 'others' && formData.medicalHistory.others ? (
+                  <Input
+                    id="otherMedicalHistory"
+                    value={formData.otherMedicalHistory}
+                    onChange={(event) => onFieldChange('otherMedicalHistory', event.target.value)}
+                    placeholder="Please specify"
+                    maxLength={20}
+                    aria-required="true"
+                    className={`ml-2 h-8 w-44 ${
+                      !formData.otherMedicalHistory.trim() ? 'border-red-500 ring-1 ring-red-200' : ''
+                    }`}
+                  />
+                ) : null}
               </div>
             ))}
           </div>
+          {formData.medicalHistory.others ? (
+            <p className="text-xs text-muted-foreground">Others accepts letters and spaces only, maximum of 20 characters.</p>
+          ) : null}
           {formData.medicalHistory.allergy && (
             <div className="mt-4">
               <Label htmlFor="allergyDetails">Specify Allergy Type</Label>
@@ -524,7 +542,9 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 <div className="flex flex-wrap gap-2">
                   {MEDICAL_CONDITIONS.filter(({ key }) => formData.medicalHistory[key]).map(({ key, label }) => (
                     <span key={key} className="rounded bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-800">
-                      {label}
+                      {key === 'others' && formData.otherMedicalHistory.trim()
+                        ? `${label}: ${formData.otherMedicalHistory.trim()}`
+                        : label}
                     </span>
                   ))}
                 </div>
@@ -595,6 +615,16 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               Please review all information carefully before submitting. Once submitted, your medical record will be reviewed by clinic staff.
             </p>
           </div>
+          {submitBlockers.length ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+              <p className="text-sm font-semibold text-red-800">Submission is currently blocked due to:</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-700">
+                {submitBlockers.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       );
     default:

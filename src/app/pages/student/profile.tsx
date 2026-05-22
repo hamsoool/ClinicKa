@@ -508,8 +508,14 @@ export default function StudentProfile() {
                 type="file"
                 accept="image/png,image/jpeg,image/jpg"
                 onChange={(event) => handleAssetChange('photo', event.target.files?.[0] || null)}
-                className="w-full max-w-full cursor-pointer overflow-hidden text-sm file:mr-3 file:rounded-md file:bg-surface-container file:px-3 file:py-1.5"
+                className="hidden"
               />
+              <label
+                htmlFor="profilePhoto"
+                className="inline-flex h-10 cursor-pointer items-center rounded-md border border-outline-variant/40 bg-white px-4 text-sm font-medium text-on-surface hover:bg-surface-container-low"
+              >
+                Choose Photo
+              </label>
               <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border bg-white">
                   {currentPhotoUrl ? (
@@ -548,10 +554,16 @@ export default function StudentProfile() {
                 type="file"
                 accept="image/png,image/jpeg,image/jpg"
                 onChange={(event) => handleAssetChange('signature', event.target.files?.[0] || null)}
-                className="w-full max-w-full cursor-pointer overflow-hidden text-sm file:mr-3 file:rounded-md file:bg-surface-container file:px-3 file:py-1.5"
+                className="hidden"
               />
+              <label
+                htmlFor="studentSignature"
+                className="inline-flex h-10 cursor-pointer items-center rounded-md border border-outline-variant/40 bg-white px-4 text-sm font-medium text-on-surface hover:bg-surface-container-low"
+              >
+                Choose Signature
+              </label>
               <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
-                <div className="flex h-24 w-40 items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
+                <div className="flex h-24 w-full max-w-[10rem] items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
                   {currentSignatureUrl ? (
                     <img src={currentSignatureUrl} alt="Student signature" className="max-h-full max-w-full object-contain" />
                   ) : (

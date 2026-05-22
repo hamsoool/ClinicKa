@@ -27,6 +27,7 @@ export type MedicalFormData = {
   contactNumber: string;
   address: string;
   medicalHistory: MedicalHistoryState;
+  otherMedicalHistory: string;
   allergyDetails: string;
   hadOperation: 'yes' | 'no';
   operationDetails: string;

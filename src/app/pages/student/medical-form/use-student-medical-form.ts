@@ -29,12 +29,12 @@ type UseStudentMedicalFormArgs = {
 };
 
 const TOTAL_STEPS = 5;
-const NAME_REGEX = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
 const COURSE_REGEX = /^[A-Za-z][A-Za-z\s.'&()/-]*$/;
 const SQL_INJECTION_REGEX = /(\b(select|insert|update|delete|drop|truncate|union|alter)\b)|(--|\/\*|\*\/|;)/i;
 const MAX_NAME_LENGTH = 30;
 const MAX_ADDRESS_LENGTH = 180;
 const MAX_CLINIC_NAME_LENGTH = 60;
+const MAX_OTHER_MEDICAL_HISTORY_LENGTH = 20;
 const MIN_AGE = 15;
 function normalizeStudentId(value: string) {
   return String(value || '').replace(/\D/g, '').slice(0, 9);
@@ -70,6 +70,10 @@ function sanitizeSafeText(value: string, maxLength: number) {
 
 function sanitizeEmergencyRelationship(value: string) {
   return sanitizeName(value);
+}
+
+function sanitizeOtherMedicalHistory(value: string) {
+  return String(value).replace(/[^A-Za-z\s]/g, '').slice(0, MAX_OTHER_MEDICAL_HISTORY_LENGTH);
 }
 
 function sanitizeDigits(value: string, maxLen?: number) {
@@ -109,6 +113,7 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, init
     contactNumber: formatPhilippinePhoneInput(student?.contact_number || ''),
     address: sanitizeAddress(student?.address || ''),
     medicalHistory: { ...DEFAULT_MEDICAL_HISTORY },
+    otherMedicalHistory: '',
     allergyDetails: '',
     hadOperation: 'no',
     operationDetails: '',
@@ -208,6 +213,7 @@ export function useStudentMedicalForm({
             ...DEFAULT_MEDICAL_HISTORY,
             ...(submission.medicalHistory || {}),
           },
+          otherMedicalHistory: sanitizeOtherMedicalHistory((submission as any).otherMedicalHistory || ''),
           allergyDetails: sanitizeSafeText(submission.allergyDetails || prev.allergyDetails, 120),
           hadOperation: submission.hadOperation || prev.hadOperation,
           operationDetails: sanitizeSafeText(submission.operationDetails || prev.operationDetails, 120),
@@ -340,6 +346,9 @@ export function useStudentMedicalForm({
     if (field === 'allergyDetails') {
       return setFormData((prev) => ({ ...prev, allergyDetails: sanitizeSafeText(String(value), 120) }));
     }
+    if (field === 'otherMedicalHistory') {
+      return setFormData((prev) => ({ ...prev, otherMedicalHistory: sanitizeOtherMedicalHistory(String(value)) }));
+    }
     if (field === 'otherClinicName') {
       const safe = sanitizeCourse(String(value)).slice(0, MAX_CLINIC_NAME_LENGTH);
       if (SQL_INJECTION_REGEX.test(safe)) return;
@@ -378,6 +387,7 @@ export function useStudentMedicalForm({
   const updateMedicalCondition = useCallback((condition: MedicalConditionKey, checked: boolean) => {
     setFormData((prev) => ({
       ...prev,
+      ...(condition === 'others' && !checked ? { otherMedicalHistory: '' } : {}),
       medicalHistory: {
         ...prev.medicalHistory,
         [condition]: checked,
@@ -459,7 +469,7 @@ export function useStudentMedicalForm({
       case 1:
         return hasRequiredProfileFields && hasProfilePhoto && hasProfileSignature;
       case 2:
-        return true;
+        return !formData.medicalHistory.others || Boolean(formData.otherMedicalHistory.trim());
       case 3:
         return (
           formData.hadOperation &&
@@ -510,20 +520,67 @@ export function useStudentMedicalForm({
         (formData.labTestLocation === 'jlgh' || hasXray) &&
         (formData.labTestLocation === 'jlgh' || formData.otherClinicName.trim()) &&
         (!needsAllUploads || hasAllUploads) &&
-          NAME_REGEX.test(formData.firstName) &&
-          NAME_REGEX.test(formData.lastName) &&
+          (!formData.medicalHistory.others || Boolean(formData.otherMedicalHistory.trim())) &&
           COURSE_REGEX.test(formData.course) &&
           !SQL_INJECTION_REGEX.test(formData.address || '') &&
           formData.dataPrivacyConsent &&
+          formData.submissionConfirmed &&
           (formData.labTestLocation !== 'other' ||
             (COURSE_REGEX.test(formData.otherClinicName) &&
               formData.otherClinicName.length <= MAX_CLINIC_NAME_LENGTH &&
               !SQL_INJECTION_REGEX.test(formData.otherClinicName))) &&
-          (formData.hadOperation !== 'yes' || !SQL_INJECTION_REGEX.test(formData.operationDetails || '')),
+          (formData.hadOperation !== 'yes' || !SQL_INJECTION_REGEX.test(formData.operationDetails || '')) &&
+          (!formData.otherMedicalHistory || /^[A-Za-z\s]{1,20}$/.test(formData.otherMedicalHistory)),
       );
     },
     [formData, hasRequiredProfileFields, isEditingExistingSubmission],
   );
+
+  const submitBlockers = useMemo(() => {
+    const blockers: string[] = [];
+    const hasXray = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
+    const hasAllUploads = Boolean(
+      (formData.xrayFile || formData.existingXrayFileUrl) &&
+      (formData.cbcFile || formData.existingCbcFileUrl) &&
+      (formData.urinalysisFile || formData.existingUrinalysisFileUrl),
+    );
+    if (!hasRequiredProfileFields) blockers.push('Complete all required fields in Profile.');
+    if (!formData.yearLevel) blockers.push('Select your year level.');
+    if (!formData.sex) blockers.push('Select your sex.');
+    if (!formData.hadOperation) blockers.push('Answer the operation history question.');
+    if (!formData.emergencyContact.name?.trim()) blockers.push('Enter your emergency contact name.');
+    if (!formData.emergencyContact.relationship?.trim()) blockers.push('Select your emergency contact relationship.');
+    if (!formData.emergencyContact.phone?.trim()) blockers.push('Enter your emergency contact phone number.');
+    if (formData.emergencyContact.phone?.trim() && !isValidPhilippinePhoneNumber(formData.emergencyContact.phone)) {
+      blockers.push('Enter a valid emergency contact Philippine mobile number.');
+    }
+    if (!formData.emergencyContact.address?.trim()) blockers.push('Enter your emergency contact address.');
+    if (!formData.labTestLocation) blockers.push('Select where your laboratory tests were taken.');
+    if (formData.labTestLocation === 'other' && !formData.otherClinicName.trim()) blockers.push('Enter the clinic/laboratory name.');
+    if (
+      formData.labTestLocation === 'other' &&
+      formData.otherClinicName.trim() &&
+      (!COURSE_REGEX.test(formData.otherClinicName) ||
+        formData.otherClinicName.length > MAX_CLINIC_NAME_LENGTH ||
+        SQL_INJECTION_REGEX.test(formData.otherClinicName))
+    ) {
+      blockers.push('Clinic/laboratory name contains invalid characters.');
+    }
+    if (formData.labTestLocation === 'other' && !hasXray) blockers.push('Upload your Chest X-Ray result.');
+    if (formData.labTestLocation === 'other' && !hasAllUploads) blockers.push('Upload CBC and Urinalysis for non-JLGH results.');
+    if (formData.medicalHistory.others && !formData.otherMedicalHistory.trim()) blockers.push('Specify the "Others" medical condition.');
+    if (formData.otherMedicalHistory && !/^[A-Za-z\s]{1,20}$/.test(formData.otherMedicalHistory)) {
+      blockers.push('Others medical condition must be letters/spaces only (max 20 characters).');
+    }
+    if (formData.course && !COURSE_REGEX.test(formData.course)) blockers.push('Course contains invalid characters.');
+    if (SQL_INJECTION_REGEX.test(formData.address || '')) blockers.push('Address contains invalid characters.');
+    if (formData.hadOperation === 'yes' && SQL_INJECTION_REGEX.test(formData.operationDetails || '')) {
+      blockers.push('Operation details contain invalid characters.');
+    }
+    if (!formData.submissionConfirmed) blockers.push('Check the final confirmation box.');
+    if (!formData.dataPrivacyConsent) blockers.push('Data Privacy Consent is required.');
+    return blockers;
+  }, [formData, hasRequiredProfileFields]);
 
   const previewRecord = useMemo<SubmissionRecord>(
     () => ({
@@ -545,6 +602,7 @@ export function useStudentMedicalForm({
       address: formData.address,
       emergencyContact: formData.emergencyContact,
       medicalHistory: formData.medicalHistory,
+      otherMedicalHistory: formData.otherMedicalHistory,
       allergyDetails: formData.allergyDetails,
       hadOperation: formData.hadOperation,
       operationDetails: formData.operationDetails,
@@ -607,6 +665,7 @@ export function useStudentMedicalForm({
         contactNumber: formData.contactNumber,
         address: formData.address,
         medicalHistory: formData.medicalHistory,
+        otherMedicalHistory: formData.otherMedicalHistory,
         allergyDetails: formData.allergyDetails,
         hadOperation: formData.hadOperation,
         operationDetails: formData.operationDetails,
@@ -701,6 +760,7 @@ export function useStudentMedicalForm({
     submitted,
     canProceed,
     canSubmit,
+    submitBlockers,
     hasRequiredProfileFields,
     hasProfilePhoto,
     hasProfileSignature,

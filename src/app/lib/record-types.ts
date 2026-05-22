@@ -60,9 +60,10 @@ export type ClearanceInfo = {
   findingsNormal?: boolean;
   diagnosis?: string;
   remarks?: string;
-  purpose?: 'enrolment' | 'ojt' | 'rle';
+  purpose?: string;
   controlNo?: string;
   issuedDate?: string;
+  licenseNo?: string;
 };
 
 export type StudentProfileRecord = {

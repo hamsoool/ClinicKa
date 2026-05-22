@@ -30,6 +30,7 @@ export default function StudentMedicalForm() {
     submitted,
     canProceed,
     canSubmit,
+    submitBlockers,
     hasRequiredProfileFields,
     hasProfilePhoto,
     hasProfileSignature,
@@ -90,6 +91,7 @@ export default function StudentMedicalForm() {
                 hasRequiredProfileFields={hasRequiredProfileFields}
                 hasProfilePhoto={hasProfilePhoto}
                 hasProfileSignature={hasProfileSignature}
+                submitBlockers={submitBlockers}
                 onGoToProfile={() => navigate('/student/profile')}
               />
             </div>
@@ -113,7 +115,7 @@ export default function StudentMedicalForm() {
               ) : (
                 <Button
                   onClick={submit}
-                  disabled={!canProceed || !canSubmit || uploading || !formData.submissionConfirmed || !formData.dataPrivacyConsent}
+                  disabled={!canProceed || !canSubmit || uploading}
                   className="w-full bg-primary hover:bg-primary/90 sm:w-auto"
                 >
                   {uploading ? 'Submitting...' : 'Submit Medical Record'}

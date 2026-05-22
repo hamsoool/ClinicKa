@@ -1215,6 +1215,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
           purpose: certificate.purpose,
           controlNo: certificate.control_no,
           issuedDate: certificate.issued_date || certificate.issued_at,
+          licenseNo: certificate.license_no,
         }
       : undefined,
     photoUrl: normalizeStorageFileUrl(files.photo?.url || profileAssets.photo?.url),
@@ -3421,6 +3422,7 @@ export async function saveSubmissionReview(id: string, review: any) {
           purpose: clearanceInfo.purpose || null,
           control_no: clearanceInfo.controlNo || null,
           issued_at: clearanceInfo.issuedDate || null,
+          license_no: clearanceInfo.licenseNo || null,
         }),
       },
     ),

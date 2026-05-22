@@ -88,6 +88,7 @@ type ReportsSummary = {
 };
 
 type SubmissionBreakdownView = 'department' | 'program' | 'year' | 'gender';
+type DateRangePreset = 'today' | 'lastWeek' | 'lastMonth' | 'schoolYear';
 type SubmissionBreakdownDatum = {
   label: string;
   count: number;
@@ -223,6 +224,19 @@ function getLocalDateEndTimestamp(value?: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return Number.NaN;
   const [year, month, day] = raw.split('-').map((part) => Number(part));
   return new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
+}
+
+function getDateDaysAgo(days: number) {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - days);
+  return date;
+}
+
+function clampDateToToday(date: Date) {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  return date.getTime() > today.getTime() ? today : date;
 }
 
 function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRange {
@@ -817,6 +831,52 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     () => buildReportingTermRange(reportingTermSettings),
     [reportingTermSettings],
   );
+  const dateRangePresets = useMemo(
+    () => {
+      const schoolYearEnd = new Date(reportingTermRange.endMs - 1);
+      return [
+        {
+          value: 'today' as const,
+          label: 'Today',
+          from: today,
+          to: today,
+        },
+        {
+          value: 'lastWeek' as const,
+          label: 'Last Week',
+          from: getLocalDateInputValue(getDateDaysAgo(6)),
+          to: today,
+        },
+        {
+          value: 'lastMonth' as const,
+          label: 'Last Month',
+          from: getLocalDateInputValue(getDateDaysAgo(29)),
+          to: today,
+        },
+        {
+          value: 'schoolYear' as const,
+          label: 'School Year',
+          from: getLocalDateInputValue(new Date(reportingTermRange.startMs)),
+          to: getLocalDateInputValue(clampDateToToday(schoolYearEnd)),
+        },
+      ];
+    },
+    [reportingTermRange.endMs, reportingTermRange.startMs, today],
+  );
+  const activeDateRangePreset = useMemo(
+    () =>
+      dateRangePresets.find((preset) => preset.from === fromDate && preset.to === toDate)?.value || null,
+    [dateRangePresets, fromDate, toDate],
+  );
+  const activeDateRangeLabel =
+    dateRangePresets.find((preset) => preset.value === activeDateRangePreset)?.label ||
+    `${fromDate || '-'} to ${toDate || '-'}`;
+  const applyDateRangePreset = (preset: DateRangePreset) => {
+    const range = dateRangePresets.find((item) => item.value === preset);
+    if (!range) return;
+    setFromDate(range.from);
+    setToDate(range.to);
+  };
   const currentTermSubmissions = useMemo(
     () =>
       dedupedFilteredSubmissions.filter((submission) => {
@@ -1252,7 +1312,22 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
           {/* ── Group 3: Date Range ────────────────────────────────────── */}
           <FilterSection label="Date Range">
-            <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-sm sm:grid-cols-2">
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                {dateRangePresets.map((preset) => (
+                  <Button
+                    key={preset.value}
+                    type="button"
+                    variant={activeDateRangePreset === preset.value ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-9 justify-center"
+                    onClick={() => applyDateRangePreset(preset.value)}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-sm sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground font-medium">From</span>
                 <Input
@@ -1275,6 +1350,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                   onChange={(e) => handleToDateChange(e.target.value)}
                 />
               </div>
+              </div>
             </div>
           </FilterSection>
 
@@ -1293,10 +1369,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                   Submissions by {submissionBreakdownLabel}
                 </CardTitle>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Total medical clearance forms for the current academic year.
+                  Total medical clearance forms for the selected date range.
                 </p>
                 <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
-                  Current Academic Year: {reportingTermRange.label}
+                  Range: {activeDateRangeLabel} | Academic Year: {reportingTermRange.label}
                 </p>
               </div>
               <div className="w-full sm:w-44">

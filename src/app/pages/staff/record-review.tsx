@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   ArrowLeft,
   Camera,
@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Checkbox } from '../../components/ui/checkbox';
 
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -136,15 +137,25 @@ type ClearanceForm = {
   findingsNormal: boolean;
   diagnosis: string;
   remarks: string;
-  purpose: 'enrolment' | 'ojt' | 'rle';
+  purpose: ClearancePurpose[];
   controlNo: string;
   issuedDate: string;
+  licenseNo: string;
 };
 
-const CLEARANCE_DOCTORS = [
-  'GERALD S. BERNAL, MD',
-  'ARMANDO TAMAYO, MD',
+type ClearancePurpose = 'enrolment' | 'ojt' | 'rle';
+
+const CLEARANCE_PURPOSE_OPTIONS: Array<{ value: ClearancePurpose; label: string }> = [
+  { value: 'enrolment', label: 'Enrollment' },
+  { value: 'ojt', label: 'OJT' },
+  { value: 'rle', label: 'RLE' },
+];
+const DEFAULT_LICENSE_NO = '008455';
+const CLEARANCE_LICENSE_OPTIONS = [
+  { value: DEFAULT_LICENSE_NO, label: `Current License No. ${DEFAULT_LICENSE_NO}` },
+  { value: 'manual', label: 'Manual license no.' },
 ] as const;
+const CLEARANCE_DOCTORS = ['GERALD S. BERNAL, MD', 'ARMANDO TAMAYO, MD'] as const;
 
 const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }> = [
   { key: 'allergy', label: 'Allergy' },
@@ -408,6 +419,30 @@ function generateClearanceControlNo(submission?: SubmissionDetails | null) {
   return `GC-${currentYear}-${yearTag}-${studentTag}`;
 }
 
+function normalizeClearancePurposes(value?: string | string[] | null): ClearancePurpose[] {
+  const rawValues = Array.isArray(value)
+    ? value
+    : String(value || '')
+      .split(',')
+      .map((item) => item.trim());
+
+  const normalized = rawValues
+    .map((item) => (item.toLowerCase() === 'enrollment' ? 'enrolment' : item.toLowerCase()))
+    .filter((item): item is ClearancePurpose =>
+      CLEARANCE_PURPOSE_OPTIONS.some((option) => option.value === item),
+    );
+
+  return [...new Set(normalized)];
+}
+
+function serializeClearancePurposes(value: ClearancePurpose[]) {
+  return value.join(',');
+}
+
+function sanitizeLicenseNo(value: string) {
+  return String(value || '').replace(/\D/g, '').slice(0, 15);
+}
+
 function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
   const department = resolveDepartmentValue(submission?.department || '');
   return {
@@ -489,16 +524,14 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
 }
 
 function createClearanceForm(submission?: SubmissionDetails | null): ClearanceForm {
-  const normalizedPurpose = String(submission?.clearanceInfo?.purpose || '').toLowerCase() === 'enrollment'
-    ? 'enrolment'
-    : (submission?.clearanceInfo?.purpose || 'enrolment');
   return {
     findingsNormal: submission?.clearanceInfo?.findingsNormal ?? true,
     diagnosis: sanitizeSafeText(submission?.clearanceInfo?.diagnosis || '', MAX_CLEARANCE_DIAGNOSIS_LENGTH),
     remarks: sanitizeSafeText(submission?.clearanceInfo?.remarks || '', MAX_CLEARANCE_REMARKS_LENGTH),
-    purpose: (normalizedPurpose as ClearanceForm['purpose']),
+    purpose: normalizeClearancePurposes(submission?.clearanceInfo?.purpose),
     controlNo: submission?.clearanceInfo?.controlNo || generateClearanceControlNo(submission),
     issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate) || getTodayDateInputValue(),
+    licenseNo: sanitizeLicenseNo(submission?.clearanceInfo?.licenseNo || DEFAULT_LICENSE_NO),
   };
 }
 
@@ -528,6 +561,7 @@ function countVerifiedConditions(history: MedicalHistory) {
 export default function StaffRecordReview() {
   const navigate = useNavigate();
   const { submissionId } = useParams();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { me } = useAuth();
   const currentStaffId = String(me?.staff?.id || '').trim();
@@ -799,9 +833,24 @@ export default function StaffRecordReview() {
           : field === 'remarks'
           ? sanitizeSafeText(String(value), MAX_CLEARANCE_REMARKS_LENGTH)
           : field === 'purpose'
-          ? (String(value) === 'enrollment' ? 'enrolment' : value)
+          ? normalizeClearancePurposes(value as ClearanceForm['purpose'])
+          : field === 'licenseNo'
+          ? sanitizeLicenseNo(String(value))
           : value,
     }));
+  }
+
+  function toggleClearancePurpose(purpose: ClearancePurpose, checked: boolean) {
+    setClearanceForm((prev) => {
+      const nextPurpose = checked
+        ? [...new Set([...prev.purpose, purpose])]
+        : prev.purpose.filter((item) => item !== purpose);
+
+      return {
+        ...prev,
+        purpose: nextPurpose,
+      };
+    });
   }
 
   function validateLabImageFile(file: File, title: string) {
@@ -885,10 +934,19 @@ export default function StaffRecordReview() {
       toast.error('Emergency contact phone must follow (+63) 9XXXXXXXXX.');
       return;
     }
+    const targetStatus = nextStatus || reviewStatus;
+    if (canFinalizeClearance && targetStatus === 'approved' && clearanceForm.purpose.length === 0) {
+      toast.error('Select at least one clearance purpose.');
+      return;
+    }
+    if (canFinalizeClearance && targetStatus === 'approved' && !clearanceForm.licenseNo.trim()) {
+      toast.error('License number is required before clearing this record.');
+      return;
+    }
 
     setSaving(true);
     try {
-      const statusToSave = nextStatus || reviewStatus;
+      const statusToSave = targetStatus;
       const notesToSave = customNotes !== undefined ? customNotes : staffNotes;
       const preserveDoctorField = (
         field:
@@ -971,7 +1029,10 @@ export default function StaffRecordReview() {
           urinalysisGlucose: assessmentForm.urinalysisGlucose,
           urinalysisProtein: assessmentForm.urinalysisProtein,
         },
-        clearanceInfo: clearanceForm,
+        clearanceInfo: {
+          ...clearanceForm,
+          purpose: serializeClearancePurposes(clearanceForm.purpose),
+        },
         staffNotes: notesToSave,
         status: statusToSave,
       });
@@ -1015,7 +1076,10 @@ export default function StaffRecordReview() {
           urinalysisGlucose: assessmentForm.urinalysisGlucose,
           urinalysisProtein: assessmentForm.urinalysisProtein,
         },
-        clearanceInfo: clearanceForm,
+        clearanceInfo: {
+          ...clearanceForm,
+          purpose: serializeClearancePurposes(clearanceForm.purpose),
+        },
         staffNotes: notesToSave,
         status: statusToSave,
         updatedAt: new Date().toISOString(),
@@ -1065,7 +1129,8 @@ export default function StaffRecordReview() {
   const labUploadsCount = [submission.xrayFileUrl, submission.cbcFileUrl, submission.urinalysisFileUrl].filter(Boolean).length;
   const persistedStatus = submission.status;
   const hasUnsavedStatusChange = reviewStatus !== persistedStatus;
-  const isApprovedLocked = persistedStatus === 'approved';
+  const isArchiveEditMode = searchParams.get('archiveEdit') === '1';
+  const isApprovedLocked = persistedStatus === 'approved' && !isArchiveEditMode;
   const isAssignedToAnotherReviewer =
     persistedStatus === 'in_review'
     && Boolean(submission.reviewedByStaffId)
@@ -2119,20 +2184,26 @@ export default function StaffRecordReview() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
                 {canFinalizeClearance ? (
                 <div className="xl:col-span-2">
-                  <Label htmlFor="clearancePurpose">Purpose</Label>
-                  <Select
-                    value={clearanceForm.purpose}
-                    onValueChange={(value) => updateClearanceField('purpose', value as ClearanceForm['purpose'])}
+                  <Label>Purpose *</Label>
+                  <div
+                    className={`mt-2 grid gap-2 rounded-lg border px-3 py-3 sm:grid-cols-3 xl:grid-cols-1 ${
+                      clearanceForm.purpose.length === 0 ? 'border-red-300 bg-red-50/50' : 'border-outline-variant/50'
+                    }`}
                   >
-                    <SelectTrigger id="clearancePurpose" className="mt-2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="enrolment">Enrollment</SelectItem>
-                      <SelectItem value="ojt">OJT</SelectItem>
-                      <SelectItem value="rle">RLE</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    {CLEARANCE_PURPOSE_OPTIONS.map((option) => (
+                      <label key={option.value} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={clearanceForm.purpose.includes(option.value)}
+                          onCheckedChange={(checked) => toggleClearancePurpose(option.value, checked === true)}
+                          className="size-4"
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {clearanceForm.purpose.length === 0 ? (
+                    <p className="mt-1 text-xs text-red-600">Select at least one purpose.</p>
+                  ) : null}
                 </div>
                 ) : null}
 
@@ -2180,6 +2251,44 @@ export default function StaffRecordReview() {
                     </SelectContent>
                   </Select>
                   <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical clearance.</p>
+                </div>
+                ) : null}
+
+                {canFinalizeClearance ? (
+                <div className="md:col-span-1 xl:col-span-3">
+                  <Label htmlFor="licenseNoSelect">License No.</Label>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                    <Select
+                      value={CLEARANCE_LICENSE_OPTIONS.some((option) => option.value === clearanceForm.licenseNo)
+                        ? clearanceForm.licenseNo
+                        : 'manual'}
+                      onValueChange={(value) => {
+                        if (value !== 'manual') {
+                          updateClearanceField('licenseNo', value);
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="licenseNoSelect">
+                        <SelectValue placeholder="Select license no." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CLEARANCE_LICENSE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      id="licenseNo"
+                      value={clearanceForm.licenseNo}
+                      onChange={(event) => updateClearanceField('licenseNo', event.target.value)}
+                      inputMode="numeric"
+                      maxLength={15}
+                      placeholder="License No."
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">Numbers only, up to 15 digits.</p>
                 </div>
                 ) : null}
 
@@ -2278,6 +2387,8 @@ export default function StaffRecordReview() {
             <p className="text-sm text-muted-foreground">
               {isApprovedLocked
                 ? 'This submission is already approved. Actions are locked to prevent accidental changes.'
+                : persistedStatus === 'approved' && isArchiveEditMode
+                  ? 'Archive edit mode is enabled. Save changes keeps this record approved while updating corrected details or replacement files.'
                 : canFinalizeClearance
                   ? `Save draft edits at any time, mark the record pending when needed, or ${isDoctorWorkspace ? 'mark it cleared' : 'mark the record cleared'} once everything is complete.`
                   : 'Save draft edits at any time or mark the record pending when updates are needed.'}
@@ -2286,17 +2397,23 @@ export default function StaffRecordReview() {
 
           {!isApprovedLocked ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
-            <Button variant="outline" onClick={() => void persistReview()} disabled={saving}>
+            <Button
+              variant="outline"
+              onClick={() => void persistReview(isArchiveEditMode ? 'approved' : undefined)}
+              disabled={saving}
+            >
               <Save className="mr-2 h-4 w-4" />
               {saving ? 'Saving...' : 'Save Review'}
             </Button>
+            {!isArchiveEditMode ? (
             <Button variant="destructive" onClick={() => {
               setReturnReason(staffNotes);
               setShowReturnDialog(true);
             }} disabled={saving}>
               Pending
             </Button>
-            {canFinalizeClearance ? (
+            ) : null}
+            {canFinalizeClearance && !isArchiveEditMode ? (
               <Button
                 onClick={() => void persistReview('approved')}
                 disabled={saving}

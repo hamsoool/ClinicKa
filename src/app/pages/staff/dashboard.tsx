@@ -318,7 +318,7 @@ export default function StaffDashboard() {
     staffRoleLabel;
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>(workspacePreferences.reviewSortOrder);
-  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'returned' | 'resubmitted'>(
+  const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted'>(
     workspacePreferences.dashboardQueueTab,
   );
   const [reportRange, setReportRange] = useState<SubmissionRangeKey>('today');
@@ -381,6 +381,11 @@ export default function StaffDashboard() {
     const timeB = new Date(b.submittedAt).getTime();
     return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
   });
+  const inReviewQueue = [...queueGroups.in_review].sort((a, b) => {
+    const timeA = new Date(a.submittedAt).getTime();
+    const timeB = new Date(b.submittedAt).getTime();
+    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
   const returnedQueue = [...queueGroups.returned].sort((a, b) => {
     const timeA = new Date(a.submittedAt).getTime();
     const timeB = new Date(b.submittedAt).getTime();
@@ -394,6 +399,8 @@ export default function StaffDashboard() {
   const visibleQueue =
     queueTab === 'pending'
       ? pendingQueue
+      : queueTab === 'in_review'
+      ? inReviewQueue
       : queueTab === 'returned'
       ? returnedQueue
       : queueTab === 'resubmitted'
@@ -677,13 +684,16 @@ export default function StaffDashboard() {
           </div>
           <Tabs
             value={queueTab}
-            onValueChange={(value) => setQueueTab(value as 'all' | 'pending' | 'returned' | 'resubmitted')}
+            onValueChange={(value) => setQueueTab(value as 'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted')}
             className="mb-5"
           >
             <div className="pb-1">
-              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-4">
+              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-5">
                 <TabsTrigger value="pending" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
                   Pending ({overview.pendingRecords || 0})
+                </TabsTrigger>
+                <TabsTrigger value="in_review" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
+                  In Review ({overview.inReviewRecords || 0})
                 </TabsTrigger>
                 <TabsTrigger value="returned" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
                   Returned ({overview.returnedRecords || 0})
@@ -705,7 +715,7 @@ export default function StaffDashboard() {
               <p className="mt-2 max-w-sm text-sm text-on-surface-variant">
                 {queueTab === 'all'
                   ? 'There are no records that need staff attention right now.'
-                  : `There are no ${queueTab} records right now.`}
+                  : `There are no ${queueTab.replace('_', ' ')} records right now.`}
               </p>
             </div>
           ) : (
@@ -754,7 +764,7 @@ export default function StaffDashboard() {
           <div className="mb-4 flex flex-col gap-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-on-surface">Report Graph</h2>
+                <h2 className="text-lg font-semibold text-on-surface">Submission Overview</h2>
                 <p className="mt-1 text-xs text-on-surface-variant">
                   {totalReportStudents} student{totalReportStudents === 1 ? '' : 's'}
                 </p>

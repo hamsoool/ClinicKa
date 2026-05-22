@@ -240,6 +240,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
           purpose: certificate.purpose,
           controlNo: certificate.control_no,
           issuedDate: certificate.issued_date || certificate.issued_at,
+          licenseNo: certificate.license_no,
         }
       : undefined,
     photoUrl: files.photo?.url,
