@@ -184,18 +184,6 @@ export function deriveStudentIdFromEmail(email?: string | null) {
   return match?.[1] || null;
 }
 
-function isGoogleAuthUser(user: any) {
-  const providers = [
-    user?.app_metadata?.provider,
-    ...(Array.isArray(user?.identities)
-      ? user.identities.map((identity: any) => identity?.provider)
-      : []),
-  ];
-  return providers.some(
-    (provider) => String(provider || "").trim().toLowerCase() === "google",
-  );
-}
-
 export function isRejectedGoogleUser(user: any) {
   return isGoogleAuthUser(user) && !isGCDomainEmail(user?.email);
 }
