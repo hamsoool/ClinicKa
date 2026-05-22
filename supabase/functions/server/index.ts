@@ -50,6 +50,7 @@ import {
   normalizeStudentNotificationState,
 } from "./settings.ts";
 import {
+  deleteStoragePrefixes,
   ensureBucket,
 } from "./storage.ts";
 import {
@@ -165,6 +166,12 @@ app.put("/student-profile", async (c) => {
     const civilStatus = String(data.civilStatus || '').trim() || null;
     const contactNumber = String(data.contactNumber || '').trim() || null;
     const address = String(data.address || '').trim() || null;
+    const submissionCategory = String(data.submissionCategory || '').trim() || null;
+    const rawSubmissionTargetYearLevel = data.submissionTargetYearLevel;
+    const submissionTargetYearLevel =
+      rawSubmissionTargetYearLevel === null || rawSubmissionTargetYearLevel === undefined || rawSubmissionTargetYearLevel === ""
+        ? null
+        : Number(rawSubmissionTargetYearLevel);
 
     const { data: updatedProfile, error: profileError } = await supabase
       .from('profiles')
@@ -183,27 +190,67 @@ app.put("/student-profile", async (c) => {
       throw new Error(profileError?.message || 'Failed to update profile');
     }
 
-    const { data: updatedStudent, error: studentError } = await supabase
+    const studentPayload = {
+      student_id: studentId,
+      profile_id: requester.profile.id,
+      first_name: firstName,
+      last_name: lastName,
+      middle_initial: middleInitial,
+      department,
+      course,
+      age: Number.isFinite(age) ? age : null,
+      sex,
+      birthday,
+      civil_status: civilStatus,
+      contact_number: contactNumber,
+      address,
+      submission_category: submissionCategory,
+      submission_target_year_level: Number.isFinite(submissionTargetYearLevel) ? submissionTargetYearLevel : null,
+    };
+
+    let updatedStudent = null;
+    let studentError = null;
+    const studentWrite = await supabase
       .from('students')
-      .upsert({
-        student_id: studentId,
-        profile_id: requester.profile.id,
-        first_name: firstName,
-        last_name: lastName,
-        middle_initial: middleInitial,
-        department,
-        course,
-        age: Number.isFinite(age) ? age : null,
-        sex,
-        birthday,
-        civil_status: civilStatus,
-        contact_number: contactNumber,
-        address,
-      }, {
+      .upsert(studentPayload, {
         onConflict: 'student_id',
       })
       .select('*')
       .single();
+
+    updatedStudent = studentWrite.data;
+    studentError = studentWrite.error;
+
+    const missingStudentColumns =
+      String(studentError?.message || '').includes('submission_category') ||
+      String(studentError?.message || '').includes('submission_target_year_level');
+
+    if (studentError && missingStudentColumns) {
+      const fallbackWrite = await supabase
+        .from('students')
+        .upsert({
+          student_id: studentId,
+          profile_id: requester.profile.id,
+          first_name: firstName,
+          last_name: lastName,
+          middle_initial: middleInitial,
+          department,
+          course,
+          age: Number.isFinite(age) ? age : null,
+          sex,
+          birthday,
+          civil_status: civilStatus,
+          contact_number: contactNumber,
+          address,
+        }, {
+          onConflict: 'student_id',
+        })
+        .select('*')
+        .single();
+
+      updatedStudent = fallbackWrite.data;
+      studentError = fallbackWrite.error;
+    }
 
     if (studentError || !updatedStudent) {
       throw new Error(studentError?.message || 'Failed to update student record');
@@ -217,6 +264,102 @@ app.put("/student-profile", async (c) => {
   } catch (error) {
     console.log('Error updating student profile:', error);
     return internalServerError(c, 'Failed to update student profile', error);
+  }
+});
+
+app.post("/student-profile-asset", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File | null;
+    const fileType = String(formData.get('fileType') || '').trim().toLowerCase();
+    const requestedStudentId = String(formData.get('studentId') || '').trim();
+    const studentId =
+      requester.profile.student_id ||
+      requester.student?.student_id ||
+      requestedStudentId;
+
+    if (!file || !fileType) {
+      return badRequest('file and fileType are required');
+    }
+
+    if (fileType !== 'photo' && fileType !== 'signature') {
+      return badRequest('Unsupported profile asset type');
+    }
+
+    if (!studentId) {
+      return badRequest('Student ID is required');
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return badRequest('Profile photo and signature must be 5 MB or smaller.');
+    }
+
+    const targetBucket = fileType === 'photo' ? 'profile' : 'student_signature';
+    const safeFileName = String(file.name || `${fileType}.bin`).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `${studentId}/${fileType}_${Date.now()}_${safeFileName}`;
+    const fileBuffer = await file.arrayBuffer();
+
+    await deleteStoragePrefixes([targetBucket], [`${studentId}/`, `profiles/${studentId}/`]);
+
+    const { error: uploadError } = await supabase.storage
+      .from(targetBucket)
+      .upload(storagePath, fileBuffer, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new Error(uploadError.message);
+    }
+
+    const { data: insertedFile, error: fileInsertError } = await supabase
+      .from('files')
+      .insert({
+        submission_id: null,
+        type: fileType,
+        file_name: file.name,
+        mime_type: file.type || 'application/octet-stream',
+        url: null,
+        storage_bucket: targetBucket,
+        storage_path: storagePath,
+        uploaded_by: requester.profile.id,
+      })
+      .select('*')
+      .single();
+
+    if (fileInsertError || !insertedFile) {
+      throw new Error(fileInsertError?.message || 'Failed to save file metadata');
+    }
+
+    await supabase
+      .from('files')
+      .delete()
+      .eq('uploaded_by', requester.profile.id)
+      .is('submission_id', null)
+      .eq('type', fileType)
+      .neq('id', insertedFile.id);
+
+    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+      .from(targetBucket)
+      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+
+    if (signedUrlError) {
+      throw new Error(signedUrlError.message);
+    }
+
+    return c.json({
+      success: true,
+      url: signedUrlData?.signedUrl || null,
+      fileName: storagePath,
+    });
+  } catch (error) {
+    console.log('Error uploading student profile asset:', error);
+    return internalServerError(c, 'Failed to upload student profile asset', error);
   }
 });
 

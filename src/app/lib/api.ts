@@ -2150,88 +2150,22 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     throw new Error('Student ID is required.');
   }
 
-  const updatedProfileRows = await restRequest<any[]>(
-    'profiles',
-    `id=eq.${encodeURIComponent(me.profile.id)}&select=*`,
+  const result = await apiRequest<{ success: true; profile: any; student: any }>(
+    '/functions/v1/server/student-profile',
     {
-      method: 'PATCH',
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        Prefer: 'return=representation',
       },
-      body: JSON.stringify({
-        first_name: payload.firstName || null,
-        last_name: payload.lastName || null,
-        department: payload.department || null,
-        course: payload.course || null,
-        student_id: studentId,
-      }),
+      body: JSON.stringify(payload),
     },
-  );
-
-  const studentPayload = {
-    student_id: studentId,
-    profile_id: me.profile.id,
-    first_name: payload.firstName || null,
-    last_name: payload.lastName || null,
-    middle_initial: payload.middleInitial || null,
-    department: payload.department || null,
-    course: payload.course || null,
-    age: payload.age ? Number.parseInt(payload.age, 10) : null,
-    sex: payload.sex || null,
-    birthday: payload.birthday || null,
-    civil_status: payload.civilStatus || null,
-    contact_number: payload.contactNumber || null,
-    address: payload.address || null,
-    submission_category: payload.submissionCategory || null,
-    submission_target_year_level: payload.submissionTargetYearLevel || null,
-  };
-
-  try {
-    await restRequest<any[]>(
-      'students',
-      'on_conflict=student_id',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify(studentPayload),
-      },
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-    const hasMissingColumns = message.includes('submission_category') || message.includes('submission_target_year_level');
-    if (!hasMissingColumns) throw error;
-    await restRequest<any[]>(
-      'students',
-      'on_conflict=student_id',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({
-          ...studentPayload,
-          submission_category: undefined,
-          submission_target_year_level: undefined,
-        }),
-      },
-    );
-  }
-
-  const updatedStudentRows = await restRequest<any[]>(
-    'students',
-    `student_id=eq.${encodeURIComponent(studentId)}&select=*`,
   );
 
   invalidateMeCache();
   return {
     success: true as const,
-    profile: updatedProfileRows[0] || me.profile,
-    student: updatedStudentRows[0] || me.student,
+    profile: result.profile || me.profile,
+    student: result.student || me.student,
   };
 }
 
@@ -4050,192 +3984,27 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
     throw new Error('Student ID is required to upload profile assets.');
   }
 
-  const storageBucket = STORAGE_BUCKET_BY_FILE_TYPE[fileType];
   const token = getAccessToken();
   if (!token || !supabaseUrl || !publicAnonKey) {
     throw new Error('You must be signed in to upload files.');
   }
+  const formData = new FormData();
+  formData.set('file', file);
+  formData.set('fileType', fileType);
+  formData.set('studentId', targetStudentId);
 
-  const objectName = fileType;
-  const storagePrefix = `${targetStudentId}/`;
-  const storagePath = `${storagePrefix}${objectName}`;
-
-  try {
-    const prefixesToScan = [storagePrefix, `profiles/${targetStudentId}/`];
-    const removablePaths: string[] = [];
-
-    for (const prefix of prefixesToScan) {
-      const listResponse = await fetch(
-        `${supabaseUrl}/storage/v1/object/list/${storageBucket}`,
-        {
-          method: 'POST',
-          headers: {
-            apikey: publicAnonKey,
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prefix,
-            limit: 100,
-            offset: 0,
-            sortBy: { column: 'name', order: 'desc' },
-          }),
-        },
-      );
-
-      const listed = await listResponse.json().catch(() => []);
-      const matched = (Array.isArray(listed) ? listed : [])
-        .map((item) => String(item?.name || '').trim())
-        .filter((name) => name === fileType || name.startsWith(`${fileType}.`) || name.startsWith(`${fileType}_`))
-        .map((name) => `${prefix}${name}`);
-      removablePaths.push(...matched);
-    }
-
-    if (removablePaths.length) {
-      const uniquePaths = [...new Set(removablePaths)].filter((path) => path !== storagePath);
-      await Promise.all(
-        uniquePaths.map((targetPath) =>
-          fetch(`${supabaseUrl}/storage/v1/object/${storageBucket}/${targetPath}`, {
-            method: 'DELETE',
-            headers: {
-              apikey: publicAnonKey,
-              Authorization: `Bearer ${token}`,
-            },
-          }).catch(() => null),
-        ),
-      );
-    }
-  } catch {
-    // Ignore cleanup failures; upload still proceeds and latest metadata wins.
-  }
-
-  try {
-    const legacyPrefixes = [`profiles/${targetStudentId}/${fileType}`, `${targetStudentId}/${fileType}`];
-    await Promise.all(
-      legacyPrefixes.map((path) =>
-        fetch(`${supabaseUrl}/storage/v1/object/${storageBucket}/${path}`, {
-          method: 'DELETE',
-          headers: {
-            apikey: publicAnonKey,
-            Authorization: `Bearer ${token}`,
-          },
-        }).catch(() => null),
-      ),
-    );
-  } catch {
-    // Ignore best-effort legacy cleanup
-  }
-
-  const uploadWithPath = async (path: string) =>
-    fetch(`${supabaseUrl}/storage/v1/object/${storageBucket}/${path}`, {
-      method: 'POST',
-      headers: {
-        apikey: publicAnonKey,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': file.type || 'application/octet-stream',
-        'x-upsert': 'true',
-      },
-      body: file,
-    });
-
-  let finalStoragePath = storagePath;
-  let uploadResponse = await uploadWithPath(finalStoragePath);
-
-  if (!uploadResponse.ok) {
-    const failedRaw = await uploadResponse.text().catch(() => '');
-    const lower = failedRaw.toLowerCase();
-    const isRlsError = lower.includes('row-level security') || lower.includes('rls');
-    if (isRlsError) {
-      const fallbackObjectName = buildStorageObjectName(fileType, file);
-      finalStoragePath = `${targetStudentId}/${fallbackObjectName}`;
-      uploadResponse = await uploadWithPath(finalStoragePath);
-    } else {
-      // Recreate response-like payload behavior below
-      uploadResponse = new Response(failedRaw, { status: uploadResponse.status, statusText: uploadResponse.statusText });
-    }
-  }
-
-  if (!uploadResponse.ok) {
-    const raw = await uploadResponse.text().catch(() => '');
-    let payload: Record<string, any> = {};
-    try {
-      payload = raw ? JSON.parse(raw) : {};
-    } catch {
-      payload = {};
-    }
-    throw new Error(
-      payload.message ||
-      payload.error ||
-      payload.details ||
-      raw ||
-      `Failed to upload file (${uploadResponse.status})`,
-    );
-  }
-
-  const signedResponse = await fetch(
-    `${supabaseUrl}/storage/v1/object/sign/${storageBucket}/${finalStoragePath}`,
+  const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
+    '/functions/v1/server/student-profile-asset',
     {
       method: 'POST',
-      headers: {
-        apikey: publicAnonKey,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ expiresIn: SIGNED_STORAGE_URL_EXPIRES_SECONDS }),
+      body: formData,
     },
   );
 
-  const signedPayload = await signedResponse.json().catch(() => ({}));
-  const rawSignedUrl =
-    signedPayload?.signedURL || signedPayload?.signedUrl || signedPayload?.signed_url || null;
-  const fileUrl =
-    typeof rawSignedUrl === 'string'
-      ? (/^https?:\/\//i.test(rawSignedUrl) ? rawSignedUrl : `${supabaseUrl}/storage/v1${rawSignedUrl}`)
-      : null;
-
-  try {
-    const authUser = await getCurrentAuthUser();
-    await restRequest<any[]>(
-      'files',
-      'select=*',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation',
-        },
-        body: JSON.stringify({
-          submission_id: null,
-          type: fileType,
-          file_name: file.name,
-          mime_type: file.type,
-          url: null,
-          storage_bucket: storageBucket,
-          storage_path: finalStoragePath,
-          uploaded_by: authUser.id,
-        }),
-      },
-    );
-
-    await restRequest(
-      'files',
-      `uploaded_by=eq.${encodeURIComponent(authUser.id)}&submission_id=is.null&type=eq.${encodeURIComponent(fileType)}&storage_path=like.${encodeURIComponent(`${targetStudentId}/${fileType}%`)}&storage_path=neq.${encodeURIComponent(finalStoragePath)}`,
-      {
-        method: 'DELETE',
-        headers: {
-          Prefer: 'return=minimal',
-        },
-      },
-    ).catch(() => {});
-  } catch {
-    // Storage is the source of truth for profile assets; metadata is best-effort
-    // so older schemas can still function.
-  }
-
   return {
     success: true as const,
-    url: fileUrl || undefined,
-    fileName: finalStoragePath,
+    url: payload.url || undefined,
+    fileName: payload.fileName || undefined,
   };
 }
 
