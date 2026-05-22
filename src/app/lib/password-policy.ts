@@ -1,8 +1,8 @@
 import zxcvbn from 'zxcvbn';
 
-export const MIN_PASSWORD_LENGTH = 15;
+export const MIN_PASSWORD_LENGTH = 8;
 export const MIN_PASSWORD_SCORE = 3;
-export const MIN_REGISTRATION_PASSWORD_LENGTH = 8;
+export const MIN_REGISTRATION_PASSWORD_LENGTH = MIN_PASSWORD_LENGTH;
 
 export type PasswordPolicyUserInputs = {
   email?: string | null;
@@ -98,7 +98,7 @@ export function getPasswordCharacterCount(password: string) {
 }
 
 export function getPasswordLengthMessage() {
-  return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  return `Password must be at least ${MIN_REGISTRATION_PASSWORD_LENGTH} characters. Special characters are optional.`;
 }
 
 export function getRegistrationPasswordMessage() {
@@ -106,11 +106,11 @@ export function getRegistrationPasswordMessage() {
 }
 
 export function getPasswordGuidanceMessage() {
-  return `Use a unique passphrase with at least ${MIN_PASSWORD_LENGTH} characters. Longer phrases with unrelated words are easier to remember and harder to guess.`;
+  return `Use at least ${MIN_REGISTRATION_PASSWORD_LENGTH} characters. Special characters are optional.`;
 }
 
 export function isPasswordLongEnough(password: string) {
-  return getPasswordCharacterCount(password) >= MIN_PASSWORD_LENGTH;
+  return getPasswordCharacterCount(password) >= MIN_REGISTRATION_PASSWORD_LENGTH;
 }
 
 export function isRegistrationPasswordLongEnough(password: string) {
@@ -145,7 +145,7 @@ export function getPasswordStrengthResult(
     meetsLength,
     meetsScore,
     avoidsPersonalInfo,
-    isStrongEnough: hasVisibleCharacters && meetsLength && meetsScore && avoidsPersonalInfo,
+    isStrongEnough: hasVisibleCharacters && meetsLength,
   };
 }
 
@@ -156,8 +156,5 @@ export function getPasswordPolicyMessage(result: PasswordStrengthResult) {
   if (!result.meetsLength) {
     return getPasswordLengthMessage();
   }
-  if (!result.avoidsPersonalInfo) {
-    return 'Password should not include your name, email, or school ID.';
-  }
-  return 'Password is still too easy to guess. Use a longer, unique passphrase and avoid common patterns.';
+  return getPasswordLengthMessage();
 }
