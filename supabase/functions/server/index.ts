@@ -52,6 +52,7 @@ import {
 import {
   deleteStoragePrefixes,
   ensureBucket,
+  ensureStorageBucket,
 } from "./storage.ts";
 import {
   getCachedAnalyticsSummary,
@@ -304,7 +305,13 @@ app.post("/student-profile-asset", async (c) => {
     const storagePath = `${studentId}/${fileType}_${Date.now()}_${safeFileName}`;
     const fileBuffer = await file.arrayBuffer();
 
-    await deleteStoragePrefixes([targetBucket], [`${studentId}/`, `profiles/${studentId}/`]);
+    await ensureStorageBucket(targetBucket);
+
+    try {
+      await deleteStoragePrefixes([targetBucket], [`${studentId}/`, `profiles/${studentId}/`]);
+    } catch (cleanupError) {
+      console.log('Profile asset cleanup warning:', cleanupError);
+    }
 
     const { error: uploadError } = await supabase.storage
       .from(targetBucket)
@@ -317,32 +324,36 @@ app.post("/student-profile-asset", async (c) => {
       throw new Error(uploadError.message);
     }
 
-    const { data: insertedFile, error: fileInsertError } = await supabase
-      .from('files')
-      .insert({
-        submission_id: null,
-        type: fileType,
-        file_name: file.name,
-        mime_type: file.type || 'application/octet-stream',
-        url: null,
-        storage_bucket: targetBucket,
-        storage_path: storagePath,
-        uploaded_by: requester.profile.id,
-      })
-      .select('*')
-      .single();
+    try {
+      const { data: insertedFile, error: fileInsertError } = await supabase
+        .from('files')
+        .insert({
+          submission_id: null,
+          type: fileType,
+          file_name: file.name,
+          mime_type: file.type || 'application/octet-stream',
+          url: null,
+          storage_bucket: targetBucket,
+          storage_path: storagePath,
+          uploaded_by: requester.profile.id,
+        })
+        .select('*')
+        .single();
 
-    if (fileInsertError || !insertedFile) {
-      throw new Error(fileInsertError?.message || 'Failed to save file metadata');
+      if (fileInsertError || !insertedFile) {
+        console.log('Profile asset metadata warning:', fileInsertError?.message || 'Missing inserted metadata row');
+      } else {
+        await supabase
+          .from('files')
+          .delete()
+          .eq('uploaded_by', requester.profile.id)
+          .is('submission_id', null)
+          .eq('type', fileType)
+          .neq('id', insertedFile.id);
+      }
+    } catch (metadataError) {
+      console.log('Profile asset metadata warning:', metadataError);
     }
-
-    await supabase
-      .from('files')
-      .delete()
-      .eq('uploaded_by', requester.profile.id)
-      .is('submission_id', null)
-      .eq('type', fileType)
-      .neq('id', insertedFile.id);
 
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from(targetBucket)

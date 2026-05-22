@@ -71,11 +71,18 @@ function isMissingStorageBucketError(error: any) {
 }
 
 export async function ensureBucket() {
+  await ensureStorageBucket(bucketName);
+}
+
+export async function ensureStorageBucket(targetBucket: string) {
+  const normalizedBucket = String(targetBucket || "").trim();
+  if (!normalizedBucket) return;
+
   const { data: buckets } = await supabase.storage.listBuckets();
-  const exists = buckets?.some((bucket) => bucket.name === bucketName);
+  const exists = buckets?.some((bucket) => bucket.name === normalizedBucket);
 
   if (!exists) {
-    await supabase.storage.createBucket(bucketName, { public: false });
+    await supabase.storage.createBucket(normalizedBucket, { public: false });
   }
 }
 

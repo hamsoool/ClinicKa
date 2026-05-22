@@ -410,44 +410,6 @@ export default function StudentProfile() {
               <Label htmlFor="studentId">Student ID</Label>
               <Input id="studentId" value={formData.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
             </div>
-            <div className="min-w-0 md:col-span-2">
-              <div className="grid gap-5 md:grid-cols-2">
-                <div className="min-w-0">
-                  <Label htmlFor="department">Department *</Label>
-                  <Select value={formData.department} onValueChange={(value) => updateField('department', value)}>
-                    <SelectTrigger id="department" className={requiredFieldClass(!formData.department.trim())}>
-                      <SelectValue placeholder="Required: select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEPARTMENT_OPTIONS.map((department) => (
-                        <SelectItem key={department.value} value={department.value}>
-                          {department.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="min-w-0">
-                  <Label htmlFor="course">Course / Program *</Label>
-                  <Select
-                    value={formData.course || undefined}
-                    onValueChange={(value) => updateField('course', value)}
-                    disabled={!formData.department}
-                  >
-                    <SelectTrigger id="course" className={requiredFieldClass(!formData.course.trim())}>
-                      <SelectValue placeholder={formData.department ? 'Required: select program' : 'Select department first'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getProgramOptionsForSelect(formData.department, formData.course).map((program) => (
-                        <SelectItem key={program} value={program}>
-                          {program}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
             <div className="min-w-0">
               <Label htmlFor="firstName">First Name *</Label>
               <Input
@@ -494,16 +456,54 @@ export default function StudentProfile() {
               />
             </div>
             <div className="min-w-0">
-              <Label htmlFor="sex">Sex *</Label>
+              <Label htmlFor="sex">Sex at Birth *</Label>
               <Select value={formData.sex} onValueChange={(value) => updateField('sex', value)}>
                 <SelectTrigger id="sex" className={requiredFieldClass(!formData.sex.trim())}>
-                  <SelectValue placeholder="Required: select sex" />
+                  <SelectValue placeholder="Required: select sex at birth" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="female">Female</SelectItem>
                   <SelectItem value="male">Male</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="min-w-0 md:col-span-2">
+              <div className="grid gap-5 md:grid-cols-2">
+                <div className="min-w-0">
+                  <Label htmlFor="department">Department *</Label>
+                  <Select value={formData.department} onValueChange={(value) => updateField('department', value)}>
+                    <SelectTrigger id="department" className={requiredFieldClass(!formData.department.trim())}>
+                      <SelectValue placeholder="Required: select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEPARTMENT_OPTIONS.map((department) => (
+                        <SelectItem key={department.value} value={department.value}>
+                          {department.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-0">
+                  <Label htmlFor="course">Course / Program *</Label>
+                  <Select
+                    value={formData.course || undefined}
+                    onValueChange={(value) => updateField('course', value)}
+                    disabled={!formData.department}
+                  >
+                    <SelectTrigger id="course" className={requiredFieldClass(!formData.course.trim())}>
+                      <SelectValue placeholder={formData.department ? 'Required: select program' : 'Select department first'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getProgramOptionsForSelect(formData.department, formData.course).map((program) => (
+                        <SelectItem key={program} value={program}>
+                          {program}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
             <div className="min-w-0">
               <Label htmlFor="birthday">Birthday *</Label>
