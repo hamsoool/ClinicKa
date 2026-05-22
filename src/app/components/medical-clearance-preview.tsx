@@ -110,10 +110,14 @@ function HSULogo({ size = 44 }: { size?: number }) {
 
 function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyType: string }) {
   const cl = record.clearanceInfo || {};
-  const purpose = cl.purpose || 'enrolment';
+  const purposes = String(cl.purpose || 'enrolment')
+    .split(',')
+    .map((item) => item.trim().toLowerCase() === 'enrollment' ? 'enrolment' : item.trim().toLowerCase())
+    .filter(Boolean);
 
   const signatoryName = (record.staffMeasurements?.examinedBy || '').trim() || 'GERALD S. BERNAL, MD';
   const signatoryTitle = 'College Physician';
+  const licenseNo = (cl.licenseNo || '008455').trim();
 
   const isStudentCopy = copyType === "STUDENT'S COPY";
   const remarksEnding = isStudentCopy
@@ -266,9 +270,9 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
           {/* Purpose */}
           <div style={{ fontSize: '10.5px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontWeight: 'bold' }}>Purpose:</span>
-            <span><span style={S.checkbox(purpose === 'enrolment')}></span> Enrolment</span>
-            <span><span style={S.checkbox(purpose === 'ojt')}></span> OJT / Internship</span>
-            <span><span style={S.checkbox(purpose === 'rle')}></span> R.L.E</span>
+            <span><span style={S.checkbox(purposes.includes('enrolment'))}></span> Enrolment</span>
+            <span><span style={S.checkbox(purposes.includes('ojt'))}></span> OJT / Internship</span>
+            <span><span style={S.checkbox(purposes.includes('rle'))}></span> R.L.E</span>
           </div>
         </div>
 
@@ -296,7 +300,7 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
           <div style={{ ...S.sigBlock, flexShrink: 0, minWidth: '190px' }}>
             <div style={S.sigName}>{signatoryName}</div>
             <div>{signatoryTitle}</div>
-            <div>License No. 008455</div>
+            <div>License No. {licenseNo}</div>
           </div>
         </div>
 

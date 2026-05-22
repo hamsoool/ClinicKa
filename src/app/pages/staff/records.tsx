@@ -1,11 +1,12 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import ListPagination from '../../components/list-pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import PortalPageIntro from '../../components/portal-page-intro';
-import { ChevronDown, Search, X } from 'lucide-react';
+import { ChevronDown, Pencil, Search, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
 import type { ApprovedStudentSummary } from '../../lib/record-types';
@@ -34,6 +35,7 @@ function formatDate(value?: string) {
 }
 
 export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -299,7 +301,18 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
                                 Approved on {formatDate(record.updatedAt || record.submittedAt)}
                               </p>
                             </div>
-                            <Badge className="bg-green-100 text-green-800">Approved</Badge>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate(`/staff/review/${record.id}?archiveEdit=1`)}
+                              >
+                                <Pencil className="mr-2 h-3.5 w-3.5" />
+                                Edit
+                              </Button>
+                              <Badge className="bg-green-100 text-green-800">Approved</Badge>
+                            </div>
                           </div>
                         ))}
                       </div>

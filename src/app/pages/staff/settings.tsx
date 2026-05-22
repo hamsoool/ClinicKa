@@ -269,6 +269,7 @@ export default function StaffSettings() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending">Pending review</SelectItem>
+                    <SelectItem value="in_review">In review</SelectItem>
                     <SelectItem value="returned">Returned</SelectItem>
                     <SelectItem value="resubmitted">Resubmitted</SelectItem>
                     <SelectItem value="all">All action items</SelectItem>

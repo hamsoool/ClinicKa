@@ -13,6 +13,7 @@ export type EmergencyContact = {
 };
 
 export type MedicalFormData = {
+  studentCategory: 'regular' | 'returning' | 'repeater_irregular';
   studentId: string;
   firstName: string;
   lastName: string;
@@ -27,6 +28,7 @@ export type MedicalFormData = {
   contactNumber: string;
   address: string;
   medicalHistory: MedicalHistoryState;
+  otherMedicalHistory: string;
   allergyDetails: string;
   hadOperation: 'yes' | 'no';
   operationDetails: string;
@@ -35,14 +37,21 @@ export type MedicalFormData = {
   weight: string;
   height: string;
   bmi: string;
-  xrayFile: File | null;
-  cbcFile: File | null;
-  urinalysisFile: File | null;
+  xrayFile?: File | null;
+  cbcFile?: File | null;
+  urinalysisFile?: File | null;
   existingXrayFileUrl?: string;
   existingCbcFileUrl?: string;
   existingUrinalysisFileUrl?: string;
-  labTestLocation: '' | 'jlgh' | 'other';
-  otherClinicName: string;
+  labTestLocation?: '' | 'jlgh' | 'other';
+  otherClinicName?: string;
+  cbcTestSite: string;
+  cbcTestSiteOther: string;
+  urinalysisTestSite: string;
+  urinalysisTestSiteOther: string;
+  xrayTestSite: string;
+  xrayTestSiteOther: string;
+  physicalCopyAgreement: boolean;
   submissionConfirmed: boolean;
   year: string;
 };

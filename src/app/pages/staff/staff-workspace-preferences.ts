@@ -1,4 +1,4 @@
-export type StaffDashboardQueueTab = 'all' | 'pending' | 'returned' | 'resubmitted';
+export type StaffDashboardQueueTab = 'all' | 'pending' | 'in_review' | 'returned' | 'resubmitted';
 export type StaffReviewQueueStatus =
   | 'action_needed'
   | 'all'
@@ -24,6 +24,7 @@ const STORAGE_KEY_PREFIX = 'gc-staff-workspace-preferences';
 const DASHBOARD_QUEUE_TABS = new Set<StaffDashboardQueueTab>([
   'all',
   'pending',
+  'in_review',
   'returned',
   'resubmitted',
 ]);

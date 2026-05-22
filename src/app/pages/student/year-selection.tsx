@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, GraduationCap, Lock } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import { getYearLevelLabel, resolveStudentYearLevel } from '../../lib/student-year';
+import { resolveStudentSubmissionProfile, toCategoryLabel } from '../../lib/student-submission-profile';
 import { useStudentRecordsQuery } from './student-records-query';
 
 const years = [
@@ -18,7 +19,12 @@ export default function StudentYearSelection() {
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const studentYearLevel = resolveStudentYearLevel(me);
-  const currentYearLabel = getYearLevelLabel(studentYearLevel);
+  const submissionProfile = useMemo(() => resolveStudentSubmissionProfile(me), [me]);
+  const hasYearOverride =
+    (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') &&
+    Boolean(submissionProfile.targetYearLevel);
+  const allowedYearLevel = hasYearOverride ? Number(submissionProfile.targetYearLevel) : studentYearLevel;
+  const currentYearLabel = getYearLevelLabel(allowedYearLevel);
   const { data = [], isLoading } = useStudentRecordsQuery(studentId);
   const records = data;
   const latestByYear = useMemo(() => {
@@ -59,9 +65,8 @@ export default function StudentYearSelection() {
           const latestYearStatus = latestByYear.get(year.level)?.status || '';
           const isApprovedLocked = latestYearStatus === 'approved';
           const isPendingLocked = latestYearStatus === 'pending' || latestYearStatus === 'in_review' || latestYearStatus === 'resubmitted';
-          const isInReview = latestYearStatus === 'in_review';
           const isReturned = latestYearStatus === 'returned';
-          const isCurrent = year.level === studentYearLevel;
+          const isCurrent = year.level === allowedYearLevel;
           const isNonCurrentLocked = !isCurrent && !isApprovedLocked;
           const isLocked = isPendingLocked || isNonCurrentLocked;
           const destination = isApprovedLocked
@@ -70,9 +75,7 @@ export default function StudentYearSelection() {
           const cardStatusLabel = isApprovedLocked
             ? 'Approved'
             : isPendingLocked
-              ? isInReview
-                ? 'In Review'
-                : 'Pending Review'
+              ? 'Pending'
               : isReturned && isCurrent
                 ? 'Returned'
                 : isNonCurrentLocked
@@ -87,14 +90,12 @@ export default function StudentYearSelection() {
               : isReturned && isCurrent
                 ? 'Returned by clinic staff. You may edit and resubmit.'
                 : isNonCurrentLocked
-                  ? `Only your current year level (${currentYearLabel}) can be submitted.`
+                  ? `Only your ${hasYearOverride ? 'selected submission year' : 'current year level'} (${currentYearLabel}) can be submitted.`
                   : year.description;
           const statusClasses = isApprovedLocked
             ? 'bg-primary-container/20 text-on-primary-container'
             : isPendingLocked
-              ? isInReview
-                ? 'bg-sky-100 text-sky-800'
-                : 'bg-amber-100 text-amber-800'
+              ? 'bg-amber-100 text-amber-800'
               : isReturned && isCurrent
                 ? 'bg-error-container/70 text-on-error-container'
                 : isCurrent
@@ -139,7 +140,7 @@ export default function StudentYearSelection() {
                 </div>
                 {isCurrent ? (
                   <div className="inline-flex w-fit items-center rounded-b-xl rounded-t-md bg-[#0a7f49] px-3 py-1 text-xs font-semibold text-white">
-                    Current Year
+                    {hasYearOverride ? `${toCategoryLabel(submissionProfile.category)} Year` : 'Current Year'}
                   </div>
                 ) : isLocked ? (
                   <span className="text-outline">
@@ -173,7 +174,9 @@ export default function StudentYearSelection() {
                     {isPendingLocked
                       ? 'Unavailable right now'
                       : isNonCurrentLocked
-                        ? 'Current year only'
+                        ? hasYearOverride
+                          ? 'Selected year only'
+                          : 'Current year only'
                         : isApprovedLocked
                           ? 'Open clearance form'
                           : isReturned && isCurrent

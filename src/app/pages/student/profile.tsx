@@ -18,6 +18,12 @@ import {
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import {
+  resolveStudentSubmissionProfile,
+  toCategoryLabel,
+  type StudentSubmissionCategory,
+  writeStudentSubmissionProfile,
+} from '../../lib/student-submission-profile';
+import {
   DEPARTMENT_OPTIONS,
   formatPhilippinePhoneInput,
   getProgramOptionsForSelect,
@@ -39,6 +45,8 @@ type StudentProfileFormState = {
   civilStatus: string;
   contactNumber: string;
   address: string;
+  submissionCategory: StudentSubmissionCategory;
+  submissionTargetYearLevel: string;
 };
 
 function sanitizeName(value: string) {
@@ -54,6 +62,7 @@ function sanitizeAddress(value: string) {
 
 function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null): StudentProfileFormState {
   const department = resolveDepartmentValue(me?.student?.department || me?.profile.department || '');
+  const submissionProfile = resolveStudentSubmissionProfile(me as AuthMe | null);
   return {
     studentId: me?.student?.student_id || me?.profile.student_id || '',
     firstName: sanitizeName(me?.student?.first_name || me?.profile.first_name || ''),
@@ -67,6 +76,8 @@ function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null):
     civilStatus: me?.student?.civil_status || 'Single',
     contactNumber: formatPhilippinePhoneInput(me?.student?.contact_number || ''),
     address: sanitizeAddress(me?.student?.address || ''),
+    submissionCategory: submissionProfile.category,
+    submissionTargetYearLevel: submissionProfile.targetYearLevel ? String(submissionProfile.targetYearLevel) : '',
   };
 }
 
@@ -177,6 +188,8 @@ export default function StudentProfile() {
   const hasChanges = hasTextChanges || hasFileChanges;
   const hasValidContactNumber =
     !formData.contactNumber.trim() || isValidPhilippinePhoneNumber(formData.contactNumber);
+  const requiresYearOverride =
+    formData.submissionCategory === 'returning' || formData.submissionCategory === 'repeater_irregular';
 
   const isValid =
     Boolean(formData.studentId.trim()) &&
@@ -189,7 +202,8 @@ export default function StudentProfile() {
     Boolean(formData.sex.trim()) &&
     Boolean(formData.birthday.trim()) &&
     Boolean(formData.civilStatus.trim()) &&
-    hasValidContactNumber;
+    hasValidContactNumber &&
+    (!requiresYearOverride || Boolean(formData.submissionTargetYearLevel));
 
   const currentPhotoUrl = photoPreviewUrl || profileAssets.photoUrl || null;
   const currentSignatureUrl = signaturePreviewUrl || profileAssets.signatureUrl || null;
@@ -231,6 +245,18 @@ export default function StudentProfile() {
         : field === 'address'
         ? {
             address: sanitizeAddress(String(value)),
+          }
+        : field === 'submissionCategory'
+        ? {
+            submissionCategory: String(value) as StudentSubmissionCategory,
+            submissionTargetYearLevel:
+              String(value) === 'returning' || String(value) === 'repeater_irregular'
+                ? prev.submissionTargetYearLevel
+                : '',
+          }
+        : field === 'submissionTargetYearLevel'
+        ? {
+            submissionTargetYearLevel: String(value).replace(/\D/g, '').slice(0, 1),
           }
         : {
             [field]: value,
@@ -276,7 +302,12 @@ export default function StudentProfile() {
 
     setSaving(true);
     try {
-      const result = await updateStudentProfile(formData);
+      const result = await updateStudentProfile({
+        ...formData,
+        submissionTargetYearLevel: formData.submissionTargetYearLevel
+          ? Number.parseInt(formData.submissionTargetYearLevel, 10)
+          : null,
+      });
       const nextStateFromResult = buildProfileFormState({
         profile: result.profile,
         student: result.student,
@@ -310,6 +341,14 @@ export default function StudentProfile() {
 
       // Keep the just-saved values even if auth refresh returns a partial student payload.
       setFormData(nextStateFromResult);
+      if (resolvedStudentId) {
+        writeStudentSubmissionProfile(resolvedStudentId, {
+          category: formData.submissionCategory,
+          targetYearLevel: formData.submissionTargetYearLevel
+            ? Number.parseInt(formData.submissionTargetYearLevel, 10)
+            : null,
+        });
+      }
       void refresh();
 
       if (typeof window !== 'undefined') {
@@ -484,6 +523,38 @@ export default function StudentProfile() {
                 className={requiredFieldClass(!formData.address.trim())}
               />
             </div>
+            <div className="min-w-0">
+              <Label htmlFor="submissionCategory">Submission Status</Label>
+              <Select value={formData.submissionCategory} onValueChange={(value) => updateField('submissionCategory', value as StudentSubmissionCategory)}>
+                <SelectTrigger id="submissionCategory">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="regular">{toCategoryLabel('regular')}</SelectItem>
+                  <SelectItem value="returning">{toCategoryLabel('returning')}</SelectItem>
+                  <SelectItem value="repeater_irregular">{toCategoryLabel('repeater_irregular')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {requiresYearOverride ? (
+              <div className="min-w-0">
+                <Label htmlFor="submissionTargetYearLevel">Submission Year *</Label>
+                <Select
+                  value={formData.submissionTargetYearLevel || undefined}
+                  onValueChange={(value) => updateField('submissionTargetYearLevel', value)}
+                >
+                  <SelectTrigger id="submissionTargetYearLevel" className={requiredFieldClass(!formData.submissionTargetYearLevel)}>
+                    <SelectValue placeholder="Select year to open" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1st Year</SelectItem>
+                    <SelectItem value="2">2nd Year</SelectItem>
+                    <SelectItem value="3">3rd Year</SelectItem>
+                    <SelectItem value="4">4th Year</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -508,8 +579,14 @@ export default function StudentProfile() {
                 type="file"
                 accept="image/png,image/jpeg,image/jpg"
                 onChange={(event) => handleAssetChange('photo', event.target.files?.[0] || null)}
-                className="w-full max-w-full cursor-pointer overflow-hidden text-sm file:mr-3 file:rounded-md file:bg-surface-container file:px-3 file:py-1.5"
+                className="hidden"
               />
+              <label
+                htmlFor="profilePhoto"
+                className="inline-flex h-10 cursor-pointer items-center rounded-md border border-outline-variant/40 bg-white px-4 text-sm font-medium text-on-surface hover:bg-surface-container-low"
+              >
+                Choose Photo
+              </label>
               <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border bg-white">
                   {currentPhotoUrl ? (
@@ -548,10 +625,16 @@ export default function StudentProfile() {
                 type="file"
                 accept="image/png,image/jpeg,image/jpg"
                 onChange={(event) => handleAssetChange('signature', event.target.files?.[0] || null)}
-                className="w-full max-w-full cursor-pointer overflow-hidden text-sm file:mr-3 file:rounded-md file:bg-surface-container file:px-3 file:py-1.5"
+                className="hidden"
               />
+              <label
+                htmlFor="studentSignature"
+                className="inline-flex h-10 cursor-pointer items-center rounded-md border border-outline-variant/40 bg-white px-4 text-sm font-medium text-on-surface hover:bg-surface-container-low"
+              >
+                Choose Signature
+              </label>
               <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
-                <div className="flex h-24 w-40 items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
+                <div className="flex h-24 w-full max-w-[10rem] items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
                   {currentSignatureUrl ? (
                     <img src={currentSignatureUrl} alt="Student signature" className="max-h-full max-w-full object-contain" />
                   ) : (

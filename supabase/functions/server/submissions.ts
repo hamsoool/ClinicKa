@@ -58,6 +58,9 @@ export const SUBMISSION_LIST_COLUMNS = [
   "bmi",
   "lab_test_location",
   "lab_test_clinic",
+  "cbc_test_clinic",
+  "urinalysis_test_clinic",
+  "xray_test_clinic",
 ].join(",");
 
 const SUBMISSION_SUMMARY_COLUMNS = [
@@ -240,6 +243,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
           purpose: certificate.purpose,
           controlNo: certificate.control_no,
           issuedDate: certificate.issued_date || certificate.issued_at,
+          licenseNo: certificate.license_no,
         }
       : undefined,
     photoUrl: files.photo?.url,
@@ -250,6 +254,9 @@ function mapSubmission(row: any, related: Record<string, any>) {
     certificatePdfUrl: files.certificate?.url || certificate?.pdf_url,
     labTestLocation: row.lab_test_location || "",
     otherClinicName: row.lab_test_clinic || "",
+    cbcTestClinic: row.cbc_test_clinic || "",           
+    urinalysisTestClinic: row.urinalysis_test_clinic || "",  
+    xrayTestClinic: row.xray_test_clinic || "",
   };
 }
 
@@ -483,6 +490,8 @@ function applySubmissionSummaryFilters(queryBuilder: any, options: any = {}) {
 
   if (statusFilter === "action_needed") {
     query = query.in("status", ACTIONABLE_SUBMISSION_STATUSES);
+  } else if (statusFilter === "pending") {
+    query = query.in("status", ["pending", "in_review"]);
   } else if (statusFilter !== "all") {
     query = query.eq("status", statusFilter);
   }
@@ -843,7 +852,7 @@ async function loadStaffSubmissionSummaries(options: any = {}) {
     page,
     pageSize,
     counts: {
-      pending: overview.pendingRecords,
+      pending: (overview.pendingRecords || 0) + (overview.inReviewRecords || 0),
       inReview: overview.inReviewRecords,
       returned: overview.returnedRecords,
       resubmitted: overview.resubmittedRecords,

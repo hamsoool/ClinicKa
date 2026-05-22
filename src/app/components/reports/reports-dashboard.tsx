@@ -39,7 +39,7 @@ const YEAR_LABELS: Record<string, string> = { '1': '1st Year', '2': '2nd Year', 
 const YEAR_LEVEL_ORDER = ['1', '2', '3', '4'];
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
-  in_review: 'In Review',
+  in_review: 'Pending',
   approved: 'Approved',
   returned: 'Returned',
   physical_exam_done: 'Physical Exam Done',
@@ -48,7 +48,6 @@ const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', is
 const STATUS_COLORS: Record<string, string> = {
   Approved: '#3b6d11',
   Pending: '#ba7517',
-  'In Review': '#2f6fa3',
   Returned: '#a32d2d',
   'Exam Done': '#185fa5',
 };
@@ -76,7 +75,6 @@ type ReportsSummary = {
   total: number;
   approved: number;
   pending: number;
-  inReview: number;
   returned: number;
   physicalExamDone: number;
   firstYears: number;
@@ -88,10 +86,17 @@ type ReportsSummary = {
 };
 
 type SubmissionBreakdownView = 'department' | 'program' | 'year' | 'gender';
+type SubmissionBreakdownDatePreset = 'today' | 'thisWeek' | 'thisMonth' | 'schoolYear';
 type SubmissionBreakdownDatum = {
   label: string;
   count: number;
   fill: string;
+};
+type PresetDateRange = {
+  value: SubmissionBreakdownDatePreset;
+  label: string;
+  from: string;
+  to: string;
 };
 type ReportingTermRange = {
   label: string;
@@ -225,6 +230,30 @@ function getLocalDateEndTimestamp(value?: string) {
   return new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
 }
 
+function getStartOfCurrentWeek(date = new Date()) {
+  const nextDate = new Date(date);
+  nextDate.setHours(0, 0, 0, 0);
+
+  const day = nextDate.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  nextDate.setDate(nextDate.getDate() + diff);
+  return nextDate;
+}
+
+function getStartOfCurrentMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+}
+
+function clampDateToToday(date: Date) {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  return date.getTime() > today.getTime() ? today : date;
+}
+
+function getLaterDate(left: Date, right: Date) {
+  return left.getTime() >= right.getTime() ? left : right;
+}
+
 function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRange {
   const [startYearValue, endYearValue] = String(settings.academicYear || '').split('-');
   const startYear = Number.parseInt(startYearValue || '', 10);
@@ -236,9 +265,32 @@ function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRa
 
   return {
     label: settings.academicYear,
-    startMs: Date.UTC(startYear, 6, 1),
-    endMs: Date.UTC(endYear, 6, 1),
+    startMs: new Date(startYear, 6, 1, 0, 0, 0, 0).getTime(),
+    endMs: new Date(endYear, 6, 1, 0, 0, 0, 0).getTime(),
   };
+}
+
+function dedupeSubmissions(submissions: any[]) {
+  const seen = new Set<string>();
+  const deduped: any[] = [];
+
+  for (const submission of submissions) {
+    const signature = [
+      submission.studentId || '',
+      (submission.firstName || '').trim().toLowerCase(),
+      (submission.lastName || '').trim().toLowerCase(),
+      submission.year || '',
+      submission.status || '',
+      submission.course || '',
+      submission.submittedAt ? new Date(submission.submittedAt).toISOString().slice(0, 10) : '',
+    ].join('|');
+
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    deduped.push(submission);
+  }
+
+  return deduped;
 }
 
 async function imagePathToDataUrl(path: string, options?: { maxDimension?: number }) {
@@ -574,6 +626,7 @@ function DepartmentBarValueLabel(props: any) {
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) {
+  const isStaffMode = mode === 'staff';
   const analyticsQueryKey = mode === 'admin' ? ['adminAnalytics'] : ['staffAnalytics'];
   const submissionsQueryKey = mode === 'admin' ? ['adminSubmissions'] : ['staffSubmissions'];
   const reportingTermQueryKey = ['reportingTermSettings'];
@@ -586,6 +639,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const [genderFilter, setGenderFilter] = useState('all');
   const [studentBatchFilter, setStudentBatchFilter] = useState('all');
   const [submissionBreakdownView, setSubmissionBreakdownView] = useState<SubmissionBreakdownView>('department');
+  const [submissionBreakdownDatePreset, setSubmissionBreakdownDatePreset] = useState<SubmissionBreakdownDatePreset>('schoolYear');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [statusOverviewFromDate, setStatusOverviewFromDate] = useState('');
@@ -676,12 +730,18 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     return [...batches].sort();
   }, [normalizedSubmissions]);
 
-  const filteredSubmissions = useMemo(
+  const baseFilteredSubmissions = useMemo(
     () =>
       normalizedSubmissions.filter((sub) => {
         if (departmentFilter !== 'all' && !(sub.department === departmentFilter || sub.course?.includes(departmentFilter))) return false;
         if (yearFilter !== 'all' && String(sub.year) !== yearFilter) return false;
-        if (statusFilter !== 'all' && sub.status !== statusFilter) return false;
+        if (statusFilter !== 'all') {
+          if (statusFilter === 'pending') {
+            if (!(sub.status === 'pending' || sub.status === 'in_review')) return false;
+          } else if (sub.status !== statusFilter) {
+            return false;
+          }
+        }
         if (courseFilter !== 'all' && normalizeCourseValue(sub.course) !== normalizeCourseValue(courseFilter)) return false;
         if (conditionFilter !== 'all' && !sub.medicalHistory?.[conditionFilter]) return false;
         if (certificateFilter === 'issued' && !sub.clearanceInfo?.issuedDate) return false;
@@ -694,33 +754,24 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           const id = String(sub.studentId || '');
           if (!id.startsWith(studentBatchFilter)) return false;
         }
+        return true;
+      }),
+    [normalizedSubmissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, genderFilter, studentBatchFilter],
+  );
+
+  const filteredSubmissions = useMemo(
+    () =>
+      baseFilteredSubmissions.filter((sub) => {
         const subDate = sub.submittedAt ? new Date(sub.submittedAt) : null;
         if (fromDate && subDate && subDate.getTime() < getLocalDateStartTimestamp(fromDate)) return false;
         if (toDate && subDate && subDate.getTime() > getLocalDateEndTimestamp(toDate)) return false;
         return true;
       }),
-    [normalizedSubmissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, genderFilter, studentBatchFilter, fromDate, toDate],
+    [baseFilteredSubmissions, fromDate, toDate],
   );
 
-  const dedupedFilteredSubmissions = useMemo(() => {
-    const seen = new Set<string>();
-    const out: any[] = [];
-    for (const s of filteredSubmissions) {
-      const signature = [
-        s.studentId || '',
-        (s.firstName || '').trim().toLowerCase(),
-        (s.lastName || '').trim().toLowerCase(),
-        s.year || '',
-        s.status || '',
-        s.course || '',
-        s.submittedAt ? new Date(s.submittedAt).toISOString().slice(0, 10) : '',
-      ].join('|');
-      if (seen.has(signature)) continue;
-      seen.add(signature);
-      out.push(s);
-    }
-    return out;
-  }, [filteredSubmissions]);
+  const dedupedBaseFilteredSubmissions = useMemo(() => dedupeSubmissions(baseFilteredSubmissions), [baseFilteredSubmissions]);
+  const dedupedFilteredSubmissions = useMemo(() => dedupeSubmissions(filteredSubmissions), [filteredSubmissions]);
 
   const dateRange = useMemo(() => {
     const timestamps = normalizedSubmissions
@@ -781,8 +832,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const summary = useMemo<ReportsSummary>(() => {
     const total = dedupedFilteredSubmissions.length;
     const approved = dedupedFilteredSubmissions.filter((s) => s.status === 'approved').length;
-    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending').length;
-    const inReview = dedupedFilteredSubmissions.filter((s) => s.status === 'in_review').length;
+    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending' || s.status === 'in_review').length;
     const returned = dedupedFilteredSubmissions.filter((s) => s.status === 'returned').length;
     const physicalExamDone = dedupedFilteredSubmissions.filter((s) => s.status === 'physical_exam_done').length;
     const firstYears = dedupedFilteredSubmissions.filter((s) => String(s.year) === '1');
@@ -802,7 +852,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       total,
       approved,
       pending,
-      inReview,
       returned,
       physicalExamDone,
       firstYears: firstYears.length,
@@ -817,20 +866,76 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     () => buildReportingTermRange(reportingTermSettings),
     [reportingTermSettings],
   );
-  const currentTermSubmissions = useMemo(
+  const dashboardDateRangeLabel = `${fromDate || '-'} to ${toDate || '-'}`;
+  const submissionBreakdownDateRanges = useMemo<PresetDateRange[]>(
+    () => {
+      const academicYearStart = new Date(reportingTermRange.startMs);
+      const academicYearEnd = clampDateToToday(new Date(reportingTermRange.endMs - 1));
+      const currentDate = new Date();
+      currentDate.setHours(23, 59, 59, 999);
+
+      const constrainedEnd = academicYearEnd.getTime() < currentDate.getTime() ? academicYearEnd : currentDate;
+      const buildPresetRange = (value: SubmissionBreakdownDatePreset, label: string, startDate: Date): PresetDateRange => {
+        const constrainedStart = getLaterDate(academicYearStart, startDate);
+        const safeStart = constrainedStart.getTime() > constrainedEnd.getTime() ? new Date(constrainedEnd) : constrainedStart;
+
+        return {
+          value,
+          label,
+          from: getLocalDateInputValue(safeStart),
+          to: getLocalDateInputValue(constrainedEnd),
+        };
+      };
+
+      return [
+        buildPresetRange('today', 'Today', new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 0, 0, 0, 0)),
+        buildPresetRange('thisWeek', 'This Week', getStartOfCurrentWeek(currentDate)),
+        buildPresetRange('thisMonth', 'This Month', getStartOfCurrentMonth(currentDate)),
+        {
+          value: 'schoolYear',
+          label: 'School Year',
+          from: getLocalDateInputValue(academicYearStart),
+          to: getLocalDateInputValue(academicYearEnd),
+        },
+      ];
+    },
+    [reportingTermRange.endMs, reportingTermRange.startMs],
+  );
+  const activeSubmissionBreakdownDateRange = useMemo(
     () =>
-      dedupedFilteredSubmissions.filter((submission) => {
+      submissionBreakdownDateRanges.find((preset) => preset.value === submissionBreakdownDatePreset)
+      || submissionBreakdownDateRanges[submissionBreakdownDateRanges.length - 1],
+    [submissionBreakdownDatePreset, submissionBreakdownDateRanges],
+  );
+  const submissionBreakdownSubmissions = useMemo(
+    () => {
+      if (isStaffMode) {
+        if (!activeSubmissionBreakdownDateRange) return [];
+
+        const selectedStart = getLocalDateStartTimestamp(activeSubmissionBreakdownDateRange.from);
+        const selectedEnd = getLocalDateEndTimestamp(activeSubmissionBreakdownDateRange.to);
+
+        if (!Number.isFinite(selectedStart) || !Number.isFinite(selectedEnd)) return [];
+
+        return dedupedBaseFilteredSubmissions.filter((submission) => {
+          const submittedTimestamp = new Date(submission.submittedAt || 0).getTime();
+          return Number.isFinite(submittedTimestamp) && submittedTimestamp >= selectedStart && submittedTimestamp <= selectedEnd;
+        });
+      }
+
+      return dedupedFilteredSubmissions.filter((submission) => {
         const submittedTimestamp = new Date(submission.submittedAt || 0).getTime();
         return Number.isFinite(submittedTimestamp)
           && submittedTimestamp >= reportingTermRange.startMs
           && submittedTimestamp < reportingTermRange.endMs;
-      }),
-    [dedupedFilteredSubmissions, reportingTermRange.endMs, reportingTermRange.startMs],
+      });
+    },
+    [activeSubmissionBreakdownDateRange, dedupedBaseFilteredSubmissions, dedupedFilteredSubmissions, isStaffMode, reportingTermRange.endMs, reportingTermRange.startMs],
   );
 
   // ── Chart data ─────────────────────────────────────────────────────────
   const departmentChartData = useMemo(() => {
-    const counts = currentTermSubmissions.reduce((acc, sub) => {
+    const counts = submissionBreakdownSubmissions.reduce((acc, sub) => {
       const department = resolveDepartmentValue(sub.department, sub.course);
       if (!department) return acc;
 
@@ -844,10 +949,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         count: counts[department] || 0,
         fill: DEPARTMENT_COLORS[department] || '#94a3b8',
       }));
-  }, [currentTermSubmissions]);
+  }, [submissionBreakdownSubmissions]);
   const programChartData = useMemo(
     () => {
-      const programCounts = currentTermSubmissions.reduce((acc, sub) => {
+      const programCounts = submissionBreakdownSubmissions.reduce((acc, sub) => {
         const program = abbreviateCourse(sub.course);
         if (!program || program === '-') return acc;
 
@@ -876,10 +981,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           fill: DEPARTMENT_COLORS[details.department] || 'hsl(var(--primary))',
         }));
     },
-    [currentTermSubmissions],
+    [submissionBreakdownSubmissions],
   );
   const yearChartData = useMemo(() => {
-    const yearCounts = currentTermSubmissions.reduce((acc, sub) => {
+    const yearCounts = submissionBreakdownSubmissions.reduce((acc, sub) => {
       const year = String(sub.year || '').trim();
       acc[year] = (acc[year] || 0) + 1;
       return acc;
@@ -916,9 +1021,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     }
 
     return data;
-  }, [currentTermSubmissions]);
+  }, [submissionBreakdownSubmissions]);
   const genderChartData = useMemo(() => {
-    const genderCounts = currentTermSubmissions.reduce((acc, sub) => {
+    const genderCounts = submissionBreakdownSubmissions.reduce((acc, sub) => {
       const gender = normalizeSubmissionGenderValue(sub.gender || sub.sex);
       acc[gender] = (acc[gender] || 0) + 1;
       return acc;
@@ -950,7 +1055,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     }
 
     return data;
-  }, [currentTermSubmissions]);
+  }, [submissionBreakdownSubmissions]);
   const submissionBreakdownLabel = formatSubmissionBreakdownLabel(submissionBreakdownView);
   const submissionBreakdownData: SubmissionBreakdownDatum[] =
     submissionBreakdownView === 'department'
@@ -981,7 +1086,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     () =>
       [
         { name: 'Approved', value: statusOverviewSubmissions.filter((s) => s.status === 'approved').length },
-        { name: 'Pending', value: statusOverviewSubmissions.filter((s) => s.status === 'pending').length },
+        {
+          name: 'Pending',
+          value: statusOverviewSubmissions.filter((s) => s.status === 'pending' || s.status === 'in_review').length,
+        },
         { name: 'Returned', value: statusOverviewSubmissions.filter((s) => s.status === 'returned').length },
         { name: 'Exam Done', value: statusOverviewSubmissions.filter((s) => s.status === 'physical_exam_done').length },
       ].filter((d) => d.value > 0),
@@ -1027,7 +1135,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         { label: 'Total submissions', value: String(summary.total) },
         { label: 'Approved', value: String(summary.approved) },
         { label: 'Pending', value: String(summary.pending) },
-        { label: 'In review', value: String(summary.inReview) },
         { label: 'Approval rate', value: `${summary.approvalRate}%` },
         { label: 'With medical certificate', value: String(summary.withCertificate) },
         {
@@ -1221,7 +1328,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               <LabeledSelect label="Status" value={statusFilter} onValueChange={setStatusFilter} placeholder="Status">
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in_review">In Review</SelectItem>
                 <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="returned">Returned</SelectItem>
@@ -1252,9 +1358,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
           {/* ── Group 3: Date Range ────────────────────────────────────── */}
           <FilterSection label="Date Range">
-            <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-sm sm:grid-cols-2">
+            <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-xl sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground font-medium">From</span>
+                <span className="text-xs font-medium text-muted-foreground">From</span>
                 <Input
                   type="date"
                   className="h-9 text-sm"
@@ -1265,7 +1371,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground font-medium">To</span>
+                <span className="text-xs font-medium text-muted-foreground">To</span>
                 <Input
                   type="date"
                   className="h-9 text-sm"
@@ -1288,40 +1394,65 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         <Card className="border-outline-variant/30">
           <CardHeader className="pb-0 pt-5 px-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
+              <div>
                 <CardTitle className="text-base font-semibold">
                   Submissions by {submissionBreakdownLabel}
                 </CardTitle>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Total medical clearance forms for the current academic year.
+                  Total medical clearance forms for the selected date range.
                 </p>
                 <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
-                  Current Academic Year: {reportingTermRange.label}
+                  {isStaffMode
+                    ? `Date Range: ${activeSubmissionBreakdownDateRange?.label || 'School Year'} | Academic Year: ${reportingTermRange.label}`
+                    : `Range: ${dashboardDateRangeLabel} | Academic Year: ${reportingTermRange.label}`}
                 </p>
               </div>
-              <div className="w-full sm:w-44">
-                <p className="mb-1 text-xs font-medium text-muted-foreground">Sort by</p>
-                <Select
-                  value={submissionBreakdownView}
-                  onValueChange={(value) => setSubmissionBreakdownView(value as SubmissionBreakdownView)}
-                >
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Choose chart view" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="department">Department</SelectItem>
-                    <SelectItem value="program">Program</SelectItem>
-                    <SelectItem value="year">Year Level</SelectItem>
-                    <SelectItem value="gender">Gender</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className={`grid w-full gap-3 sm:w-auto ${isStaffMode ? 'sm:grid-cols-2' : ''}`}>
+                {isStaffMode && (
+                  <div className="w-full sm:w-44">
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">Date Range</p>
+                    <Select
+                      value={submissionBreakdownDatePreset}
+                      onValueChange={(value) => setSubmissionBreakdownDatePreset(value as SubmissionBreakdownDatePreset)}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Choose chart range" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="thisWeek">This Week</SelectItem>
+                        <SelectItem value="thisMonth">This Month</SelectItem>
+                        <SelectItem value="schoolYear">School Year</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="w-full sm:w-44">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">View by</p>
+                  <Select
+                    value={submissionBreakdownView}
+                    onValueChange={(value) => setSubmissionBreakdownView(value as SubmissionBreakdownView)}
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Choose chart view" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="department">Department</SelectItem>
+                      <SelectItem value="program">Program</SelectItem>
+                      <SelectItem value="year">Year Level</SelectItem>
+                      <SelectItem value="gender">Gender</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-5 pt-4">
             {submissionBreakdownView === 'program' && submissionBreakdownData.length === 0 ? (
               <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
-                No current academic year program submissions are available for the selected filters.
+                {isStaffMode
+                  ? 'No program submissions are available for the selected chart date range and filters.'
+                  : 'No current academic year program submissions are available for the selected filters.'}
               </div>
             ) : (
               <div className="h-64">

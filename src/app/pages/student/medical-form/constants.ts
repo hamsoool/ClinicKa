@@ -168,6 +168,21 @@ export const YEAR_LEVELS = [
   { value: '4', label: '4th Year' },
 ] as const;
 
+export const LAB_TEST_SITE_OPTIONS = [
+  'Hi-Precision Diagnostics Plus - Subic Bay Branch',
+  'Lab1 Diagnostic Center',
+  'MEDHUB Multispecialty Clinic and Diagnostic Laboratory',
+  'Bioline Diagnostic Laboratory & Medical Clinic',
+  'Health Scan Laboratory And Diagnostic Center',
+  'Olongapo HealthCare Specialists',
+  'Laceda Medical Clinic',
+  'Ulticare Medical Center',
+  'Tubban-Lab Ob Gyne And Medical Diagnostic Center',
+  'ZMMG COOP Hospital',
+  'Holy Infant Clinic',
+  'James L. Gordon Hospital',
+] as const;
+
 export const EMERGENCY_CONTACT_RELATIONSHIPS = [
   'Parent',
   'Sibling',
@@ -196,6 +211,7 @@ export const MEDICAL_CONDITIONS = [
   { key: 'typhoidFever', label: 'Typhoid Fever' },
   { key: 'covid19', label: 'COVID-19' },
   { key: 'uti', label: 'Urinary Tract Infection' },
+  { key: 'others', label: 'Others' },
 ] as const;
 
 export const DEFAULT_MEDICAL_HISTORY: MedicalHistoryState = {
@@ -217,6 +233,7 @@ export const DEFAULT_MEDICAL_HISTORY: MedicalHistoryState = {
   typhoidFever: false,
   covid19: false,
   uti: false,
+  others: false,
 };
 
 export const DATA_PRIVACY_CONSENT_BODY =

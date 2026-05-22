@@ -72,6 +72,18 @@ function getStatusFilterLabel(status: string) {
   }
 }
 
+function getSubmissionCategoryLabel(category?: SubmissionSummaryRecord['submissionCategory']) {
+  if (category === 'returning') return 'Returning';
+  if (category === 'repeater_irregular') return 'Irregular/Repeater';
+  return 'Regular';
+}
+
+function getSubmissionCategoryBadgeClass(category?: SubmissionSummaryRecord['submissionCategory']) {
+  if (category === 'returning') return 'bg-blue-100 text-blue-800 border-blue-200';
+  if (category === 'repeater_irregular') return 'bg-violet-100 text-violet-800 border-violet-200';
+  return 'bg-slate-100 text-slate-800 border-slate-200';
+}
+
 export default function StaffSubmissions() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -87,6 +99,7 @@ export default function StaffSubmissions() {
   const defaultSortOrder = workspacePreferences.reviewSortOrder;
   const defaultShowAdvancedFilters = workspacePreferences.showAdvancedQueueFilters;
   const statusFilter = parseStatusFilter(searchParams.get('status') ?? defaultStatusFilter);
+  const queryStatusFilter = statusFilter === 'pending' ? 'action_needed' : statusFilter;
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -125,7 +138,7 @@ export default function StaffSubmissions() {
     isError,
   } = useStaffSubmissionSummariesQuery({
     searchQuery: deferredSearchQuery,
-    statusFilter,
+    statusFilter: queryStatusFilter,
     departmentFilter,
     yearFilter,
     sortOrder,
@@ -139,12 +152,6 @@ export default function StaffSubmissions() {
     }
   }, [isError]);
 
-  const submissions = useMemo(
-    () => ((data?.items || []) as SubmissionSummaryRecord[]),
-    [data?.items],
-  );
-  const total = data?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const counts = data?.counts || {
     pending: 0,
     inReview: 0,
@@ -152,6 +159,17 @@ export default function StaffSubmissions() {
     resubmitted: 0,
     actionNeeded: 0,
   };
+  const pendingDisplayCount =
+    counts.actionNeeded === (counts.pending + counts.returned + counts.resubmitted)
+      ? counts.pending
+      : counts.pending + counts.inReview;
+  const submissions = useMemo(() => {
+    const items = ((data?.items || []) as SubmissionSummaryRecord[]);
+    if (statusFilter !== 'pending') return items;
+    return items.filter((submission) => submission.status === 'pending' || submission.status === 'in_review');
+  }, [data?.items, statusFilter]);
+  const total = statusFilter === 'pending' ? pendingDisplayCount : (data?.total || 0);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -213,7 +231,7 @@ export default function StaffSubmissions() {
               }`}
             >
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pending</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{counts.pending}</p>
+              <p className="mt-1 text-2xl font-bold text-foreground">{pendingDisplayCount}</p>
             </button>
             <button
               type="button"
@@ -391,6 +409,12 @@ export default function StaffSubmissions() {
                         </h4>
                         <Badge variant="outline" className="bg-secondary/50 text-secondary-foreground">
                           Year {submission.year || '--'}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={getSubmissionCategoryBadgeClass(submission.submissionCategory)}
+                        >
+                          {getSubmissionCategoryLabel(submission.submissionCategory)}
                         </Badge>
                         {getStatusBadge(submission.status)}
                       </div>

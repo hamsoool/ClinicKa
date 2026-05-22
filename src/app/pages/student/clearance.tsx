@@ -321,9 +321,9 @@ export default function StudentClearance() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending Review</Badge>;
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending</Badge>;
       case 'in_review':
-        return <Badge className="bg-sky-100 text-sky-800 border-sky-200">In Review</Badge>;
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending</Badge>;
       case 'approved':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge>;
       case 'physical_exam_done':
@@ -566,16 +566,16 @@ export default function StudentClearance() {
                     <div className="flex items-start gap-3">
                       {isPending || isInReview ? (
                         <>
-                          <Clock className={`mt-0.5 h-5 w-5 shrink-0 ${isInReview ? 'text-sky-600' : 'text-yellow-600'}`} />
+                          <Clock className="mt-0.5 h-5 w-5 shrink-0 text-yellow-600" />
                           <div>
-                            <p className={`font-medium ${isInReview ? 'text-sky-800' : 'text-yellow-800'}`}>Clearance Not Yet Available</p>
+                            <p className="font-medium text-yellow-800">Clearance Not Yet Available</p>
                             <p className="mt-1 text-sm text-muted-foreground">
                               {isInReview
                                 ? 'A clinic staff member is currently reviewing your medical record. Once approved, your medical clearance will be available for download here.'
                                 : 'Your medical record is waiting to be picked up for review. Once clinic staff starts processing it, your status will update here.'}
                             </p>
-                            <Badge variant="secondary" className={`mt-2 ${isInReview ? 'bg-sky-100 text-sky-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                              <Clock className="mr-1 h-3 w-3" /> {isInReview ? 'In Review' : 'Pending Review'}
+                            <Badge variant="secondary" className="mt-2 bg-yellow-100 text-yellow-800">
+                              <Clock className="mr-1 h-3 w-3" /> Pending
                             </Badge>
                           </div>
                         </>

@@ -319,7 +319,7 @@ export default function StaffDashboard() {
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>(workspacePreferences.reviewSortOrder);
   const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'returned' | 'resubmitted'>(
-    workspacePreferences.dashboardQueueTab,
+    workspacePreferences.dashboardQueueTab === 'in_review' ? 'pending' : workspacePreferences.dashboardQueueTab,
   );
   const [reportRange, setReportRange] = useState<SubmissionRangeKey>('today');
   const [reportGroupBy, setReportGroupBy] = useState<ReportGroupKey>('department');
@@ -354,7 +354,7 @@ export default function StaffDashboard() {
 
   useEffect(() => {
     setQueueSortOrder(workspacePreferences.reviewSortOrder);
-    setQueueTab(workspacePreferences.dashboardQueueTab);
+    setQueueTab(workspacePreferences.dashboardQueueTab === 'in_review' ? 'pending' : workspacePreferences.dashboardQueueTab);
   }, [workspacePreferences]);
 
   const queueGroups = {
@@ -376,7 +376,7 @@ export default function StaffDashboard() {
     const timeB = new Date(b.submittedAt).getTime();
     return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
   });
-  const pendingQueue = [...queueGroups.pending].sort((a, b) => {
+  const pendingQueue = [...queueGroups.pending, ...queueGroups.in_review].sort((a, b) => {
     const timeA = new Date(a.submittedAt).getTime();
     const timeB = new Date(b.submittedAt).getTime();
     return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
@@ -403,7 +403,7 @@ export default function StaffDashboard() {
   const summaryCards = [
     {
       label: 'Pending',
-      value: overview?.pendingRecords || 0,
+      value: (overview?.pendingRecords || 0) + (overview?.inReviewRecords || 0),
       icon: ClipboardCheck,
       tone: 'text-primary',
       href: '/staff/submissions?status=pending',
@@ -683,7 +683,7 @@ export default function StaffDashboard() {
             <div className="pb-1">
               <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-4">
                 <TabsTrigger value="pending" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
-                  Pending ({overview.pendingRecords || 0})
+                  Pending ({(overview.pendingRecords || 0) + (overview.inReviewRecords || 0)})
                 </TabsTrigger>
                 <TabsTrigger value="returned" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
                   Returned ({overview.returnedRecords || 0})
@@ -705,7 +705,7 @@ export default function StaffDashboard() {
               <p className="mt-2 max-w-sm text-sm text-on-surface-variant">
                 {queueTab === 'all'
                   ? 'There are no records that need staff attention right now.'
-                  : `There are no ${queueTab} records right now.`}
+                  : `There are no ${queueTab.replace('_', ' ')} records right now.`}
               </p>
             </div>
           ) : (
@@ -754,7 +754,7 @@ export default function StaffDashboard() {
           <div className="mb-4 flex flex-col gap-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-on-surface">Report Graph</h2>
+                <h2 className="text-lg font-semibold text-on-surface">Submission Overview</h2>
                 <p className="mt-1 text-xs text-on-surface-variant">
                   {totalReportStudents} student{totalReportStudents === 1 ? '' : 's'}
                 </p>
