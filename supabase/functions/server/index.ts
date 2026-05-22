@@ -321,6 +321,98 @@ app.put("/student-profile", async (c) => {
   }
 });
 
+app.put("/staff-profile", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'staff') return forbidden();
+
+  try {
+    const data = await c.req.json();
+    const fullName = String(data.name || "").trim();
+    const email = normalizeEmail(data.email) || null;
+    const phone = String(data.phone || "").trim() || null;
+    const applyAcrossRoles = data.applyAcrossRoles !== false;
+
+    if (!fullName || !email) {
+      return badRequest("Name and email are required");
+    }
+
+    const nameParts = fullName.split(/\s+/).filter(Boolean);
+    const firstName = nameParts.slice(0, -1).join(" ").trim() || nameParts[0] || null;
+    const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : null;
+    const preservedPosition = requester.staff?.position || "Clinic Staff";
+
+    let updatedProfile = requester.profile;
+    if (applyAcrossRoles) {
+      const { data: profileRow, error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          email,
+        })
+        .eq("id", requester.profile.id)
+        .select("*")
+        .single();
+
+      if (profileError || !profileRow) {
+        throw new Error(profileError?.message || "Failed to update profile");
+      }
+
+      updatedProfile = profileRow;
+    }
+
+    const staffPayload = {
+      profile_id: requester.profile.id,
+      email,
+      first_name: firstName,
+      last_name: lastName,
+      position: preservedPosition,
+      phone,
+    };
+
+    const { data: updatedStaff, error: staffError } = await supabase
+      .from("staff_users")
+      .upsert(staffPayload, {
+        onConflict: "profile_id",
+      })
+      .select("*")
+      .single();
+
+    if (staffError || !updatedStaff) {
+      throw new Error(staffError?.message || "Failed to update staff profile");
+    }
+
+    if (applyAcrossRoles && requester.profile.student_id) {
+      const { error: studentError } = await supabase
+        .from("students")
+        .upsert({
+          student_id: requester.profile.student_id,
+          profile_id: requester.profile.id,
+          first_name: firstName,
+          last_name: lastName,
+          contact_number: phone,
+        }, {
+          onConflict: "student_id",
+        });
+
+      if (studentError) {
+        throw new Error(studentError.message);
+      }
+    }
+
+    return c.json({
+      success: true,
+      profile: updatedProfile,
+      staff: updatedStaff,
+    });
+  } catch (error) {
+    console.log("Error updating staff profile:", error);
+    return internalServerError(c, "Failed to update staff profile", error);
+  }
+});
+
 app.post("/student-profile-asset", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);

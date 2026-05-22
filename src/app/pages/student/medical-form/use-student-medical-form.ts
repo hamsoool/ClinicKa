@@ -5,7 +5,7 @@ import type { AuthMe } from '../../../lib/api';
 import type { SubmissionRecord } from '../../../lib/record-types';
 import { getYearLevelLabel, resolveStudentYearLevel } from '../../../lib/student-year';
 import { resolveStudentSubmissionProfile } from '../../../lib/student-submission-profile';
-import { getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord } from '../../../lib/api';
+import { getMe, getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord } from '../../../lib/api';
 import { invalidateStudentRecordsQuery } from '../student-records-query';
 import {
   DEFAULT_MEDICAL_HISTORY,
@@ -93,6 +93,25 @@ function getMaxBirthdateIso(minAge: number) {
   return max.toISOString().split('T')[0];
 }
 
+function calculateAgeFromBirthdate(dateValue: string) {
+  if (!dateValue) return null;
+
+  const birthdate = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(birthdate.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthdate.getFullYear();
+  const monthDelta = today.getMonth() - birthdate.getMonth();
+  const hasBirthdayPassed =
+    monthDelta > 0 || (monthDelta === 0 && today.getDate() >= birthdate.getDate());
+
+  if (!hasBirthdayPassed) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
 function isAtLeastAge(dateValue: string, minAge: number) {
   if (!dateValue) return false;
   const date = new Date(`${dateValue}T00:00:00`);
@@ -104,6 +123,8 @@ function isAtLeastAge(dateValue: string, minAge: number) {
 function buildInitialFormData(year: string | undefined, me?: AuthMe | null, initialDataPrivacyConsent = false): MedicalFormData {
   const student = me?.student;
   const department = resolveDepartmentValue(student?.department || me?.profile.department || 'CCS');
+  const birthday = student?.birthday || '';
+  const derivedAge = calculateAgeFromBirthdate(birthday);
   return {
     studentCategory: 'regular',
     studentId: normalizeStudentId(student?.student_id || me?.profile.student_id || ''),
@@ -113,9 +134,9 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, init
     department,
     course: normalizeProgramForDepartment(department, student?.course || me?.profile.course || ''),
     yearLevel: year || '1',
-    age: student?.age ? sanitizeDigits(String(student.age), 2) : '',
+    age: derivedAge !== null ? sanitizeDigits(String(derivedAge), 2) : student?.age ? sanitizeDigits(String(student.age), 2) : '',
     sex: student?.sex || 'female',
-    birthday: student?.birthday || '',
+    birthday,
     civilStatus: student?.civil_status || 'Single',
     contactNumber: formatPhilippinePhoneInput(student?.contact_number || ''),
     address: sanitizeAddress(student?.address || ''),
@@ -184,6 +205,49 @@ export function useStudentMedicalForm({
   const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, initialDataPrivacyConsent));
   const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_AGE), []);
   const isEditingExistingSubmission = Boolean(activeSubmissionId);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadFreshProfileSnapshot = async () => {
+      try {
+        const latestMe = await getMe();
+        if (!active) return;
+
+        const latestStudent = latestMe?.student;
+        const latestProfile = latestMe?.profile;
+        const latestBirthday = latestStudent?.birthday || '';
+        const derivedAge = calculateAgeFromBirthdate(latestBirthday);
+
+        setFormData((prev) => ({
+          ...prev,
+          studentId: normalizeStudentId(latestStudent?.student_id || latestProfile?.student_id || prev.studentId),
+          firstName: sanitizeName(latestStudent?.first_name || latestProfile?.first_name || prev.firstName),
+          lastName: sanitizeName(latestStudent?.last_name || latestProfile?.last_name || prev.lastName),
+          middleInitial: normalizeMiddleInitial(latestStudent?.middle_initial || prev.middleInitial),
+          department: resolveDepartmentValue(latestStudent?.department || latestProfile?.department || prev.department),
+          course: normalizeProgramForDepartment(
+            latestStudent?.department || latestProfile?.department || prev.department,
+            latestStudent?.course || latestProfile?.course || prev.course,
+          ),
+          age: derivedAge !== null ? sanitizeDigits(String(derivedAge), 2) : latestStudent?.age ? sanitizeDigits(String(latestStudent.age), 2) : prev.age,
+          sex: latestStudent?.sex || prev.sex,
+          birthday: latestBirthday || prev.birthday,
+          civilStatus: latestStudent?.civil_status || prev.civilStatus,
+          contactNumber: formatPhilippinePhoneInput(latestStudent?.contact_number || prev.contactNumber),
+          address: sanitizeAddress(latestStudent?.address || prev.address),
+        }));
+      } catch {
+        if (!active) return;
+      }
+    };
+
+    void loadFreshProfileSnapshot();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useEffect(() => {
     setSubmitted(false);
     setStep(1);
@@ -207,20 +271,29 @@ export function useStudentMedicalForm({
         setOriginalSubmissionStatus(submission.status || null);
         setFormData((prev) => ({
           ...prev,
-          studentId: normalizeStudentId(submission.studentId || prev.studentId),
-          firstName: sanitizeName(submission.firstName || prev.firstName),
-          lastName: sanitizeName(submission.lastName || prev.lastName),
-          middleInitial: normalizeMiddleInitial(submission.middleInitial || prev.middleInitial),
-          department: resolveDepartmentValue(submission.department || prev.department),
-          course: normalizeProgramForDepartment(submission.department || prev.department, submission.course || prev.course),
+          studentId: normalizeStudentId(prev.studentId || submission.studentId),
+          firstName: sanitizeName(prev.firstName || submission.firstName || ''),
+          lastName: sanitizeName(prev.lastName || submission.lastName || ''),
+          middleInitial: normalizeMiddleInitial(prev.middleInitial || submission.middleInitial || ''),
+          department: resolveDepartmentValue(prev.department || submission.department || ''),
+          course: normalizeProgramForDepartment(
+            prev.department || submission.department || '',
+            prev.course || submission.course || '',
+          ),
           yearLevel: submission.year || prev.yearLevel,
           year: submission.year || prev.year,
-          age: sanitizeDigits(submission.age || prev.age, 2),
-          sex: submission.sex || prev.sex,
-          birthday: submission.birthday || prev.birthday,
-          civilStatus: submission.civilStatus || prev.civilStatus,
-          contactNumber: formatPhilippinePhoneInput(submission.contactNumber || prev.contactNumber),
-          address: sanitizeAddress(submission.address || prev.address),
+          age: (() => {
+            const chosenBirthday = prev.birthday || submission.birthday || '';
+            const derivedAge = calculateAgeFromBirthdate(chosenBirthday);
+            return derivedAge !== null
+              ? sanitizeDigits(String(derivedAge), 2)
+              : sanitizeDigits(prev.age || submission.age || '', 2);
+          })(),
+          sex: prev.sex || submission.sex || '',
+          birthday: prev.birthday || submission.birthday || '',
+          civilStatus: prev.civilStatus || submission.civilStatus || '',
+          contactNumber: formatPhilippinePhoneInput(prev.contactNumber || submission.contactNumber || ''),
+          address: sanitizeAddress(prev.address || submission.address || ''),
           medicalHistory: {
             ...DEFAULT_MEDICAL_HISTORY,
             ...(submission.medicalHistory || {}),
@@ -361,7 +434,11 @@ export function useStudentMedicalForm({
         student?.department || me?.profile.department || prev.department,
         student?.course || me?.profile.course || prev.course,
       ),
-      age: student?.age ? sanitizeDigits(String(student.age), 2) : prev.age,
+      age: (() => {
+        const latestBirthday = student?.birthday || prev.birthday;
+        const derivedAge = calculateAgeFromBirthdate(latestBirthday);
+        return derivedAge !== null ? sanitizeDigits(String(derivedAge), 2) : student?.age ? sanitizeDigits(String(student.age), 2) : prev.age;
+      })(),
       sex: student?.sex || prev.sex,
       birthday: student?.birthday || prev.birthday,
       civilStatus: student?.civil_status || prev.civilStatus,
@@ -409,6 +486,17 @@ export function useStudentMedicalForm({
         ...prev,
         course: normalizeProgramForDepartment(prev.department, sanitizeCourse(String(value))),
       }));
+    }
+    if (field === 'birthday') {
+      return setFormData((prev) => {
+        const birthday = String(value);
+        const derivedAge = calculateAgeFromBirthdate(birthday);
+        return {
+          ...prev,
+          birthday,
+          age: derivedAge !== null ? sanitizeDigits(String(derivedAge), 2) : '',
+        };
+      });
     }
     if (field === 'age') return setFormData((prev) => ({ ...prev, age: sanitizeDigits(String(value), 2) }));
     if (field === 'contactNumber') {

@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { format } from 'date-fns';
-import { CalendarIcon, Check, ChevronLeft, ChevronRight, ImageIcon, PenLine } from 'lucide-react';
+import { Check, ImageIcon, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
-import { Calendar } from '../../components/ui/calendar';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import StudentPageIntro from '../../components/student-page-intro';
 import PasswordChangeCard from '../../components/password-change-card';
 import SettingsLogoutCard from '../../components/settings-logout-card';
+import { StudentProfileFormCard } from '../../components/student-profile-form-card';
 import { Input } from '../../components/ui/input';
-import { Label } from '../../components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { cn } from '../../components/ui/utils';
 import {
   getStudentProfileAssets,
   updateStudentProfile,
@@ -23,14 +18,11 @@ import {
 import { useAuth } from '../../lib/auth';
 import {
   resolveStudentSubmissionProfile,
-  toCategoryLabel,
   type StudentSubmissionCategory,
   writeStudentSubmissionProfile,
 } from '../../lib/student-submission-profile';
 import {
-  DEPARTMENT_OPTIONS,
   formatPhilippinePhoneInput,
-  getProgramOptionsForSelect,
   isValidPhilippinePhoneNumber,
   normalizeProgramForDepartment,
   resolveDepartmentValue,
@@ -55,20 +47,6 @@ type StudentProfileFormState = {
 
 const MAX_NAME_LENGTH = 30;
 const MIN_PROFILE_AGE = 16;
-const MONTH_OPTIONS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
 
 function sanitizeName(value: string) {
   return String(value).normalize('NFC').replace(/[^\p{L}\s'-]/gu, '').slice(0, MAX_NAME_LENGTH);
@@ -79,13 +57,6 @@ function sanitizeAddress(value: string) {
     .replace(/[<>`]/g, '')
     .replace(/--|\/\*|\*\//g, '')
     .slice(0, 180);
-}
-
-function formatDateInputValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function parseDateInputValue(dateValue: string) {
@@ -108,25 +79,6 @@ function parseDateInputValue(dateValue: string) {
 
   return date;
 }
-
-function getMaxBirthdateIso(minAge: number) {
-  const today = new Date();
-  const max = new Date(today.getFullYear() - minAge, today.getMonth(), today.getDate());
-  return formatDateInputValue(max);
-}
-
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function shiftMonth(date: Date, amount: number) {
-  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
-}
-
-function isSameMonth(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
-}
-
 function calculateAgeFromBirthdate(dateValue: string) {
   const birthdate = parseDateInputValue(dateValue);
   if (!birthdate) return null;
@@ -203,8 +155,6 @@ export default function StudentProfile() {
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string | null>(null);
-  const [birthdayPickerOpen, setBirthdayPickerOpen] = useState(false);
-  const [birthdayPickerMonth, setBirthdayPickerMonth] = useState<Date>(() => startOfMonth(new Date()));
 
   useEffect(() => {
     setFormData(initialFormData);
@@ -283,34 +233,8 @@ export default function StudentProfile() {
     !formData.contactNumber.trim() || isValidPhilippinePhoneNumber(formData.contactNumber);
   const hasValidBirthday =
     !formData.birthday.trim() || isAtLeastAge(formData.birthday, MIN_PROFILE_AGE);
-  const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_PROFILE_AGE), []);
-  const selectedBirthday = useMemo(() => parseDateInputValue(formData.birthday), [formData.birthday]);
-  const maxBirthdateDate = useMemo(() => parseDateInputValue(maxBirthdate), [maxBirthdate]);
-  const birthdayFromYear = useMemo(() => new Date().getFullYear() - 100, []);
-  const birthdayToYear = useMemo(() => maxBirthdateDate?.getFullYear() || new Date().getFullYear(), [maxBirthdateDate]);
-  const birthdayYearOptions = useMemo(
-    () => Array.from({ length: birthdayToYear - birthdayFromYear + 1 }, (_, index) => birthdayToYear - index),
-    [birthdayFromYear, birthdayToYear],
-  );
-  const birthdayMinMonth = useMemo(() => new Date(birthdayFromYear, 0, 1), [birthdayFromYear]);
-  const birthdayMaxMonth = useMemo(
-    () => startOfMonth(maxBirthdateDate || new Date()),
-    [maxBirthdateDate],
-  );
-  const canGoToPreviousBirthdayMonth = birthdayPickerMonth > birthdayMinMonth;
-  const canGoToNextBirthdayMonth = birthdayPickerMonth < birthdayMaxMonth;
-  const clampBirthdayPickerMonth = (date: Date) => {
-    if (date < birthdayMinMonth) return birthdayMinMonth;
-    if (date > birthdayMaxMonth) return birthdayMaxMonth;
-    return startOfMonth(date);
-  };
   const requiresYearOverride =
     formData.submissionCategory === 'returning' || formData.submissionCategory === 'repeater_irregular';
-
-  useEffect(() => {
-    if (!birthdayPickerOpen) return;
-    setBirthdayPickerMonth(clampBirthdayPickerMonth(selectedBirthday || maxBirthdateDate || new Date()));
-  }, [birthdayPickerOpen, maxBirthdateDate, selectedBirthday]);
 
   const isValid =
     Boolean(formData.studentId.trim()) &&
@@ -329,8 +253,6 @@ export default function StudentProfile() {
 
   const currentPhotoUrl = photoPreviewUrl || profileAssets.photoUrl || null;
   const currentSignatureUrl = signaturePreviewUrl || profileAssets.signatureUrl || null;
-  const requiredFieldClass = (missing: boolean) =>
-    missing ? 'border-red-500 ring-1 ring-red-200 focus-visible:ring-red-300' : '';
 
   const updateField = <K extends keyof StudentProfileFormState>(field: K, value: StudentProfileFormState[K]) => {
     setFormData((prev) => ({
@@ -507,300 +429,15 @@ export default function StudentProfile() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
       <form onSubmit={handleSubmit} className="space-y-6">
-        <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-          <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
-            <CardTitle className="text-xl font-semibold text-on-surface">Student Information</CardTitle>
-            <CardDescription>
-              Your student ID is managed by your account. The rest of these details can be updated any time.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-5 pt-6 md:grid-cols-2">
-            <div className="min-w-0">
-              <Label htmlFor="studentId">Student ID</Label>
-              <Input id="studentId" value={formData.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="firstName">First Name *</Label>
-              <Input
-                id="firstName"
-                value={formData.firstName}
-                onChange={(event) => updateField('firstName', event.target.value)}
-                placeholder="Required"
-                className={requiredFieldClass(!formData.firstName.trim())}
-              />
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="lastName">Last Name *</Label>
-              <Input
-                id="lastName"
-                value={formData.lastName}
-                onChange={(event) => updateField('lastName', event.target.value)}
-                placeholder="Required"
-                className={requiredFieldClass(!formData.lastName.trim())}
-              />
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="middleInitial">Middle Initial *</Label>
-              <Input
-                id="middleInitial"
-                value={formData.middleInitial}
-                onChange={(event) => updateField('middleInitial', event.target.value)}
-                placeholder="Required"
-                maxLength={1}
-                className={requiredFieldClass(!formData.middleInitial.trim())}
-              />
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="age">Age *</Label>
-              <Input
-                id="age"
-                type="text"
-                value={formData.age}
-                readOnly
-                disabled
-                placeholder="Auto-calculated from birthday"
-                className={`cursor-not-allowed opacity-80 ${requiredFieldClass(!formData.age.trim())}`}
-              />
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="sex">Sex at Birth *</Label>
-              <Select value={formData.sex} onValueChange={(value) => updateField('sex', value)}>
-                <SelectTrigger id="sex" className={requiredFieldClass(!formData.sex.trim())}>
-                  <SelectValue placeholder="Required: select sex at birth" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="female">Female</SelectItem>
-                  <SelectItem value="male">Male</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="min-w-0 md:col-span-2">
-              <div className="grid gap-5 md:grid-cols-2">
-                <div className="min-w-0">
-                  <Label htmlFor="department">Department *</Label>
-                  <Select value={formData.department} onValueChange={(value) => updateField('department', value)}>
-                    <SelectTrigger id="department" className={requiredFieldClass(!formData.department.trim())}>
-                      <SelectValue placeholder="Required: select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEPARTMENT_OPTIONS.map((department) => (
-                        <SelectItem key={department.value} value={department.value}>
-                          {department.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="min-w-0">
-                  <Label htmlFor="course">Course / Program *</Label>
-                  <Select
-                    value={formData.course || undefined}
-                    onValueChange={(value) => updateField('course', value)}
-                    disabled={!formData.department}
-                  >
-                    <SelectTrigger id="course" className={requiredFieldClass(!formData.course.trim())}>
-                      <SelectValue placeholder={formData.department ? 'Required: select program' : 'Select department first'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getProgramOptionsForSelect(formData.department, formData.course).map((program) => (
-                        <SelectItem key={program} value={program}>
-                          {program}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="birthday">Birthday *</Label>
-              <Popover open={birthdayPickerOpen} onOpenChange={setBirthdayPickerOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="birthday"
-                    type="button"
-                    variant="outline"
-                    className={cn(
-                      'border-input bg-input-background hover:bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 w-full justify-between rounded-md border px-3 py-2 text-left font-normal text-foreground shadow-none focus-visible:ring-[3px]',
-                      !selectedBirthday && 'text-muted-foreground',
-                      'data-[state=open]:bg-input-background',
-                      requiredFieldClass(!formData.birthday.trim() || !hasValidBirthday),
-                    )}
-                  >
-                    {selectedBirthday ? format(selectedBirthday, 'MMMM d, yyyy') : 'Select birthday'}
-                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[min(92vw,24rem)] rounded-2xl p-0 shadow-xl" align="start">
-                  <div className="border-b border-border/60 px-3 py-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 rounded-xl"
-                        onClick={() => canGoToPreviousBirthdayMonth && setBirthdayPickerMonth((prev) => shiftMonth(prev, -1))}
-                        disabled={!canGoToPreviousBirthdayMonth}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <div className="grid flex-1 grid-cols-[minmax(0,1fr)_6.5rem] gap-2">
-                        <Select
-                          value={String(birthdayPickerMonth.getMonth())}
-                          onValueChange={(value) =>
-                            setBirthdayPickerMonth(
-                              clampBirthdayPickerMonth(
-                                new Date(
-                                  birthdayPickerMonth.getFullYear(),
-                                  Number.parseInt(value, 10),
-                                  1,
-                                ),
-                              ),
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-9 rounded-xl bg-input-background">
-                            <SelectValue placeholder="Month" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {MONTH_OPTIONS.map((month, index) => (
-                              <SelectItem key={month} value={String(index)}>
-                                {month}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={String(birthdayPickerMonth.getFullYear())}
-                          onValueChange={(value) =>
-                            setBirthdayPickerMonth(
-                              clampBirthdayPickerMonth(
-                                new Date(
-                                  Number.parseInt(value, 10),
-                                  birthdayPickerMonth.getMonth(),
-                                  1,
-                                ),
-                              ),
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-9 rounded-xl bg-input-background">
-                            <SelectValue placeholder="Year" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {birthdayYearOptions.map((year) => (
-                              <SelectItem key={year} value={String(year)}>
-                                {year}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 rounded-xl"
-                        onClick={() => canGoToNextBirthdayMonth && setBirthdayPickerMonth((prev) => shiftMonth(prev, 1))}
-                        disabled={!canGoToNextBirthdayMonth}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <Calendar
-                    mode="single"
-                    selected={selectedBirthday || undefined}
-                    onSelect={(date) => {
-                      updateField('birthday', date ? formatDateInputValue(date) : '');
-                      if (date) {
-                        setBirthdayPickerOpen(false);
-                      }
-                    }}
-                    month={birthdayPickerMonth}
-                    onMonthChange={(date) => setBirthdayPickerMonth(clampBirthdayPickerMonth(date))}
-                    disabled={(date) => !!maxBirthdateDate && date > maxBirthdateDate}
-                    className="px-2 pb-3 pt-2"
-                    classNames={{ caption: 'hidden', nav: 'hidden' }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              {!hasValidBirthday && formData.birthday ? (
-                <p className="mt-1 text-sm text-red-600">Student must be at least 16 years old.</p>
-              ) : null}
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="civilStatus">Civil Status *</Label>
-              <Select value={formData.civilStatus} onValueChange={(value) => updateField('civilStatus', value)}>
-                <SelectTrigger id="civilStatus" className={requiredFieldClass(!formData.civilStatus.trim())}>
-                  <SelectValue placeholder="Required: select civil status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Single">Single</SelectItem>
-                  <SelectItem value="Married">Married</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="contactNumber">Contact Number *</Label>
-              <Input
-                id="contactNumber"
-                type="tel"
-                value={formData.contactNumber}
-                onChange={(event) => updateField('contactNumber', event.target.value)}
-                inputMode="numeric"
-                placeholder="(+63) 9123456789"
-                className={requiredFieldClass(!formData.contactNumber.trim() || !hasValidContactNumber)}
-              />
-              {!hasValidContactNumber && formData.contactNumber ? (
-                <p className="mt-1 text-sm text-red-600">Use the format (+63) 9123456789.</p>
-              ) : null}
-            </div>
-            <div className="md:col-span-2">
-              <Label htmlFor="address">Street Address *</Label>
-              <Input
-                id="address"
-                value={formData.address}
-                onChange={(event) => updateField('address', event.target.value)}
-                placeholder="Required"
-                className={requiredFieldClass(!formData.address.trim())}
-              />
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="submissionCategory">Submission Status</Label>
-              <Select value={formData.submissionCategory} onValueChange={(value) => updateField('submissionCategory', value as StudentSubmissionCategory)}>
-                <SelectTrigger id="submissionCategory">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="regular">{toCategoryLabel('regular')}</SelectItem>
-                  <SelectItem value="returning">{toCategoryLabel('returning')}</SelectItem>
-                  <SelectItem value="repeater_irregular">{toCategoryLabel('repeater_irregular')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {requiresYearOverride ? (
-              <div className="min-w-0">
-                <Label htmlFor="submissionTargetYearLevel">Submission Year *</Label>
-                <Select
-                  value={formData.submissionTargetYearLevel || undefined}
-                  onValueChange={(value) => updateField('submissionTargetYearLevel', value)}
-                >
-                  <SelectTrigger id="submissionTargetYearLevel" className={requiredFieldClass(!formData.submissionTargetYearLevel)}>
-                    <SelectValue placeholder="Select year to open" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1st Year</SelectItem>
-                    <SelectItem value="2">2nd Year</SelectItem>
-                    <SelectItem value="3">3rd Year</SelectItem>
-                    <SelectItem value="4">4th Year</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
+        <StudentProfileFormCard
+          value={formData}
+          onChange={(field, value) => updateField(field as keyof StudentProfileFormState, value as StudentProfileFormState[keyof StudentProfileFormState])}
+          title="Student Information"
+          description="Your student ID is managed by your account. The rest of these details can be updated any time."
+          showSubmissionFields
+          hasValidBirthday={hasValidBirthday}
+          hasValidContactNumber={hasValidContactNumber}
+        />
 
         <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">

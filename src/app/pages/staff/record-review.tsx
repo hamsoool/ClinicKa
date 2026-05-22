@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { StudentProfileFormCard } from '../../components/student-profile-form-card';
 import { Checkbox } from '../../components/ui/checkbox';
 
 import { Input } from '../../components/ui/input';
@@ -52,7 +53,6 @@ import {
 import {
   EMERGENCY_CONTACT_RELATIONSHIPS,
   formatPhilippinePhoneInput,
-  getProgramOptionsForSelect,
   isValidPhilippinePhoneNumber,
   normalizeProgramForDepartment,
   resolveDepartmentValue,
@@ -178,8 +178,6 @@ const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }
   { key: 'uti', label: 'UTI' },
 ];
 
-const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAS', 'CED'];
-const YEAR_OPTIONS = ['1', '2', '3', '4'];
 const LAB_IMAGE_MAX_SIZE_BYTES = 2 * 1024 * 1024;
 const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'] as const;
@@ -396,20 +394,6 @@ function normalizeSexValue(value: string) {
   if ((SEX_BASE_OPTIONS as readonly string[]).includes(lowered)) return lowered;
   if (lowered === 'others') return 'others';
   return sanitizeSexOther(trimmed);
-}
-
-function getSexSelectValue(value: string) {
-  const lowered = String(value || '').trim().toLowerCase();
-  if ((SEX_BASE_OPTIONS as readonly string[]).includes(lowered)) return lowered;
-  if (lowered === 'others') return 'others';
-  if (lowered) return 'others';
-  return 'unassigned';
-}
-
-function getSexOtherInputValue(value: string) {
-  const lowered = String(value || '').trim().toLowerCase();
-  if (!lowered || lowered === 'others' || (SEX_BASE_OPTIONS as readonly string[]).includes(lowered)) return '';
-  return value;
 }
 
 function generateClearanceControlNo(submission?: SubmissionDetails | null) {
@@ -1380,219 +1364,34 @@ export default function StaffRecordReview() {
         </TabsList>
 
         <TabsContent value="record" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Editable Student Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex flex-col gap-6 lg:flex-row">
-                <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-xl border bg-muted/30 p-5">
-                  {submission.photoUrl ? (
-                    <img
-                      src={submission.photoUrl}
-                      alt="Student"
-                      className="h-28 w-28 rounded-2xl object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-28 w-28 items-center justify-center rounded-2xl bg-muted text-3xl font-semibold text-muted-foreground">
-                      {recordForm.firstName?.[0]}
-                      {recordForm.lastName?.[0]}
-                    </div>
-                  )}
-                  <div className="text-center">
-                    <p className="font-semibold">
-                      {recordForm.firstName} {recordForm.lastName}
-                    </p>
-                    <p className="text-sm text-muted-foreground">{recordForm.studentId}</p>
-                  </div>
-                </div>
-
-                <div className="grid flex-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <div>
-                    <Label htmlFor="studentId">Student ID</Label>
-                    <Input id="studentId" value={recordForm.studentId} readOnly className="mt-2 bg-muted/40" />
-                  </div>
-                  <div>
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input
-                      id="firstName"
-                      value={recordForm.firstName}
-                      onChange={(event) => updateRecordField('firstName', event.target.value)}
-                      maxLength={MAX_FIRST_NAME_LENGTH}
-                      className="mt-2"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input
-                      id="lastName"
-                      value={recordForm.lastName}
-                      onChange={(event) => updateRecordField('lastName', event.target.value)}
-                      maxLength={MAX_LAST_NAME_LENGTH}
-                      className="mt-2"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="middleInitial">Middle Initial</Label>
-                    <Input
-                      id="middleInitial"
-                      value={recordForm.middleInitial}
-                      onChange={(event) => updateRecordField('middleInitial', event.target.value)}
-                      maxLength={MAX_MIDDLE_INITIAL_LENGTH}
-                      className="mt-2"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="department">Department</Label>
-                    <Select value={recordForm.department || 'unassigned'} onValueChange={(value) => updateRecordField('department', value === 'unassigned' ? '' : value)}>
-                      <SelectTrigger id="department" className="mt-2">
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Not set</SelectItem>
-                        {DEPARTMENTS.map((department) => (
-                          <SelectItem key={department} value={department}>
-                            {department}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="course">Course</Label>
-                    <Select
-                      value={recordForm.course || 'unassigned'}
-                      onValueChange={(value) => updateRecordField('course', value === 'unassigned' ? '' : value)}
-                      disabled={!recordForm.department}
-                    >
-                      <SelectTrigger id="course" className="mt-2">
-                        <SelectValue placeholder={recordForm.department ? 'Select course' : 'Select department first'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Not set</SelectItem>
-                        {getProgramOptionsForSelect(recordForm.department, recordForm.course).map((course) => (
-                          <SelectItem key={course} value={course}>
-                            {course}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="year">Year Level</Label>
-                    <Select value={recordForm.year || 'unassigned'} onValueChange={(value) => updateRecordField('year', value === 'unassigned' ? '' : value)}>
-                      <SelectTrigger id="year" className="mt-2">
-                        <SelectValue placeholder="Select year" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Not set</SelectItem>
-                        {YEAR_OPTIONS.map((year) => (
-                          <SelectItem key={year} value={year}>
-                            Year {year}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="age">Age</Label>
-                    <Input
-                      id="age"
-                      value={recordForm.age}
-                      onChange={(event) => updateRecordField('age', event.target.value)}
-                      inputMode="numeric"
-                      pattern="\d{2}"
-                      maxLength={MAX_AGE_LENGTH}
-                      className="mt-2"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="sex">Sex</Label>
-                    <Select
-                      value={getSexSelectValue(recordForm.sex)}
-                      onValueChange={(value) => {
-                        if (value === 'unassigned') {
-                          updateRecordField('sex', '');
-                          return;
-                        }
-                        if (value === 'others') {
-                          const existingOtherValue = getSexOtherInputValue(recordForm.sex);
-                          updateRecordField('sex', existingOtherValue || 'others');
-                          return;
-                        }
-                        updateRecordField('sex', value);
-                      }}
-                    >
-                      <SelectTrigger id="sex" className="mt-2">
-                        <SelectValue placeholder="Select sex" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Not set</SelectItem>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
-                        <SelectItem value="others">Others, specify</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {getSexSelectValue(recordForm.sex) === 'others' ? (
-                      <Input
-                        id="sexOthersSpecify"
-                        value={getSexOtherInputValue(recordForm.sex)}
-                        onChange={(event) => updateRecordField('sex', sanitizeSexOther(event.target.value))}
-                        maxLength={MAX_SEX_OTHER_LENGTH}
-                        placeholder="Specify (letters only)"
-                        className="mt-2"
-                      />
-                    ) : null}
-                  </div>
-                  <div>
-                    <Label htmlFor="birthday">Birthday</Label>
-                    <Input
-                      id="birthday"
-                      type="date"
-                      value={recordForm.birthday}
-                      onChange={(event) => updateRecordField('birthday', event.target.value)}
-                      className="mt-2"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="civilStatus">Civil Status</Label>
-                    <Select value={recordForm.civilStatus || 'unassigned'} onValueChange={(value) => updateRecordField('civilStatus', value === 'unassigned' ? '' : value)}>
-                      <SelectTrigger id="civilStatus" className="mt-2">
-                        <SelectValue placeholder="Select civil status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Not set</SelectItem>
-                        <SelectItem value="Single">Single</SelectItem>
-                        <SelectItem value="Married">Married</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="contactNumber">Contact Number</Label>
-                    <Input
-                      id="contactNumber"
-                      value={recordForm.contactNumber}
-                      onChange={(event) => updateRecordField('contactNumber', event.target.value)}
-                      inputMode="numeric"
-                      placeholder="(+63) 9123456789"
-                      className="mt-2"
-                    />
-                  </div>
-                  <div className="md:col-span-2 xl:col-span-3">
-                    <Label htmlFor="address">Address</Label>
-                    <Textarea
-                      id="address"
-                      value={recordForm.address}
-                      onChange={(event) => updateRecordField('address', event.target.value)}
-                      maxLength={MAX_ADDRESS_LENGTH}
-                      className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <StudentProfileFormCard
+            value={{
+              studentId: recordForm.studentId,
+              firstName: recordForm.firstName,
+              lastName: recordForm.lastName,
+              middleInitial: recordForm.middleInitial,
+              department: recordForm.department,
+              course: recordForm.course,
+              age: recordForm.age,
+              sex: recordForm.sex,
+              birthday: recordForm.birthday,
+              civilStatus: recordForm.civilStatus,
+              contactNumber: recordForm.contactNumber,
+              address: recordForm.address,
+            }}
+            readOnly
+            title="Student Profile"
+            description={isDoctorWorkspace
+              ? 'This uses the same profile editor shown to students, but doctors can only view it here.'
+              : 'This uses the same profile editor shown to students, but clinic staff can only view it here.'}
+            extraFields={[
+              {
+                id: 'yearLevel',
+                label: 'Year Level',
+                value: recordForm.year ? `Year ${recordForm.year}` : '',
+              },
+            ]}
+          />
 
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
             <Card>

@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../../components/ui/switch';
 import { useAuth } from '../../lib/auth';
 import { getRoleLabel, updateStaffProfile } from '../../lib/api';
+import { formatPhilippinePhoneInput, isValidPhilippinePhoneNumber } from '../student/medical-form/constants';
 import {
   loadStaffWorkspacePreferences,
   saveStaffWorkspacePreferences,
@@ -96,13 +97,15 @@ export default function StaffSettings() {
   );
 
   const isProfileValid =
-    Boolean(profile.name.trim()) && Boolean(profile.email.trim()) && Boolean(profile.position.trim());
-  const isDoctorWorkspace = profile.position === 'Clinic Doctor' || staffRoleLabel === 'Clinic Doctor';
+    Boolean(profile.name.trim()) &&
+    Boolean(profile.email.trim()) &&
+    (!profile.phone.trim() || isValidPhilippinePhoneNumber(profile.phone));
+  const isDoctorWorkspace = staffRoleLabel === 'Clinic Doctor';
 
   const updateProfileField = <K extends keyof StaffProfileFormState>(field: K, value: StaffProfileFormState[K]) => {
     setProfile((prev) => ({
       ...prev,
-      [field]: value,
+      [field]: field === 'phone' ? formatPhilippinePhoneInput(String(value)) as StaffProfileFormState[K] : value,
     }));
   };
 
@@ -118,7 +121,7 @@ export default function StaffSettings() {
 
   const requestSaveConfirmation = () => {
     if (!isProfileValid) {
-      toast.error('Please complete name, email, and position before saving.');
+      toast.error('Please complete your name and email, and use a valid phone number if provided.');
       return;
     }
     if (!hasProfileChanges) {
@@ -206,16 +209,14 @@ export default function StaffSettings() {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="min-w-0">
-                <Label htmlFor="staffPosition">Position</Label>
-                <Select value={profile.position} onValueChange={(value) => updateProfileField('position', value)}>
-                  <SelectTrigger id="staffPosition">
-                    <SelectValue placeholder="Select position" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Clinic Staff">Clinic Staff</SelectItem>
-                    <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="staffPosition">Role</Label>
+                <Input
+                  id="staffPosition"
+                  value={staffRoleLabel}
+                  readOnly
+                  disabled
+                  className="cursor-not-allowed opacity-80"
+                />
               </div>
               <div className="min-w-0">
                 <Label htmlFor="staffPhone">Phone Number</Label>
@@ -223,8 +224,12 @@ export default function StaffSettings() {
                   id="staffPhone"
                   value={profile.phone}
                   onChange={(event) => updateProfileField('phone', event.target.value)}
-                  placeholder="Contact number"
+                  inputMode="numeric"
+                  placeholder="(+63) 9123456789"
                 />
+                {profile.phone.trim() && !isValidPhilippinePhoneNumber(profile.phone) ? (
+                  <p className="mt-2 text-xs text-red-600">Use the format (+63) 9123456789.</p>
+                ) : null}
               </div>
             </div>
             <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">

@@ -287,7 +287,7 @@ export type StudentProfileUpdateInput = {
 export type StaffProfileUpdateInput = {
   name: string;
   email: string;
-  position: string;
+  position?: string;
   phone: string;
   applyAcrossRoles?: boolean;
 };
@@ -2263,12 +2263,12 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
     applyAcrossRoles: data.applyAcrossRoles !== false,
   };
 
-  if (!payload.name || !payload.email || !payload.position) {
-    throw new Error('Name, email, and position are required.');
+  if (!payload.name || !payload.email) {
+    throw new Error('Name and email are required.');
   }
 
   try {
-    return await apiRequest<{
+    const result = await apiRequest<{
       success: boolean;
       profile: AuthMe['profile'];
       staff: AuthMe['staff'];
@@ -2279,6 +2279,8 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
       },
       body: JSON.stringify(payload),
     });
+    invalidateMeCache();
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message.toLowerCase() : '';
     const missingRoute = message.includes('404') || message.includes('not found');
@@ -2325,7 +2327,7 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
         email: payload.email || null,
         first_name: firstName || null,
         last_name: lastName || null,
-        position: payload.position || null,
+        position: me.staff?.position || payload.position || null,
         phone: payload.phone || null,
       }),
     },
