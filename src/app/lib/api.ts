@@ -152,6 +152,9 @@ type SupabaseAuthUser = {
     first_name?: string | null;
     last_name?: string | null;
     full_name?: string | null;
+    given_name?: string | null;
+    family_name?: string | null;
+    name?: string | null;
   } | null;
 };
 
@@ -340,14 +343,23 @@ function normalizeNamePart(value?: string | null) {
 }
 
 function deriveNamePartsFromUser(user?: SupabaseAuthUser | null) {
-  const firstName = normalizeNamePart(user?.user_metadata?.first_name);
-  const lastName = normalizeNamePart(user?.user_metadata?.last_name);
+  const firstName = normalizeNamePart(
+    user?.user_metadata?.first_name
+    || user?.user_metadata?.given_name,
+  );
+  const lastName = normalizeNamePart(
+    user?.user_metadata?.last_name
+    || user?.user_metadata?.family_name,
+  );
 
   if (firstName || lastName) {
     return { firstName, lastName };
   }
 
-  const fullName = normalizeNamePart(user?.user_metadata?.full_name);
+  const fullName = normalizeNamePart(
+    user?.user_metadata?.full_name
+    || user?.user_metadata?.name,
+  );
   if (!fullName) {
     return { firstName: null, lastName: null };
   }

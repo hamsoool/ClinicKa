@@ -49,8 +49,11 @@ type StudentProfileFormState = {
   submissionTargetYearLevel: string;
 };
 
+const MAX_NAME_LENGTH = 30;
+const MIN_PROFILE_AGE = 18;
+
 function sanitizeName(value: string) {
-  return String(value).replace(/[^A-Za-z\s'-]/g, '').slice(0, 30);
+  return String(value).normalize('NFC').replace(/[^\p{L}\s'-]/gu, '').slice(0, MAX_NAME_LENGTH);
 }
 
 function sanitizeAddress(value: string) {
@@ -58,6 +61,20 @@ function sanitizeAddress(value: string) {
     .replace(/[<>`]/g, '')
     .replace(/--|\/\*|\*\//g, '')
     .slice(0, 180);
+}
+
+function getMaxBirthdateIso(minAge: number) {
+  const today = new Date();
+  const max = new Date(today.getFullYear() - minAge, today.getMonth(), today.getDate());
+  return max.toISOString().split('T')[0];
+}
+
+function isAtLeastAge(dateValue: string, minAge: number) {
+  if (!dateValue) return false;
+  const date = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  const maxBirthdate = new Date(getMaxBirthdateIso(minAge));
+  return date <= maxBirthdate;
 }
 
 function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null): StudentProfileFormState {
@@ -188,6 +205,9 @@ export default function StudentProfile() {
   const hasChanges = hasTextChanges || hasFileChanges;
   const hasValidContactNumber =
     !formData.contactNumber.trim() || isValidPhilippinePhoneNumber(formData.contactNumber);
+  const hasValidBirthday =
+    !formData.birthday.trim() || isAtLeastAge(formData.birthday, MIN_PROFILE_AGE);
+  const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_PROFILE_AGE), []);
   const requiresYearOverride =
     formData.submissionCategory === 'returning' || formData.submissionCategory === 'repeater_irregular';
 
@@ -202,6 +222,7 @@ export default function StudentProfile() {
     Boolean(formData.sex.trim()) &&
     Boolean(formData.birthday.trim()) &&
     Boolean(formData.civilStatus.trim()) &&
+    hasValidBirthday &&
     hasValidContactNumber &&
     (!requiresYearOverride || Boolean(formData.submissionTargetYearLevel));
 
@@ -296,6 +317,10 @@ export default function StudentProfile() {
         toast.error('Use a Philippine mobile number in the format (+63) 9123456789.');
         return;
       }
+      if (!hasValidBirthday) {
+        toast.error('Birthday must be for a student who is 18 years old or above.');
+        return;
+      }
       toast.error('Please complete the required profile fields before saving.');
       return;
     }
@@ -385,20 +410,43 @@ export default function StudentProfile() {
               <Label htmlFor="studentId">Student ID</Label>
               <Input id="studentId" value={formData.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
             </div>
-            <div className="min-w-0">
-              <Label htmlFor="department">Department *</Label>
-              <Select value={formData.department} onValueChange={(value) => updateField('department', value)}>
-                <SelectTrigger id="department" className={requiredFieldClass(!formData.department.trim())}>
-                  <SelectValue placeholder="Required: select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DEPARTMENT_OPTIONS.map((department) => (
-                    <SelectItem key={department.value} value={department.value}>
-                      {department.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="min-w-0 md:col-span-2">
+              <div className="grid gap-5 md:grid-cols-2">
+                <div className="min-w-0">
+                  <Label htmlFor="department">Department *</Label>
+                  <Select value={formData.department} onValueChange={(value) => updateField('department', value)}>
+                    <SelectTrigger id="department" className={requiredFieldClass(!formData.department.trim())}>
+                      <SelectValue placeholder="Required: select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEPARTMENT_OPTIONS.map((department) => (
+                        <SelectItem key={department.value} value={department.value}>
+                          {department.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-0">
+                  <Label htmlFor="course">Course / Program *</Label>
+                  <Select
+                    value={formData.course || undefined}
+                    onValueChange={(value) => updateField('course', value)}
+                    disabled={!formData.department}
+                  >
+                    <SelectTrigger id="course" className={requiredFieldClass(!formData.course.trim())}>
+                      <SelectValue placeholder={formData.department ? 'Required: select program' : 'Select department first'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getProgramOptionsForSelect(formData.department, formData.course).map((program) => (
+                        <SelectItem key={program} value={program}>
+                          {program}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
             <div className="min-w-0">
               <Label htmlFor="firstName">First Name *</Label>
@@ -430,25 +478,6 @@ export default function StudentProfile() {
                 maxLength={1}
                 className={requiredFieldClass(!formData.middleInitial.trim())}
               />
-            </div>
-            <div className="min-w-0">
-              <Label htmlFor="course">Course / Program *</Label>
-              <Select
-                value={formData.course || undefined}
-                onValueChange={(value) => updateField('course', value)}
-                disabled={!formData.department}
-              >
-                <SelectTrigger id="course" className={requiredFieldClass(!formData.course.trim())}>
-                  <SelectValue placeholder={formData.department ? 'Required: select program' : 'Select department first'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {getProgramOptionsForSelect(formData.department, formData.course).map((program) => (
-                    <SelectItem key={program} value={program}>
-                      {program}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
             <div className="min-w-0">
               <Label htmlFor="age">Age *</Label>
@@ -483,8 +512,12 @@ export default function StudentProfile() {
                 type="date"
                 value={formData.birthday}
                 onChange={(event) => updateField('birthday', event.target.value)}
-                className={requiredFieldClass(!formData.birthday.trim())}
+                max={maxBirthdate}
+                className={requiredFieldClass(!formData.birthday.trim() || !hasValidBirthday)}
               />
+              {!hasValidBirthday && formData.birthday ? (
+                <p className="mt-1 text-sm text-red-600">Student must be 18 years old or above.</p>
+              ) : null}
             </div>
             <div className="min-w-0">
               <Label htmlFor="civilStatus">Civil Status *</Label>

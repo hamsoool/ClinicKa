@@ -97,12 +97,44 @@ Optional but required if you want email notifications to send successfully:
 - `SMTP_PORT`
 - `SMTP_USER`
 - `SMTP_PASS`
+- `SMTP_FROM_EMAIL`
+- `SMTP_FROM_NAME`
 
 Notes:
 
 - `.env.example` also includes `VITE_SUPABASE_PROJECT_ID`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_PUBLISHABLE_KEY` for project compatibility; current app runtime primarily uses the variables listed above.
 - Set `ALLOWED_ORIGINS` to your deployed frontend origin before deploying the Supabase Edge Function. Keep `DEBUG_ERRORS=false` and `ENABLE_REQUEST_LOGGING=false` in production.
 - Never commit real secrets from `.env.local`.
+- For Supabase Edge Functions, do not use SMTP port `587`. Supabase documents outgoing connections to ports `25` and `587` as unavailable for Edge Functions, so use `465` for Brevo with SSL/TLS.
+
+## Brevo Setup Notes
+
+ClinicKa uses email in two separate places:
+
+- Supabase Auth emails for public student signup, verification, and password reset
+- The `server` edge function for ClinicKa status notifications (`returned`, `approved`, `physical_exam_done`)
+
+For Brevo:
+
+1. In Brevo, authenticate your sending domain and create a transactional sender.
+2. Retrieve your SMTP credentials from Brevo's SMTP page.
+3. In Supabase Auth SMTP settings, use Brevo's relay host and your Brevo SMTP credentials.
+4. In the `server` edge-function secrets, set:
+
+```env
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=465
+SMTP_USER=your-brevo-smtp-login
+SMTP_PASS=your-brevo-smtp-key
+SMTP_FROM_EMAIL=no-reply@yourdomain.com
+SMTP_FROM_NAME=ClinicKa
+```
+
+Notes:
+
+- Supabase Auth custom SMTP is configured in the Supabase dashboard, not in frontend code.
+- The ClinicKa edge function now supports `SMTP_FROM_EMAIL` and `SMTP_FROM_NAME` so the sender can match your verified Brevo sender identity.
+- Disable Brevo click tracking for Supabase Auth emails. Supabase warns that external provider link rewriting can break `{{ .ConfirmationURL }}` verification links.
 
 ## Supabase Setup Notes
 

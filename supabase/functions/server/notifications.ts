@@ -66,6 +66,8 @@ export async function sendStatusNotificationEmail(
   const smtpPort = Number(Deno.env.get("SMTP_PORT") || "0");
   const smtpUser = String(Deno.env.get("SMTP_USER") || "").trim();
   const smtpPass = String(Deno.env.get("SMTP_PASS") || "").trim();
+  const smtpFromEmail = String(Deno.env.get("SMTP_FROM_EMAIL") || "").trim();
+  const smtpFromName = String(Deno.env.get("SMTP_FROM_NAME") || "").trim() || "Gordon College Clinic";
 
   if (!smtpHost || !smtpPort || !smtpUser || !smtpPass) {
     throw new Error(
@@ -131,7 +133,7 @@ export async function sendStatusNotificationEmail(
   });
 
   await transporter.sendMail({
-    from: `"Gordon College Clinic" <${smtpUser}>`,
+    from: `"${smtpFromName}" <${smtpFromEmail || smtpUser}>`,
     to: recipientEmail,
     subject: emailContent.subject,
     text: emailContent.text,

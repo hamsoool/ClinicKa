@@ -39,14 +39,23 @@ function withRuntimeRoleOverrides(profile: any, user: any) {
 }
 
 function deriveNamePartsFromUser(user: any) {
-  const firstName = normalizeNamePart(user?.user_metadata?.first_name);
-  const lastName = normalizeNamePart(user?.user_metadata?.last_name);
+  const firstName = normalizeNamePart(
+    user?.user_metadata?.first_name
+    || user?.user_metadata?.given_name,
+  );
+  const lastName = normalizeNamePart(
+    user?.user_metadata?.last_name
+    || user?.user_metadata?.family_name,
+  );
 
   if (firstName || lastName) {
     return { firstName, lastName };
   }
 
-  const fullName = normalizeNamePart(user?.user_metadata?.full_name);
+  const fullName = normalizeNamePart(
+    user?.user_metadata?.full_name
+    || user?.user_metadata?.name,
+  );
   if (!fullName) {
     return { firstName: null, lastName: null };
   }

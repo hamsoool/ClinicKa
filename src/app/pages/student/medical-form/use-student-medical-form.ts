@@ -49,7 +49,7 @@ function normalizeMiddleInitial(value: string) {
 
 
 function sanitizeName(value: string) {
-  return value.replace(/[^A-Za-z\s'-]/g, '').slice(0, MAX_NAME_LENGTH);
+  return value.normalize('NFC').replace(/[^\p{L}\s'-]/gu, '').slice(0, MAX_NAME_LENGTH);
 }
 
 function sanitizeCourse(value: string) {

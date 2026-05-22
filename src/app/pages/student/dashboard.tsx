@@ -259,6 +259,7 @@ export default function StudentDashboard() {
 
     const latestRecordStatus = String(latestRecord.status || '').toLowerCase();
     const shouldCheckLatestSubmission = latestRecordStatus !== 'approved' && latestRecordStatus !== 'physical_exam_done';
+    const isLegacyJlghSubmission = String(latestRecord.labTestLocation || '').trim().toLowerCase() === 'jlgh';
     const editPath = `/student/privacy-waiver/${latestRecord.year || '1'}?edit=${encodeURIComponent(latestRecord.id)}`;
 
     if (shouldCheckLatestSubmission) {
@@ -270,9 +271,9 @@ export default function StudentDashboard() {
         !hasValue(latestRecord.emergencyContact?.address)
           ? 'emergency contact'
           : '',
-        !hasValue(latestRecord.cbcTestClinic) ? 'CBC test clinic/lab' : '',
-        !hasValue(latestRecord.urinalysisTestClinic) ? 'Urinalysis test clinic/lab' : '',
-        !hasValue(latestRecord.xrayTestClinic) ? 'X-Ray test clinic/lab' : '',
+        !isLegacyJlghSubmission && !hasValue(latestRecord.cbcTestClinic) ? 'CBC test clinic/lab' : '',
+        !isLegacyJlghSubmission && !hasValue(latestRecord.urinalysisTestClinic) ? 'Urinalysis test clinic/lab' : '',
+        !isLegacyJlghSubmission && !hasValue(latestRecord.xrayTestClinic) ? 'X-Ray test clinic/lab' : '',
       ].filter(Boolean);
 
       if (missingSubmissionInfo.length > 0) {
