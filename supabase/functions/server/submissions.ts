@@ -254,6 +254,9 @@ function mapSubmission(row: any, related: Record<string, any>) {
     certificatePdfUrl: files.certificate?.url || certificate?.pdf_url,
     labTestLocation: row.lab_test_location || "",
     otherClinicName: row.lab_test_clinic || "",
+    cbcTestClinic: row.cbc_test_clinic || "",           
+    urinalysisTestClinic: row.urinalysis_test_clinic || "",  
+    xrayTestClinic: row.xray_test_clinic || "",
   };
 }
 

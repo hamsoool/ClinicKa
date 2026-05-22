@@ -1267,15 +1267,6 @@ export default function StaffRecordReview() {
               <Badge className={clearanceStatus === 'Approved' ? 'bg-green-100 text-green-800 hover:bg-green-100' : clearanceStatus === 'Returned' ? 'bg-red-100 text-red-800 hover:bg-red-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
                 Clearance: {clearanceStatus}
               </Badge>
-              <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
-                CBC: {submission.cbcTestClinic || 'Not specified'}
-              </Badge>
-              <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
-                Urinalysis: {submission.urinalysisTestClinic || 'Not specified'}
-              </Badge>
-              <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">
-                X-Ray: {submission.xrayTestClinic || 'Not specified'}
-              </Badge>
             </div>
           </div>
         )}

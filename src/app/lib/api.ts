@@ -3319,15 +3319,8 @@ export async function getSubmissions() {
   return { submissions };
 }
 
-export async function getSubmission(id: string) {
-  try {
-    return await apiRequest<{ submission: any }>(`/functions/v1/server/submission/${encodeURIComponent(id)}`);
-  } catch (error) {
-    if (!shouldFallbackToRest(error)) {
-      throw error;
-    }
-  }
 
+export async function getSubmission(id: string) {
   const submissions = await getMappedSubmissions(`id=eq.${id}&order=submitted_at.desc`);
   const submission = submissions[0];
   if (!submission) {
