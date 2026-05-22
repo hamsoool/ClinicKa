@@ -70,6 +70,58 @@ import {
 
 const app = new Hono().basePath("/server");
 
+async function findLatestProfileAssetInStorage(studentId: string, fileType: "photo" | "signature") {
+  const targetStudentId = String(studentId || "").trim();
+  if (!targetStudentId) return null;
+
+  const bucket = fileType === "photo" ? "profile" : "student_signature";
+  const prefixes = [`${targetStudentId}/`, `profiles/${targetStudentId}/`];
+  const candidates: Array<{ name: string; prefix: string; updatedAt: number }> = [];
+
+  for (const prefix of prefixes) {
+    try {
+      const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+        limit: 100,
+        offset: 0,
+      });
+      if (error || !data?.length) continue;
+
+      for (const item of data) {
+        const name = String(item?.name || "").trim();
+        if (!name) continue;
+        const lowerName = name.toLowerCase();
+        if (!(lowerName === fileType || lowerName.startsWith(`${fileType}.`) || lowerName.startsWith(`${fileType}_`))) {
+          continue;
+        }
+        const updatedAt = new Date(
+          String(item?.updated_at || item?.created_at || item?.last_accessed_at || 0),
+        ).getTime();
+        candidates.push({ name, prefix, updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0 });
+      }
+    } catch (error) {
+      console.log(`Profile asset storage list warning (${bucket}):`, error);
+    }
+  }
+
+  const latest = candidates.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if (!latest) return null;
+
+  const storagePath = `${latest.prefix}${latest.name}`;
+  const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+
+  if (signedUrlError) {
+    console.log(`Profile asset signed URL warning (${bucket}):`, signedUrlError.message);
+    return null;
+  }
+
+  return {
+    url: signedUrlData?.signedUrl || null,
+    fileName: latest.name,
+  };
+}
+
 if (requestLoggingEnabled) {
   app.use('*', logger(console.log));
 }
@@ -341,20 +393,19 @@ app.post("/student-profile-asset", async (c) => {
       .single();
 
     if (fileInsertError || !insertedFile) {
-      await supabase.storage.from(targetBucket).remove([storagePath]).catch(() => null);
-      throw new Error(fileInsertError?.message || 'Failed to save profile asset metadata.');
-    }
-
-    try {
-      await supabase
-        .from('files')
-        .delete()
-        .eq('uploaded_by', requester.profile.id)
-        .is('submission_id', null)
-        .eq('type', fileType)
-        .neq('id', insertedFile.id);
-    } catch (metadataCleanupError) {
-      console.log('Profile asset cleanup warning:', metadataCleanupError);
+      console.log('Profile asset metadata warning:', fileInsertError?.message || 'Missing inserted metadata row');
+    } else {
+      try {
+        await supabase
+          .from('files')
+          .delete()
+          .eq('uploaded_by', requester.profile.id)
+          .is('submission_id', null)
+          .eq('type', fileType)
+          .neq('id', insertedFile.id);
+      } catch (metadataCleanupError) {
+        console.log('Profile asset cleanup warning:', metadataCleanupError);
+      }
     }
 
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
@@ -423,12 +474,21 @@ app.get("/student-profile-assets", async (c) => {
       return acc;
     }, {} as Record<string, any>);
 
+    const storagePhoto =
+      !latestByType.photo && targetStudentId
+        ? await findLatestProfileAssetInStorage(targetStudentId, "photo")
+        : null;
+    const storageSignature =
+      !latestByType.signature && targetStudentId
+        ? await findLatestProfileAssetInStorage(targetStudentId, "signature")
+        : null;
+
     return c.json({
       success: true,
-      photoUrl: latestByType.photo?.url || null,
-      signatureUrl: latestByType.signature?.url || null,
-      photoFileName: latestByType.photo?.file_name || null,
-      signatureFileName: latestByType.signature?.file_name || null,
+      photoUrl: latestByType.photo?.url || storagePhoto?.url || null,
+      signatureUrl: latestByType.signature?.url || storageSignature?.url || null,
+      photoFileName: latestByType.photo?.file_name || storagePhoto?.fileName || null,
+      signatureFileName: latestByType.signature?.file_name || storageSignature?.fileName || null,
     });
   } catch (error) {
     return internalServerError(c, "Failed to load student profile assets", error);
