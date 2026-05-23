@@ -202,6 +202,7 @@ const MAX_CLEARANCE_DIAGNOSIS_LENGTH = 50;
 const MAX_CLEARANCE_REMARKS_LENGTH = 50;
 const SEX_BASE_OPTIONS = ['male', 'female'] as const;
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married'] as const;
+const MEDICAL_RECORD_DATE_RANGE_MONTHS = 6;
 
 type ReviewStep = (typeof REVIEW_STEPS)[number];
 
@@ -293,6 +294,13 @@ function isValidVisualAcuity(value: string) {
   return /^(OD|OS)\s\d{1,2}\/\d{1,3}$/i.test(trimmedValue);
 }
 
+function formatDateInputValue(date: Date) {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeDateInputValue(value?: string | null) {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -312,8 +320,32 @@ function normalizeDateInputValue(value?: string | null) {
   return isSameDate ? candidate : '';
 }
 
+function shiftCalendarMonths(date: Date, amount: number) {
+  const shifted = new Date(date.getFullYear(), date.getMonth() + amount, 1);
+  const lastDayOfShiftedMonth = new Date(shifted.getFullYear(), shifted.getMonth() + 1, 0).getDate();
+  shifted.setDate(Math.min(date.getDate(), lastDayOfShiftedMonth));
+  return shifted;
+}
+
 function getTodayDateInputValue() {
-  return new Date().toISOString().slice(0, 10);
+  return formatDateInputValue(new Date());
+}
+
+function getMedicalRecordDateBounds(referenceDate = new Date()) {
+  return {
+    min: formatDateInputValue(shiftCalendarMonths(referenceDate, -MEDICAL_RECORD_DATE_RANGE_MONTHS)),
+    max: formatDateInputValue(referenceDate),
+  };
+}
+
+function getMedicalRecordDateValidationMessage(label: string, value?: string | null) {
+  const normalized = normalizeDateInputValue(value);
+  if (!normalized) return `${label} must be a valid date.`;
+
+  const { min, max } = getMedicalRecordDateBounds();
+  if (normalized > max) return `${label} cannot be in the future.`;
+  if (normalized < min) return `${label} must be within the past ${MEDICAL_RECORD_DATE_RANGE_MONTHS} months.`;
+  return '';
 }
 
 function sanitizeNumericWithLimits(value: string, maxIntegerDigits: number, maxDecimalPlaces = 2) {
@@ -928,6 +960,24 @@ export default function StaffRecordReview() {
       return;
     }
 
+    const medicalRecordDateChecks: Array<[string, string]> = [
+      ['Chest X-Ray date', assessmentForm.xrayDate],
+      ['CBC date', assessmentForm.cbcDate],
+      ['Urinalysis date', assessmentForm.urinalysisDate],
+    ];
+
+    if (canFinalizeClearance) {
+      medicalRecordDateChecks.push(['Issued date', clearanceForm.issuedDate]);
+    }
+
+    for (const [label, value] of medicalRecordDateChecks) {
+      const validationMessage = getMedicalRecordDateValidationMessage(label, value);
+      if (validationMessage) {
+        toast.error(validationMessage);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const statusToSave = targetStatus;
@@ -1131,6 +1181,7 @@ export default function StaffRecordReview() {
   const previousReviewStep = currentReviewStepIndex > 0 ? REVIEW_STEPS[currentReviewStepIndex - 1] : null;
   const nextReviewStep =
     currentReviewStepIndex < REVIEW_STEPS.length - 1 ? REVIEW_STEPS[currentReviewStepIndex + 1] : null;
+  const medicalRecordDateBounds = getMedicalRecordDateBounds();
   const finalDecisionLabel = 'Clearance';
   const getReviewStepLabel = (step: ReviewStep) => {
     switch (step) {
@@ -1542,6 +1593,8 @@ export default function StaffRecordReview() {
                     type="date"
                     value={assessmentForm.xrayDate}
                     onChange={(event) => updateAssessmentField('xrayDate', event.target.value)}
+                    min={medicalRecordDateBounds.min}
+                    max={medicalRecordDateBounds.max}
                     className="mt-2"
                   />
                 </div>
@@ -1592,6 +1645,8 @@ export default function StaffRecordReview() {
                     type="date"
                     value={assessmentForm.cbcDate}
                     onChange={(event) => updateAssessmentField('cbcDate', event.target.value)}
+                    min={medicalRecordDateBounds.min}
+                    max={medicalRecordDateBounds.max}
                     className="mt-2"
                   />
                 </div>
@@ -1686,6 +1741,8 @@ export default function StaffRecordReview() {
                     type="date"
                     value={assessmentForm.urinalysisDate}
                     onChange={(event) => updateAssessmentField('urinalysisDate', event.target.value)}
+                    min={medicalRecordDateBounds.min}
+                    max={medicalRecordDateBounds.max}
                     className="mt-2"
                   />
                 </div>
@@ -2009,6 +2066,8 @@ export default function StaffRecordReview() {
                     type="date"
                     value={clearanceForm.issuedDate}
                     onChange={(event) => updateClearanceField('issuedDate', event.target.value)}
+                    min={medicalRecordDateBounds.min}
+                    max={medicalRecordDateBounds.max}
                     className="mt-2"
                   />
                 </div>

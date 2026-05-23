@@ -692,7 +692,7 @@ export default function StaffDashboard() {
                   Resubmitted ({overview.resubmittedRecords || 0})
                 </TabsTrigger>
                 <TabsTrigger value="all" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
-                  All ({overview.actionableRecords || 0})
+                  All Action Needed ({overview.actionableRecords || 0})
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -704,7 +704,7 @@ export default function StaffDashboard() {
               <p className="mt-4 text-lg font-semibold text-on-surface">All caught up</p>
               <p className="mt-2 max-w-sm text-sm text-on-surface-variant">
                 {queueTab === 'all'
-                  ? 'There are no records that need staff attention right now.'
+                  ? 'There are no pending, in-review, returned, or resubmitted records that need staff attention right now.'
                   : `There are no ${queueTab.replace('_', ' ')} records right now.`}
               </p>
             </div>

@@ -3460,6 +3460,66 @@ export async function getSubmission(id: string) {
   return { submission };
 }
 
+const MEDICAL_RECORD_DATE_RANGE_MONTHS = 6;
+
+function formatDateInputValue(date: Date) {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeDateInputValue(value?: unknown) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const candidate = raw.includes('T') ? raw.slice(0, 10) : raw;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return '';
+
+  const [year, month, day] = candidate.split('-').map((part) => Number(part));
+  if (!year || !month || !day) return '';
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const isSameDate =
+    date.getUTCFullYear() === year
+    && date.getUTCMonth() + 1 === month
+    && date.getUTCDate() === day;
+
+  return isSameDate ? candidate : '';
+}
+
+function shiftCalendarMonths(date: Date, amount: number) {
+  const shifted = new Date(date.getFullYear(), date.getMonth() + amount, 1);
+  const lastDayOfShiftedMonth = new Date(shifted.getFullYear(), shifted.getMonth() + 1, 0).getDate();
+  shifted.setDate(Math.min(date.getDate(), lastDayOfShiftedMonth));
+  return shifted;
+}
+
+function getMedicalRecordDateBounds(referenceDate = new Date()) {
+  return {
+    min: formatDateInputValue(shiftCalendarMonths(referenceDate, -MEDICAL_RECORD_DATE_RANGE_MONTHS)),
+    max: formatDateInputValue(referenceDate),
+  };
+}
+
+function assertMedicalRecordDateInRange(label: string, value?: unknown) {
+  const raw = String(value || '').trim();
+  if (!raw) return;
+
+  const normalized = normalizeDateInputValue(raw);
+  if (!normalized) {
+    throw new Error(`${label} must be a valid date.`);
+  }
+
+  const { min, max } = getMedicalRecordDateBounds();
+  if (normalized > max) {
+    throw new Error(`${label} cannot be in the future.`);
+  }
+  if (normalized < min) {
+    throw new Error(`${label} must be within the past ${MEDICAL_RECORD_DATE_RANGE_MONTHS} months.`);
+  }
+}
+
 export async function saveSubmissionReview(id: string, review: any) {
   const personalInfo = review.personalInfo || {};
   const emergencyContact = review.emergencyContact || {};
@@ -3472,7 +3532,12 @@ export async function saveSubmissionReview(id: string, review: any) {
   const nextStatus = review.status;
   const now = new Date().toISOString();
 
-    const me = await getMe();
+  assertMedicalRecordDateInRange('Chest X-Ray date', labResults.xrayDate);
+  assertMedicalRecordDateInRange('CBC date', labResults.cbcDate);
+  assertMedicalRecordDateInRange('Urinalysis date', labResults.urinalysisDate);
+  assertMedicalRecordDateInRange('Issued date', clearanceInfo.issuedDate);
+
+  const me = await getMe();
   const reviewedBy = me.staff?.id || null;
   const requestedControlNo = String(clearanceInfo.controlNo || '').trim();
 
