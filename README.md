@@ -206,3 +206,30 @@ npm run build
 - Archived account endpoints returning migration errors: verify the target Supabase project already includes the archived accounts schema changes.
 - Google sign-in blocked: student accounts are restricted to `@gordoncollege.edu.ph`.
 - Email notifications not sending: verify `SMTP_*` values are available to the deployed Supabase edge function (and in `.env.local` if you also use local function tooling).
+
+## Copyright Notice
+
+Copyright (c) 2026 ClinicKa contributors.
+
+All rights reserved unless a separate written license or institutional approval states otherwise.
+
+## Disclaimer
+
+ClinicKa is provided for clinic workflow, medical record intake, and administrative support purposes only.
+
+- It is not a substitute for professional medical judgment, diagnosis, treatment, or emergency services.
+- The software is provided "as is", without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, and non-infringement.
+- Users and deploying institutions are responsible for validating data accuracy, configuring access controls correctly, and complying with applicable privacy, health-record, and school data regulations.
+- The maintainers and contributors are not liable for any direct, indirect, incidental, special, or consequential damages arising from use, misuse, deployment, or inability to use the system.
+
+## License
+
+Unless your organization has an explicit written agreement covering this repository, this project is distributed as source-available reference material and is not automatically granted an open-source license for unrestricted redistribution, sublicensing, or commercial reuse.
+
+If you want this repository released under a specific open-source license, add a dedicated `LICENSE` file and update this section to match it.
+
+## Third-Party Licenses
+
+- Parts of the UI include `shadcn/ui`-derived source, which is distributed under the MIT License.
+- Project imagery may include assets governed by the Unsplash License.
+- Other third-party packages, libraries, fonts, icons, and tools used by this project remain subject to their respective licenses and terms from their original authors.
