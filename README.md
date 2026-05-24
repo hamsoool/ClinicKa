@@ -1,309 +1,296 @@
 # ClinicKa
 
-ClinicKa is a web-based clinic management system for Gordon College.
+ClinicKa is a web application for managing student medical requirements at Gordon College.
 
-It helps students submit medical requirements, lets clinic staff review and clear records, and provides admin tooling for user accounts, settings, and reporting. The application is a React + Vite single-page app connected to Supabase (Auth, Postgres, Storage, and Edge Functions).
+If you’re new to web dev: you can think of this project as **a website (frontend)** that talks to **Supabase (backend as a service)** for login, database, and file uploads.
 
 ## Contents
 
-- [Product Overview](#product-overview)
-- [Architecture At A Glance](#architecture-at-a-glance)
-- [Repo Tour (Where To Start Reading Code)](#repo-tour-where-to-start-reading-code)
-- [Frontend Architecture](#frontend-architecture)
-- [Backend Architecture](#backend-architecture)
-- [Supabase Data Model (High-Level)](#supabase-data-model-high-level)
-- [Key Runtime Flows](#key-runtime-flows)
-- [Edge Function API (`server`)](#edge-function-api-server)
-- [OCR Pipeline](#ocr-pipeline)
-- [Tech Stack](#tech-stack)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
+- [What ClinicKa Does](#what-clinicka-does)
+- [Quick Start (Developers)](#quick-start-developers)
+- [How This Project Works (Beginner-Friendly)](#how-this-project-works-beginner-friendly)
+- [Where To Start In The Code](#where-to-start-in-the-code)
+- [Project Map](#project-map)
 - [Configuration](#configuration)
 - [Useful Scripts](#useful-scripts)
-- [Project Structure](#project-structure)
 - [Build And Deploy](#build-and-deploy)
+- [Glossary](#glossary)
+- [Advanced (Optional)](#advanced-optional)
+- [Tech Stack](#tech-stack)
 - [Troubleshooting](#troubleshooting)
-- [Copyright Notice](#copyright-notice)
-- [Disclaimer](#disclaimer)
-- [License](#license)
-- [Third-Party Licenses](#third-party-licenses)
 
-## Product Overview
+## What ClinicKa Does
 
 ClinicKa has four role-based portals:
 
-- Student portal (`/student`): profile management, yearly medical submission, requirements tracking, announcements, and certificate/clearance viewing.
-- Staff portal (`/staff`): submission queue, detailed record review, OCR-assisted extraction for lab results, and record status updates.
-- Admin portal (`/admin`): user account management, staff management, system settings, reports, and announcements.
-- Super admin portal (`/super-admin`): manage administrator accounts.
+- **Students** submit their profile, medical form, and lab files, then track the review status.
+- **Clinic staff** review submissions, update statuses, and (optionally) use OCR to speed up encoding lab values.
+- **Admins** manage users, announcements, system settings, and reports.
+- **Super admins** manage administrator accounts.
 
-### Submission Status Lifecycle
+### Submission Status (Plain English)
 
-The core workflow revolves around a submission whose status is one of:
+A submission typically moves through these statuses:
 
-`pending` → `in_review` → `returned`/`physical_exam_done` → `approved` (with `resubmitted` used when a student re-uploads after a return).
+`pending` → `in_review` → `returned` / `physical_exam_done` → `approved`
 
-This lifecycle is surfaced throughout the staff queue and student dashboards (see `SubmissionStatus` in [src/app/lib/record-types.ts](src/app/lib/record-types.ts)).
+If a student fixes a returned submission and re-uploads files, it becomes `resubmitted`.
 
-## Architecture At A Glance
+## Quick Start (Developers)
 
-```mermaid
-graph TD
-  UI[React + Vite SPA] -->|Auth / REST / Storage| SB[(Supabase)]
-  UI -->|Privileged ops| FX[Edge Function: server (Hono)]
-  FX -->|Service role key| SB
-  FX -->|SMTP| SMTP[SMTP provider]
-  FX -->|OCR| OCR[OCR.space API]
-```
+### Requirements
 
-Key idea:
-
-- The browser can directly talk to Supabase Auth, PostgREST (`/rest/v1/*`), and Storage using the anonymous key + user bearer tokens.
-- Privileged operations (admin actions, server-side joins/mapping, OCR calls, some signed URL generation) go through the Supabase Edge Function named `server`.
-
-## Repo Tour (Where To Start Reading Code)
-
-If you are new to the repo, these files show the application’s “spine”:
-
-- App bootstrap + PWA behavior: [src/main.tsx](src/main.tsx)
-- Global providers (React Query, Auth, Router, Toaster): [src/app/App.tsx](src/app/App.tsx)
-- Route map + role gating: [src/app/routes.tsx](src/app/routes.tsx)
-- Lazy loaded page modules + route prefetching: [src/app/route-modules.ts](src/app/route-modules.ts)
-- Auth state machine (session, role, password recovery/setup, idle timeout): [src/app/lib/auth.tsx](src/app/lib/auth.tsx)
-- All Supabase + edge-function calls live here: [src/app/lib/api.ts](src/app/lib/api.ts)
-
-Backend edge function entrypoint:
-
-- Hono router and route handlers: [supabase/functions/server/index.ts](supabase/functions/server/index.ts)
-- Edge function runtime config + CORS allowlist + server-side Supabase client: [supabase/functions/server/context.ts](supabase/functions/server/context.ts)
-- Requester authentication + archived-account checks + super-admin overrides: [supabase/functions/server/requester.ts](supabase/functions/server/requester.ts)
-- Submission mapping, staff queues, analytics + in-memory caches: [supabase/functions/server/submissions.ts](supabase/functions/server/submissions.ts)
-- Email notification sender: [supabase/functions/server/notifications.ts](supabase/functions/server/notifications.ts)
-- OCR parsing + OCR.space client: [supabase/functions/server/ocr-space-ocr.ts](supabase/functions/server/ocr-space-ocr.ts)
-
-## Frontend Architecture
-
-### Routing + Code Splitting
-
-- Routes are declared in [src/app/routes.tsx](src/app/routes.tsx) using `createBrowserRouter`.
-- Each portal (`/student`, `/staff`, `/admin`, `/super-admin`) uses a layout route with nested children.
-- Route components are lazily imported via [src/app/route-modules.ts](src/app/route-modules.ts), and rendered with `Suspense` skeletons.
-- Each portal layout prefetches its route modules after mount via `prefetchPortalRoutes()` (see [src/app/route-modules.ts](src/app/route-modules.ts) and the portal layout pages under [src/app/pages](src/app/pages)).
-
-### Auth + Session
-
-- `AuthProvider` lives in [src/app/lib/auth.tsx](src/app/lib/auth.tsx) and is mounted globally in [src/app/App.tsx](src/app/App.tsx).
-- Sessions are stored in `sessionStorage` as `gc_supabase_session` (see [src/app/lib/api.ts](src/app/lib/api.ts)). This is a deliberate security tradeoff: sessions do not persist after closing the browser.
-- The router gates portal routes through `RequireAuth` (role allowlist) and `RedirectIfAuthenticated` (prevent signed-in users from seeing auth/marketing pages).
-- Staff/admin/super-admin sessions also enforce an idle timeout driven by server settings.
-
-### Data Access Pattern
-
-All client-side Supabase access is centralized in [src/app/lib/api.ts](src/app/lib/api.ts):
-
-- `authRequest()` calls Supabase Auth endpoints (`/auth/v1/*`).
-- `restRequest()` calls Supabase PostgREST (`/rest/v1/*`).
-- `apiRequest()` calls Supabase Edge Functions (`/functions/v1/*`).
-
-The API layer also:
-
-- Refreshes access tokens automatically on `401` (using the refresh token when available).
-- Uses “try edge function first, then fallback to PostgREST” for some operations so older deployments can still function when specific routes are missing.
-
-For caching and request deduplication, the app uses TanStack Query with a shared client in [src/app/query-client.ts](src/app/query-client.ts). The login experience is warmed with best-effort query + route prefetching in [src/app/lib/login-prefetch.ts](src/app/lib/login-prefetch.ts).
-
-### PWA
-
-PWA configuration is in [vite.config.ts](vite.config.ts). Runtime service worker behavior (update prompts, cache cleanup) is implemented in [src/main.tsx](src/main.tsx).
-
-## Backend Architecture
-
-ClinicKa’s “backend” is Supabase + a single edge function named `server`.
-
-### Supabase Edge Function (`server`)
-
-- Implemented with Hono in [supabase/functions/server/index.ts](supabase/functions/server/index.ts).
-- Uses middleware for CORS and adds basic response hardening headers (no-store, no-sniff, etc).
-- Uses a server-side Supabase client instantiated with `SUPABASE_SERVICE_ROLE_KEY` (see [supabase/functions/server/context.ts](supabase/functions/server/context.ts)).
-
-Key backend modules:
-
-- Requester auth and role enforcement: [supabase/functions/server/requester.ts](supabase/functions/server/requester.ts)
-- Dashboard/submission mapping and TTL caches (per edge-runtime instance): [supabase/functions/server/submissions.ts](supabase/functions/server/submissions.ts)
-- Storage + signed URL helpers: [supabase/functions/server/storage.ts](supabase/functions/server/storage.ts)
-- System settings and student notification state: [supabase/functions/server/settings.ts](supabase/functions/server/settings.ts)
-- Status email notifications via SMTP: [supabase/functions/server/notifications.ts](supabase/functions/server/notifications.ts)
-- OCR.space client + parser heuristics: [supabase/functions/server/ocr-space-ocr.ts](supabase/functions/server/ocr-space-ocr.ts)
-
-### CORS and Allowed Origins
-
-The edge function uses a strict CORS allowlist (see `resolveCorsOrigin()` in [supabase/functions/server/context.ts](supabase/functions/server/context.ts)). Make sure `SITE_URL` and/or `ALLOWED_ORIGINS` are set correctly in production.
-
-## Supabase Data Model (High-Level)
-
-ClinicKa expects an existing Supabase project with tables, buckets, and policies already provisioned.
+- Node.js 20+
+- npm 10+
+- A Supabase project (this app is not “standalone”)
 
 Important:
 
-- This repository contains the edge function source, but does not include the original database migration scripts.
-- If you are standing up a new environment, you must create the required schema (tables, storage buckets, RLS policies) in Supabase.
+- This repo does not include the original SQL migrations. You’ll need a Supabase project that already has the ClinicKa tables/buckets/policies set up.
 
-Access model:
+### Run Locally
 
-- The browser reads/writes some tables directly through PostgREST (`/rest/v1/*`) using the user’s bearer token, so RLS policies must be correct.
-- The edge function uses the service role key (bypasses RLS), so it must enforce role checks before performing privileged operations.
+1. Install dependencies:
 
-Tables referenced by the frontend and/or edge function include (non-exhaustive):
-
-- `profiles` (role, email, identifiers)
-- `students`, `staff_users`
-- `submissions` (status + core medical intake)
-- `emergency_contacts`, `medical_history`, `staff_measurements`
-- `lab_chest_xray`, `lab_cbc`, `lab_urinalysis`
-- `files` (storage metadata + signed URL generation)
-- `announcements`
-- `kv_store_2a5e1a6b` (admin system settings)
-- `archived_accounts` (if the archived-accounts feature/migration is enabled)
-
-## Key Runtime Flows
-
-### 1) Authentication + Role Routing
-
-The app uses an `AuthProvider` and redirects based on the current role (`student`, `staff`, `admin`, `super_admin`).
-
-```mermaid
-sequenceDiagram
-  participant UI as Browser UI
-  participant Auth as Supabase Auth
-  participant FX as Edge Function (server)
-
-  UI->>Auth: Sign in (email/password or Google OAuth)
-  Auth-->>UI: access_token (+ refresh_token)
-  UI->>FX: GET /functions/v1/server/me (Bearer access_token)
-  FX-->>UI: { profile, student, staff }
-  UI-->>UI: Navigate to /student | /staff | /admin | /super-admin
+```bash
+npm install
 ```
 
-Notes:
+2. Create a local env file:
 
-- Sessions are persisted in `sessionStorage` (not localStorage) via the key `gc_supabase_session` (see [src/app/lib/api.ts](src/app/lib/api.ts)).
-- Google sign-in is restricted to `@gordoncollege.edu.ph`. Unauthorized Google users are rejected and cleaned up via an edge-function route.
-- Elevated roles (`staff`, `admin`, `super_admin`) also enforce an idle timeout derived from server settings (see `getSessionPolicy()` in [src/app/lib/api.ts](src/app/lib/api.ts) and the inactivity logic in [src/app/lib/auth.tsx](src/app/lib/auth.tsx)).
-
-### 2) Student Submission
-
-At a high level:
-
-1. Student updates profile information.
-2. Student selects a school year level and completes the waiver + medical form.
-3. Student uploads files (xray/cbc/urinalysis) and submits the record.
-
-Uploads and record submission are mediated through the edge function so bucket selection, file bookkeeping (the `files` table), and signed URL rules remain consistent.
-
-### 3) Staff Review + OCR + Status Email
-
-```mermaid
-sequenceDiagram
-  participant Staff as Staff UI
-  participant FX as Edge Function (server)
-  participant Storage as Supabase Storage
-  participant OCR as OCR.space
-  participant SMTP as SMTP provider
-
-  Staff->>FX: POST /functions/v1/server/submission/:id/cbc-ocr
-  FX->>Storage: Download latest CBC file
-  FX->>OCR: POST /parse/image (multipart)
-  OCR-->>FX: ParsedText
-  FX-->>Staff: { fields, rawText, pageCount }
-
-  Staff->>FX: PUT /functions/v1/server/submission/:id/status
-  FX-->>Staff: success
-  Staff->>FX: POST /functions/v1/server/notifications/status-email
-  FX->>SMTP: Send email (if enabled)
-  SMTP-->>FX: accepted
-  FX-->>Staff: { success }
+```bash
+cp .env.example .env.local
 ```
 
-## Edge Function API (`server`)
+3. Fill in the minimum frontend variables in `.env.local`:
 
-The edge function is deployed under Supabase as a function named `server`.
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
 
-- External URL prefix: `https://<project>.supabase.co/functions/v1/server/*`
-- Internally the Hono app uses `basePath('/server')`, so routes are defined as `/me`, `/submission/:id`, etc (see [supabase/functions/server/index.ts](supabase/functions/server/index.ts)).
+4. Start the dev server:
 
-### Auth Model
+```bash
+npm run dev
+```
 
-- Browser requests include `Authorization: Bearer <access_token>`.
-- The edge function validates the requester, loads their `profile` and linked rows, and enforces role checks.
-- The edge function uses the **service role key** server-side (never expose `SUPABASE_SERVICE_ROLE_KEY` to the browser).
+Open: `http://localhost:5173`
 
-### Route Map (High-Level)
+## How This Project Works (Beginner-Friendly)
 
-This is not an exhaustive API reference, but these are the core “surface area” endpoints:
+There are **two moving parts**:
 
-- Health and session
-  - `GET /functions/v1/server/health`
-  - `GET /functions/v1/server/me`
-  - `GET /functions/v1/server/session-policy`
+1. **Frontend (React app)**
+   - This is what runs in the browser.
+   - It renders pages for student/staff/admin portals.
 
-- Student profile and submissions
-  - `PUT /functions/v1/server/student-profile`
-  - `POST /functions/v1/server/student-profile-asset` (photo/signature)
-  - `GET /functions/v1/server/student-profile-assets`
-  - `POST /functions/v1/server/submit-record`
-  - `GET /functions/v1/server/student-records` (current requester)
-  - `GET /functions/v1/server/student-records/:studentId`
+2. **Supabase (backend)**
+   - Handles sign-in (Auth), database tables (Postgres), and file uploads (Storage).
 
-- Files and OCR
-  - `POST /functions/v1/server/upload-file`
-  - `POST /functions/v1/server/submission/:id/chest-xray-ocr`
-  - `POST /functions/v1/server/submission/:id/cbc-ocr`
-  - `POST /functions/v1/server/submission/:id/urinalysis-ocr`
+Sometimes the frontend needs to do a “server-only” action (for example: calling OCR.space, sending SMTP emails, or using admin privileges safely). For that, the app calls a Supabase **Edge Function** named `server`.
 
-- Staff dashboard and queues
-  - `GET /functions/v1/server/staff/dashboard-overview`
-  - `GET /functions/v1/server/staff/submission-summaries`
-  - `GET /functions/v1/server/staff/approved-students`
-  - `GET /functions/v1/server/submissions`
-  - `GET /functions/v1/server/submission/:id`
-  - `PUT /functions/v1/server/submission/:id/status`
-  - `PUT /functions/v1/server/submission/:id/measurements`
+### Big Picture Diagram
 
-- Notifications
-  - `POST /functions/v1/server/notifications/status-email`
-  - `GET /functions/v1/server/student-notifications/state`
-  - `PUT /functions/v1/server/student-notifications/state`
+```mermaid
+graph TD
+  UI[Browser (React app)] -->|Login / DB / Storage| SB[(Supabase)]
+  UI -->|Server-only actions| FX[Edge Function: server]
+  FX --> SB
+  FX --> OCR[OCR.space]
+  FX --> SMTP[SMTP Email Provider]
+```
 
-- Admin / super-admin
-  - `GET|PUT /functions/v1/server/admin/system-settings`
-  - `GET /functions/v1/server/reporting-term`
-  - `GET /functions/v1/server/user-accounts`
-  - `GET /functions/v1/server/archived-accounts`
-  - `POST /functions/v1/server/admin/archive-account`
-  - `POST /functions/v1/server/admin/restore-account/:archiveId`
-  - `DELETE /functions/v1/server/admin/archive-account/:archiveId`
-  - `POST /functions/v1/server/admin/create-account`
-  - `POST /functions/v1/server/admin/create-staff`
-  - `GET|POST /functions/v1/server/super-admin/administrators`
+If the terms above are unfamiliar, see the [Glossary](#glossary).
 
-## OCR Pipeline
+## Where To Start In The Code
 
-ClinicKa supports OCR-assisted extraction for:
+If you want to understand the app quickly, start here:
 
-- Chest X-ray impression/findings (`normal`/`abnormal` inference)
-- CBC numeric fields + blood type
-- Urinalysis dipstick glucose/protein
+- App entry + PWA logic: [src/main.tsx](src/main.tsx)
+- Global providers (router, auth, react-query): [src/app/App.tsx](src/app/App.tsx)
+- Route definitions (which pages exist): [src/app/routes.tsx](src/app/routes.tsx)
+- Auth/session logic (roles, redirects, idle timeout): [src/app/lib/auth.tsx](src/app/lib/auth.tsx)
+- All “talk to Supabase / talk to edge function” code: [src/app/lib/api.ts](src/app/lib/api.ts)
 
-Implementation details:
+Backend (edge function):
 
-- Edge function calls OCR.space and then parses the returned text with heuristics in [supabase/functions/server/ocr-space-ocr.ts](supabase/functions/server/ocr-space-ocr.ts).
-- The OCR parsing rules are verified by a small Node script: [scripts/verify-ocr-parsers.cjs](scripts/verify-ocr-parsers.cjs).
+- Main router: [supabase/functions/server/index.ts](supabase/functions/server/index.ts)
+- Shared server config (CORS, Supabase client): [supabase/functions/server/context.ts](supabase/functions/server/context.ts)
+- Requester auth/role checks: [supabase/functions/server/requester.ts](supabase/functions/server/requester.ts)
 
-To run the parser verification locally:
+## Project Map
+
+If you’re trying to find “where things live”, this is the quick mental map:
+
+- `src/` → the frontend React app
+- `src/app/pages/` → pages grouped by portal (student/staff/admin)
+- `src/app/lib/` → auth + API calls (how the frontend talks to Supabase)
+- `supabase/functions/server/` → the `server` edge function (backend logic)
+- `scripts/` → developer scripts (ex: OCR parser verification)
+- `public/` → static assets
+- `vercel.json`, `Dockerfile`, `nginx.conf` → deployment helpers
+
+## Common User Flows (In Words)
+
+### Login → Go To The Right Portal
+
+1. User signs in with Supabase Auth.
+2. The app asks the edge function “who is this user?”
+3. The app redirects them to the correct portal (student/staff/admin).
+
+### Student Submission
+
+1. Student fills in their profile and medical form.
+2. Student uploads lab files.
+3. A submission record is created and becomes visible to staff for review.
+
+### Staff Review + Status Updates
+
+1. Staff opens the submission queue.
+2. Staff reviews details and uploaded files.
+3. Staff updates the status (`in_review`, `returned`, `approved`, etc).
+4. If email is enabled, staff can trigger a status email notification.
+
+### OCR (Optional)
+
+OCR is used to extract text/values from lab files (x-ray, CBC, urinalysis). It’s optional and mainly speeds up encoding.
+
+## Configuration
+
+This repo uses `.env.local` for local dev and Supabase secrets for deployed edge functions.
+
+See [.env.example](.env.example) for the full list.
+
+### Minimal Variables (Frontend)
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY` (or `VITE_SUPABASE_PUBLISHABLE_KEY`)
+
+### Edge Function Variables (Backend)
+
+These are required when deploying the `server` edge function:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SITE_URL` and/or `ALLOWED_ORIGINS` (CORS allowlist)
+
+Important safety rule:
+
+- **Never expose `SUPABASE_SERVICE_ROLE_KEY` in the browser.** It must only live in Supabase function secrets.
+
+### Email (Optional)
+
+Status email notifications use SMTP:
+
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
+- `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`
+
+Tip: on Supabase Edge Functions, SMTP port `465` is commonly the one that works. Ports `25` and `587` are often blocked.
+
+### OCR.space (Optional)
+
+- `OCR_SPACE_API_KEY` (or `OCRSPACE_API_KEY`)
+
+## Useful Scripts
+
+- `npm run dev` - Start local dev server
+- `npm run typecheck` - TypeScript type checking
+- `npm run verify:ocr` - Verify OCR parsing rules
+- `npm run build` - Build production assets into `dist/`
+- `npm run check` - `typecheck` + `verify:ocr` + `build`
+
+## Build And Deploy
+
+### Deploy The Frontend
+
+This is a normal single-page app (SPA). Build it and deploy `dist/` to any static host.
+
+```bash
+npm run build
+```
+
+This repo includes:
+
+- [vercel.json](vercel.json) for Vercel SPA rewrites and headers
+- A Docker + Nginx setup via [Dockerfile](Dockerfile) and [nginx.conf](nginx.conf)
+
+### Deploy The Edge Function
+
+The backend logic lives in the Supabase edge function named `server`.
+
+```bash
+supabase functions deploy server
+```
+
+Make sure CORS is configured correctly via `SITE_URL` / `ALLOWED_ORIGINS`.
+
+## Glossary
+
+- **Supabase**: a hosted backend (login, database, file storage, serverless functions).
+- **Auth**: user login (email/password or Google).
+- **Storage**: where uploaded files live (like lab results and signatures).
+- **Edge Function**: a small API/serverless function you deploy to Supabase.
+- **CORS**: a browser security rule that controls which websites can call your API.
+- **RLS (Row Level Security)**: database rules that decide what rows a user can read/write.
+
+## Advanced (Optional)
+
+If you want deeper internals, open the sections below.
+
+<details>
+<summary><strong>Architecture & runtime notes</strong></summary>
+
+### Frontend internals
+
+- Routes: [src/app/routes.tsx](src/app/routes.tsx)
+- Lazy route modules: [src/app/route-modules.ts](src/app/route-modules.ts)
+- Prefetching after login (best-effort): [src/app/lib/login-prefetch.ts](src/app/lib/login-prefetch.ts)
+- Session storage key: `gc_supabase_session` in [src/app/lib/api.ts](src/app/lib/api.ts)
+
+### Edge function internals
+
+- Router entrypoint: [supabase/functions/server/index.ts](supabase/functions/server/index.ts)
+- CORS allowlist logic: `resolveCorsOrigin()` in [supabase/functions/server/context.ts](supabase/functions/server/context.ts)
+
+</details>
+
+<details>
+<summary><strong>OCR parsing verification</strong></summary>
+
+OCR parsing heuristics live in [supabase/functions/server/ocr-space-ocr.ts](supabase/functions/server/ocr-space-ocr.ts).
+
+They are verified by a Node script: [scripts/verify-ocr-parsers.cjs](scripts/verify-ocr-parsers.cjs)
+
+Run:
 
 ```bash
 npm run verify:ocr
 ```
+
+</details>
+
+<details>
+<summary><strong>Supabase buckets & schema expectations</strong></summary>
+
+This repository does **not** include the original database migrations.
+
+If you are creating a new Supabase project, you must provision:
+
+- Tables + RLS policies expected by the frontend and edge function
+- Storage buckets used by uploads
+
+Common buckets:
+
+- `profile`
+- `student_signature`
+- `lab_chest_xray`
+- `lab_cbc`
+- `lab_urinalysis`
+
+Note: there are legacy references to `medical-files` for compatibility.
+
+</details>
 
 ## Tech Stack
 
@@ -314,199 +301,17 @@ npm run verify:ocr
 - Supabase Auth + Postgres + Storage + Edge Functions
 - PWA support via `vite-plugin-pwa` + Workbox
 
-## Prerequisites
+## Troubleshooting
 
-- Node.js 20+
-- npm 10+
-- A Supabase project with the expected tables, buckets, and policies
-- Supabase CLI (optional, recommended for deploying/serving edge functions)
-
-## Quick Start
-
-1. Install dependencies:
-
-```bash
-npm install
-```
-
-2. Create a local environment file:
-
-```bash
-cp .env.example .env.local
-```
-
-3. Fill in at least the frontend variables in `.env.local`:
-
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
-
-4. Start the development server:
-
-```bash
-npm run dev
-```
-
-App URL: `http://localhost:5173`
-
-## Configuration
-
-### Environment Variables
-
-This repo uses a single `.env.local` file to hold both:
-
-- **Frontend** config (must be prefixed with `VITE_` to be available in the browser), and
-- **Edge function** config (read via `Deno.env.get()` in `supabase/functions/server/*`).
-
-See [.env.example](.env.example) for the full list.
-
-Commonly used variables:
-
-- Frontend (required)
-  - `VITE_SUPABASE_URL`
-  - `VITE_SUPABASE_ANON_KEY` (or `VITE_SUPABASE_PUBLISHABLE_KEY`)
-
-- Edge function (required when deploying `server`)
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_ROLE_KEY`
-  - `SITE_URL` and/or `ALLOWED_ORIGINS` (CORS)
-  - `SUPER_ADMIN_EMAILS` (comma-separated list for super-admin override)
-
-- Email (edge function)
-  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
-  - `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`
-
-- OCR.space (edge function)
-  - `OCR_SPACE_API_KEY` (or `OCRSPACE_API_KEY`)
-  - Optional tuning: `OCR_SPACE_ENGINE`, `OCR_SPACE_LANGUAGE`, `OCR_SPACE_MAX_BYTES`
-
-Notes:
-
-- Never commit real secrets.
-- For Supabase Edge Functions, SMTP port `465` is the typical working choice; ports `25` and `587` are commonly unavailable.
-
-### Supabase Buckets
-
-Expected storage buckets used by uploads:
-
-- `profile`
-- `student_signature`
-- `lab_chest_xray`
-- `lab_cbc`
-- `lab_urinalysis`
-
-There are legacy references to `medical-files` for compatibility.
-
-### Brevo Setup Notes (Email)
-
-ClinicKa uses email in two separate places:
-
-- Supabase Auth emails (signup/verification/password reset), configured in the Supabase dashboard.
-- The `server` edge function for ClinicKa status notifications (configured via `SMTP_*` secrets).
-
-For Brevo:
-
-```env
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=465
-SMTP_USER=your-brevo-smtp-login
-SMTP_PASS=your-brevo-smtp-key
-SMTP_FROM_EMAIL=no-reply@yourdomain.com
-SMTP_FROM_NAME=ClinicKa
-```
-
-Important:
-
-- Disable click tracking for Supabase Auth emails to avoid breaking confirmation URLs.
-
-## Useful Scripts
-
-- `npm run dev` - Start local development server
-- `npm run typecheck` - TypeScript check (no emit)
-- `npm run verify:ocr` - Run OCR parser verification (Node)
-- `npm run build` - Production build into `dist/`
-- `npm run check` - `typecheck` + `verify:ocr` + `build`
+- `Missing Supabase config...`: check `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+- Upload errors: verify the expected Supabase buckets and storage policies exist.
+- Google sign-in blocked: accounts are restricted to `@gordoncollege.edu.ph`.
+- Email notifications not sending: verify SMTP secrets are set for the deployed edge function.
 
 ## Attributions
 
 - UI components in this project include `shadcn/ui`-derived source used under the MIT license.
 - Project imagery includes an Unsplash photo used under the Unsplash license.
-
-## Project Structure
-
-```text
-src/
-  app/
-    components/          Shared UI, shell, reports, previews
-    lib/                 Auth + API client logic
-    pages/               Role-based pages (student, staff, admin, auth)
-  styles/                Global styles and fonts
-scripts/
-  verify-ocr-parsers.cjs OCR parsing verification
-supabase/
-  functions/server/
-    index.ts             Hono route entrypoint
-    context.ts           Shared server config (CORS, Supabase client, helpers)
-    requester.ts         Requester auth + archived account logic
-    settings.ts          Admin settings + student notification state
-    storage.ts           Storage bucket + signed URL helpers
-    submissions.ts       Submission mapping + dashboard caches
-    notifications.ts     SMTP email notifications
-    ocr-space-ocr.ts     OCR.space integration + parsing
-public/                  Static assets + PWA icons
-```
-
-## Build And Deploy
-
-### Static Hosting (Vercel / Nginx / Any SPA Host)
-
-1. Build frontend:
-
-```bash
-npm run build
-```
-
-2. Deploy `dist/` to your static host.
-
-`vercel.json` already includes:
-
-- SPA rewrite rules for client-side routing
-- Basic security headers (CSP, HSTS, etc)
-
-### Docker + Nginx
-
-This repo includes a multi-stage [Dockerfile](Dockerfile) that builds the app and serves it via Nginx using [nginx.conf](nginx.conf).
-
-Example:
-
-```bash
-docker build -t clinicka .
-docker run --rm -p 8080:80 clinicka
-```
-
-Then open `http://localhost:8080`.
-
-### Supabase Edge Function (`server`)
-
-Deploy/update the Supabase edge function for backend routes:
-
-1. Set secrets on the target Supabase project (see `.env.example`).
-2. Deploy with Supabase CLI (example):
-
-```bash
-supabase functions deploy server
-```
-
-Also ensure your deployed edge function CORS allowlist is configured (`SITE_URL` / `ALLOWED_ORIGINS`).
-
-## Troubleshooting
-
-- `Missing Supabase config...`: check `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-- Upload/sign URL errors: verify the expected Supabase buckets and storage policies exist in the target project.
-- Archived account endpoints returning migration errors: verify the target Supabase project already includes the archived accounts schema changes.
-- Google sign-in blocked: accounts are restricted to `@gordoncollege.edu.ph`.
-- Email notifications not sending: verify `SMTP_*` secrets are set for the deployed edge function.
 
 ## Copyright Notice
 
