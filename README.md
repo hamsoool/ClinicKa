@@ -28,7 +28,7 @@ ClinicKa has four role-based portals:
 - **Admins** manage users, announcements, system settings, and reports.
 - **Super admins** manage administrator accounts.
 
-### Submission Status (Plain English)
+### Submission Status
 
 A submission typically moves through these statuses:
 
@@ -77,7 +77,7 @@ npm run dev
 
 Open: `http://localhost:5173`
 
-## How This Project Works (Beginner-Friendly)
+## How This Project Works
 
 There are **two moving parts**:
 
@@ -94,11 +94,11 @@ Sometimes the frontend needs to do a “server-only” action (for example: call
 
 ```mermaid
 graph TD
-  UI[Browser (React app)] -->|Login / DB / Storage| SB[(Supabase)]
-  UI -->|Server-only actions| FX[Edge Function: server]
-  FX --> SB
-  FX --> OCR[OCR.space]
-  FX --> SMTP[SMTP Email Provider]
+   UI[Browser - React app] -->|Login + Database + Storage| SB[Supabase]
+   UI -->|Server-only actions| FX[Edge Function - server]
+   FX --> SB
+   FX --> OCR[OCR Space]
+   FX --> SMTP[SMTP Email Provider]
 ```
 
 If the terms above are unfamiliar, see the [Glossary](#glossary).
