@@ -6,8 +6,9 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "check": "npm run typecheck && npm run build",
+    "check": "npm run typecheck && npm run verify:ocr && npm run build",
     "typecheck": "tsc --noEmit",
+    "verify:ocr": "node scripts/verify-ocr-parsers.cjs",
     "dev": "vite"
   },
   "dependencies": {

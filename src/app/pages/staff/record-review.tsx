@@ -9,7 +9,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   FileCheck2,
-  ImageUp,
+  FileUp,
   Loader2,
   Save,
   ScanText,
@@ -45,11 +45,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Textarea } from '../../components/ui/textarea';
 import {
+  extractCbcFields,
   extractChestXrayFindings,
+  extractUrinalysisFields,
   saveSubmissionReview,
   updateSubmissionStatus,
   uploadFile,
+  type CbcOcrExtraction,
   type ChestXrayOcrExtraction,
+  type UrinalysisOcrExtraction,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { MedicalHistory, SubmissionRecord } from '../../lib/record-types';
@@ -78,6 +82,11 @@ type SubmissionDetails = SubmissionRecord & {
 
 type ReviewStatus = SubmissionRecord['status'];
 type LabUploadType = 'xray' | 'cbc' | 'urinalysis';
+type PendingLabReplacement = {
+  file: File;
+  fileType: LabUploadType;
+  title: string;
+};
 const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
 
 function isClinicManagedLabSource(source?: string | null) {
@@ -89,6 +98,20 @@ type XrayOcrState = {
   message: string;
   source?: ChestXrayOcrExtraction['source'];
   status: 'idle' | 'processing' | 'success' | 'warning' | 'error';
+};
+
+type CbcOcrState = {
+  fieldsDetected?: number;
+  message: string;
+  source?: CbcOcrExtraction['source'];
+  status: XrayOcrState['status'];
+};
+
+type UrinalysisOcrState = {
+  fieldsDetected?: number;
+  message: string;
+  source?: UrinalysisOcrExtraction['source'];
+  status: XrayOcrState['status'];
 };
 
 type RecordForm = {
@@ -198,7 +221,10 @@ const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }
   { key: 'uti', label: 'UTI' },
 ];
 
-const LAB_IMAGE_MAX_SIZE_BYTES = 2 * 1024 * 1024;
+const LAB_RESULT_MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024;
+const LAB_RESULT_MAX_FILE_SIZE_LABEL = '1 MB';
+const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
+const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff'];
 const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'] as const;
 const BLOOD_PRESSURE_PATTERN = /^\d{2,3}\/\d{2,3}$/;
@@ -229,29 +255,29 @@ type ReviewStep = (typeof REVIEW_STEPS)[number];
 type LabUploadActionsProps = {
   title: string;
   isUploading: boolean;
-  onChooseImage: () => void;
+  onChooseFile: () => void;
   onOpenCamera: () => void;
 };
 
 function LabUploadActions({
   title,
   isUploading,
-  onChooseImage,
+  onChooseFile,
   onOpenCamera,
 }: LabUploadActionsProps) {
   return (
     <div className="rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-low px-4 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-on-surface">Add or replace {title} image</p>
+          <p className="text-sm font-medium text-on-surface">Add or replace {title} file</p>
           <p className="text-xs text-on-surface-variant">
-            Images only, up to 2MB. Camera opens on supported mobile devices.
+            PDF or image only, up to {LAB_RESULT_MAX_FILE_SIZE_LABEL}. Camera opens on supported mobile devices.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-          <Button type="button" variant="outline" onClick={onChooseImage} disabled={isUploading} className="w-full sm:w-auto">
-            <ImageUp className="mr-2 h-4 w-4" />
-            {isUploading ? 'Uploading...' : 'Upload Image'}
+          <Button type="button" variant="outline" onClick={onChooseFile} disabled={isUploading} className="w-full sm:w-auto">
+            <FileUp className="mr-2 h-4 w-4" />
+            {isUploading ? 'Uploading...' : 'Upload PDF/Image'}
           </Button>
           <Button type="button" variant="outline" onClick={onOpenCamera} disabled={isUploading} className="w-full sm:w-auto">
             <Camera className="mr-2 h-4 w-4" />
@@ -263,17 +289,22 @@ function LabUploadActions({
   );
 }
 
-function getXrayOcrStatusClass(status: XrayOcrState['status']) {
+function getOcrStatusClass(status: XrayOcrState['status']) {
   if (status === 'success') return 'border-green-200 bg-green-50 text-green-800';
   if (status === 'warning') return 'border-amber-200 bg-amber-50 text-amber-900';
   if (status === 'error') return 'border-red-200 bg-red-50 text-red-800';
   return 'border-blue-200 bg-blue-50 text-blue-800';
 }
 
-function getXrayOcrSourceLabel(source?: ChestXrayOcrExtraction['source']) {
-  if (source === 'google-vision-pdf') return 'Google Vision PDF';
-  if (source === 'google-vision-image') return 'Google Vision image';
-  return 'Google Vision';
+function getOcrSourceLabel(source?: ChestXrayOcrExtraction['source'] | CbcOcrExtraction['source'] | UrinalysisOcrExtraction['source']) {
+  if (source === 'ocr-space') return 'OCR.space';
+  return 'OCR';
+}
+
+function formatSelectedFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2).replace(/\.?0+$/, '')} MB`;
 }
 
 function createEmptyMedicalHistory(): MedicalHistory {
@@ -635,14 +666,26 @@ export default function StaffRecordReview() {
     cbc: false,
     urinalysis: false,
   });
+  const [pendingLabReplacement, setPendingLabReplacement] = useState<PendingLabReplacement | null>(null);
   const [xrayOcrState, setXrayOcrState] = useState<XrayOcrState>({
     message: '',
     status: 'idle',
   });
+  const [cbcOcrState, setCbcOcrState] = useState<CbcOcrState>({
+    message: '',
+    status: 'idle',
+  });
+  const [urinalysisOcrState, setUrinalysisOcrState] = useState<UrinalysisOcrState>({
+    message: '',
+    status: 'idle',
+  });
   const inReviewTransitionRef = useRef<string | null>(null);
-  const autoXrayOcrFileRef = useRef<string | null>(null);
   const lastXrayOcrFileRef = useRef<string | null>(null);
+  const lastCbcOcrFileRef = useRef<string | null>(null);
+  const lastUrinalysisOcrFileRef = useRef<string | null>(null);
   const xrayOcrRunRef = useRef(0);
+  const cbcOcrRunRef = useRef(0);
+  const urinalysisOcrRunRef = useRef(0);
   const xrayUploadInputRef = useRef<HTMLInputElement | null>(null);
   const cbcUploadInputRef = useRef<HTMLInputElement | null>(null);
   const urinalysisUploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -731,7 +774,6 @@ export default function StaffRecordReview() {
     if (lastXrayOcrFileRef.current === nextFileUrl) return;
 
     lastXrayOcrFileRef.current = nextFileUrl;
-    autoXrayOcrFileRef.current = null;
     xrayOcrRunRef.current += 1;
     setXrayOcrState({
       message: '',
@@ -740,15 +782,28 @@ export default function StaffRecordReview() {
   }, [submission?.xrayFileUrl]);
 
   useEffect(() => {
-    const xrayFileUrl = submission?.xrayFileUrl || '';
-    if (!xrayFileUrl) return;
-    if (isClinicManagedLabSource(submission?.xrayTestClinic)) return;
-    if (assessmentForm.xrayFindings.trim()) return;
-    if (autoXrayOcrFileRef.current === xrayFileUrl) return;
+    const nextFileUrl = submission?.cbcFileUrl || '';
+    if (lastCbcOcrFileRef.current === nextFileUrl) return;
 
-    autoXrayOcrFileRef.current = xrayFileUrl;
-    void runChestXrayOcr(false);
-  }, [assessmentForm.xrayFindings, submission?.xrayFileUrl, submission?.xrayTestClinic]);
+    lastCbcOcrFileRef.current = nextFileUrl;
+    cbcOcrRunRef.current += 1;
+    setCbcOcrState({
+      message: '',
+      status: 'idle',
+    });
+  }, [submission?.cbcFileUrl]);
+
+  useEffect(() => {
+    const nextFileUrl = submission?.urinalysisFileUrl || '';
+    if (lastUrinalysisOcrFileRef.current === nextFileUrl) return;
+
+    lastUrinalysisOcrFileRef.current = nextFileUrl;
+    urinalysisOcrRunRef.current += 1;
+    setUrinalysisOcrState({
+      message: '',
+      status: 'idle',
+    });
+  }, [submission?.urinalysisFileUrl]);
 
   function updateRecordField<K extends keyof RecordForm>(field: K, value: RecordForm[K]) {
     setRecordForm((prev) => {
@@ -933,14 +988,24 @@ export default function StaffRecordReview() {
     });
   }
 
-  function validateLabImageFile(file: File, title: string) {
-    if (!file.type.startsWith('image/')) {
-      toast.error(`${title} must be uploaded as an image.`);
+  function getFileExtension(fileName: string) {
+    return String(fileName || '').split('.').pop()?.toLowerCase() || '';
+  }
+
+  function isAllowedLabResultFile(file: File) {
+    const mimeType = String(file.type || '').toLowerCase();
+    const extension = getFileExtension(file.name);
+    return mimeType === 'application/pdf' || mimeType.startsWith('image/') || LAB_RESULT_ALLOWED_EXTENSIONS.includes(extension);
+  }
+
+  function validateLabResultFile(file: File, title: string) {
+    if (!isAllowedLabResultFile(file)) {
+      toast.error(`${title} must be a PDF or image file.`);
       return false;
     }
 
-    if (file.size > LAB_IMAGE_MAX_SIZE_BYTES) {
-      toast.error(`${title} image must be 2MB or smaller.`);
+    if (file.size > LAB_RESULT_MAX_FILE_SIZE_BYTES) {
+      toast.error(`${title} file must be ${LAB_RESULT_MAX_FILE_SIZE_LABEL} or smaller.`);
       return false;
     }
 
@@ -953,7 +1018,7 @@ export default function StaffRecordReview() {
     return 'Urinalysis';
   }
 
-  function getLabImageInputRef(fileType: LabUploadType, source: 'library' | 'camera') {
+  function getLabFileInputRef(fileType: LabUploadType, source: 'library' | 'camera') {
     if (fileType === 'xray') {
       return source === 'camera' ? xrayCameraInputRef : xrayUploadInputRef;
     }
@@ -963,16 +1028,34 @@ export default function StaffRecordReview() {
     return source === 'camera' ? urinalysisCameraInputRef : urinalysisUploadInputRef;
   }
 
-  function openLabImagePicker(fileType: LabUploadType, source: 'library' | 'camera') {
-    getLabImageInputRef(fileType, source).current?.click();
+  function openLabFilePicker(fileType: LabUploadType, source: 'library' | 'camera') {
+    getLabFileInputRef(fileType, source).current?.click();
   }
 
-  async function handleLabImageSelected(fileType: LabUploadType, file: File | null) {
+  function getCurrentLabFileUrl(fileType: LabUploadType) {
+    if (fileType === 'xray') return submission?.xrayFileUrl || '';
+    if (fileType === 'cbc') return submission?.cbcFileUrl || '';
+    return submission?.urinalysisFileUrl || '';
+  }
+
+  async function handleLabResultFileSelected(fileType: LabUploadType, file: File | null) {
     if (!submissionId || !submission || !file) return;
 
     const title = getLabUploadTitle(fileType);
-    if (!validateLabImageFile(file, title)) return;
+    if (!validateLabResultFile(file, title)) return;
 
+    if (getCurrentLabFileUrl(fileType)) {
+      setPendingLabReplacement({ file, fileType, title });
+      return;
+    }
+
+    await uploadLabResultFile(fileType, file);
+  }
+
+  async function uploadLabResultFile(fileType: LabUploadType, file: File, isReplacement = false) {
+    if (!submissionId || !submission) return false;
+
+    const title = getLabUploadTitle(fileType);
     setUploadingLabFile((prev) => ({ ...prev, [fileType]: true }));
     try {
       const result = await uploadFile(file, submissionId, fileType);
@@ -991,13 +1074,82 @@ export default function StaffRecordReview() {
       });
 
       await invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId);
-      toast.success(`${title} image uploaded.`);
+      toast.success(`${title} file ${isReplacement ? 'replaced' : 'uploaded'}.`);
+      return true;
     } catch (error) {
-      console.error(`Failed to upload ${fileType} image:`, error);
-      toast.error(error instanceof Error ? error.message : `Failed to upload ${title} image.`);
+      console.error(`Failed to upload ${fileType} file:`, error);
+      toast.error(error instanceof Error ? error.message : `Failed to upload ${title} file.`);
+      return false;
     } finally {
       setUploadingLabFile((prev) => ({ ...prev, [fileType]: false }));
     }
+  }
+
+  async function confirmPendingLabReplacement() {
+    if (!pendingLabReplacement) return;
+
+    const { file, fileType } = pendingLabReplacement;
+    const uploaded = await uploadLabResultFile(fileType, file, true);
+    if (uploaded) {
+      setPendingLabReplacement(null);
+    }
+  }
+
+  function normalizeCbcOcrFields(fields: CbcOcrExtraction['fields']) {
+    const normalized: Partial<Pick<AssessmentForm, 'bloodType' | 'cbcDate' | 'hematocrit' | 'hemoglobin' | 'plateletCount' | 'wbc'>> = {};
+
+    const cbcDate = normalizeDateInputValue(fields.date);
+    if (cbcDate) normalized.cbcDate = cbcDate;
+
+    const hemoglobin = sanitizeNumericWithLimits(fields.hemoglobin || '', 2, 1);
+    if (hemoglobin) normalized.hemoglobin = hemoglobin;
+
+    const hematocrit = sanitizeNumericWithLimits(fields.hematocrit || '', 3, 1);
+    if (hematocrit) normalized.hematocrit = hematocrit;
+
+    const wbc = sanitizeNumericWithLimits(fields.wbc || '', 3, 2);
+    const wbcValue = Number(wbc);
+    if (Number.isFinite(wbcValue) && wbcValue >= 0.5 && wbcValue <= 100) normalized.wbc = wbc;
+
+    const plateletCount = sanitizeNumericWithLimits(fields.plateletCount || '', 4, 0);
+    const plateletValue = Number(plateletCount);
+    if (Number.isFinite(plateletValue) && plateletValue >= 10 && plateletValue <= 1000) normalized.plateletCount = plateletCount;
+
+    const bloodType = String(fields.bloodType || '').trim().toUpperCase();
+    if (BLOOD_TYPE_OPTIONS.includes(bloodType as (typeof BLOOD_TYPE_OPTIONS)[number])) {
+      normalized.bloodType = bloodType;
+    }
+
+    return normalized;
+  }
+
+  function getCbcDetectedFieldCount(fields: Partial<Pick<AssessmentForm, 'bloodType' | 'cbcDate' | 'hematocrit' | 'hemoglobin' | 'plateletCount' | 'wbc'>>) {
+    return Object.values(fields).filter((value) => String(value || '').trim()).length;
+  }
+
+  function normalizeUrinalysisOcrFields(fields: UrinalysisOcrExtraction['fields']) {
+    const normalized: Partial<Pick<AssessmentForm, 'glucose' | 'protein' | 'urinalysisDate' | 'urinalysisGlucose' | 'urinalysisProtein'>> = {};
+
+    const urinalysisDate = normalizeDateInputValue(fields.date);
+    if (urinalysisDate) normalized.urinalysisDate = urinalysisDate;
+
+    const glucose = String(fields.glucose || '').trim();
+    if (URINALYSIS_DIPSTICK_OPTIONS.includes(glucose as (typeof URINALYSIS_DIPSTICK_OPTIONS)[number])) {
+      normalized.urinalysisGlucose = glucose;
+      normalized.glucose = glucose;
+    }
+
+    const protein = String(fields.protein || '').trim();
+    if (URINALYSIS_DIPSTICK_OPTIONS.includes(protein as (typeof URINALYSIS_DIPSTICK_OPTIONS)[number])) {
+      normalized.urinalysisProtein = protein;
+      normalized.protein = protein;
+    }
+
+    return normalized;
+  }
+
+  function getUrinalysisDetectedFieldCount(fields: Partial<Pick<AssessmentForm, 'urinalysisDate' | 'urinalysisGlucose' | 'urinalysisProtein'>>) {
+    return [fields.urinalysisDate, fields.urinalysisGlucose, fields.urinalysisProtein].filter((value) => String(value || '').trim()).length;
   }
 
   async function runChestXrayOcr(manualRun: boolean) {
@@ -1020,7 +1172,7 @@ export default function StaffRecordReview() {
     const runId = xrayOcrRunRef.current + 1;
     xrayOcrRunRef.current = runId;
     setXrayOcrState({
-      message: 'Sending Chest X-Ray result to Google Vision.',
+      message: 'Sending Chest X-Ray result to OCR.space.',
       status: 'processing',
     });
 
@@ -1034,7 +1186,7 @@ export default function StaffRecordReview() {
       if (!findings) {
         setXrayOcrState({
           message: result.rawText.trim()
-            ? 'Auto-read finished, but no findings or impression line was detected.'
+            ? 'Scan finished, but no findings or impression line was detected.'
             : 'No readable text was found in the Chest X-Ray file.',
           source: result.source,
           status: 'warning',
@@ -1055,10 +1207,10 @@ export default function StaffRecordReview() {
       setXrayOcrState({
         confidence: result.confidence,
         message: wasShortened
-          ? `${getXrayOcrSourceLabel(result.source)} filled Findings and shortened the text to fit the field.`
+          ? `${getOcrSourceLabel(result.source)} filled Findings and shortened the text to fit the field.`
           : isLowConfidence
-            ? 'Google Vision filled Findings with low confidence. Review before saving.'
-            : `${getXrayOcrSourceLabel(result.source)} filled Findings. Review before saving.`,
+            ? 'OCR.space filled Findings with low confidence. Review before saving.'
+            : `${getOcrSourceLabel(result.source)} filled Findings. Review before saving.`,
         source: result.source,
         status: isLowConfidence ? 'warning' : 'success',
       });
@@ -1067,6 +1219,161 @@ export default function StaffRecordReview() {
       if (xrayOcrRunRef.current !== runId) return;
       const message = error instanceof Error ? error.message : 'Failed to read the Chest X-Ray result file.';
       setXrayOcrState({
+        message,
+        status: 'error',
+      });
+      if (manualRun) {
+        toast.error(message);
+      }
+    }
+  }
+
+  async function runCbcOcr(manualRun: boolean) {
+    if (!submissionId) {
+      toast.error('Submission record is still loading.');
+      return;
+    }
+
+    const cbcFileUrl = submission?.cbcFileUrl || '';
+    if (!cbcFileUrl) {
+      toast.error('Upload a CBC result file before running OCR.');
+      return;
+    }
+
+    const hasCurrentCbcValues = [
+      assessmentForm.cbcDate,
+      assessmentForm.hemoglobin,
+      assessmentForm.hematocrit,
+      assessmentForm.wbc,
+      assessmentForm.plateletCount,
+      assessmentForm.bloodType,
+    ].some((value) => String(value || '').trim());
+
+    if (manualRun && hasCurrentCbcValues) {
+      const shouldReplace = window.confirm('Replace matching CBC fields with the OCR result? Fields not detected by OCR will be kept.');
+      if (!shouldReplace) return;
+    }
+
+    const runId = cbcOcrRunRef.current + 1;
+    cbcOcrRunRef.current = runId;
+    setCbcOcrState({
+      message: 'Sending CBC result to OCR.space.',
+      status: 'processing',
+    });
+
+    try {
+      const result = await extractCbcFields(submissionId);
+
+      if (cbcOcrRunRef.current !== runId) return;
+
+      const fields = normalizeCbcOcrFields(result.fields);
+      const detectedFieldCount = getCbcDetectedFieldCount(fields);
+
+      if (!detectedFieldCount) {
+        setCbcOcrState({
+          message: result.rawText.trim()
+            ? 'Scan finished, but no CBC labels and values were detected.'
+            : 'No readable text was found in the CBC file.',
+          source: result.source,
+          status: 'warning',
+        });
+        if (manualRun) {
+          toast.warning('No CBC values were detected in the uploaded file.');
+        }
+        return;
+      }
+
+      setAssessmentForm((prev) => ({
+        ...prev,
+        ...fields,
+      }));
+      setCbcOcrState({
+        fieldsDetected: detectedFieldCount,
+        message: `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} CBC field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
+        source: result.source,
+        status: 'success',
+      });
+      toast.success('CBC fields were filled from the uploaded file.');
+    } catch (error) {
+      if (cbcOcrRunRef.current !== runId) return;
+      const message = error instanceof Error ? error.message : 'Failed to read the CBC result file.';
+      setCbcOcrState({
+        message,
+        status: 'error',
+      });
+      if (manualRun) {
+        toast.error(message);
+      }
+    }
+  }
+
+  async function runUrinalysisOcr(manualRun: boolean) {
+    if (!submissionId) {
+      toast.error('Submission record is still loading.');
+      return;
+    }
+
+    const urinalysisFileUrl = submission?.urinalysisFileUrl || '';
+    if (!urinalysisFileUrl) {
+      toast.error('Upload a Urinalysis result file before running OCR.');
+      return;
+    }
+
+    const hasCurrentUrinalysisValues = [
+      assessmentForm.urinalysisDate,
+      assessmentForm.urinalysisGlucose,
+      assessmentForm.urinalysisProtein,
+    ].some((value) => String(value || '').trim());
+
+    if (manualRun && hasCurrentUrinalysisValues) {
+      const shouldReplace = window.confirm('Replace matching Urinalysis fields with the OCR result? Fields not detected by OCR will be kept.');
+      if (!shouldReplace) return;
+    }
+
+    const runId = urinalysisOcrRunRef.current + 1;
+    urinalysisOcrRunRef.current = runId;
+    setUrinalysisOcrState({
+      message: 'Sending Urinalysis result to OCR.space.',
+      status: 'processing',
+    });
+
+    try {
+      const result = await extractUrinalysisFields(submissionId);
+
+      if (urinalysisOcrRunRef.current !== runId) return;
+
+      const fields = normalizeUrinalysisOcrFields(result.fields);
+      const detectedFieldCount = getUrinalysisDetectedFieldCount(fields);
+
+      if (!detectedFieldCount) {
+        setUrinalysisOcrState({
+          message: result.rawText.trim()
+            ? 'Scan finished, but no Urinalysis glucose or protein result was detected.'
+            : 'No readable text was found in the Urinalysis file.',
+          source: result.source,
+          status: 'warning',
+        });
+        if (manualRun) {
+          toast.warning('No Urinalysis values were detected in the uploaded file.');
+        }
+        return;
+      }
+
+      setAssessmentForm((prev) => ({
+        ...prev,
+        ...fields,
+      }));
+      setUrinalysisOcrState({
+        fieldsDetected: detectedFieldCount,
+        message: `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} Urinalysis field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
+        source: result.source,
+        status: 'success',
+      });
+      toast.success('Urinalysis fields were filled from the uploaded file.');
+    } catch (error) {
+      if (urinalysisOcrRunRef.current !== runId) return;
+      const message = error instanceof Error ? error.message : 'Failed to read the Urinalysis result file.';
+      setUrinalysisOcrState({
         message,
         status: 'error',
       });
@@ -1326,6 +1633,9 @@ export default function StaffRecordReview() {
     currentReviewStepIndex < REVIEW_STEPS.length - 1 ? REVIEW_STEPS[currentReviewStepIndex + 1] : null;
   const medicalRecordDateBounds = getMedicalRecordDateBounds();
   const finalDecisionLabel = 'Clearance';
+  const pendingReplacementIsUploading = pendingLabReplacement
+    ? uploadingLabFile[pendingLabReplacement.fileType]
+    : false;
   const getReviewStepLabel = (step: ReviewStep) => {
     switch (step) {
       case 'record':
@@ -1346,33 +1656,33 @@ export default function StaffRecordReview() {
       <input
         ref={xrayUploadInputRef}
         type="file"
-        accept="image/*"
+        accept={LAB_RESULT_ACCEPT_ATTRIBUTE}
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0] || null;
-          void handleLabImageSelected('xray', file);
+          void handleLabResultFileSelected('xray', file);
           event.currentTarget.value = '';
         }}
       />
       <input
         ref={cbcUploadInputRef}
         type="file"
-        accept="image/*"
+        accept={LAB_RESULT_ACCEPT_ATTRIBUTE}
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0] || null;
-          void handleLabImageSelected('cbc', file);
+          void handleLabResultFileSelected('cbc', file);
           event.currentTarget.value = '';
         }}
       />
       <input
         ref={urinalysisUploadInputRef}
         type="file"
-        accept="image/*"
+        accept={LAB_RESULT_ACCEPT_ATTRIBUTE}
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0] || null;
-          void handleLabImageSelected('urinalysis', file);
+          void handleLabResultFileSelected('urinalysis', file);
           event.currentTarget.value = '';
         }}
       />
@@ -1384,7 +1694,7 @@ export default function StaffRecordReview() {
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0] || null;
-          void handleLabImageSelected('xray', file);
+          void handleLabResultFileSelected('xray', file);
           event.currentTarget.value = '';
         }}
       />
@@ -1396,7 +1706,7 @@ export default function StaffRecordReview() {
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0] || null;
-          void handleLabImageSelected('cbc', file);
+          void handleLabResultFileSelected('cbc', file);
           event.currentTarget.value = '';
         }}
       />
@@ -1408,10 +1718,84 @@ export default function StaffRecordReview() {
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0] || null;
-          void handleLabImageSelected('urinalysis', file);
+          void handleLabResultFileSelected('urinalysis', file);
           event.currentTarget.value = '';
         }}
       />
+      <Dialog
+        open={Boolean(pendingLabReplacement)}
+        onOpenChange={(open) => {
+          if (!open && !pendingReplacementIsUploading) {
+            setPendingLabReplacement(null);
+          }
+        }}
+      >
+        <DialogContent className="overflow-hidden p-0 sm:max-w-xl">
+          <div className="border-b bg-surface-container-low px-6 py-5">
+            <DialogHeader className="gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <FileCheck2 className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <DialogTitle>Replace {pendingLabReplacement?.title} file?</DialogTitle>
+                  <DialogDescription className="mt-2">
+                    This will replace the student&apos;s current uploaded file for this record.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+          {pendingLabReplacement ? (
+            <div className="space-y-4 px-6 py-5">
+              <div className="rounded-lg border border-outline-variant/60 bg-background px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                    <FileUp className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Selected replacement</p>
+                    <p className="mt-1 break-all text-sm text-muted-foreground">{pendingLabReplacement.file.name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatSelectedFileSize(pendingLabReplacement.file.size)} - {pendingLabReplacement.file.type || 'File type from extension'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                  <p>
+                    The existing file stays available if this upload fails. OCR fields will only update when staff runs the extract button again.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter className="border-t bg-surface-container-low px-6 py-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingLabReplacement(null)}
+              disabled={pendingReplacementIsUploading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void confirmPendingLabReplacement()}
+              disabled={pendingReplacementIsUploading}
+            >
+              {pendingReplacementIsUploading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileUp className="mr-2 h-4 w-4" />
+              )}
+              {pendingReplacementIsUploading ? 'Replacing...' : 'Replace file'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Button
         variant="ghost"
         onClick={() => navigate('/staff/submissions')}
@@ -1737,13 +2121,19 @@ export default function StaffRecordReview() {
               ) : (
                 <SubmittedFilePreview title="Chest X-Ray Result" fileUrl={submission.xrayFileUrl} alt="Student chest X-ray result" />
               )}
+              <LabUploadActions
+                title="Chest X-Ray result"
+                isUploading={uploadingLabFile.xray}
+                onChooseFile={() => openLabFilePicker('xray', 'library')}
+                onOpenCamera={() => openLabFilePicker('xray', 'camera')}
+              />
               {submission.xrayFileUrl ? (
                 <div
                   aria-live="polite"
                   className={`rounded-lg border px-4 py-3 text-sm ${
                     xrayOcrState.status === 'idle'
                       ? 'border-outline-variant/50 bg-surface-container-low text-on-surface'
-                      : getXrayOcrStatusClass(xrayOcrState.status)
+                      : getOcrStatusClass(xrayOcrState.status)
                   }`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1756,7 +2146,7 @@ export default function StaffRecordReview() {
                       <div className="min-w-0">
                         <p className="font-medium">Chest X-Ray OCR</p>
                         <p className="mt-1 text-xs opacity-85">
-                          {xrayOcrState.message || 'Ready to extract findings from the uploaded result.'}
+                          {xrayOcrState.message || 'Press Extract Findings to scan the uploaded result.'}
                         </p>
                       </div>
                     </div>
@@ -1768,7 +2158,7 @@ export default function StaffRecordReview() {
                       ) : null}
                       {xrayOcrState.source ? (
                         <Badge variant="outline" className="w-fit bg-white/70">
-                          {getXrayOcrSourceLabel(xrayOcrState.source)}
+                          {getOcrSourceLabel(xrayOcrState.source)}
                         </Badge>
                       ) : null}
                       <Button
@@ -1851,6 +2241,65 @@ export default function StaffRecordReview() {
               ) : (
                 <SubmittedFilePreview title="CBC Result" fileUrl={submission.cbcFileUrl} alt="Student CBC result" />
               )}
+              <LabUploadActions
+                title="CBC result"
+                isUploading={uploadingLabFile.cbc}
+                onChooseFile={() => openLabFilePicker('cbc', 'library')}
+                onOpenCamera={() => openLabFilePicker('cbc', 'camera')}
+              />
+              {submission.cbcFileUrl ? (
+                <div
+                  aria-live="polite"
+                  className={`rounded-lg border px-4 py-3 text-sm ${
+                    cbcOcrState.status === 'idle'
+                      ? 'border-outline-variant/50 bg-surface-container-low text-on-surface'
+                      : getOcrStatusClass(cbcOcrState.status)
+                  }`}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      {cbcOcrState.status === 'processing' ? (
+                        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+                      ) : (
+                        <ScanText className="mt-0.5 h-4 w-4 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-medium">CBC OCR</p>
+                        <p className="mt-1 text-xs opacity-85">
+                          {cbcOcrState.message || 'Press Extract CBC Values to scan the uploaded result.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                      {typeof cbcOcrState.fieldsDetected === 'number' ? (
+                        <Badge variant="outline" className="w-fit bg-white/70">
+                          {cbcOcrState.fieldsDetected} field{cbcOcrState.fieldsDetected === 1 ? '' : 's'}
+                        </Badge>
+                      ) : null}
+                      {cbcOcrState.source ? (
+                        <Badge variant="outline" className="w-fit bg-white/70">
+                          {getOcrSourceLabel(cbcOcrState.source)}
+                        </Badge>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void runCbcOcr(true)}
+                        disabled={cbcOcrState.status === 'processing'}
+                        className="w-full bg-white/70 sm:w-auto"
+                      >
+                        {cbcOcrState.status === 'processing' ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <ScanText className="mr-2 h-4 w-4" />
+                        )}
+                        Extract CBC Values
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <Label htmlFor="cbcDate">Date</Label>
@@ -1956,6 +2405,65 @@ export default function StaffRecordReview() {
               ) : (
                 <SubmittedFilePreview title="Urinalysis Result" fileUrl={submission.urinalysisFileUrl} alt="Student urinalysis result" />
               )}
+              <LabUploadActions
+                title="Urinalysis result"
+                isUploading={uploadingLabFile.urinalysis}
+                onChooseFile={() => openLabFilePicker('urinalysis', 'library')}
+                onOpenCamera={() => openLabFilePicker('urinalysis', 'camera')}
+              />
+              {submission.urinalysisFileUrl ? (
+                <div
+                  aria-live="polite"
+                  className={`rounded-lg border px-4 py-3 text-sm ${
+                    urinalysisOcrState.status === 'idle'
+                      ? 'border-outline-variant/50 bg-surface-container-low text-on-surface'
+                      : getOcrStatusClass(urinalysisOcrState.status)
+                  }`}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      {urinalysisOcrState.status === 'processing' ? (
+                        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+                      ) : (
+                        <ScanText className="mt-0.5 h-4 w-4 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-medium">Urinalysis OCR</p>
+                        <p className="mt-1 text-xs opacity-85">
+                          {urinalysisOcrState.message || 'Press Extract Urinalysis Values to scan the uploaded result.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                      {typeof urinalysisOcrState.fieldsDetected === 'number' ? (
+                        <Badge variant="outline" className="w-fit bg-white/70">
+                          {urinalysisOcrState.fieldsDetected} field{urinalysisOcrState.fieldsDetected === 1 ? '' : 's'}
+                        </Badge>
+                      ) : null}
+                      {urinalysisOcrState.source ? (
+                        <Badge variant="outline" className="w-fit bg-white/70">
+                          {getOcrSourceLabel(urinalysisOcrState.source)}
+                        </Badge>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void runUrinalysisOcr(true)}
+                        disabled={urinalysisOcrState.status === 'processing'}
+                        className="w-full bg-white/70 sm:w-auto"
+                      >
+                        {urinalysisOcrState.status === 'processing' ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <ScanText className="mr-2 h-4 w-4" />
+                        )}
+                        Extract Urinalysis Values
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <Label htmlFor="urinalysisDate">Date</Label>

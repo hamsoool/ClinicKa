@@ -39,9 +39,10 @@ const MAX_CLINIC_NAME_LENGTH = 60;
 const MAX_TEST_SITE_OTHER_LENGTH = 50;
 const MAX_OTHER_MEDICAL_HISTORY_LENGTH = 20;
 const MIN_AGE = 15;
-const LAB_RESULT_MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
-const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
-const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp';
+const LAB_RESULT_MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024;
+const LAB_RESULT_MAX_FILE_SIZE_LABEL = '1 MB';
+const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff'];
+const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
 const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
 
 const LAB_UPLOAD_FIELD_CONFIG: Record<
@@ -643,12 +644,12 @@ export function useStudentMedicalForm({
     }
 
     if (nextFile.size > LAB_RESULT_MAX_FILE_SIZE_BYTES) {
-      toast.error(`${config.label} must be 8 MB or smaller.`);
+      toast.error(`${config.label} must be ${LAB_RESULT_MAX_FILE_SIZE_LABEL} or smaller.`);
       return;
     }
 
     if (!isAllowedLabResultFile(nextFile)) {
-      toast.error(`${config.label} must be a PDF, PNG, JPG, JPEG, or WEBP file.`);
+      toast.error(`${config.label} must be a PDF or supported image file.`);
       return;
     }
 
@@ -1011,6 +1012,7 @@ export function useStudentMedicalForm({
     hasProfilePhoto,
     hasProfileSignature,
     labResultAccept: LAB_RESULT_ACCEPT_ATTRIBUTE,
+    labResultMaxFileSizeLabel: LAB_RESULT_MAX_FILE_SIZE_LABEL,
     hasCbcFile,
     hasUrinalysisFile,
     hasXrayFile,

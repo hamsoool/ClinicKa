@@ -33,6 +33,7 @@ type Props = {
   requiresUrinalysisFile: boolean;
   requiresXrayFile: boolean;
   labResultAccept: string;
+  labResultMaxFileSizeLabel: string;
   submitBlockers: string[];
   onGoToProfile: () => void;
   onLabFileChange: (kind: LabUploadKind, file: File | null) => void;
@@ -54,6 +55,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   requiresUrinalysisFile,
   requiresXrayFile,
   labResultAccept,
+  labResultMaxFileSizeLabel,
   submitBlockers,
   onGoToProfile,
   onLabFileChange,
@@ -96,7 +98,9 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             <FileUp className={`h-4 w-4 ${isReady ? 'text-green-600' : 'text-red-600'}`} />
             <p className="text-sm font-semibold text-on-surface">{title}</p>
           </div>
-          <p className="text-xs text-muted-foreground">Upload a clear PDF or image copy. Maximum file size is 8 MB.</p>
+          <p className="text-xs text-muted-foreground">
+            Upload a clear PDF or image copy. Maximum file size is {labResultMaxFileSizeLabel}.
+          </p>
           {selectedFile ? (
             <p className="break-all text-xs text-on-surface-variant">
               Selected: <span className="font-medium text-on-surface">{selectedFile.name}</span>. This will replace the current file when you submit.

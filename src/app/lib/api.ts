@@ -4003,7 +4003,34 @@ export type ChestXrayOcrExtraction = {
   pageCount: number;
   rawText: string;
   result?: 'normal' | 'abnormal';
-  source: 'google-vision-image' | 'google-vision-pdf';
+  source: 'ocr-space';
+  success: true;
+};
+
+export type CbcOcrExtraction = {
+  fields: {
+    bloodType?: string;
+    date?: string;
+    hematocrit?: string;
+    hemoglobin?: string;
+    plateletCount?: string;
+    wbc?: string;
+  };
+  pageCount: number;
+  rawText: string;
+  source: 'ocr-space';
+  success: true;
+};
+
+export type UrinalysisOcrExtraction = {
+  fields: {
+    date?: string;
+    glucose?: string;
+    protein?: string;
+  };
+  pageCount: number;
+  rawText: string;
+  source: 'ocr-space';
   success: true;
 };
 
@@ -4015,6 +4042,40 @@ export async function extractChestXrayFindings(id: string) {
 
   return apiRequest<ChestXrayOcrExtraction>(
     `/functions/v1/server/submission/${encodeURIComponent(submissionId)}/chest-xray-ocr`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+}
+
+export async function extractCbcFields(id: string) {
+  const submissionId = String(id || '').trim();
+  if (!submissionId) {
+    throw new Error('Submission ID is required to extract CBC values.');
+  }
+
+  return apiRequest<CbcOcrExtraction>(
+    `/functions/v1/server/submission/${encodeURIComponent(submissionId)}/cbc-ocr`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+}
+
+export async function extractUrinalysisFields(id: string) {
+  const submissionId = String(id || '').trim();
+  if (!submissionId) {
+    throw new Error('Submission ID is required to extract Urinalysis values.');
+  }
+
+  return apiRequest<UrinalysisOcrExtraction>(
+    `/functions/v1/server/submission/${encodeURIComponent(submissionId)}/urinalysis-ocr`,
     {
       method: 'POST',
       headers: {

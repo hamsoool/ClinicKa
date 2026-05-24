@@ -45,6 +45,7 @@ export default function StudentMedicalForm() {
     hasUrinalysisFile,
     hasXrayFile,
     labResultAccept,
+    labResultMaxFileSizeLabel,
     updateField,
     updateEmergencyContact,
     updateMedicalCondition,
@@ -111,6 +112,7 @@ export default function StudentMedicalForm() {
                 requiresUrinalysisFile={requiresUrinalysisFile}
                 requiresXrayFile={requiresXrayFile}
                 labResultAccept={labResultAccept}
+                labResultMaxFileSizeLabel={labResultMaxFileSizeLabel}
                 submitBlockers={submitBlockers}
                 onGoToProfile={() => navigate('/student/profile')}
                 onLabFileChange={updateLabFile}
