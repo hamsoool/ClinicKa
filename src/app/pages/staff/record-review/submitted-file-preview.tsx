@@ -28,6 +28,17 @@ function getDownloadFileName(title: string, extension: string) {
   return `${safeBase}.${extension}`;
 }
 
+function buildPdfPreviewUrl(fileUrl: string, view: 'Fit' | 'FitH' | 'FitV' = 'Fit') {
+  const hashParams = new URLSearchParams({
+    page: '1',
+    toolbar: '0',
+    navpanes: '0',
+    scrollbar: '0',
+    view,
+  });
+  return `${fileUrl}#${hashParams.toString()}`;
+}
+
 function base64ToUint8Array(base64: string) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -104,6 +115,8 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
   const previewType = getFilePreviewType(fileUrl);
   const previewTitle = `${title} preview`;
   const previewAlt = alt || title;
+  const pdfPreviewUrl = previewType === 'pdf' ? buildPdfPreviewUrl(fileUrl) : fileUrl;
+  const pdfDialogPreviewUrl = previewType === 'pdf' ? buildPdfPreviewUrl(fileUrl, 'FitH') : fileUrl;
 
   const handleDownloadOriginal = () => {
     const basePath = fileUrl.split('?')[0];
@@ -163,7 +176,18 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
   const previewContent = (() => {
     switch (previewType) {
       case 'pdf':
-        return <iframe src={fileUrl} title={previewTitle} className="h-[420px] w-full bg-white" />;
+        return (
+          <div className="bg-muted/20 p-4">
+            <object
+              data={pdfPreviewUrl}
+              type="application/pdf"
+              aria-label={previewTitle}
+              className="mx-auto h-[70vh] min-h-[720px] w-full max-w-[900px] rounded-md border bg-white"
+            >
+              <iframe src={pdfPreviewUrl} title={previewTitle} className="h-[70vh] min-h-[720px] w-full rounded-md bg-white" />
+            </object>
+          </div>
+        );
       case 'image':
         return <img src={fileUrl} alt={previewAlt} className="max-h-[420px] w-full bg-black/5 object-contain" />;
       default:
@@ -202,7 +226,18 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
               </DialogHeader>
               <div className="max-h-[calc(90vh-80px)] overflow-auto bg-muted/20 p-4">
                 {previewType === 'pdf' ? (
-                  <iframe src={fileUrl} title={`${previewTitle} enlarged`} className="h-[75vh] w-full rounded-md bg-white" />
+                  <object
+                    data={pdfDialogPreviewUrl}
+                    type="application/pdf"
+                    aria-label={`${previewTitle} enlarged`}
+                    className="mx-auto h-[78vh] min-h-[760px] w-full max-w-[1080px] rounded-md border bg-white"
+                  >
+                    <iframe
+                      src={pdfDialogPreviewUrl}
+                      title={`${previewTitle} enlarged`}
+                      className="h-[78vh] min-h-[760px] w-full rounded-md bg-white"
+                    />
+                  </object>
                 ) : previewType === 'image' ? (
                   <img src={fileUrl} alt={previewAlt} className="mx-auto max-h-[75vh] w-auto max-w-full object-contain" />
                 ) : (

@@ -41,9 +41,17 @@ export default function StudentMedicalForm() {
     hasRequiredProfileFields,
     hasProfilePhoto,
     hasProfileSignature,
+    hasCbcFile,
+    hasUrinalysisFile,
+    hasXrayFile,
+    labResultAccept,
     updateField,
     updateEmergencyContact,
     updateMedicalCondition,
+    updateLabFile,
+    requiresCbcFile,
+    requiresUrinalysisFile,
+    requiresXrayFile,
     submit,
   } = useStudentMedicalForm({ year, me, editSubmissionId, initialDataPrivacyConsent: hasDataPrivacyConsent });
 
@@ -96,8 +104,16 @@ export default function StudentMedicalForm() {
                 hasRequiredProfileFields={hasRequiredProfileFields}
                 hasProfilePhoto={hasProfilePhoto}
                 hasProfileSignature={hasProfileSignature}
+                hasCbcFile={hasCbcFile}
+                hasUrinalysisFile={hasUrinalysisFile}
+                hasXrayFile={hasXrayFile}
+                requiresCbcFile={requiresCbcFile}
+                requiresUrinalysisFile={requiresUrinalysisFile}
+                requiresXrayFile={requiresXrayFile}
+                labResultAccept={labResultAccept}
                 submitBlockers={submitBlockers}
                 onGoToProfile={() => navigate('/student/profile')}
+                onLabFileChange={updateLabFile}
               />
             </div>
 

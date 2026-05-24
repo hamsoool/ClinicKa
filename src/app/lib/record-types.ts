@@ -133,6 +133,9 @@ export type SubmissionRecord = {
   clearanceInfo?: ClearanceInfo;
   photoUrl?: string;
   signatureUrl?: string;
+  xrayFileUrl?: string;
+  cbcFileUrl?: string;
+  urinalysisFileUrl?: string;
   labTestLocation?: 'jlgh' | 'other' | '';
   otherClinicName?: string;
   cbcTestClinic?: string;

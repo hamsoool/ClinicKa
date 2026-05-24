@@ -3452,6 +3452,16 @@ export async function getSubmissions() {
 
 
 export async function getSubmission(id: string) {
+  try {
+    return await apiRequest<{ submission: any }>(
+      `/functions/v1/server/submission/${encodeURIComponent(id)}`,
+    );
+  } catch (error) {
+    if (!shouldFallbackToRest(error)) {
+      throw error;
+    }
+  }
+
   const submissions = await getMappedSubmissions(`id=eq.${id}&order=submitted_at.desc`);
   const submission = submissions[0];
   if (!submission) {
@@ -3987,115 +3997,56 @@ export async function updateMeasurements(id: string, measurements: any) {
   return { success: true as const };
 }
 
+export type ChestXrayOcrExtraction = {
+  confidence?: number;
+  findings: string;
+  pageCount: number;
+  rawText: string;
+  result?: 'normal' | 'abnormal';
+  source: 'google-vision-image' | 'google-vision-pdf';
+  success: true;
+};
+
+export async function extractChestXrayFindings(id: string) {
+  const submissionId = String(id || '').trim();
+  if (!submissionId) {
+    throw new Error('Submission ID is required to extract Chest X-Ray findings.');
+  }
+
+  return apiRequest<ChestXrayOcrExtraction>(
+    `/functions/v1/server/submission/${encodeURIComponent(submissionId)}/chest-xray-ocr`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    },
+  );
+}
+
 export async function uploadFile(file: File, recordId: string, fileType: string) {
-    const storageBucket = STORAGE_BUCKET_BY_FILE_TYPE[fileType] || STORAGE_BUCKET;
   const token = getAccessToken();
   if (!token || !supabaseUrl || !publicAnonKey) {
     throw new Error('You must be signed in to upload files.');
   }
 
-  const objectName = buildStorageObjectName(fileType, file);
-  const storagePath = `${recordId}/${objectName}`;
-  const uploadResponse = await fetch(
-    `${supabaseUrl}/storage/v1/object/${storageBucket}/${storagePath}`,
+  const formData = new FormData();
+  formData.set('file', file);
+  formData.set('recordId', String(recordId || '').trim());
+  formData.set('fileType', String(fileType || '').trim().toLowerCase());
+
+  const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
+    '/functions/v1/server/upload-file',
     {
       method: 'POST',
-      headers: {
-        apikey: publicAnonKey,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': file.type || 'application/octet-stream',
-      },
-      body: file,
+      body: formData,
     },
   );
-
-  if (!uploadResponse.ok) {
-    const raw = await uploadResponse.text().catch(() => '');
-    let payload: Record<string, any> = {};
-    try {
-      payload = raw ? JSON.parse(raw) : {};
-    } catch {
-      payload = {};
-    }
-    const message =
-      payload.message ||
-      payload.error ||
-      payload.details ||
-      raw ||
-      `Failed to upload file (${uploadResponse.status})`;
-    throw new Error(message);
-  }
-
-  const signedResponse = await fetch(
-    `${supabaseUrl}/storage/v1/object/sign/${storageBucket}/${storagePath}`,
-    {
-      method: 'POST',
-      headers: {
-        apikey: publicAnonKey,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ expiresIn: SIGNED_STORAGE_URL_EXPIRES_SECONDS }),
-    },
-  );
-
-  const signedPayload = await signedResponse.json().catch(() => ({}));
-  const rawSignedUrl =
-    signedPayload?.signedURL || signedPayload?.signedUrl || signedPayload?.signed_url || null;
-  const fileUrl =
-    typeof rawSignedUrl === 'string'
-      ? (/^https?:\/\//i.test(rawSignedUrl) ? rawSignedUrl : `${supabaseUrl}/storage/v1${rawSignedUrl}`)
-      : null;
-
-  const inserted = await restRequest<any[]>(
-    'files',
-    'select=*',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-      },
-      body: JSON.stringify({
-        submission_id: recordId,
-        type: fileType,
-        file_name: file.name,
-        mime_type: file.type,
-        // Persist only storage metadata in the database.
-        // Access is resolved later through signed URLs instead of a stored public URL.
-        url: null,
-        storage_bucket: storageBucket,
-        storage_path: storagePath,
-        uploaded_by: (await getCurrentAuthUser()).id,
-      }),
-    },
-  );
-
-  const fileId = inserted[0]?.id;
-  if (!fileId) {
-    throw new Error('File upload metadata could not be saved in the database.');
-  }
-
-  if (fileId && (fileType === 'xray' || fileType === 'cbc' || fileType === 'urinalysis')) {
-    const table = fileType === 'xray' ? 'lab_chest_xray' : fileType === 'cbc' ? 'lab_cbc' : 'lab_urinalysis';
-    await restRequest(
-      table,
-      'on_conflict=submission_id',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({ submission_id: recordId, file_id: fileId }),
-      },
-    );
-  }
 
   return {
     success: true as const,
-    url: fileUrl || undefined,
-    fileName: storagePath,
+    url: normalizeStorageFileUrl(payload.url || null) || undefined,
+    fileName: payload.fileName || undefined,
   };
 }
 

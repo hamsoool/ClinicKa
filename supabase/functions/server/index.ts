@@ -4,7 +4,6 @@ import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import {
   badRequest,
-  bucketName,
   buildCorsHeaders,
   forbidden,
   getManagedPasswordPolicyError,
@@ -49,11 +48,18 @@ import {
   normalizeStudentNotificationState,
 } from "./settings.ts";
 import {
+  deleteStoredFiles,
   deleteStoragePrefixes,
-  ensureBucket,
   ensureStorageBucket,
+  inferStorageBucket,
   normalizeFileRows,
+  normalizeStoragePath,
 } from "./storage.ts";
+import {
+  GoogleVisionConfigurationError,
+  readChestXrayWithGoogleVision,
+  resolveVisionInputMimeType,
+} from "./google-vision-ocr.ts";
 import {
   getCachedAnalyticsSummary,
   getCachedApprovedStudents,
@@ -68,6 +74,118 @@ import {
 } from "./submissions.ts";
 
 const app = new Hono().basePath("/server");
+const LAB_UPLOAD_TYPES = new Set(["xray", "cbc", "urinalysis"]);
+const LAB_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+const FILE_SELECT_COLUMNS = "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by";
+
+function isSupportedOcrFile(file: any) {
+  const mimeType = String(file?.mime_type || "").toLowerCase();
+  const name = `${file?.file_name || ""} ${file?.storage_path || ""} ${file?.url || ""}`.toLowerCase();
+  return (
+    mimeType === "application/pdf" ||
+    mimeType.startsWith("image/") ||
+    /\.(pdf|png|jpe?g|webp|bmp|gif|tiff?)(?=$|[\s?])/i.test(name)
+  );
+}
+
+function isLikelyChestXrayFile(file: any) {
+  const type = String(file?.type || "").trim().toLowerCase();
+  if (type === "xray") return true;
+
+  const haystack = `${file?.file_name || ""} ${file?.storage_path || ""} ${file?.url || ""}`.toLowerCase();
+  return /\b(xray|x-ray|chest|cxr)\b/.test(haystack);
+}
+
+function pickLatestFile(files: any[]) {
+  return [...(files || [])].sort((a, b) => {
+    const bTime = new Date(b?.uploaded_at || 0).getTime();
+    const aTime = new Date(a?.uploaded_at || 0).getTime();
+    return bTime - aTime;
+  })[0] || null;
+}
+
+async function findChestXrayOcrFile(submissionId: string) {
+  const { data: labRow, error: labError } = await supabase
+    .from("lab_chest_xray")
+    .select("submission_id,file_id")
+    .eq("submission_id", submissionId)
+    .maybeSingle();
+
+  if (labError) throw new Error(labError.message);
+
+  const fileId = String(labRow?.file_id || "").trim();
+  if (fileId) {
+    const { data: linkedFile, error: linkedFileError } = await supabase
+      .from("files")
+      .select(FILE_SELECT_COLUMNS)
+      .eq("id", fileId)
+      .maybeSingle();
+
+    if (linkedFileError) throw new Error(linkedFileError.message);
+    if (linkedFile && isSupportedOcrFile(linkedFile)) return linkedFile;
+  }
+
+  const { data: files, error: filesError } = await supabase
+    .from("files")
+    .select(FILE_SELECT_COLUMNS)
+    .eq("submission_id", submissionId)
+    .order("uploaded_at", { ascending: false });
+
+  if (filesError) throw new Error(filesError.message);
+
+  const supportedFiles = (files || []).filter(isSupportedOcrFile);
+  const typeMatched = supportedFiles.filter((file) => String(file?.type || "").toLowerCase() === "xray");
+  if (typeMatched.length) return pickLatestFile(typeMatched);
+
+  const hinted = supportedFiles.filter(isLikelyChestXrayFile);
+  if (hinted.length) return pickLatestFile(hinted);
+
+  return supportedFiles.length === 1 ? supportedFiles[0] : null;
+}
+
+async function fetchFileFromStorage(file: any) {
+  const bucket = inferStorageBucket(file);
+  const storagePath = normalizeStoragePath(file?.storage_path, bucket);
+  if (!bucket || !storagePath) return null;
+
+  const { data, error } = await supabase.storage.from(bucket).download(storagePath);
+  if (error || !data) return null;
+
+  return data;
+}
+
+async function fetchFileFromUrl(file: any) {
+  const url = String(file?.url || "").trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+
+  const response = await fetch(url);
+  if (!response.ok) return null;
+
+  return await response.blob();
+}
+
+async function loadChestXrayOcrInput(file: any) {
+  const blob = (await fetchFileFromStorage(file)) || (await fetchFileFromUrl(file));
+  if (!blob) {
+    throw new Error("The Chest X-Ray result file could not be downloaded from storage.");
+  }
+
+  if (blob.size > LAB_UPLOAD_MAX_BYTES) {
+    throw new Error("Chest X-Ray OCR supports files up to 8 MB.");
+  }
+
+  const fileName = String(file?.file_name || file?.storage_path || "chest-xray-result").trim();
+  const mimeType = resolveVisionInputMimeType(file?.mime_type || blob.type, fileName);
+  if (!mimeType) {
+    throw new Error("Unsupported Chest X-Ray file type. Upload a PDF or image file.");
+  }
+
+  return {
+    content: await blob.arrayBuffer(),
+    fileName,
+    mimeType,
+  };
+}
 
 async function findLatestProfileAssetInStorage(studentId: string, fileType: "photo" | "signature") {
   const targetStudentId = String(studentId || "").trim();
@@ -1140,34 +1258,100 @@ app.put("/submission/:id/measurements", async (c) => {
   }
 });
 
+app.post("/submission/:id/chest-xray-ocr", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const id = c.req.param("id");
+    const access = await requireSubmissionAccess(requester, id);
+    if (access.response) return access.response;
+
+    const file = await findChestXrayOcrFile(id);
+    if (!file) {
+      return badRequest("No Chest X-Ray result file was found for this submission.");
+    }
+
+    const input = await loadChestXrayOcrInput(file);
+    const result = await readChestXrayWithGoogleVision(input);
+
+    return c.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    console.log("Error reading Chest X-Ray with Google Vision:", error);
+
+    if (error instanceof GoogleVisionConfigurationError) {
+      return c.json({ error: error.message }, 503);
+    }
+
+    const message = error instanceof Error ? error.message : "Failed to read the Chest X-Ray result file.";
+    if (/unsupported|not found|could not be downloaded|up to 8 mb/i.test(message)) {
+      return badRequest(message);
+    }
+
+    return internalServerError(c, "Failed to read Chest X-Ray result with Google Vision", error);
+  }
+});
+
 app.post("/upload-file", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
 
   try {
-    await ensureBucket();
-
     const formData = await c.req.formData();
     const file = formData.get('file') as File;
-    const recordId = formData.get('recordId') as string;
-    const fileType = formData.get('fileType') as string;
+    const recordId = String(formData.get('recordId') || '').trim();
+    const fileType = String(formData.get('fileType') || '').trim().toLowerCase();
 
     if (!file || !recordId || !fileType) {
       return badRequest('file, recordId, and fileType are required');
+    }
+    if (!LAB_UPLOAD_TYPES.has(fileType)) {
+      return badRequest('Unsupported laboratory file type');
+    }
+    if (file.size > LAB_UPLOAD_MAX_BYTES) {
+      return badRequest('Laboratory result files must be 8 MB or smaller.');
+    }
+    const mimeType = String(file.type || '').trim().toLowerCase();
+    const hasAllowedExtension = /\.(pdf|png|jpe?g|webp)$/i.test(String(file.name || ''));
+    if (mimeType !== 'application/pdf' && !mimeType.startsWith('image/') && !hasAllowedExtension) {
+      return badRequest('Laboratory result files must be a PDF or image.');
     }
 
     const access = await requireSubmissionAccess(requester, recordId);
     if (access.response) return access.response;
 
+    const targetBucket =
+      fileType === 'xray'
+        ? 'lab_chest_xray'
+        : fileType === 'cbc'
+          ? 'lab_cbc'
+          : 'lab_urinalysis';
+    await ensureStorageBucket(targetBucket);
+
     const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${recordId}/${fileType}_${Date.now()}_${safeFileName}`;
     const fileBuffer = await file.arrayBuffer();
 
+    const { data: previousFiles, error: previousFilesError } = await supabase
+      .from('files')
+      .select('id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by')
+      .eq('submission_id', recordId)
+      .eq('type', fileType);
+
+    if (previousFilesError) {
+      throw new Error(previousFilesError.message);
+    }
+
     const { error: uploadError } = await supabase.storage
-      .from(bucketName)
+      .from(targetBucket)
       .upload(storagePath, fileBuffer, {
-        contentType: file.type,
+        contentType: mimeType || 'application/octet-stream',
         upsert: true,
       });
 
@@ -1176,7 +1360,7 @@ app.post("/upload-file", async (c) => {
     }
 
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from(bucketName)
+      .from(targetBucket)
       .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
 
     if (signedUrlError) throw new Error(signedUrlError.message);
@@ -1187,9 +1371,9 @@ app.post("/upload-file", async (c) => {
         submission_id: recordId,
         type: fileType,
         file_name: file.name,
-        mime_type: file.type,
+        mime_type: mimeType || 'application/octet-stream',
         url: null,
-        storage_bucket: bucketName,
+        storage_bucket: targetBucket,
         storage_path: storagePath,
         uploaded_by: requester.profile.id,
       })
@@ -1200,14 +1384,32 @@ app.post("/upload-file", async (c) => {
       throw new Error(fileInsertError?.message || 'Failed to save file metadata');
     }
 
-    if (fileType === 'xray') {
-      await supabase.from('lab_chest_xray').upsert({ submission_id: recordId, file_id: insertedFile.id });
+    const labTable =
+      fileType === 'xray'
+        ? 'lab_chest_xray'
+        : fileType === 'cbc'
+          ? 'lab_cbc'
+          : 'lab_urinalysis';
+    const { error: labUpsertError } = await supabase
+      .from(labTable)
+      .upsert({ submission_id: recordId, file_id: insertedFile.id });
+    if (labUpsertError) {
+      throw new Error(labUpsertError.message);
     }
-    if (fileType === 'cbc') {
-      await supabase.from('lab_cbc').upsert({ submission_id: recordId, file_id: insertedFile.id });
-    }
-    if (fileType === 'urinalysis') {
-      await supabase.from('lab_urinalysis').upsert({ submission_id: recordId, file_id: insertedFile.id });
+
+    const staleFiles = (previousFiles || []).filter((item) => item?.id && item.id !== insertedFile.id);
+    if (staleFiles.length) {
+      try {
+        await deleteStoredFiles(staleFiles);
+      } catch (cleanupError) {
+        console.log('Laboratory file storage cleanup warning:', cleanupError);
+      }
+
+      try {
+        await supabase.from('files').delete().in('id', staleFiles.map((item) => item.id));
+      } catch (cleanupError) {
+        console.log('Laboratory file metadata cleanup warning:', cleanupError);
+      }
     }
 
     invalidateDashboardReadCaches();

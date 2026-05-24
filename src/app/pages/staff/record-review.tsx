@@ -10,7 +10,9 @@ import {
   ClipboardCheck,
   FileCheck2,
   ImageUp,
+  Loader2,
   Save,
+  ScanText,
   ShieldCheck,
   Stethoscope,
 } from 'lucide-react';
@@ -42,7 +44,13 @@ import {
 } from '../../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Textarea } from '../../components/ui/textarea';
-import { saveSubmissionReview, updateSubmissionStatus, uploadFile } from '../../lib/api';
+import {
+  extractChestXrayFindings,
+  saveSubmissionReview,
+  updateSubmissionStatus,
+  uploadFile,
+  type ChestXrayOcrExtraction,
+} from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { MedicalHistory, SubmissionRecord } from '../../lib/record-types';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
@@ -70,6 +78,18 @@ type SubmissionDetails = SubmissionRecord & {
 
 type ReviewStatus = SubmissionRecord['status'];
 type LabUploadType = 'xray' | 'cbc' | 'urinalysis';
+const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
+
+function isClinicManagedLabSource(source?: string | null) {
+  return String(source || '').trim().toLowerCase() === CLINIC_INTERNAL_LAB_SOURCE.toLowerCase();
+}
+
+type XrayOcrState = {
+  confidence?: number;
+  message: string;
+  source?: ChestXrayOcrExtraction['source'];
+  status: 'idle' | 'processing' | 'success' | 'warning' | 'error';
+};
 
 type RecordForm = {
   studentId: string;
@@ -193,7 +213,7 @@ const MAX_ADDRESS_LENGTH = 180;
 const MAX_EMERGENCY_NAME_LENGTH = 40;
 const MAX_ALLERGY_DETAILS_LENGTH = 100;
 const MAX_OPERATION_HISTORY_LENGTH = 100;
-const MAX_FINDINGS_LENGTH = 100;
+const MAX_FINDINGS_LENGTH = 300;
 const MAX_PHYSICAL_EXAM_FIELD_LENGTH = 100;
 const MAX_PHYSICAL_EXAM_NOTES_LENGTH = 150;
 const MAX_EXAMINED_BY_LENGTH = 40;
@@ -241,6 +261,19 @@ function LabUploadActions({
       </div>
     </div>
   );
+}
+
+function getXrayOcrStatusClass(status: XrayOcrState['status']) {
+  if (status === 'success') return 'border-green-200 bg-green-50 text-green-800';
+  if (status === 'warning') return 'border-amber-200 bg-amber-50 text-amber-900';
+  if (status === 'error') return 'border-red-200 bg-red-50 text-red-800';
+  return 'border-blue-200 bg-blue-50 text-blue-800';
+}
+
+function getXrayOcrSourceLabel(source?: ChestXrayOcrExtraction['source']) {
+  if (source === 'google-vision-pdf') return 'Google Vision PDF';
+  if (source === 'google-vision-image') return 'Google Vision image';
+  return 'Google Vision';
 }
 
 function createEmptyMedicalHistory(): MedicalHistory {
@@ -602,7 +635,14 @@ export default function StaffRecordReview() {
     cbc: false,
     urinalysis: false,
   });
+  const [xrayOcrState, setXrayOcrState] = useState<XrayOcrState>({
+    message: '',
+    status: 'idle',
+  });
   const inReviewTransitionRef = useRef<string | null>(null);
+  const autoXrayOcrFileRef = useRef<string | null>(null);
+  const lastXrayOcrFileRef = useRef<string | null>(null);
+  const xrayOcrRunRef = useRef(0);
   const xrayUploadInputRef = useRef<HTMLInputElement | null>(null);
   const cbcUploadInputRef = useRef<HTMLInputElement | null>(null);
   const urinalysisUploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -685,6 +725,30 @@ export default function StaffRecordReview() {
       isActive = false;
     };
   }, [queryClient, submission, submissionId]);
+
+  useEffect(() => {
+    const nextFileUrl = submission?.xrayFileUrl || '';
+    if (lastXrayOcrFileRef.current === nextFileUrl) return;
+
+    lastXrayOcrFileRef.current = nextFileUrl;
+    autoXrayOcrFileRef.current = null;
+    xrayOcrRunRef.current += 1;
+    setXrayOcrState({
+      message: '',
+      status: 'idle',
+    });
+  }, [submission?.xrayFileUrl]);
+
+  useEffect(() => {
+    const xrayFileUrl = submission?.xrayFileUrl || '';
+    if (!xrayFileUrl) return;
+    if (isClinicManagedLabSource(submission?.xrayTestClinic)) return;
+    if (assessmentForm.xrayFindings.trim()) return;
+    if (autoXrayOcrFileRef.current === xrayFileUrl) return;
+
+    autoXrayOcrFileRef.current = xrayFileUrl;
+    void runChestXrayOcr(false);
+  }, [assessmentForm.xrayFindings, submission?.xrayFileUrl, submission?.xrayTestClinic]);
 
   function updateRecordField<K extends keyof RecordForm>(field: K, value: RecordForm[K]) {
     setRecordForm((prev) => {
@@ -936,6 +1000,82 @@ export default function StaffRecordReview() {
     }
   }
 
+  async function runChestXrayOcr(manualRun: boolean) {
+    if (!submissionId) {
+      toast.error('Submission record is still loading.');
+      return;
+    }
+
+    const xrayFileUrl = submission?.xrayFileUrl || '';
+    if (!xrayFileUrl) {
+      toast.error('Upload a Chest X-Ray result file before running OCR.');
+      return;
+    }
+
+    if (manualRun && assessmentForm.xrayFindings.trim()) {
+      const shouldReplace = window.confirm('Replace the current Chest X-Ray findings with the OCR result?');
+      if (!shouldReplace) return;
+    }
+
+    const runId = xrayOcrRunRef.current + 1;
+    xrayOcrRunRef.current = runId;
+    setXrayOcrState({
+      message: 'Sending Chest X-Ray result to Google Vision.',
+      status: 'processing',
+    });
+
+    try {
+      const result = await extractChestXrayFindings(submissionId);
+
+      if (xrayOcrRunRef.current !== runId) return;
+
+      const rawFindings = result.findings.trim();
+      const findings = sanitizeSafeText(rawFindings, MAX_FINDINGS_LENGTH).trim();
+      if (!findings) {
+        setXrayOcrState({
+          message: result.rawText.trim()
+            ? 'Auto-read finished, but no findings or impression line was detected.'
+            : 'No readable text was found in the Chest X-Ray file.',
+          source: result.source,
+          status: 'warning',
+        });
+        if (manualRun) {
+          toast.warning('No Chest X-Ray findings were detected in the uploaded file.');
+        }
+        return;
+      }
+
+      const wasShortened = rawFindings.length > findings.length;
+      const isLowConfidence = typeof result.confidence === 'number' && result.confidence < 80;
+      setAssessmentForm((prev) => ({
+        ...prev,
+        xrayFindings: findings,
+        xrayResult: result.result || prev.xrayResult,
+      }));
+      setXrayOcrState({
+        confidence: result.confidence,
+        message: wasShortened
+          ? `${getXrayOcrSourceLabel(result.source)} filled Findings and shortened the text to fit the field.`
+          : isLowConfidence
+            ? 'Google Vision filled Findings with low confidence. Review before saving.'
+            : `${getXrayOcrSourceLabel(result.source)} filled Findings. Review before saving.`,
+        source: result.source,
+        status: isLowConfidence ? 'warning' : 'success',
+      });
+      toast.success('Chest X-Ray findings were filled from the uploaded file.');
+    } catch (error) {
+      if (xrayOcrRunRef.current !== runId) return;
+      const message = error instanceof Error ? error.message : 'Failed to read the Chest X-Ray result file.';
+      setXrayOcrState({
+        message,
+        status: 'error',
+      });
+      if (manualRun) {
+        toast.error(message);
+      }
+    }
+  }
+
   async function persistReview(nextStatus?: ReviewStatus, customNotes?: string) {
     if (!submissionId || !submission) return;
     if (!/^\d{2}$/.test(recordForm.age)) {
@@ -1161,6 +1301,9 @@ export default function StaffRecordReview() {
   }
 
   const labUploadsCount = [submission.xrayFileUrl, submission.cbcFileUrl, submission.urinalysisFileUrl].filter(Boolean).length;
+  const xrayManagedByClinic = isClinicManagedLabSource(submission.xrayTestClinic);
+  const cbcManagedByClinic = isClinicManagedLabSource(submission.cbcTestClinic);
+  const urinalysisManagedByClinic = isClinicManagedLabSource(submission.urinalysisTestClinic);
   const persistedStatus = submission.status;
   const hasUnsavedStatusChange = reviewStatus !== persistedStatus;
   const isArchiveEditMode = searchParams.get('archiveEdit') === '1';
@@ -1585,6 +1728,68 @@ export default function StaffRecordReview() {
                 <span className="font-medium">Submitted test location: </span>
                 {submission.xrayTestClinic || 'Not specified'}
               </div>
+              {submission.xrayFileUrl ? (
+                <SubmittedFilePreview title="Chest X-Ray Result" fileUrl={submission.xrayFileUrl} alt="Student chest X-ray result" />
+              ) : xrayManagedByClinic ? (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                  No student upload required. Results from James L. Gordon Hospital are sent directly to the clinic.
+                </div>
+              ) : (
+                <SubmittedFilePreview title="Chest X-Ray Result" fileUrl={submission.xrayFileUrl} alt="Student chest X-ray result" />
+              )}
+              {submission.xrayFileUrl ? (
+                <div
+                  aria-live="polite"
+                  className={`rounded-lg border px-4 py-3 text-sm ${
+                    xrayOcrState.status === 'idle'
+                      ? 'border-outline-variant/50 bg-surface-container-low text-on-surface'
+                      : getXrayOcrStatusClass(xrayOcrState.status)
+                  }`}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      {xrayOcrState.status === 'processing' ? (
+                        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+                      ) : (
+                        <ScanText className="mt-0.5 h-4 w-4 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-medium">Chest X-Ray OCR</p>
+                        <p className="mt-1 text-xs opacity-85">
+                          {xrayOcrState.message || 'Ready to extract findings from the uploaded result.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                      {typeof xrayOcrState.confidence === 'number' ? (
+                        <Badge variant="outline" className="w-fit bg-white/70">
+                          Confidence {Math.round(xrayOcrState.confidence)}%
+                        </Badge>
+                      ) : null}
+                      {xrayOcrState.source ? (
+                        <Badge variant="outline" className="w-fit bg-white/70">
+                          {getXrayOcrSourceLabel(xrayOcrState.source)}
+                        </Badge>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void runChestXrayOcr(true)}
+                        disabled={xrayOcrState.status === 'processing'}
+                        className="w-full bg-white/70 sm:w-auto"
+                      >
+                        {xrayOcrState.status === 'processing' ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <ScanText className="mr-2 h-4 w-4" />
+                        )}
+                        Extract Findings
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor="xrayDate">Date</Label>
@@ -1637,6 +1842,15 @@ export default function StaffRecordReview() {
                 <span className="font-medium">Submitted test location: </span>
                 {submission.cbcTestClinic || 'Not specified'}
               </div>
+              {submission.cbcFileUrl ? (
+                <SubmittedFilePreview title="CBC Result" fileUrl={submission.cbcFileUrl} alt="Student CBC result" />
+              ) : cbcManagedByClinic ? (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                  No student upload required. Results from James L. Gordon Hospital are sent directly to the clinic.
+                </div>
+              ) : (
+                <SubmittedFilePreview title="CBC Result" fileUrl={submission.cbcFileUrl} alt="Student CBC result" />
+              )}
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <Label htmlFor="cbcDate">Date</Label>
@@ -1733,6 +1947,15 @@ export default function StaffRecordReview() {
                 <span className="font-medium">Submitted test location: </span>
                 {submission.urinalysisTestClinic || 'Not specified'}
               </div>
+              {submission.urinalysisFileUrl ? (
+                <SubmittedFilePreview title="Urinalysis Result" fileUrl={submission.urinalysisFileUrl} alt="Student urinalysis result" />
+              ) : urinalysisManagedByClinic ? (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                  No student upload required. Results from James L. Gordon Hospital are sent directly to the clinic.
+                </div>
+              ) : (
+                <SubmittedFilePreview title="Urinalysis Result" fileUrl={submission.urinalysisFileUrl} alt="Student urinalysis result" />
+              )}
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <Label htmlFor="urinalysisDate">Date</Label>
