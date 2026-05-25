@@ -12,6 +12,8 @@ export type EmergencyContact = {
   address: string;
 };
 
+export type LabUploadKind = 'cbc' | 'urinalysis' | 'xray';
+
 export type MedicalFormData = {
   studentCategory: 'regular' | 'returning' | 'repeater_irregular';
   studentId: string;

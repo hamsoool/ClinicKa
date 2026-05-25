@@ -5,7 +5,7 @@ import type { AuthMe } from '../../../lib/api';
 import type { SubmissionRecord } from '../../../lib/record-types';
 import { getYearLevelLabel, resolveStudentYearLevel } from '../../../lib/student-year';
 import { resolveStudentSubmissionProfile } from '../../../lib/student-submission-profile';
-import { getMe, getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord } from '../../../lib/api';
+import { getMe, getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import { invalidateStudentRecordsQuery } from '../student-records-query';
 import {
   DEFAULT_MEDICAL_HISTORY,
@@ -17,6 +17,7 @@ import {
 import type {
   BmiCategory,
   EmergencyContact,
+  LabUploadKind,
   MedicalConditionKey,
   MedicalFormData,
   MedicalHistoryState,
@@ -38,6 +39,33 @@ const MAX_CLINIC_NAME_LENGTH = 60;
 const MAX_TEST_SITE_OTHER_LENGTH = 50;
 const MAX_OTHER_MEDICAL_HISTORY_LENGTH = 20;
 const MIN_AGE = 15;
+const LAB_RESULT_MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024;
+const LAB_RESULT_MAX_FILE_SIZE_LABEL = '1 MB';
+const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff'];
+const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
+const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
+
+const LAB_UPLOAD_FIELD_CONFIG: Record<
+  LabUploadKind,
+  {
+    fileField: 'cbcFile' | 'urinalysisFile' | 'xrayFile';
+    label: string;
+  }
+> = {
+  cbc: {
+    fileField: 'cbcFile',
+    label: 'CBC result',
+  },
+  urinalysis: {
+    fileField: 'urinalysisFile',
+    label: 'Urinalysis result',
+  },
+  xray: {
+    fileField: 'xrayFile',
+    label: 'X-Ray result',
+  },
+};
+
 function normalizeStudentId(value: string) {
   return String(value || '').replace(/\D/g, '').slice(0, 9);
 }
@@ -120,6 +148,26 @@ function isAtLeastAge(dateValue: string, minAge: number) {
   return date <= maxBirthdate;
 }
 
+function getFileExtension(file?: File | null) {
+  const fileName = String(file?.name || '');
+  return fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() || '' : '';
+}
+
+function isAllowedLabResultFile(file?: File | null) {
+  if (!file) return false;
+  const mimeType = String(file.type || '').toLowerCase();
+  const extension = getFileExtension(file);
+  return mimeType === 'application/pdf' || mimeType.startsWith('image/') || LAB_RESULT_ALLOWED_EXTENSIONS.includes(extension);
+}
+
+function resolveSelectedLabSource(primaryValue: string, otherValue: string) {
+  return String(primaryValue === 'Others' ? otherValue : primaryValue).trim();
+}
+
+function isClinicManagedLabSource(primaryValue: string, otherValue: string) {
+  return resolveSelectedLabSource(primaryValue, otherValue).toLowerCase() === CLINIC_INTERNAL_LAB_SOURCE.toLowerCase();
+}
+
 function buildInitialFormData(year: string | undefined, me?: AuthMe | null, initialDataPrivacyConsent = false): MedicalFormData {
   const student = me?.student;
   const department = resolveDepartmentValue(student?.department || me?.profile.department || 'CCS');
@@ -155,6 +203,12 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, init
     weight: '',
     height: '',
     bmi: '',
+    cbcFile: null,
+    urinalysisFile: null,
+    xrayFile: null,
+    existingCbcFileUrl: '',
+    existingUrinalysisFileUrl: '',
+    existingXrayFileUrl: '',
     cbcTestSite: '',
     cbcTestSiteOther: '',
     urinalysisTestSite: '',
@@ -204,7 +258,6 @@ export function useStudentMedicalForm({
   const [originalSubmissionStatus, setOriginalSubmissionStatus] = useState<string | null>(null);
   const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, initialDataPrivacyConsent));
   const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_AGE), []);
-  const isEditingExistingSubmission = Boolean(activeSubmissionId);
 
   useEffect(() => {
     let active = true;
@@ -319,6 +372,12 @@ export function useStudentMedicalForm({
           cbcTestSiteOther: '',
           urinalysisTestSiteOther: '',
           xrayTestSiteOther: '',
+          cbcFile: null,
+          urinalysisFile: null,
+          xrayFile: null,
+          existingCbcFileUrl: submission.cbcFileUrl || '',
+          existingUrinalysisFileUrl: submission.urinalysisFileUrl || '',
+          existingXrayFileUrl: submission.xrayFileUrl || '',
           submissionConfirmed: false,
         }));
       } catch (error) {
@@ -573,6 +632,33 @@ export function useStudentMedicalForm({
     });
   }, []);
 
+  const updateLabFile = useCallback((kind: LabUploadKind, nextFile: File | null) => {
+    const config = LAB_UPLOAD_FIELD_CONFIG[kind];
+
+    if (!nextFile) {
+      setFormData((prev) => ({
+        ...prev,
+        [config.fileField]: null,
+      }));
+      return;
+    }
+
+    if (nextFile.size > LAB_RESULT_MAX_FILE_SIZE_BYTES) {
+      toast.error(`${config.label} must be ${LAB_RESULT_MAX_FILE_SIZE_LABEL} or smaller.`);
+      return;
+    }
+
+    if (!isAllowedLabResultFile(nextFile)) {
+      toast.error(`${config.label} must be a PDF or supported image file.`);
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      [config.fileField]: nextFile,
+    }));
+  }, []);
+
   const getBmiCategory = useCallback((bmi: string): BmiCategory => {
     const bmiValue = parseFloat(bmi);
     if (bmiValue < 18.5) return { category: 'Underweight', color: 'text-blue-600' };
@@ -603,6 +689,12 @@ export function useStudentMedicalForm({
   );
   const hasProfilePhoto = Boolean(profileAssetUrls.photoUrl);
   const hasProfileSignature = Boolean(profileAssetUrls.signatureUrl);
+  const hasCbcFile = Boolean(formData.cbcFile || formData.existingCbcFileUrl);
+  const hasUrinalysisFile = Boolean(formData.urinalysisFile || formData.existingUrinalysisFileUrl);
+  const hasXrayFile = Boolean(formData.xrayFile || formData.existingXrayFileUrl);
+  const requiresCbcFile = !isClinicManagedLabSource(formData.cbcTestSite, formData.cbcTestSiteOther);
+  const requiresUrinalysisFile = !isClinicManagedLabSource(formData.urinalysisTestSite, formData.urinalysisTestSiteOther);
+  const requiresXrayFile = !isClinicManagedLabSource(formData.xrayTestSite, formData.xrayTestSiteOther);
 
   const canProceed = useMemo(() => {
     switch (step) {
@@ -624,6 +716,9 @@ export function useStudentMedicalForm({
           formData.cbcTestSite.trim() &&
             formData.urinalysisTestSite.trim() &&
             formData.xrayTestSite.trim() &&
+            (!requiresCbcFile || hasCbcFile) &&
+            (!requiresUrinalysisFile || hasUrinalysisFile) &&
+            (!requiresXrayFile || hasXrayFile) &&
             formData.physicalCopyAgreement &&
             (formData.cbcTestSite !== 'Others' || Boolean(formData.cbcTestSiteOther.trim())) &&
             (formData.urinalysisTestSite !== 'Others' || Boolean(formData.urinalysisTestSiteOther.trim())) &&
@@ -634,7 +729,7 @@ export function useStudentMedicalForm({
       default:
         return false;
     }
-  }, [formData, hasProfilePhoto, hasProfileSignature, hasRequiredProfileFields, step]);
+  }, [formData, hasCbcFile, hasProfilePhoto, hasProfileSignature, hasRequiredProfileFields, hasUrinalysisFile, hasXrayFile, requiresCbcFile, requiresUrinalysisFile, requiresXrayFile, step]);
 
   const canSubmit = useMemo(
     () => {
@@ -651,6 +746,9 @@ export function useStudentMedicalForm({
         formData.cbcTestSite.trim() &&
         formData.urinalysisTestSite.trim() &&
         formData.xrayTestSite.trim() &&
+        (!requiresCbcFile || hasCbcFile) &&
+        (!requiresUrinalysisFile || hasUrinalysisFile) &&
+        (!requiresXrayFile || hasXrayFile) &&
         formData.physicalCopyAgreement &&
         (formData.cbcTestSite !== 'Others' || Boolean(formData.cbcTestSiteOther.trim())) &&
         (formData.urinalysisTestSite !== 'Others' || Boolean(formData.urinalysisTestSiteOther.trim())) &&
@@ -664,7 +762,7 @@ export function useStudentMedicalForm({
           (!formData.otherMedicalHistory || /^[A-Za-z\s]{1,20}$/.test(formData.otherMedicalHistory)),
       );
     },
-    [formData, hasRequiredProfileFields, isEditingExistingSubmission],
+    [formData, hasCbcFile, hasRequiredProfileFields, hasUrinalysisFile, hasXrayFile, requiresCbcFile, requiresUrinalysisFile, requiresXrayFile],
   );
 
   const submitBlockers = useMemo(() => {
@@ -683,6 +781,9 @@ export function useStudentMedicalForm({
     if (!formData.cbcTestSite.trim()) blockers.push('Select where you took your CBC test.');
     if (!formData.urinalysisTestSite.trim()) blockers.push('Select where you took your Urinalysis test.');
     if (!formData.xrayTestSite.trim()) blockers.push('Select where you took your X-Ray test.');
+    if (requiresCbcFile && !hasCbcFile) blockers.push('Upload your CBC laboratory result.');
+    if (requiresUrinalysisFile && !hasUrinalysisFile) blockers.push('Upload your Urinalysis laboratory result.');
+    if (requiresXrayFile && !hasXrayFile) blockers.push('Upload your X-Ray laboratory result.');
     if (formData.cbcTestSite === 'Others' && !formData.cbcTestSiteOther.trim()) blockers.push('Specify the CBC test clinic/lab.');
     if (formData.urinalysisTestSite === 'Others' && !formData.urinalysisTestSiteOther.trim()) blockers.push('Specify the Urinalysis test clinic/lab.');
     if (formData.xrayTestSite === 'Others' && !formData.xrayTestSiteOther.trim()) blockers.push('Specify the X-Ray test clinic/lab.');
@@ -699,7 +800,7 @@ export function useStudentMedicalForm({
     if (!formData.submissionConfirmed) blockers.push('Check the final confirmation box.');
     if (!formData.dataPrivacyConsent) blockers.push('Data Privacy Consent is required.');
     return blockers;
-  }, [formData, hasRequiredProfileFields]);
+  }, [formData, hasCbcFile, hasRequiredProfileFields, hasUrinalysisFile, hasXrayFile, requiresCbcFile, requiresUrinalysisFile, requiresXrayFile]);
 
   const previewRecord = useMemo<SubmissionRecord>(
     () => ({
@@ -738,6 +839,9 @@ export function useStudentMedicalForm({
       xrayTestClinic: formData.xrayTestSite === 'Others' ? formData.xrayTestSiteOther : formData.xrayTestSite,
       photoUrl: profileAssetUrls.photoUrl || undefined,
       signatureUrl: profileAssetUrls.signatureUrl || undefined,
+      cbcFileUrl: formData.existingCbcFileUrl || undefined,
+      urinalysisFileUrl: formData.existingUrinalysisFileUrl || undefined,
+      xrayFileUrl: formData.existingXrayFileUrl || undefined,
     }),
     [formData, profileAssetUrls.photoUrl, profileAssetUrls.signatureUrl],
   );
@@ -746,6 +850,10 @@ export function useStudentMedicalForm({
     if (uploading) return;
     if (!formData.physicalCopyAgreement) {
       toast.error('Please agree to bring physical copies of CBC, Urinalysis, and X-ray results before submitting.');
+      return;
+    }
+    if ((requiresCbcFile && !hasCbcFile) || (requiresUrinalysisFile && !hasUrinalysisFile) || (requiresXrayFile && !hasXrayFile)) {
+      toast.error('Please attach your CBC, Urinalysis, and X-Ray result files before submitting.');
       return;
     }
     if (!formData.submissionConfirmed) {
@@ -851,8 +959,35 @@ export function useStudentMedicalForm({
         throw new Error('Failed to identify or create medical record.');
       }
 
+      const uploads = [
+        { kind: 'cbc' as const, file: formData.cbcFile },
+        { kind: 'urinalysis' as const, file: formData.urinalysisFile },
+        { kind: 'xray' as const, file: formData.xrayFile },
+      ];
+
+      const uploadedUrls: Partial<Record<LabUploadKind, string>> = {};
+      for (const uploadItem of uploads) {
+        if (!uploadItem.file) continue;
+        const result = await uploadFile(uploadItem.file, recordId, uploadItem.kind);
+        if (result.url) {
+          uploadedUrls[uploadItem.kind] = result.url;
+        }
+      }
+
+      if (Object.keys(uploadedUrls).length || formData.cbcFile || formData.urinalysisFile || formData.xrayFile) {
+        setFormData((prev) => ({
+          ...prev,
+          cbcFile: null,
+          urinalysisFile: null,
+          xrayFile: null,
+          existingCbcFileUrl: uploadedUrls.cbc || prev.existingCbcFileUrl || '',
+          existingUrinalysisFileUrl: uploadedUrls.urinalysis || prev.existingUrinalysisFileUrl || '',
+          existingXrayFileUrl: uploadedUrls.xray || prev.existingXrayFileUrl || '',
+        }));
+      }
+
       await invalidateStudentRecordsQuery(queryClient, formData.studentId);
-      toast.success(isResubmission ? 'Medical record resubmitted successfully!' : 'Medical record submitted successfully!');
+      toast.success(isResubmission ? 'Medical record and laboratory files resubmitted successfully!' : 'Medical record and laboratory files submitted successfully!');
       setSubmitted(true);
       setActiveSubmissionId(null);
     } catch (error) {
@@ -861,7 +996,7 @@ export function useStudentMedicalForm({
     } finally {
       setUploading(false);
     }
-  }, [activeSubmissionId, allowedYearLevel, canSubmit, currentYearLabel, formData, originalSubmissionStatus, queryClient, uploading]);
+  }, [activeSubmissionId, allowedYearLevel, canSubmit, currentYearLabel, formData, hasCbcFile, hasUrinalysisFile, hasXrayFile, originalSubmissionStatus, queryClient, uploading]);
 
   return {
     step,
@@ -876,10 +1011,19 @@ export function useStudentMedicalForm({
     hasRequiredProfileFields,
     hasProfilePhoto,
     hasProfileSignature,
+    labResultAccept: LAB_RESULT_ACCEPT_ATTRIBUTE,
+    labResultMaxFileSizeLabel: LAB_RESULT_MAX_FILE_SIZE_LABEL,
+    hasCbcFile,
+    hasUrinalysisFile,
+    hasXrayFile,
+    requiresCbcFile,
+    requiresUrinalysisFile,
+    requiresXrayFile,
     previewRecord,
     updateField,
     updateEmergencyContact,
     updateMedicalCondition,
+    updateLabFile,
     updateMeasurement,
     getBmiCategory,
     maxBirthdate,

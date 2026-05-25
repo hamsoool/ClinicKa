@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { CheckCircle2, PenLine, UserRound, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, FileUp, PenLine, ShieldCheck, UserRound, XCircle } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Checkbox } from '../../../components/ui/checkbox';
@@ -15,7 +15,7 @@ import {
   MEDICAL_CONDITIONS,
   YEAR_LEVELS,
 } from './constants';
-import type { MedicalConditionKey, MedicalFormData } from './types';
+import type { LabUploadKind, MedicalConditionKey, MedicalFormData } from './types';
 
 type Props = {
   step: number;
@@ -26,8 +26,17 @@ type Props = {
   hasRequiredProfileFields: boolean;
   hasProfilePhoto: boolean;
   hasProfileSignature: boolean;
+  hasCbcFile: boolean;
+  hasUrinalysisFile: boolean;
+  hasXrayFile: boolean;
+  requiresCbcFile: boolean;
+  requiresUrinalysisFile: boolean;
+  requiresXrayFile: boolean;
+  labResultAccept: string;
+  labResultMaxFileSizeLabel: string;
   submitBlockers: string[];
   onGoToProfile: () => void;
+  onLabFileChange: (kind: LabUploadKind, file: File | null) => void;
 };
 
 export const MedicalFormStepContent = memo(function MedicalFormStepContent({
@@ -39,10 +48,20 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   hasRequiredProfileFields,
   hasProfilePhoto,
   hasProfileSignature,
+  hasCbcFile,
+  hasUrinalysisFile,
+  hasXrayFile,
+  requiresCbcFile,
+  requiresUrinalysisFile,
+  requiresXrayFile,
+  labResultAccept,
+  labResultMaxFileSizeLabel,
   submitBlockers,
   onGoToProfile,
+  onLabFileChange,
 }: Props) {
   const stepOneReady = hasRequiredProfileFields && hasProfilePhoto && hasProfileSignature;
+  const stepFourReady = (!requiresCbcFile || hasCbcFile) && (!requiresUrinalysisFile || hasUrinalysisFile) && (!requiresXrayFile || hasXrayFile);
   const stepThreeMissingRequired = [
     !formData.hadOperation,
     !formData.emergencyContact.name?.trim(),
@@ -60,6 +79,96 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     )
       ? [formData.emergencyContact.relationship, ...EMERGENCY_CONTACT_RELATIONSHIPS]
       : EMERGENCY_CONTACT_RELATIONSHIPS;
+  const shouldShowCbcUpload = Boolean(formData.cbcTestSite.trim() && (formData.cbcTestSite !== 'Others' || formData.cbcTestSiteOther.trim()));
+  const shouldShowUrinalysisUpload = Boolean(
+    formData.urinalysisTestSite.trim() && (formData.urinalysisTestSite !== 'Others' || formData.urinalysisTestSiteOther.trim()),
+  );
+  const shouldShowXrayUpload = Boolean(formData.xrayTestSite.trim() && (formData.xrayTestSite !== 'Others' || formData.xrayTestSiteOther.trim()));
+  const getLabFileReviewLabel = (selectedFile: File | null | undefined, existingUrl?: string) => {
+    if (selectedFile) {
+      return existingUrl ? `Replacement selected: ${selectedFile.name}` : selectedFile.name;
+    }
+    return existingUrl ? 'Submitted file attached' : 'Missing';
+  };
+  const renderLabUploadField = (
+    kind: LabUploadKind,
+    title: string,
+    selectedFile: File | null | undefined,
+    existingUrl: string | undefined,
+    isReady: boolean,
+  ) => {
+    const isReplacingSubmittedFile = Boolean(existingUrl && selectedFile);
+
+    return (
+      <div
+        className={`rounded-lg border p-4 ${
+          isReplacingSubmittedFile
+            ? 'border-amber-300 bg-amber-50/80'
+            : isReady
+              ? 'border-outline-variant/40 bg-surface-container-low'
+              : 'border-red-200 bg-red-50/60'
+        }`}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-2">
+            <div className="flex items-center gap-2">
+              <FileUp className={`h-4 w-4 ${isReady ? 'text-green-600' : 'text-red-600'}`} />
+              <p className="text-sm font-semibold text-on-surface">{title}</p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Upload a clear PDF or image copy. Maximum file size is {labResultMaxFileSizeLabel}.
+            </p>
+            {selectedFile ? (
+              <div className={`rounded-md border px-3 py-2 text-xs ${
+                existingUrl ? 'border-amber-200 bg-amber-100/70 text-amber-900' : 'border-green-200 bg-green-50 text-green-800'
+              }`}>
+                <div className="flex items-start gap-2">
+                  {existingUrl ? (
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  ) : (
+                    <FileUp className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  )}
+                  <p className="min-w-0 break-words">
+                    <span className="font-semibold">{existingUrl ? 'Replacement selected' : 'Selected file'}:</span>{' '}
+                    <span className="break-all">{selectedFile.name}</span>
+                    {existingUrl ? ' will replace the submitted file when you submit.' : ''}
+                  </p>
+                </div>
+              </div>
+            ) : existingUrl ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-semibold">Submitted file attached.</span>
+                  <span>Choosing another file will replace it when you submit.</span>
+                  <a href={existingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                    Open current file
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-red-700">No file attached yet.</p>
+            )}
+          </div>
+          <div className="min-w-0 space-y-1 sm:w-[18rem]">
+            <p className="text-xs font-medium text-muted-foreground">
+              {existingUrl ? 'Choose replacement file' : 'Choose file'}
+            </p>
+            <Input
+              type="file"
+              accept={labResultAccept}
+              className={`cursor-pointer bg-white ${existingUrl ? 'border-amber-300' : ''}`}
+              onChange={(event) => {
+                const nextFile = event.target.files?.[0] || null;
+                onLabFileChange(kind, nextFile);
+                event.currentTarget.value = '';
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   switch (step) {
     case 1:
@@ -280,6 +389,14 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           <p className="text-sm text-muted-foreground">
             Select where each test was performed. Choose <span className="font-medium">Others</span> to type a custom clinic/lab name (max 50 letters and numbers).
           </p>
+          <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />
+              <p className="text-sm leading-6 text-on-surface-variant">
+                Upload the laboratory result files here. Attachments are kept in private storage and opened through signed access for authorized clinic staff only.
+              </p>
+            </div>
+          </div>
           <div className="grid gap-4">
             <div>
               <Label>Where did you do your CBC test? *</Label>
@@ -302,6 +419,14 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   maxLength={50}
                   placeholder="Enter clinic/lab"
                 />
+              ) : null}
+              {shouldShowCbcUpload && requiresCbcFile ? (
+                <div className="mt-3">
+                  {renderLabUploadField('cbc', 'CBC Laboratory Result *', formData.cbcFile || null, formData.existingCbcFileUrl, hasCbcFile)}
+                </div>
+              ) : null}
+              {shouldShowCbcUpload && !requiresCbcFile ? (
+                <p className="mt-3 text-xs text-green-700">No upload required. Results from James L. Gordon Hospital are sent directly to the clinic.</p>
               ) : null}
             </div>
             <div>
@@ -326,6 +451,20 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   placeholder="Enter clinic/lab"
                 />
               ) : null}
+              {shouldShowUrinalysisUpload && requiresUrinalysisFile ? (
+                <div className="mt-3">
+                  {renderLabUploadField(
+                    'urinalysis',
+                    'Urinalysis Laboratory Result *',
+                    formData.urinalysisFile || null,
+                    formData.existingUrinalysisFileUrl,
+                    hasUrinalysisFile,
+                  )}
+                </div>
+              ) : null}
+              {shouldShowUrinalysisUpload && !requiresUrinalysisFile ? (
+                <p className="mt-3 text-xs text-green-700">No upload required. Results from James L. Gordon Hospital are sent directly to the clinic.</p>
+              ) : null}
             </div>
             <div>
               <Label>Where did you do your X-Ray test? *</Label>
@@ -349,6 +488,14 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   placeholder="Enter clinic/lab"
                 />
               ) : null}
+              {shouldShowXrayUpload && requiresXrayFile ? (
+                <div className="mt-3">
+                  {renderLabUploadField('xray', 'X-Ray Laboratory Result *', formData.xrayFile || null, formData.existingXrayFileUrl, hasXrayFile)}
+                </div>
+              ) : null}
+              {shouldShowXrayUpload && !requiresXrayFile ? (
+                <p className="mt-3 text-xs text-green-700">No upload required. Results from James L. Gordon Hospital are sent directly to the clinic.</p>
+              ) : null}
             </div>
           </div>
           <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
@@ -364,6 +511,11 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </Label>
             </div>
           </div>
+          {!stepFourReady ? (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Upload the laboratory result files for tests not performed at James L. Gordon Hospital before moving to the final review step.
+            </div>
+          ) : null}
         </div>
       );
     case 5:
@@ -431,6 +583,18 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 <p className="font-medium">{formData.urinalysisTestSite === 'Others' ? formData.urinalysisTestSiteOther || 'Others' : formData.urinalysisTestSite || '--'}</p>
                 <p className="text-muted-foreground">X-Ray:</p>
                 <p className="font-medium">{formData.xrayTestSite === 'Others' ? formData.xrayTestSiteOther || 'Others' : formData.xrayTestSite || '--'}</p>
+                {requiresCbcFile ? <p className="text-muted-foreground">CBC file:</p> : null}
+                {requiresCbcFile ? (
+                  <p className="font-medium">{getLabFileReviewLabel(formData.cbcFile, formData.existingCbcFileUrl)}</p>
+                ) : null}
+                {requiresUrinalysisFile ? <p className="text-muted-foreground">Urinalysis file:</p> : null}
+                {requiresUrinalysisFile ? (
+                  <p className="font-medium">{getLabFileReviewLabel(formData.urinalysisFile, formData.existingUrinalysisFileUrl)}</p>
+                ) : null}
+                {requiresXrayFile ? <p className="text-muted-foreground">X-Ray file:</p> : null}
+                {requiresXrayFile ? (
+                  <p className="font-medium">{getLabFileReviewLabel(formData.xrayFile, formData.existingXrayFileUrl)}</p>
+                ) : null}
               </div>
             </CardContent>
           </Card>
