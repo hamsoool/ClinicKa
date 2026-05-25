@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { CheckCircle2, ExternalLink, FileUp, PenLine, ShieldCheck, UserRound, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, FileUp, PenLine, ShieldCheck, UserRound, XCircle } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Checkbox } from '../../../components/ui/checkbox';
@@ -84,54 +84,91 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     formData.urinalysisTestSite.trim() && (formData.urinalysisTestSite !== 'Others' || formData.urinalysisTestSiteOther.trim()),
   );
   const shouldShowXrayUpload = Boolean(formData.xrayTestSite.trim() && (formData.xrayTestSite !== 'Others' || formData.xrayTestSiteOther.trim()));
+  const getLabFileReviewLabel = (selectedFile: File | null | undefined, existingUrl?: string) => {
+    if (selectedFile) {
+      return existingUrl ? `Replacement selected: ${selectedFile.name}` : selectedFile.name;
+    }
+    return existingUrl ? 'Submitted file attached' : 'Missing';
+  };
   const renderLabUploadField = (
     kind: LabUploadKind,
     title: string,
     selectedFile: File | null | undefined,
     existingUrl: string | undefined,
     isReady: boolean,
-  ) => (
-    <div className={`rounded-lg border p-4 ${isReady ? 'border-outline-variant/40 bg-surface-container-low' : 'border-red-200 bg-red-50/60'}`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
-            <FileUp className={`h-4 w-4 ${isReady ? 'text-green-600' : 'text-red-600'}`} />
-            <p className="text-sm font-semibold text-on-surface">{title}</p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Upload a clear PDF or image copy. Maximum file size is {labResultMaxFileSizeLabel}.
-          </p>
-          {selectedFile ? (
-            <p className="break-all text-xs text-on-surface-variant">
-              Selected: <span className="font-medium text-on-surface">{selectedFile.name}</span>. This will replace the current file when you submit.
-            </p>
-          ) : existingUrl ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-              <span>Current file is already attached to this record.</span>
-              <a href={existingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-                Open current file
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+  ) => {
+    const isReplacingSubmittedFile = Boolean(existingUrl && selectedFile);
+
+    return (
+      <div
+        className={`rounded-lg border p-4 ${
+          isReplacingSubmittedFile
+            ? 'border-amber-300 bg-amber-50/80'
+            : isReady
+              ? 'border-outline-variant/40 bg-surface-container-low'
+              : 'border-red-200 bg-red-50/60'
+        }`}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-2">
+            <div className="flex items-center gap-2">
+              <FileUp className={`h-4 w-4 ${isReady ? 'text-green-600' : 'text-red-600'}`} />
+              <p className="text-sm font-semibold text-on-surface">{title}</p>
             </div>
-          ) : (
-            <p className="text-xs text-red-700">No file attached yet.</p>
-          )}
-        </div>
-        <div className="min-w-0 sm:w-[18rem]">
-          <Input
-            type="file"
-            accept={labResultAccept}
-            className="cursor-pointer bg-white"
-            onChange={(event) => {
-              const nextFile = event.target.files?.[0] || null;
-              onLabFileChange(kind, nextFile);
-              event.currentTarget.value = '';
-            }}
-          />
+            <p className="text-xs text-muted-foreground">
+              Upload a clear PDF or image copy. Maximum file size is {labResultMaxFileSizeLabel}.
+            </p>
+            {selectedFile ? (
+              <div className={`rounded-md border px-3 py-2 text-xs ${
+                existingUrl ? 'border-amber-200 bg-amber-100/70 text-amber-900' : 'border-green-200 bg-green-50 text-green-800'
+              }`}>
+                <div className="flex items-start gap-2">
+                  {existingUrl ? (
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  ) : (
+                    <FileUp className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  )}
+                  <p className="min-w-0 break-words">
+                    <span className="font-semibold">{existingUrl ? 'Replacement selected' : 'Selected file'}:</span>{' '}
+                    <span className="break-all">{selectedFile.name}</span>
+                    {existingUrl ? ' will replace the submitted file when you submit.' : ''}
+                  </p>
+                </div>
+              </div>
+            ) : existingUrl ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-semibold">Submitted file attached.</span>
+                  <span>Choosing another file will replace it when you submit.</span>
+                  <a href={existingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                    Open current file
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-red-700">No file attached yet.</p>
+            )}
+          </div>
+          <div className="min-w-0 space-y-1 sm:w-[18rem]">
+            <p className="text-xs font-medium text-muted-foreground">
+              {existingUrl ? 'Choose replacement file' : 'Choose file'}
+            </p>
+            <Input
+              type="file"
+              accept={labResultAccept}
+              className={`cursor-pointer bg-white ${existingUrl ? 'border-amber-300' : ''}`}
+              onChange={(event) => {
+                const nextFile = event.target.files?.[0] || null;
+                onLabFileChange(kind, nextFile);
+                event.currentTarget.value = '';
+              }}
+            />
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   switch (step) {
     case 1:
@@ -548,15 +585,15 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 <p className="font-medium">{formData.xrayTestSite === 'Others' ? formData.xrayTestSiteOther || 'Others' : formData.xrayTestSite || '--'}</p>
                 {requiresCbcFile ? <p className="text-muted-foreground">CBC file:</p> : null}
                 {requiresCbcFile ? (
-                  <p className="font-medium">{formData.cbcFile?.name || (formData.existingCbcFileUrl ? 'Attached on current record' : 'Missing')}</p>
+                  <p className="font-medium">{getLabFileReviewLabel(formData.cbcFile, formData.existingCbcFileUrl)}</p>
                 ) : null}
                 {requiresUrinalysisFile ? <p className="text-muted-foreground">Urinalysis file:</p> : null}
                 {requiresUrinalysisFile ? (
-                  <p className="font-medium">{formData.urinalysisFile?.name || (formData.existingUrinalysisFileUrl ? 'Attached on current record' : 'Missing')}</p>
+                  <p className="font-medium">{getLabFileReviewLabel(formData.urinalysisFile, formData.existingUrinalysisFileUrl)}</p>
                 ) : null}
                 {requiresXrayFile ? <p className="text-muted-foreground">X-Ray file:</p> : null}
                 {requiresXrayFile ? (
-                  <p className="font-medium">{formData.xrayFile?.name || (formData.existingXrayFileUrl ? 'Attached on current record' : 'Missing')}</p>
+                  <p className="font-medium">{getLabFileReviewLabel(formData.xrayFile, formData.existingXrayFileUrl)}</p>
                 ) : null}
               </div>
             </CardContent>

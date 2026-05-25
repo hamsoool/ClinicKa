@@ -23,6 +23,7 @@ import {
 } from 'recharts';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import ListPagination from '../../components/list-pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
@@ -66,6 +67,7 @@ const YEAR_LABELS: Record<string, string> = {
   '3': '3rd Year',
   '4': '4th Year',
 };
+const DASHBOARD_QUEUE_PAGE_SIZE = 20;
 const GENDER_ORDER = ['male', 'female', 'other', 'unspecified'];
 
 const SUBMISSION_RANGE_LABELS = {
@@ -321,6 +323,7 @@ export default function StaffDashboard() {
   const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'returned' | 'resubmitted'>(
     workspacePreferences.dashboardQueueTab === 'in_review' ? 'pending' : workspacePreferences.dashboardQueueTab,
   );
+  const [queuePage, setQueuePage] = useState(1);
   const [reportRange, setReportRange] = useState<SubmissionRangeKey>('today');
   const [reportGroupBy, setReportGroupBy] = useState<ReportGroupKey>('department');
   const {
@@ -356,6 +359,10 @@ export default function StaffDashboard() {
     setQueueSortOrder(workspacePreferences.reviewSortOrder);
     setQueueTab(workspacePreferences.dashboardQueueTab === 'in_review' ? 'pending' : workspacePreferences.dashboardQueueTab);
   }, [workspacePreferences]);
+
+  useEffect(() => {
+    setQueuePage(1);
+  }, [queueSortOrder, queueTab]);
 
   const queueGroups = {
     pending: overview?.pendingQueueItems || [],
@@ -399,6 +406,17 @@ export default function StaffDashboard() {
       : queueTab === 'resubmitted'
       ? resubmittedQueue
       : sortedBySubmitted;
+  const queueTotalPages = Math.max(1, Math.ceil(visibleQueue.length / DASHBOARD_QUEUE_PAGE_SIZE));
+  const paginatedQueue = visibleQueue.slice(
+    (queuePage - 1) * DASHBOARD_QUEUE_PAGE_SIZE,
+    queuePage * DASHBOARD_QUEUE_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    if (queuePage > queueTotalPages) {
+      setQueuePage(queueTotalPages);
+    }
+  }, [queuePage, queueTotalPages]);
 
   const summaryCards = [
     {
@@ -710,7 +728,7 @@ export default function StaffDashboard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {visibleQueue.slice(0, 4).map((submission) => (
+              {paginatedQueue.map((submission) => (
                 <button
                   key={submission.id}
                   onClick={() => navigate(`/staff/review/${submission.id}`)}
@@ -746,6 +764,16 @@ export default function StaffDashboard() {
                   </div>
                 </button>
               ))}
+              <ListPagination
+                currentPage={queuePage}
+                totalPages={queueTotalPages}
+                totalItems={visibleQueue.length}
+                pageSize={DASHBOARD_QUEUE_PAGE_SIZE}
+                pageSizeOptions={[DASHBOARD_QUEUE_PAGE_SIZE]}
+                itemLabel="submissions"
+                onPageChange={setQueuePage}
+                onPageSizeChange={() => undefined}
+              />
             </div>
           )}
         </div>

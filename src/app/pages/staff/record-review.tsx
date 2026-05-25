@@ -7,14 +7,10 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  ClipboardCheck,
-  FileCheck2,
   FileUp,
   Loader2,
   Save,
   ScanText,
-  ShieldCheck,
-  Stethoscope,
 } from 'lucide-react';
 import {
   Dialog,
@@ -24,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../components/ui/dialog';
-import PortalPageIntro from '../../components/portal-page-intro';
 import { toast } from 'sonner';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -35,6 +30,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
+import { Skeleton } from '../../components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -44,6 +40,7 @@ import {
 } from '../../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Textarea } from '../../components/ui/textarea';
+import { cn } from '../../components/ui/utils';
 import {
   extractCbcFields,
   extractChestXrayFindings,
@@ -113,6 +110,9 @@ type UrinalysisOcrState = {
   source?: UrinalysisOcrExtraction['source'];
   status: XrayOcrState['status'];
 };
+
+type OcrRunOutcome = 'filled' | 'filled_with_warning' | 'warning' | 'error' | 'skipped';
+type UpdatedAssessmentFields = Partial<Record<keyof AssessmentForm, boolean>>;
 
 type RecordForm = {
   studentId: string;
@@ -249,6 +249,21 @@ const MAX_CLEARANCE_REMARKS_LENGTH = 50;
 const SEX_BASE_OPTIONS = ['male', 'female'] as const;
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married'] as const;
 const MEDICAL_RECORD_DATE_RANGE_MONTHS = 6;
+const UPDATED_FIELD_CLASS = 'border-green-300 bg-green-50 text-green-950 focus-visible:border-green-500 focus-visible:ring-green-500/20';
+const HIGHLIGHTED_ASSESSMENT_FIELDS: Array<keyof AssessmentForm> = [
+  'xrayDate',
+  'xrayResult',
+  'xrayFindings',
+  'cbcDate',
+  'hemoglobin',
+  'hematocrit',
+  'wbc',
+  'plateletCount',
+  'bloodType',
+  'urinalysisDate',
+  'urinalysisGlucose',
+  'urinalysisProtein',
+];
 
 type ReviewStep = (typeof REVIEW_STEPS)[number];
 
@@ -299,12 +314,6 @@ function getOcrStatusClass(status: XrayOcrState['status']) {
 function getOcrSourceLabel(source?: ChestXrayOcrExtraction['source'] | CbcOcrExtraction['source'] | UrinalysisOcrExtraction['source']) {
   if (source === 'ocr-space') return 'OCR.space';
   return 'OCR';
-}
-
-function formatSelectedFileSize(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2).replace(/\.?0+$/, '')} MB`;
 }
 
 function createEmptyMedicalHistory(): MedicalHistory {
@@ -634,6 +643,89 @@ function getStatusBadge(status: ReviewStatus) {
   }
 }
 
+function StaffRecordReviewSkeleton() {
+  return (
+    <div aria-busy="true" aria-live="polite" className="mx-auto w-full max-w-[100rem] space-y-6">
+      <div className="space-y-3">
+        <Skeleton className="h-9 w-72 bg-primary/15" />
+        <Skeleton className="h-4 w-full max-w-2xl bg-surface-container-high" />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(20rem,0.8fr)]">
+        <Card className="border-outline-variant/30">
+          <CardHeader className="space-y-3">
+            <Skeleton className="h-6 w-48 bg-surface-container-high" />
+            <Skeleton className="h-4 w-64 bg-surface-container" />
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <div key={index} className="space-y-2">
+                  <Skeleton className="h-3 w-20 bg-surface-container-high" />
+                  <Skeleton className="h-10 w-full bg-surface-container" />
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {Array.from({ length: 2 }).map((_, index) => (
+                <div key={index} className="space-y-2">
+                  <Skeleton className="h-3 w-28 bg-surface-container-high" />
+                  <Skeleton className="h-24 w-full bg-surface-container" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-outline-variant/30">
+          <CardHeader className="space-y-3">
+            <Skeleton className="h-6 w-32 bg-surface-container-high" />
+            <Skeleton className="h-4 w-40 bg-surface-container" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Skeleton key={index} className="h-10 w-full bg-surface-container" />
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-outline-variant/30">
+        <CardHeader className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-10 w-28 rounded-full bg-surface-container-high" />
+            ))}
+          </div>
+          <Skeleton className="h-4 w-56 bg-surface-container" />
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <div className="space-y-4">
+              <Skeleton className="h-56 w-full rounded-xl bg-surface-container" />
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div key={index} className="space-y-2">
+                    <Skeleton className="h-3 w-24 bg-surface-container-high" />
+                    <Skeleton className="h-10 w-full bg-surface-container" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Skeleton key={index} className="h-32 w-full rounded-xl bg-surface-container" />
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <span className="sr-only">Loading submission...</span>
+    </div>
+  );
+}
+
 function countVerifiedConditions(history: MedicalHistory) {
   return Object.values(history).filter(Boolean).length;
 }
@@ -667,6 +759,7 @@ export default function StaffRecordReview() {
     urinalysis: false,
   });
   const [pendingLabReplacement, setPendingLabReplacement] = useState<PendingLabReplacement | null>(null);
+  const [showAutoFillReplaceDialog, setShowAutoFillReplaceDialog] = useState(false);
   const [xrayOcrState, setXrayOcrState] = useState<XrayOcrState>({
     message: '',
     status: 'idle',
@@ -679,7 +772,10 @@ export default function StaffRecordReview() {
     message: '',
     status: 'idle',
   });
+  const [updatedAssessmentFields, setUpdatedAssessmentFields] = useState<UpdatedAssessmentFields>({});
+  const assessmentFormRef = useRef<AssessmentForm>(createAssessmentForm());
   const inReviewTransitionRef = useRef<string | null>(null);
+  const hydratedSubmissionIdRef = useRef<string | null>(null);
   const lastXrayOcrFileRef = useRef<string | null>(null);
   const lastCbcOcrFileRef = useRef<string | null>(null);
   const lastUrinalysisOcrFileRef = useRef<string | null>(null);
@@ -709,20 +805,49 @@ export default function StaffRecordReview() {
     const loadedSubmission = (submissionData || null) as SubmissionDetails | null;
 
     if (!loadedSubmission) {
+      hydratedSubmissionIdRef.current = null;
       setSubmission(null);
+      setUpdatedAssessmentFields({});
       return;
     }
 
+    const isSameSubmissionRefresh = hydratedSubmissionIdRef.current === loadedSubmission.id;
+    if (!isSameSubmissionRefresh) {
+      setUpdatedAssessmentFields({});
+    }
     setSubmission(loadedSubmission);
     setRecordForm(createRecordForm(loadedSubmission));
     const nextAssessmentForm = createAssessmentForm(loadedSubmission);
     if (!nextAssessmentForm.examinedBy && defaultSignatoryName) {
       nextAssessmentForm.examinedBy = defaultSignatoryName;
     }
-    setAssessmentForm(nextAssessmentForm);
+    const previousAssessmentForm = assessmentFormRef.current;
+    const hydratedAssessmentForm = isSameSubmissionRefresh
+      ? {
+          ...nextAssessmentForm,
+          // Preserve locally extracted lab values when background refetches return older saved data.
+          xrayDate: previousAssessmentForm.xrayDate,
+          xrayResult: previousAssessmentForm.xrayResult,
+          xrayFindings: previousAssessmentForm.xrayFindings,
+          cbcDate: previousAssessmentForm.cbcDate,
+          hemoglobin: previousAssessmentForm.hemoglobin,
+          hematocrit: previousAssessmentForm.hematocrit,
+          wbc: previousAssessmentForm.wbc,
+          plateletCount: previousAssessmentForm.plateletCount,
+          bloodType: previousAssessmentForm.bloodType,
+          glucose: previousAssessmentForm.glucose,
+          protein: previousAssessmentForm.protein,
+          urinalysisDate: previousAssessmentForm.urinalysisDate,
+          urinalysisGlucose: previousAssessmentForm.urinalysisGlucose,
+          urinalysisProtein: previousAssessmentForm.urinalysisProtein,
+        }
+      : nextAssessmentForm;
+    assessmentFormRef.current = hydratedAssessmentForm;
+    setAssessmentForm(hydratedAssessmentForm);
     setClearanceForm(createClearanceForm(loadedSubmission));
     setStaffNotes(loadedSubmission.staffNotes || '');
     setReviewStatus(loadedSubmission.status);
+    hydratedSubmissionIdRef.current = loadedSubmission.id;
   }, [defaultSignatoryName, submissionData]);
 
   useEffect(() => {
@@ -733,7 +858,12 @@ export default function StaffRecordReview() {
 
   useEffect(() => {
     if (!defaultSignatoryName) return;
-    setAssessmentForm((prev) => (prev.examinedBy ? prev : { ...prev, examinedBy: defaultSignatoryName }));
+    const previousAssessmentForm = assessmentFormRef.current;
+    if (previousAssessmentForm.examinedBy) return;
+
+    const nextAssessmentForm = { ...previousAssessmentForm, examinedBy: defaultSignatoryName };
+    assessmentFormRef.current = nextAssessmentForm;
+    setAssessmentForm(nextAssessmentForm);
   }, [defaultSignatoryName]);
 
   useEffect(() => {
@@ -889,72 +1019,103 @@ export default function StaffRecordReview() {
     }));
   }
 
-  function updateAssessmentField<K extends keyof AssessmentForm>(field: K, value: AssessmentForm[K]) {
-    setAssessmentForm((prev) => {
-      let normalizedValue = value;
-
-      if (field === 'xrayDate' || field === 'cbcDate' || field === 'urinalysisDate') {
-        normalizedValue = normalizeDateInputValue(String(value)) as AssessmentForm[K];
-      } else if (field === 'xrayFindings') {
-        normalizedValue = sanitizeSafeText(String(value), MAX_FINDINGS_LENGTH) as AssessmentForm[K];
-      } else if (field === 'hemoglobin') {
-        normalizedValue = sanitizeNumericWithLimits(String(value), 2, 1) as AssessmentForm[K];
-      } else if (field === 'hematocrit') {
-        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 1) as AssessmentForm[K];
-      } else if (field === 'wbc') {
-        const safeValue = sanitizeNumericWithLimits(String(value), 6, 2);
-        normalizedValue = normalizeCountToX10Power9(safeValue) as AssessmentForm[K];
-      } else if (field === 'plateletCount') {
-        const safeValue = sanitizeNumericWithLimits(String(value), 7, 0);
-        normalizedValue = normalizeCountToX10Power9Whole(safeValue) as AssessmentForm[K];
-      } else if (
-        field === 'skin'
-        || field === 'heent'
-        || field === 'chestLungs'
-        || field === 'heart'
-        || field === 'abdomen'
-        || field === 'extremities'
-      ) {
-        normalizedValue = sanitizeSafeText(String(value), MAX_PHYSICAL_EXAM_FIELD_LENGTH) as AssessmentForm[K];
-      } else if (field === 'examinedBy') {
-        normalizedValue = sanitizeSafeText(String(value), MAX_EXAMINED_BY_LENGTH) as AssessmentForm[K];
-      } else if (field === 'others') {
-        normalizedValue = sanitizeSafeText(String(value), MAX_PHYSICAL_EXAM_NOTES_LENGTH) as AssessmentForm[K];
-      } else if (field === 'cardiacRate') {
-        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 0) as AssessmentForm[K];
-      } else if (field === 'respiratoryRate') {
-        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 0) as AssessmentForm[K];
-      } else if (field === 'temperature') {
-        normalizedValue = sanitizeNumericWithLimits(String(value), 2, 1) as AssessmentForm[K];
-      } else if (field === 'weight') {
-        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 1) as AssessmentForm[K];
-      } else if (field === 'height') {
-        normalizedValue = sanitizeNumericWithLimits(String(value), 3, 1) as AssessmentForm[K];
-      } else if (field === 'bloodPressure') {
-        normalizedValue = sanitizeFractionLikeInput(String(value), 3, 3) as AssessmentForm[K];
-      } else if (field === 'visualAcuity') {
-        normalizedValue = sanitizeVisualAcuityText(String(value)) as AssessmentForm[K];
-      }
-
-      const next = { ...prev, [field]: normalizedValue };
-
-      if (field === 'weight' || field === 'height') {
-        next.bmi = calculateBmi(
-          field === 'weight' ? String(normalizedValue) : prev.weight,
-          field === 'height' ? String(normalizedValue) : prev.height,
+  function markChangedAssessmentFields(previous: AssessmentForm, updates: Partial<AssessmentForm>) {
+    const changedFields = Object.entries(updates)
+      .filter(([field, value]) => {
+        const assessmentField = field as keyof AssessmentForm;
+        return (
+          HIGHLIGHTED_ASSESSMENT_FIELDS.includes(assessmentField)
+          && String(previous[assessmentField] || '') !== String(value || '')
         );
-      }
+      })
+      .map(([field]) => field as keyof AssessmentForm);
 
-      if (field === 'urinalysisGlucose') {
-        next.glucose = String(normalizedValue);
-      }
+    if (!changedFields.length) return;
 
-      if (field === 'urinalysisProtein') {
-        next.protein = String(normalizedValue);
-      }
-
+    setUpdatedAssessmentFields((prev) => {
+      const next = { ...prev };
+      changedFields.forEach((field) => {
+        next[field] = true;
+      });
       return next;
     });
+  }
+
+  function getUpdatedFieldClass(field: keyof AssessmentForm) {
+    return updatedAssessmentFields[field] ? UPDATED_FIELD_CLASS : '';
+  }
+
+  function commitAssessmentFormChange(previous: AssessmentForm, next: AssessmentForm) {
+    markChangedAssessmentFields(previous, next);
+    assessmentFormRef.current = next;
+    setAssessmentForm(next);
+  }
+
+  function updateAssessmentField<K extends keyof AssessmentForm>(field: K, value: AssessmentForm[K]) {
+    const prev = assessmentFormRef.current;
+    let normalizedValue = value;
+
+    if (field === 'xrayDate' || field === 'cbcDate' || field === 'urinalysisDate') {
+      normalizedValue = normalizeDateInputValue(String(value)) as AssessmentForm[K];
+    } else if (field === 'xrayFindings') {
+      normalizedValue = sanitizeSafeText(String(value), MAX_FINDINGS_LENGTH) as AssessmentForm[K];
+    } else if (field === 'hemoglobin') {
+      normalizedValue = sanitizeNumericWithLimits(String(value), 2, 1) as AssessmentForm[K];
+    } else if (field === 'hematocrit') {
+      normalizedValue = sanitizeNumericWithLimits(String(value), 3, 1) as AssessmentForm[K];
+    } else if (field === 'wbc') {
+      const safeValue = sanitizeNumericWithLimits(String(value), 6, 2);
+      normalizedValue = normalizeCountToX10Power9(safeValue) as AssessmentForm[K];
+    } else if (field === 'plateletCount') {
+      const safeValue = sanitizeNumericWithLimits(String(value), 7, 0);
+      normalizedValue = normalizeCountToX10Power9Whole(safeValue) as AssessmentForm[K];
+    } else if (
+      field === 'skin'
+      || field === 'heent'
+      || field === 'chestLungs'
+      || field === 'heart'
+      || field === 'abdomen'
+      || field === 'extremities'
+    ) {
+      normalizedValue = sanitizeSafeText(String(value), MAX_PHYSICAL_EXAM_FIELD_LENGTH) as AssessmentForm[K];
+    } else if (field === 'examinedBy') {
+      normalizedValue = sanitizeSafeText(String(value), MAX_EXAMINED_BY_LENGTH) as AssessmentForm[K];
+    } else if (field === 'others') {
+      normalizedValue = sanitizeSafeText(String(value), MAX_PHYSICAL_EXAM_NOTES_LENGTH) as AssessmentForm[K];
+    } else if (field === 'cardiacRate') {
+      normalizedValue = sanitizeNumericWithLimits(String(value), 3, 0) as AssessmentForm[K];
+    } else if (field === 'respiratoryRate') {
+      normalizedValue = sanitizeNumericWithLimits(String(value), 3, 0) as AssessmentForm[K];
+    } else if (field === 'temperature') {
+      normalizedValue = sanitizeNumericWithLimits(String(value), 2, 1) as AssessmentForm[K];
+    } else if (field === 'weight') {
+      normalizedValue = sanitizeNumericWithLimits(String(value), 3, 1) as AssessmentForm[K];
+    } else if (field === 'height') {
+      normalizedValue = sanitizeNumericWithLimits(String(value), 3, 1) as AssessmentForm[K];
+    } else if (field === 'bloodPressure') {
+      normalizedValue = sanitizeFractionLikeInput(String(value), 3, 3) as AssessmentForm[K];
+    } else if (field === 'visualAcuity') {
+      normalizedValue = sanitizeVisualAcuityText(String(value)) as AssessmentForm[K];
+    }
+
+    const next = { ...prev, [field]: normalizedValue };
+
+    if (field === 'weight' || field === 'height') {
+      next.bmi = calculateBmi(
+        field === 'weight' ? String(normalizedValue) : prev.weight,
+        field === 'height' ? String(normalizedValue) : prev.height,
+      );
+    }
+
+    if (field === 'urinalysisGlucose') {
+      next.glucose = String(normalizedValue);
+    }
+
+    if (field === 'urinalysisProtein') {
+      next.protein = String(normalizedValue);
+    }
+
+    commitAssessmentFormChange(prev, next);
   }
 
   function updateClearanceField<K extends keyof ClearanceForm>(field: K, value: ClearanceForm[K]) {
@@ -1152,21 +1313,16 @@ export default function StaffRecordReview() {
     return [fields.urinalysisDate, fields.urinalysisGlucose, fields.urinalysisProtein].filter((value) => String(value || '').trim()).length;
   }
 
-  async function runChestXrayOcr(manualRun: boolean) {
+  async function runChestXrayOcr(manualRun: boolean): Promise<OcrRunOutcome> {
     if (!submissionId) {
-      toast.error('Submission record is still loading.');
-      return;
+      if (manualRun) toast.error('Submission record is still loading.');
+      return 'skipped';
     }
 
     const xrayFileUrl = submission?.xrayFileUrl || '';
     if (!xrayFileUrl) {
-      toast.error('Upload a Chest X-Ray result file before running OCR.');
-      return;
-    }
-
-    if (manualRun && assessmentForm.xrayFindings.trim()) {
-      const shouldReplace = window.confirm('Replace the current Chest X-Ray findings with the OCR result?');
-      if (!shouldReplace) return;
+      if (manualRun) toast.error('Upload a Chest X-Ray result file before running OCR.');
+      return 'skipped';
     }
 
     const runId = xrayOcrRunRef.current + 1;
@@ -1179,7 +1335,7 @@ export default function StaffRecordReview() {
     try {
       const result = await extractChestXrayFindings(submissionId);
 
-      if (xrayOcrRunRef.current !== runId) return;
+      if (xrayOcrRunRef.current !== runId) return 'skipped';
 
       const rawFindings = result.findings.trim();
       const findings = sanitizeSafeText(rawFindings, MAX_FINDINGS_LENGTH).trim();
@@ -1194,16 +1350,17 @@ export default function StaffRecordReview() {
         if (manualRun) {
           toast.warning('No Chest X-Ray findings were detected in the uploaded file.');
         }
-        return;
+        return 'warning';
       }
 
       const wasShortened = rawFindings.length > findings.length;
       const isLowConfidence = typeof result.confidence === 'number' && result.confidence < 80;
-      setAssessmentForm((prev) => ({
-        ...prev,
+      const previousAssessmentForm = assessmentFormRef.current;
+      commitAssessmentFormChange(previousAssessmentForm, {
+        ...previousAssessmentForm,
         xrayFindings: findings,
-        xrayResult: result.result || prev.xrayResult,
-      }));
+        xrayResult: result.result || previousAssessmentForm.xrayResult,
+      });
       setXrayOcrState({
         confidence: result.confidence,
         message: wasShortened
@@ -1214,9 +1371,10 @@ export default function StaffRecordReview() {
         source: result.source,
         status: isLowConfidence ? 'warning' : 'success',
       });
-      toast.success('Chest X-Ray findings were filled from the uploaded file.');
+      if (manualRun) toast.success('Chest X-Ray findings were filled from the uploaded file.');
+      return isLowConfidence ? 'filled_with_warning' : 'filled';
     } catch (error) {
-      if (xrayOcrRunRef.current !== runId) return;
+      if (xrayOcrRunRef.current !== runId) return 'skipped';
       const message = error instanceof Error ? error.message : 'Failed to read the Chest X-Ray result file.';
       setXrayOcrState({
         message,
@@ -1225,33 +1383,20 @@ export default function StaffRecordReview() {
       if (manualRun) {
         toast.error(message);
       }
+      return 'error';
     }
   }
 
-  async function runCbcOcr(manualRun: boolean) {
+  async function runCbcOcr(manualRun: boolean): Promise<OcrRunOutcome> {
     if (!submissionId) {
-      toast.error('Submission record is still loading.');
-      return;
+      if (manualRun) toast.error('Submission record is still loading.');
+      return 'skipped';
     }
 
     const cbcFileUrl = submission?.cbcFileUrl || '';
     if (!cbcFileUrl) {
-      toast.error('Upload a CBC result file before running OCR.');
-      return;
-    }
-
-    const hasCurrentCbcValues = [
-      assessmentForm.cbcDate,
-      assessmentForm.hemoglobin,
-      assessmentForm.hematocrit,
-      assessmentForm.wbc,
-      assessmentForm.plateletCount,
-      assessmentForm.bloodType,
-    ].some((value) => String(value || '').trim());
-
-    if (manualRun && hasCurrentCbcValues) {
-      const shouldReplace = window.confirm('Replace matching CBC fields with the OCR result? Fields not detected by OCR will be kept.');
-      if (!shouldReplace) return;
+      if (manualRun) toast.error('Upload a CBC result file before running OCR.');
+      return 'skipped';
     }
 
     const runId = cbcOcrRunRef.current + 1;
@@ -1264,7 +1409,7 @@ export default function StaffRecordReview() {
     try {
       const result = await extractCbcFields(submissionId);
 
-      if (cbcOcrRunRef.current !== runId) return;
+      if (cbcOcrRunRef.current !== runId) return 'skipped';
 
       const fields = normalizeCbcOcrFields(result.fields);
       const detectedFieldCount = getCbcDetectedFieldCount(fields);
@@ -1280,22 +1425,24 @@ export default function StaffRecordReview() {
         if (manualRun) {
           toast.warning('No CBC values were detected in the uploaded file.');
         }
-        return;
+        return 'warning';
       }
 
-      setAssessmentForm((prev) => ({
-        ...prev,
+      const previousAssessmentForm = assessmentFormRef.current;
+      commitAssessmentFormChange(previousAssessmentForm, {
+        ...previousAssessmentForm,
         ...fields,
-      }));
+      });
       setCbcOcrState({
         fieldsDetected: detectedFieldCount,
         message: `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} CBC field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
         source: result.source,
         status: 'success',
       });
-      toast.success('CBC fields were filled from the uploaded file.');
+      if (manualRun) toast.success('CBC fields were filled from the uploaded file.');
+      return 'filled';
     } catch (error) {
-      if (cbcOcrRunRef.current !== runId) return;
+      if (cbcOcrRunRef.current !== runId) return 'skipped';
       const message = error instanceof Error ? error.message : 'Failed to read the CBC result file.';
       setCbcOcrState({
         message,
@@ -1304,30 +1451,20 @@ export default function StaffRecordReview() {
       if (manualRun) {
         toast.error(message);
       }
+      return 'error';
     }
   }
 
-  async function runUrinalysisOcr(manualRun: boolean) {
+  async function runUrinalysisOcr(manualRun: boolean): Promise<OcrRunOutcome> {
     if (!submissionId) {
-      toast.error('Submission record is still loading.');
-      return;
+      if (manualRun) toast.error('Submission record is still loading.');
+      return 'skipped';
     }
 
     const urinalysisFileUrl = submission?.urinalysisFileUrl || '';
     if (!urinalysisFileUrl) {
-      toast.error('Upload a Urinalysis result file before running OCR.');
-      return;
-    }
-
-    const hasCurrentUrinalysisValues = [
-      assessmentForm.urinalysisDate,
-      assessmentForm.urinalysisGlucose,
-      assessmentForm.urinalysisProtein,
-    ].some((value) => String(value || '').trim());
-
-    if (manualRun && hasCurrentUrinalysisValues) {
-      const shouldReplace = window.confirm('Replace matching Urinalysis fields with the OCR result? Fields not detected by OCR will be kept.');
-      if (!shouldReplace) return;
+      if (manualRun) toast.error('Upload a Urinalysis result file before running OCR.');
+      return 'skipped';
     }
 
     const runId = urinalysisOcrRunRef.current + 1;
@@ -1340,7 +1477,7 @@ export default function StaffRecordReview() {
     try {
       const result = await extractUrinalysisFields(submissionId);
 
-      if (urinalysisOcrRunRef.current !== runId) return;
+      if (urinalysisOcrRunRef.current !== runId) return 'skipped';
 
       const fields = normalizeUrinalysisOcrFields(result.fields);
       const detectedFieldCount = getUrinalysisDetectedFieldCount(fields);
@@ -1356,22 +1493,24 @@ export default function StaffRecordReview() {
         if (manualRun) {
           toast.warning('No Urinalysis values were detected in the uploaded file.');
         }
-        return;
+        return 'warning';
       }
 
-      setAssessmentForm((prev) => ({
-        ...prev,
+      const previousAssessmentForm = assessmentFormRef.current;
+      commitAssessmentFormChange(previousAssessmentForm, {
+        ...previousAssessmentForm,
         ...fields,
-      }));
+      });
       setUrinalysisOcrState({
         fieldsDetected: detectedFieldCount,
         message: `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} Urinalysis field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
         source: result.source,
         status: 'success',
       });
-      toast.success('Urinalysis fields were filled from the uploaded file.');
+      if (manualRun) toast.success('Urinalysis fields were filled from the uploaded file.');
+      return 'filled';
     } catch (error) {
-      if (urinalysisOcrRunRef.current !== runId) return;
+      if (urinalysisOcrRunRef.current !== runId) return 'skipped';
       const message = error instanceof Error ? error.message : 'Failed to read the Urinalysis result file.';
       setUrinalysisOcrState({
         message,
@@ -1380,6 +1519,86 @@ export default function StaffRecordReview() {
       if (manualRun) {
         toast.error(message);
       }
+      return 'error';
+    }
+  }
+
+  function getUploadedLabOcrTypes() {
+    const fileTypes: LabUploadType[] = [];
+    if (submission?.xrayFileUrl) fileTypes.push('xray');
+    if (submission?.cbcFileUrl) fileTypes.push('cbc');
+    if (submission?.urinalysisFileUrl) fileTypes.push('urinalysis');
+    return fileTypes;
+  }
+
+  function hasCurrentLabOcrValues(fileTypes: LabUploadType[]) {
+    return fileTypes.some((fileType) => {
+      if (fileType === 'xray') {
+        return Boolean(assessmentForm.xrayFindings.trim());
+      }
+
+      if (fileType === 'cbc') {
+        return [
+          assessmentForm.cbcDate,
+          assessmentForm.hemoglobin,
+          assessmentForm.hematocrit,
+          assessmentForm.wbc,
+          assessmentForm.plateletCount,
+          assessmentForm.bloodType,
+        ].some((value) => String(value || '').trim());
+      }
+
+      return [
+        assessmentForm.urinalysisDate,
+        assessmentForm.urinalysisGlucose,
+        assessmentForm.urinalysisProtein,
+      ].some((value) => String(value || '').trim());
+    });
+  }
+
+  async function runLabResultsAutoFill(options: { skipExistingValueConfirmation?: boolean } = {}) {
+    if (!submissionId) {
+      toast.error('Submission record is still loading.');
+      return;
+    }
+
+    const uploadedLabFiles = getUploadedLabOcrTypes();
+    if (!uploadedLabFiles.length) {
+      toast.error('Upload at least one lab result file before running Auto Fill.');
+      return;
+    }
+
+    const isProcessing = [xrayOcrState.status, cbcOcrState.status, urinalysisOcrState.status].some(
+      (status) => status === 'processing',
+    );
+    if (isProcessing) return;
+
+    if (!options.skipExistingValueConfirmation && hasCurrentLabOcrValues(uploadedLabFiles)) {
+      setShowAutoFillReplaceDialog(true);
+      return;
+    }
+
+    setShowAutoFillReplaceDialog(false);
+    const outcomes = await Promise.all(
+      uploadedLabFiles.map((fileType) => {
+        if (fileType === 'xray') return runChestXrayOcr(false);
+        if (fileType === 'cbc') return runCbcOcr(false);
+        return runUrinalysisOcr(false);
+      }),
+    );
+
+    const filledCount = outcomes.filter((outcome) => outcome === 'filled' || outcome === 'filled_with_warning').length;
+    const warningCount = outcomes.filter((outcome) => outcome === 'warning' || outcome === 'filled_with_warning').length;
+    const errorCount = outcomes.filter((outcome) => outcome === 'error').length;
+
+    if (filledCount && !warningCount && !errorCount) {
+      toast.success(`Auto Fill completed for ${filledCount} lab result file${filledCount === 1 ? '' : 's'}.`);
+    } else if (filledCount) {
+      toast.warning('Auto Fill filled some lab result fields. Review the OCR messages below for anything missed.');
+    } else if (warningCount && !errorCount) {
+      toast.warning('Auto Fill finished, but no lab result fields were detected. Review the OCR messages below.');
+    } else {
+      toast.error('Auto Fill could not extract lab result fields. Review the OCR messages below.');
     }
   }
 
@@ -1589,11 +1808,7 @@ export default function StaffRecordReview() {
   }
 
   if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-muted-foreground">Loading submission...</div>
-      </div>
-    );
+    return <StaffRecordReviewSkeleton />;
   }
 
   if (!submission) {
@@ -1607,10 +1822,18 @@ export default function StaffRecordReview() {
     );
   }
 
-  const labUploadsCount = [submission.xrayFileUrl, submission.cbcFileUrl, submission.urinalysisFileUrl].filter(Boolean).length;
   const xrayManagedByClinic = isClinicManagedLabSource(submission.xrayTestClinic);
   const cbcManagedByClinic = isClinicManagedLabSource(submission.cbcTestClinic);
   const urinalysisManagedByClinic = isClinicManagedLabSource(submission.urinalysisTestClinic);
+  const readyLabResultCount = [
+    submission.xrayFileUrl || xrayManagedByClinic,
+    submission.cbcFileUrl || cbcManagedByClinic,
+    submission.urinalysisFileUrl || urinalysisManagedByClinic,
+  ].filter(Boolean).length;
+  const reportedConditionCount = countVerifiedConditions(recordForm.medicalHistory);
+  const studentDisplayName = [recordForm.firstName, recordForm.lastName].filter(Boolean).join(' ') || 'Student';
+  const studentYearLevel = recordForm.year ? `Year ${recordForm.year}` : 'Year not set';
+  const submittedDate = new Date(submission.submittedAt).toLocaleDateString();
   const persistedStatus = submission.status;
   const hasUnsavedStatusChange = reviewStatus !== persistedStatus;
   const isArchiveEditMode = searchParams.get('archiveEdit') === '1';
@@ -1636,6 +1859,12 @@ export default function StaffRecordReview() {
   const pendingReplacementIsUploading = pendingLabReplacement
     ? uploadingLabFile[pendingLabReplacement.fileType]
     : false;
+  const uploadedLabOcrTypes = getUploadedLabOcrTypes();
+  const hasUploadedLabResultFile = uploadedLabOcrTypes.length > 0;
+  const isUploadingAnyLabFile = Object.values(uploadingLabFile).some(Boolean);
+  const isLabAutoFillProcessing = [xrayOcrState.status, cbcOcrState.status, urinalysisOcrState.status].some(
+    (status) => status === 'processing',
+  );
   const getReviewStepLabel = (step: ReviewStep) => {
     switch (step) {
       case 'record':
@@ -1730,68 +1959,64 @@ export default function StaffRecordReview() {
           }
         }}
       >
-        <DialogContent className="overflow-hidden p-0 sm:max-w-xl">
-          <div className="border-b bg-surface-container-low px-6 py-5">
-            <DialogHeader className="gap-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <FileCheck2 className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <DialogTitle>Replace {pendingLabReplacement?.title} file?</DialogTitle>
-                  <DialogDescription className="mt-2">
-                    This will replace the student&apos;s current uploaded file for this record.
-                  </DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
-          </div>
-          {pendingLabReplacement ? (
-            <div className="space-y-4 px-6 py-5">
-              <div className="rounded-lg border border-outline-variant/60 bg-background px-4 py-3">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                    <FileUp className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">Selected replacement</p>
-                    <p className="mt-1 break-all text-sm text-muted-foreground">{pendingLabReplacement.file.name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatSelectedFileSize(pendingLabReplacement.file.size)} - {pendingLabReplacement.file.type || 'File type from extension'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                  <p>
-                    The existing file stays available if this upload fails. OCR fields will only update when staff runs the extract button again.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : null}
-          <DialogFooter className="border-t bg-surface-container-low px-6 py-4">
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Replace {pendingLabReplacement?.title} file?</DialogTitle>
+            <DialogDescription>
+              Do you want to replace the current uploaded file?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
               onClick={() => setPendingLabReplacement(null)}
               disabled={pendingReplacementIsUploading}
             >
-              Cancel
+              No
             </Button>
             <Button
               type="button"
               onClick={() => void confirmPendingLabReplacement()}
               disabled={pendingReplacementIsUploading}
             >
-              {pendingReplacementIsUploading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FileUp className="mr-2 h-4 w-4" />
-              )}
-              {pendingReplacementIsUploading ? 'Replacing...' : 'Replace file'}
+              {pendingReplacementIsUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {pendingReplacementIsUploading ? 'Replacing...' : 'Yes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={showAutoFillReplaceDialog}
+        onOpenChange={(open) => {
+          if (!open && !isLabAutoFillProcessing) {
+            setShowAutoFillReplaceDialog(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Replace existing lab values?</DialogTitle>
+            <DialogDescription>
+              Auto Fill will update current lab fields from the uploaded files.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAutoFillReplaceDialog(false)}
+              disabled={isLabAutoFillProcessing}
+            >
+              No
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void runLabResultsAutoFill({ skipExistingValueConfirmation: true })}
+              disabled={isLabAutoFillProcessing}
+            >
+              {isLabAutoFillProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isLabAutoFillProcessing ? 'Filling...' : 'Yes'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1805,45 +2030,48 @@ export default function StaffRecordReview() {
         Back to Submissions
       </Button>
 
-      <PortalPageIntro
-        title="Clinic Review"
-        description={`Review, verify, and update the student medical record before finalizing the ${isDoctorWorkspace ? 'clinic decision' : 'clearance'}.`}
-        actions={(
-          <div className="rounded-xl border bg-card px-4 py-3 text-sm shadow-sm">
-            <p className="font-medium text-foreground">Current recommendation</p>
-            <p className="mt-1 text-muted-foreground">
-              {reviewStatus === 'approved'
-                ? 'Ready for clearance release'
-                : reviewStatus === 'in_review'
-                  ? 'Currently being reviewed by the clinic.'
-                : reviewStatus === 'physical_exam_done'
-                  ? 'Physical exam completed and ready for final clearance decision'
-                : reviewStatus === 'returned'
-                  ? 'Needs student correction'
-                  : 'Still under clinical review'}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Badge className={physicalExamStatus === 'Completed' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
-                Physical Exam: {physicalExamStatus}
-              </Badge>
-              <Badge className={clearanceStatus === 'Approved' ? 'bg-green-100 text-green-800 hover:bg-green-100' : clearanceStatus === 'Returned' ? 'bg-red-100 text-red-800 hover:bg-red-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
-                Clearance: {clearanceStatus}
-              </Badge>
+      <header className="border-b border-border/70 pb-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Clinic Review</h1>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              <span className="text-base font-semibold text-foreground">{studentDisplayName}</span>
+              <span>{recordForm.studentId}</span>
+              <span>{studentYearLevel}</span>
+              <span>{recordForm.course || 'Course not set'}</span>
             </div>
           </div>
-        )}
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          {getStatusBadge(persistedStatus)}
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            {getStatusBadge(persistedStatus) || (
+              <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">In Review</Badge>
+            )}
+            <Badge className={physicalExamStatus === 'Completed' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
+              Exam {physicalExamStatus}
+            </Badge>
+            <Badge className={clearanceStatus === 'Approved' ? 'bg-green-100 text-green-800 hover:bg-green-100' : clearanceStatus === 'Returned' ? 'bg-red-100 text-red-800 hover:bg-red-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
+              Clearance {clearanceStatus}
+            </Badge>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">
-            {recordForm.firstName} {recordForm.lastName}
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <span>
+            <span className="text-muted-foreground">Submitted </span>
+            <span className="font-medium text-foreground">{submittedDate}</span>
           </span>
-          <span>{recordForm.studentId}</span>
-          <span>{recordForm.course || 'Course not set'}</span>
+          <span>
+            <span className="text-muted-foreground">Labs </span>
+            <span className="font-medium text-foreground">{readyLabResultCount}/3 ready</span>
+          </span>
+          <span>
+            <span className="text-muted-foreground">Conditions </span>
+            <span className="font-medium text-foreground">{reportedConditionCount || 'None'}</span>
+          </span>
+          <span>
+            <span className="text-muted-foreground">Examiner </span>
+            <span className="font-medium text-foreground">{assessmentForm.examinedBy || 'Unassigned'}</span>
+          </span>
         </div>
-      </PortalPageIntro>
+      </header>
 
       {isAssignedToAnotherReviewer ? (
         <Card className="border-amber-200 bg-amber-50">
@@ -1855,75 +2083,6 @@ export default function StaffRecordReview() {
           </CardContent>
         </Card>
       ) : null}
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-emerald-100 p-3 text-emerald-700">
-                <ClipboardCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Submitted</p>
-                <p className="font-semibold">
-                  {new Date(submission.submittedAt).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-sky-100 p-3 text-sky-700">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Reported conditions</p>
-                <p className="font-semibold">{countVerifiedConditions(recordForm.medicalHistory)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-amber-100 p-3 text-amber-700">
-                <FileCheck2 className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Lab test sources</p>
-                <p className="font-semibold">CBC, Urinalysis, and X-Ray clinic/lab captured</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-rose-100 p-3 text-rose-700">
-                <Stethoscope className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Examined by</p>
-                <p className="font-semibold">{assessmentForm.examinedBy || 'Not yet recorded'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="pt-5">
-          <p className="text-sm font-semibold text-foreground">Recommended workflow</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            1) Confirm student record, 2) verify labs, 3) complete assessment, 4) finalize the {isDoctorWorkspace ? 'clinic decision' : 'clearance'}.
-          </p>
-        </CardContent>
-      </Card>
 
       <Tabs value={activeReviewStep} onValueChange={(value) => setActiveReviewStep(value as ReviewStep)} className="space-y-6">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-border/60 bg-muted/40 p-1.5 md:grid-cols-4">
@@ -2103,6 +2262,23 @@ export default function StaffRecordReview() {
         </TabsContent>
 
         <TabsContent value="labs" className="space-y-6">
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void runLabResultsAutoFill()}
+              disabled={!hasUploadedLabResultFile || isLabAutoFillProcessing || isUploadingAnyLabFile}
+              className="w-full sm:w-auto"
+            >
+              {isLabAutoFillProcessing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ScanText className="mr-2 h-4 w-4" />
+              )}
+              Auto Fill
+            </Button>
+          </div>
+
           <Card>
             <CardHeader>
               <CardTitle>Chest X-Ray Review</CardTitle>
@@ -2146,7 +2322,7 @@ export default function StaffRecordReview() {
                       <div className="min-w-0">
                         <p className="font-medium">Chest X-Ray OCR</p>
                         <p className="mt-1 text-xs opacity-85">
-                          {xrayOcrState.message || 'Press Extract Findings to scan the uploaded result.'}
+                          {xrayOcrState.message || 'Press Auto Fill to scan the uploaded result.'}
                         </p>
                       </div>
                     </div>
@@ -2161,21 +2337,6 @@ export default function StaffRecordReview() {
                           {getOcrSourceLabel(xrayOcrState.source)}
                         </Badge>
                       ) : null}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void runChestXrayOcr(true)}
-                        disabled={xrayOcrState.status === 'processing'}
-                        className="w-full bg-white/70 sm:w-auto"
-                      >
-                        {xrayOcrState.status === 'processing' ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <ScanText className="mr-2 h-4 w-4" />
-                        )}
-                        Extract Findings
-                      </Button>
                     </div>
                   </div>
                 </div>
@@ -2190,7 +2351,7 @@ export default function StaffRecordReview() {
                     onChange={(event) => updateAssessmentField('xrayDate', event.target.value)}
                     min={medicalRecordDateBounds.min}
                     max={medicalRecordDateBounds.max}
-                    className="mt-2"
+                    className={cn('mt-2', getUpdatedFieldClass('xrayDate'))}
                   />
                 </div>
                 <div>
@@ -2199,7 +2360,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.xrayResult}
                     onValueChange={(value) => updateAssessmentField('xrayResult', value as 'normal' | 'abnormal')}
                   >
-                    <SelectTrigger id="xrayResult" className="mt-2">
+                    <SelectTrigger id="xrayResult" className={cn('mt-2', getUpdatedFieldClass('xrayResult'))}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -2214,7 +2375,10 @@ export default function StaffRecordReview() {
                     id="xrayFindings"
                     value={assessmentForm.xrayFindings}
                     onChange={(event) => updateAssessmentField('xrayFindings', event.target.value)}
-                    className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                    className={cn(
+                      'mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap',
+                      getUpdatedFieldClass('xrayFindings'),
+                    )}
                     maxLength={MAX_FINDINGS_LENGTH}
                     rows={4}
                   />
@@ -2266,7 +2430,7 @@ export default function StaffRecordReview() {
                       <div className="min-w-0">
                         <p className="font-medium">CBC OCR</p>
                         <p className="mt-1 text-xs opacity-85">
-                          {cbcOcrState.message || 'Press Extract CBC Values to scan the uploaded result.'}
+                          {cbcOcrState.message || 'Press Auto Fill to scan the uploaded result.'}
                         </p>
                       </div>
                     </div>
@@ -2281,21 +2445,6 @@ export default function StaffRecordReview() {
                           {getOcrSourceLabel(cbcOcrState.source)}
                         </Badge>
                       ) : null}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void runCbcOcr(true)}
-                        disabled={cbcOcrState.status === 'processing'}
-                        className="w-full bg-white/70 sm:w-auto"
-                      >
-                        {cbcOcrState.status === 'processing' ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <ScanText className="mr-2 h-4 w-4" />
-                        )}
-                        Extract CBC Values
-                      </Button>
                     </div>
                   </div>
                 </div>
@@ -2310,7 +2459,7 @@ export default function StaffRecordReview() {
                     onChange={(event) => updateAssessmentField('cbcDate', event.target.value)}
                     min={medicalRecordDateBounds.min}
                     max={medicalRecordDateBounds.max}
-                    className="mt-2"
+                    className={cn('mt-2', getUpdatedFieldClass('cbcDate'))}
                   />
                 </div>
                 <div>
@@ -2322,7 +2471,7 @@ export default function StaffRecordReview() {
                     inputMode="decimal"
                     placeholder="13.5"
                     maxLength={4}
-                    className="mt-2"
+                    className={cn('mt-2', getUpdatedFieldClass('hemoglobin'))}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">Decimal value, e.g. 13.5</p>
                 </div>
@@ -2335,7 +2484,7 @@ export default function StaffRecordReview() {
                     inputMode="decimal"
                     placeholder="40.2"
                     maxLength={5}
-                    className="mt-2"
+                    className={cn('mt-2', getUpdatedFieldClass('hematocrit'))}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">Decimal value, e.g. 40.2</p>
                 </div>
@@ -2348,7 +2497,7 @@ export default function StaffRecordReview() {
                     inputMode="decimal"
                     placeholder="7.8"
                     maxLength={9}
-                    className="mt-2"
+                    className={cn('mt-2', getUpdatedFieldClass('wbc'))}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">If value is over 1000, it auto-converts to x10⁹/L</p>
                 </div>
@@ -2361,7 +2510,7 @@ export default function StaffRecordReview() {
                     inputMode="decimal"
                     placeholder="250"
                     maxLength={10}
-                    className="mt-2"
+                    className={cn('mt-2', getUpdatedFieldClass('plateletCount'))}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">Whole number preferred; values over 1000 auto-convert</p>
                 </div>
@@ -2371,7 +2520,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.bloodType}
                     onValueChange={(value) => updateAssessmentField('bloodType', value)}
                   >
-                    <SelectTrigger id="bloodType" className="mt-2">
+                    <SelectTrigger id="bloodType" className={cn('mt-2', getUpdatedFieldClass('bloodType'))}>
                       <SelectValue placeholder="Select blood type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -2430,7 +2579,7 @@ export default function StaffRecordReview() {
                       <div className="min-w-0">
                         <p className="font-medium">Urinalysis OCR</p>
                         <p className="mt-1 text-xs opacity-85">
-                          {urinalysisOcrState.message || 'Press Extract Urinalysis Values to scan the uploaded result.'}
+                          {urinalysisOcrState.message || 'Press Auto Fill to scan the uploaded result.'}
                         </p>
                       </div>
                     </div>
@@ -2445,21 +2594,6 @@ export default function StaffRecordReview() {
                           {getOcrSourceLabel(urinalysisOcrState.source)}
                         </Badge>
                       ) : null}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void runUrinalysisOcr(true)}
-                        disabled={urinalysisOcrState.status === 'processing'}
-                        className="w-full bg-white/70 sm:w-auto"
-                      >
-                        {urinalysisOcrState.status === 'processing' ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <ScanText className="mr-2 h-4 w-4" />
-                        )}
-                        Extract Urinalysis Values
-                      </Button>
                     </div>
                   </div>
                 </div>
@@ -2474,7 +2608,7 @@ export default function StaffRecordReview() {
                     onChange={(event) => updateAssessmentField('urinalysisDate', event.target.value)}
                     min={medicalRecordDateBounds.min}
                     max={medicalRecordDateBounds.max}
-                    className="mt-2"
+                    className={cn('mt-2', getUpdatedFieldClass('urinalysisDate'))}
                   />
                 </div>
                 <div>
@@ -2485,7 +2619,7 @@ export default function StaffRecordReview() {
                   >
                     <SelectTrigger
                       id="urinalysisGlucose"
-                      className="mt-2"
+                      className={cn('mt-2', getUpdatedFieldClass('urinalysisGlucose'))}
                     >
                       <SelectValue placeholder="Select result" />
                     </SelectTrigger>
@@ -2506,7 +2640,7 @@ export default function StaffRecordReview() {
                   >
                     <SelectTrigger
                       id="urinalysisProtein"
-                      className="mt-2"
+                      className={cn('mt-2', getUpdatedFieldClass('urinalysisProtein'))}
                     >
                       <SelectValue placeholder="Select result" />
                     </SelectTrigger>
