@@ -46,6 +46,10 @@ const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
   cbc: 'lab_cbc',
   urinalysis: 'lab_urinalysis',
 };
+const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
+const LAB_UPLOAD_TARGET_BYTES = 950 * 1024;
+const LAB_UPLOAD_CANVAS_MAX_DIMENSIONS = [2200, 1800, 1500, 1200];
+const LAB_UPLOAD_CANVAS_QUALITIES = [0.86, 0.76, 0.66, 0.56];
 let studentProfileAssetsRouteUnavailable = false;
 const disabledStorageListBuckets = new Set<string>();
 let authClient: SupabaseClient | null = null;
@@ -111,6 +115,92 @@ function buildStorageObjectName(fileType: string, file?: File | null) {
 
   const timestamp = Date.now();
   return ext ? `${normalizedType}_${timestamp}.${ext}` : `${normalizedType}_${timestamp}`;
+}
+
+function getCanvasUploadFileName(fileName: string) {
+  const cleanedName = String(fileName || 'lab-result').trim() || 'lab-result';
+  const withoutExtension = cleanedName.includes('.') ? cleanedName.replace(/\.[^.]+$/, '') : cleanedName;
+  return `${withoutExtension || 'lab-result'}.jpg`;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality);
+  });
+}
+
+async function loadImageForUpload(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.decoding = 'async';
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Unable to read image for upload optimization.'));
+      image.src = objectUrl;
+    });
+    return image;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function optimizeLabImageInBrowser(file: File) {
+  if (
+    file.size <= LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES ||
+    !file.type.toLowerCase().startsWith('image/') ||
+    typeof window === 'undefined' ||
+    typeof document === 'undefined' ||
+    typeof URL === 'undefined'
+  ) {
+    return file;
+  }
+
+  try {
+    const image = await loadImageForUpload(file);
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    if (!sourceWidth || !sourceHeight) return file;
+
+    let bestBlob: Blob | null = null;
+    for (const maxDimension of LAB_UPLOAD_CANVAS_MAX_DIMENSIONS) {
+      const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) continue;
+
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+
+      for (const quality of LAB_UPLOAD_CANVAS_QUALITIES) {
+        const blob = await canvasToBlob(canvas, 'image/jpeg', quality);
+        if (!blob) continue;
+        if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
+        if (blob.size <= LAB_UPLOAD_TARGET_BYTES) {
+          return new File([blob], getCanvasUploadFileName(file.name), {
+            type: 'image/jpeg',
+            lastModified: file.lastModified,
+          });
+        }
+      }
+    }
+
+    if (bestBlob && bestBlob.size < file.size) {
+      return new File([bestBlob], getCanvasUploadFileName(file.name), {
+        type: 'image/jpeg',
+        lastModified: file.lastModified,
+      });
+    }
+  } catch {
+    return file;
+  }
+
+  return file;
 }
 
 async function createSignedStorageUrlWithBucketFallbacks(
@@ -542,6 +632,7 @@ function isValidStudentRegistrationEmail(email?: string | null) {
 
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const ME_CACHE_TTL_MS = 15_000;
+const STUDENT_PROFILE_ASSETS_CACHE_TTL_MS = 60_000;
 const SIGNED_URL_CACHE_TTL_MS = 5 * 60 * 1000;
 const SIGNED_STORAGE_URL_EXPIRES_SECONDS = 15 * 60;
 const STORAGE_FALLBACK_MAX_SUBMISSIONS = 12;
@@ -554,8 +645,11 @@ type TimedValue<T> = {
 
 const _meCache = new Map<string, TimedValue<AuthMe>>();
 const _mePromiseCache = new Map<string, Promise<AuthMe>>();
+const _studentProfileAssetsCache = new Map<string, TimedValue<StudentProfileAssets>>();
+const _studentProfileAssetsPromiseCache = new Map<string, Promise<StudentProfileAssets>>();
 const _signedUrlCache = new Map<string, TimedValue<string>>();
 const _signedUrlPromiseCache = new Map<string, Promise<string | null>>();
+let _studentProfileAssetsCacheVersion = 0;
 
 function getMeCacheKey(token?: string | null) {
   return `me:${token || getAccessToken() || 'anon'}`;
@@ -564,6 +658,21 @@ function getMeCacheKey(token?: string | null) {
 function invalidateMeCache() {
   _meCache.clear();
   _mePromiseCache.clear();
+}
+
+function getStudentProfileAssetsCacheKey(studentId?: string | null, profileId?: string | null, token?: string | null) {
+  return [
+    'student-profile-assets',
+    token || getAccessToken() || 'anon',
+    String(studentId || '').trim(),
+    String(profileId || '').trim(),
+  ].join(':');
+}
+
+function invalidateStudentProfileAssetsCache() {
+  _studentProfileAssetsCacheVersion += 1;
+  _studentProfileAssetsCache.clear();
+  _studentProfileAssetsPromiseCache.clear();
 }
 
 function invalidateSignedUrlCache() {
@@ -645,6 +754,7 @@ export function getStoredSession(): AuthSession | null {
 export function setStoredSession(session: AuthSession | null) {
   if (typeof window === 'undefined') return;
   invalidateMeCache();
+  invalidateStudentProfileAssetsCache();
   invalidateSignedUrlCache();
   removeLegacyStoredSession();
 
@@ -2770,15 +2880,94 @@ export async function updateMedicalRecord(recordId: string, data: any) {
 }
 
 
-export async function getStudentRecords(studentId?: string) {
+type GetStudentRecordsOptions = {
+  includeProfileAssetsFallback?: boolean;
+};
+
+function mapStudentRecordSummary(row: any, emergencyContactsBySubmission: Record<string, any>) {
+  const emergencyContact = emergencyContactsBySubmission[row.id];
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    firstName: row.first_name || '',
+    lastName: row.last_name || '',
+    middleInitial: row.middle_initial || '',
+    course: row.course || row.department || '',
+    department: row.department || row.course || '',
+    year: String(row.year_level || ''),
+    status: row.status,
+    submittedAt: row.submitted_at,
+    updatedAt: row.updated_at,
+    reviewedByStaffId: row.reviewed_by || undefined,
+    staffNotes: row.staff_notes,
+    age: row.age ? String(row.age) : '',
+    sex: row.sex || '',
+    birthday: row.birthday || '',
+    civilStatus: row.civil_status || '',
+    contactNumber: row.contact_number || '',
+    address: row.address || '',
+    allergyDetails: row.allergy_details,
+    hadOperation: row.had_operation,
+    operationDetails: row.operation_details,
+    emergencyContact: emergencyContact
+      ? {
+          name: emergencyContact.name,
+          relationship: emergencyContact.relationship,
+          phone: emergencyContact.phone,
+          address: emergencyContact.address,
+        }
+      : undefined,
+    labTestLocation: row.lab_test_location || '',
+    otherClinicName: row.lab_test_clinic || '',
+    cbcTestClinic: row.cbc_test_clinic || '',
+    urinalysisTestClinic: row.urinalysis_test_clinic || '',
+    xrayTestClinic: row.xray_test_clinic || '',
+  } satisfies SubmissionRecord;
+}
+
+export async function getStudentRecordSummaries(studentId?: string) {
   const targetStudentId = String(studentId || '').trim();
   const fallbackStudentId = targetStudentId || (await getMe()).profile.student_id;
+  if (!fallbackStudentId) {
+    return { records: [] as SubmissionRecord[] };
+  }
+
+  try {
+    const rows = await restRequest<any[]>(
+      'submissions',
+      `select=id,student_id,first_name,last_name,middle_initial,course,department,year_level,status,reviewed_by,submitted_at,updated_at,staff_notes,age,sex,birthday,civil_status,contact_number,address,allergy_details,had_operation,operation_details,lab_test_location,lab_test_clinic,cbc_test_clinic,urinalysis_test_clinic,xray_test_clinic&student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
+    );
+    const submissionIds = (rows || []).map((row) => row.id).filter(Boolean);
+    const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
+    const emergencyContacts = submissionIds.length
+      ? await restRequest<any[]>(
+          'emergency_contacts',
+          `select=submission_id,name,relationship,phone,address&submission_id=in.(${idList})`,
+        ).catch(() => [])
+      : [];
+    const emergencyContactsBySubmission = (emergencyContacts || []).reduce((acc, contact) => {
+      acc[contact.submission_id] = contact;
+      return acc;
+    }, {} as Record<string, any>);
+
+    return {
+      records: (rows || []).map((row) => mapStudentRecordSummary(row, emergencyContactsBySubmission)),
+    };
+  } catch {
+    return getStudentRecords(fallbackStudentId, { includeProfileAssetsFallback: false });
+  }
+}
+
+export async function getStudentRecords(studentId?: string, options: GetStudentRecordsOptions = {}) {
+  const targetStudentId = String(studentId || '').trim();
+  const fallbackStudentId = targetStudentId || (await getMe()).profile.student_id;
+  const includeProfileAssetsFallback = options.includeProfileAssetsFallback ?? true;
   if (!fallbackStudentId) {
     return { records: [] };
   }
 
   const attachProfileAssetsFallback = async (records: SubmissionRecord[]) => {
-    if (!Array.isArray(records) || records.length === 0) {
+    if (!includeProfileAssetsFallback || !Array.isArray(records) || records.length === 0) {
       return records;
     }
 
@@ -3331,62 +3520,102 @@ export async function saveStudentNotificationState(
 }
 
 export async function getStudentProfileAssets(studentId?: string, profileId?: string | null) {
-  const me = await getMe();
-  const resolvedStudentId = studentId || me.student?.student_id || me.profile.student_id || '';
-  const resolvedProfileId = profileId || me.student?.profile_id || me.profile.id || '';
   const token = getAccessToken();
+  let resolvedStudentId = String(studentId || '').trim();
+  let resolvedProfileId = String(profileId || '').trim();
 
-  if (!studentProfileAssetsRouteUnavailable) {
-    try {
-      const query = resolvedStudentId ? `?studentId=${encodeURIComponent(resolvedStudentId)}` : '';
-      const payload = await apiRequest<{
-        success: boolean;
-        photoUrl?: string | null;
-        signatureUrl?: string | null;
-        photoFileName?: string | null;
-        signatureFileName?: string | null;
-      }>(`/functions/v1/server/student-profile-assets${query}`);
+  if (!resolvedStudentId || !resolvedProfileId) {
+    const me = await getMe();
+    resolvedStudentId = resolvedStudentId || me.student?.student_id || me.profile.student_id || '';
+    resolvedProfileId = resolvedProfileId || me.student?.profile_id || me.profile.id || '';
+  }
 
-      if (payload?.success) {
-        return {
-          photoUrl: normalizeStorageFileUrl(payload.photoUrl) || null,
-          signatureUrl: normalizeStorageFileUrl(payload.signatureUrl) || null,
-          photoFileName: payload.photoFileName || null,
-          signatureFileName: payload.signatureFileName || null,
-        } satisfies StudentProfileAssets;
+  const cacheKey = getStudentProfileAssetsCacheKey(resolvedStudentId, resolvedProfileId, token);
+  const now = Date.now();
+  const cached = _studentProfileAssetsCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  const inFlight = _studentProfileAssetsPromiseCache.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const cacheVersion = _studentProfileAssetsCacheVersion;
+  const requestPromise = (async () => {
+    let resolvedAssets: StudentProfileAssets | null = null;
+
+    if (!studentProfileAssetsRouteUnavailable) {
+      try {
+        const query = resolvedStudentId ? `?studentId=${encodeURIComponent(resolvedStudentId)}` : '';
+        const payload = await apiRequest<{
+          success: boolean;
+          photoUrl?: string | null;
+          signatureUrl?: string | null;
+          photoFileName?: string | null;
+          signatureFileName?: string | null;
+        }>(`/functions/v1/server/student-profile-assets${query}`);
+
+        if (payload?.success) {
+          resolvedAssets = {
+            photoUrl: normalizeStorageFileUrl(payload.photoUrl) || null,
+            signatureUrl: normalizeStorageFileUrl(payload.signatureUrl) || null,
+            photoFileName: payload.photoFileName || null,
+            signatureFileName: payload.signatureFileName || null,
+          };
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        if (message.includes('404') || message.includes('not found')) {
+          studentProfileAssetsRouteUnavailable = true;
+        }
+        // Fall back to legacy REST + storage lookup below when the route is unavailable.
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message.toLowerCase() : '';
-      if (message.includes('404') || message.includes('not found')) {
-        studentProfileAssetsRouteUnavailable = true;
-      }
-      // Fall back to legacy REST + storage lookup below when the route is unavailable.
     }
+
+    if (!resolvedAssets) {
+      let assetRows: any[] = [];
+      if (resolvedProfileId) {
+        assetRows = await restRequest<any[]>(
+          'files',
+          `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url&uploaded_by=eq.${encodeURIComponent(resolvedProfileId)}&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc&limit=20`,
+        ).catch(() => []);
+      }
+
+      const normalizedAssetRows = await normalizeFileRows(assetRows, token);
+      const latestAssets = latestFilesByType(normalizedAssetRows);
+      const needsStorageFallback = !latestAssets.photo || !latestAssets.signature;
+      const storageFallbackRows =
+        needsStorageFallback && resolvedStudentId
+          ? await listProfileAssetsFromStorage(resolvedStudentId, token)
+          : [];
+      const finalAssets = latestFilesByType([...(normalizedAssetRows || []), ...storageFallbackRows]);
+
+      resolvedAssets = {
+        photoUrl: normalizeStorageFileUrl(finalAssets.photo?.url) || null,
+        signatureUrl: normalizeStorageFileUrl(finalAssets.signature?.url) || null,
+        photoFileName: finalAssets.photo?.file_name || null,
+        signatureFileName: finalAssets.signature?.file_name || null,
+      };
+    }
+
+    if (cacheVersion === _studentProfileAssetsCacheVersion) {
+      _studentProfileAssetsCache.set(cacheKey, {
+        value: resolvedAssets,
+        expiresAt: Date.now() + STUDENT_PROFILE_ASSETS_CACHE_TTL_MS,
+      });
+    }
+
+    return resolvedAssets;
+  })();
+
+  _studentProfileAssetsPromiseCache.set(cacheKey, requestPromise);
+  try {
+    return await requestPromise;
+  } finally {
+    _studentProfileAssetsPromiseCache.delete(cacheKey);
   }
-
-  let assetRows: any[] = [];
-  if (resolvedProfileId) {
-    assetRows = await restRequest<any[]>(
-      'files',
-      `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url&uploaded_by=eq.${encodeURIComponent(resolvedProfileId)}&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc&limit=20`,
-    ).catch(() => []);
-  }
-
-  const normalizedAssetRows = await normalizeFileRows(assetRows, token);
-  const latestAssets = latestFilesByType(normalizedAssetRows);
-  const needsStorageFallback = !latestAssets.photo || !latestAssets.signature;
-  const storageFallbackRows =
-    needsStorageFallback && resolvedStudentId
-      ? await listProfileAssetsFromStorage(resolvedStudentId, token)
-      : [];
-  const finalAssets = latestFilesByType([...(normalizedAssetRows || []), ...storageFallbackRows]);
-
-  return {
-    photoUrl: normalizeStorageFileUrl(finalAssets.photo?.url) || null,
-    signatureUrl: normalizeStorageFileUrl(finalAssets.signature?.url) || null,
-    photoFileName: finalAssets.photo?.file_name || null,
-    signatureFileName: finalAssets.signature?.file_name || null,
-  } satisfies StudentProfileAssets;
 }
 
 export async function getStudentProfilePhoto(studentId?: string) {
@@ -4091,8 +4320,9 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
     throw new Error('You must be signed in to upload files.');
   }
 
+  const transportFile = await optimizeLabImageInBrowser(file);
   const formData = new FormData();
-  formData.set('file', file);
+  formData.set('file', transportFile);
   formData.set('recordId', String(recordId || '').trim());
   formData.set('fileType', String(fileType || '').trim().toLowerCase());
 
@@ -4133,6 +4363,7 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
       body: formData,
     },
   );
+  invalidateStudentProfileAssetsCache();
 
   return {
     success: true as const,

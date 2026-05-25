@@ -6,6 +6,11 @@ import {
   supabase,
 } from "./context.ts";
 
+const SIGNED_URL_REFRESH_BUFFER_SECONDS = 60;
+const SIGNED_URL_CACHE_MAX_ENTRIES = 500;
+const signedUrlCache = new Map<string, { url: string | null; expiresAt: number }>();
+const signedUrlPromises = new Map<string, Promise<string | null>>();
+
 export function inferStorageBucket(file: any) {
   const explicitBucket = String(file?.storage_bucket || "").trim();
   if (explicitBucket) return explicitBucket;
@@ -44,12 +49,41 @@ async function createTemporaryFileUrl(file: any) {
     return String(file?.url || "").trim() || null;
   }
 
-  const { data, error } = await supabase.storage
-    .from(resolvedBucket)
-    .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+  const cacheKey = `${resolvedBucket}:${storagePath}`;
+  const cached = signedUrlCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.url;
+  }
 
-  if (error) return null;
-  return data?.signedUrl || null;
+  const inFlight = signedUrlPromises.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const nextPromise = (async () => {
+    const { data, error } = await supabase.storage
+      .from(resolvedBucket)
+      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+
+    const url = error ? null : data?.signedUrl || null;
+    const cacheTtlSeconds = Math.max(
+      30,
+      signedStorageUrlExpiresSeconds - SIGNED_URL_REFRESH_BUFFER_SECONDS,
+    );
+    if (signedUrlCache.size >= SIGNED_URL_CACHE_MAX_ENTRIES) {
+      const oldestKey = signedUrlCache.keys().next().value;
+      if (oldestKey) signedUrlCache.delete(oldestKey);
+    }
+    signedUrlCache.set(cacheKey, {
+      url,
+      expiresAt: Date.now() + cacheTtlSeconds * 1000,
+    });
+
+    return url;
+  })().finally(() => {
+    signedUrlPromises.delete(cacheKey);
+  });
+
+  signedUrlPromises.set(cacheKey, nextPromise);
+  return nextPromise;
 }
 
 export async function normalizeFileRows(files: any[] | null | undefined) {
@@ -70,6 +104,8 @@ function isMissingStorageBucketError(error: any) {
   return message.includes("bucket") && message.includes("not found");
 }
 
+const ensuredStorageBuckets = new Set<string>();
+
 export async function ensureBucket() {
   await ensureStorageBucket(bucketName);
 }
@@ -77,6 +113,7 @@ export async function ensureBucket() {
 export async function ensureStorageBucket(targetBucket: string) {
   const normalizedBucket = String(targetBucket || "").trim();
   if (!normalizedBucket) return;
+  if (ensuredStorageBuckets.has(normalizedBucket)) return;
 
   const { data: buckets } = await supabase.storage.listBuckets();
   const exists = buckets?.some((bucket) => bucket.name === normalizedBucket);
@@ -84,6 +121,7 @@ export async function ensureStorageBucket(targetBucket: string) {
   if (!exists) {
     await supabase.storage.createBucket(normalizedBucket, { public: false });
   }
+  ensuredStorageBuckets.add(normalizedBucket);
 }
 
 export async function deleteStoredFiles(files: any[]) {

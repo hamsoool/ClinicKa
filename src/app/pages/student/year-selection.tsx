@@ -25,7 +25,7 @@ export default function StudentYearSelection() {
     Boolean(submissionProfile.targetYearLevel);
   const allowedYearLevel = hasYearOverride ? Number(submissionProfile.targetYearLevel) : studentYearLevel;
   const currentYearLabel = getYearLevelLabel(allowedYearLevel);
-  const { data = [], isLoading } = useStudentRecordsQuery(studentId);
+  const { data = [], isLoading } = useStudentRecordsQuery(studentId, 'summary');
   const records = data;
   const latestByYear = useMemo(() => {
     const map = new Map<number, { status: string; updatedAt?: string; submittedAt?: string }>();

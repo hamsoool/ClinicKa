@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import FilePickerButton from '../../components/file-picker-button';
 import { StudentProfileFormCard } from '../../components/student-profile-form-card';
 import { Checkbox } from '../../components/ui/checkbox';
 
@@ -224,8 +225,8 @@ const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }
 const LAB_RESULT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const LAB_RESULT_MAX_FILE_SIZE_LABEL = '5 MB';
 const LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL = '1 MB';
-const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
-const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
+const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.heic,.heif,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
+const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
 const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'] as const;
 const BLOOD_PRESSURE_PATTERN = /^\d{2,3}\/\d{2,3}$/;
@@ -271,8 +272,8 @@ type ReviewStep = (typeof REVIEW_STEPS)[number];
 type LabUploadActionsProps = {
   title: string;
   isUploading: boolean;
-  onChooseFile: () => void;
-  onOpenCamera: () => void;
+  onChooseFile: (file: File | null) => void;
+  onOpenCamera: (file: File | null) => void;
 };
 
 function LabUploadActions({
@@ -292,14 +293,27 @@ function LabUploadActions({
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-          <Button type="button" variant="outline" onClick={onChooseFile} disabled={isUploading} className="w-full sm:w-auto">
+          <FilePickerButton
+            accept={LAB_RESULT_ACCEPT_ATTRIBUTE}
+            ariaLabel={`Upload ${title} PDF or image`}
+            className="w-full sm:w-auto"
+            disabled={isUploading}
+            onFileSelected={onChooseFile}
+          >
             <FileUp className="mr-2 h-4 w-4" />
             {isUploading ? 'Uploading...' : 'Upload PDF/Image'}
-          </Button>
-          <Button type="button" variant="outline" onClick={onOpenCamera} disabled={isUploading} className="w-full sm:w-auto">
+          </FilePickerButton>
+          <FilePickerButton
+            accept="image/*,.heic,.heif"
+            ariaLabel={`Capture ${title} image`}
+            capture="environment"
+            className="w-full sm:w-auto"
+            disabled={isUploading}
+            onFileSelected={onOpenCamera}
+          >
             <Camera className="mr-2 h-4 w-4" />
             Use Camera
-          </Button>
+          </FilePickerButton>
         </div>
       </div>
     </div>
@@ -413,11 +427,19 @@ function getMedicalRecordDateBounds(referenceDate = new Date()) {
   };
 }
 
-function getMedicalRecordDateValidationMessage(label: string, value?: string | null) {
+function isMedicalRecordDateInRange(value?: string | null, referenceDate = new Date()) {
+  const normalized = normalizeDateInputValue(value);
+  if (!normalized) return false;
+
+  const { min, max } = getMedicalRecordDateBounds(referenceDate);
+  return normalized >= min && normalized <= max;
+}
+
+function getMedicalRecordDateValidationMessage(label: string, value?: string | null, referenceDate = new Date()) {
   const normalized = normalizeDateInputValue(value);
   if (!normalized) return `${label} must be a valid date.`;
 
-  const { min, max } = getMedicalRecordDateBounds();
+  const { min, max } = getMedicalRecordDateBounds(referenceDate);
   if (normalized > max) return `${label} cannot be in the future.`;
   if (normalized < min) return `${label} must be within the past ${MEDICAL_RECORD_DATE_RANGE_MONTHS} months.`;
   return '';
@@ -574,6 +596,7 @@ function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
 }
 
 function createAssessmentForm(submission?: SubmissionDetails | null): AssessmentForm {
+  const fallbackLabDate = getTodayDateInputValue();
   return {
     bloodPressure: submission?.staffMeasurements?.bloodPressure || submission?.bloodPressure || '',
     cardiacRate: submission?.staffMeasurements?.cardiacRate || '',
@@ -597,10 +620,10 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
     extremities: submission?.staffMeasurements?.extremities || '',
     others: submission?.staffMeasurements?.others || '',
     examinedBy: sanitizeSafeText(submission?.staffMeasurements?.examinedBy || '', MAX_EXAMINED_BY_LENGTH),
-    xrayDate: normalizeDateInputValue(submission?.labResults?.xrayDate) || getTodayDateInputValue(),
+    xrayDate: normalizeDateInputValue(submission?.labResults?.xrayDate) || fallbackLabDate,
     xrayResult: submission?.labResults?.xrayResult || 'normal',
     xrayFindings: submission?.labResults?.xrayFindings || '',
-    cbcDate: normalizeDateInputValue(submission?.labResults?.cbcDate) || getTodayDateInputValue(),
+    cbcDate: normalizeDateInputValue(submission?.labResults?.cbcDate) || fallbackLabDate,
     hemoglobin: submission?.labResults?.hemoglobin || '',
     hematocrit: submission?.labResults?.hematocrit || '',
     wbc: submission?.labResults?.wbc || '',
@@ -608,20 +631,21 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
     bloodType: submission?.labResults?.bloodType || '',
     glucose: submission?.labResults?.glucose || submission?.labResults?.urinalysisGlucose || '',
     protein: submission?.labResults?.protein || submission?.labResults?.urinalysisProtein || '',
-    urinalysisDate: normalizeDateInputValue(submission?.labResults?.urinalysisDate) || getTodayDateInputValue(),
+    urinalysisDate: normalizeDateInputValue(submission?.labResults?.urinalysisDate) || fallbackLabDate,
     urinalysisGlucose: submission?.labResults?.urinalysisGlucose || submission?.labResults?.glucose || '',
     urinalysisProtein: submission?.labResults?.urinalysisProtein || submission?.labResults?.protein || '',
   };
 }
 
 function createClearanceForm(submission?: SubmissionDetails | null): ClearanceForm {
+  const fallbackIssuedDate = getTodayDateInputValue();
   return {
     findingsNormal: submission?.clearanceInfo?.findingsNormal ?? true,
     diagnosis: sanitizeSafeText(submission?.clearanceInfo?.diagnosis || '', MAX_CLEARANCE_DIAGNOSIS_LENGTH),
     remarks: sanitizeSafeText(submission?.clearanceInfo?.remarks || '', MAX_CLEARANCE_REMARKS_LENGTH),
     purpose: normalizeClearancePurposes(submission?.clearanceInfo?.purpose),
     controlNo: submission?.clearanceInfo?.controlNo || generateClearanceControlNo(submission),
-    issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate) || getTodayDateInputValue(),
+    issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate) || fallbackIssuedDate,
     licenseNo: sanitizeLicenseNo(submission?.clearanceInfo?.licenseNo || DEFAULT_LICENSE_NO),
   };
 }
@@ -784,12 +808,6 @@ export default function StaffRecordReview() {
   const xrayOcrRunRef = useRef(0);
   const cbcOcrRunRef = useRef(0);
   const urinalysisOcrRunRef = useRef(0);
-  const xrayUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const cbcUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const urinalysisUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const xrayCameraInputRef = useRef<HTMLInputElement | null>(null);
-  const cbcCameraInputRef = useRef<HTMLInputElement | null>(null);
-  const urinalysisCameraInputRef = useRef<HTMLInputElement | null>(null);
   const defaultSignatoryName = [
     me?.staff?.first_name || me?.profile.first_name || '',
     me?.staff?.last_name || me?.profile.last_name || '',
@@ -1181,20 +1199,6 @@ export default function StaffRecordReview() {
     return 'Urinalysis';
   }
 
-  function getLabFileInputRef(fileType: LabUploadType, source: 'library' | 'camera') {
-    if (fileType === 'xray') {
-      return source === 'camera' ? xrayCameraInputRef : xrayUploadInputRef;
-    }
-    if (fileType === 'cbc') {
-      return source === 'camera' ? cbcCameraInputRef : cbcUploadInputRef;
-    }
-    return source === 'camera' ? urinalysisCameraInputRef : urinalysisUploadInputRef;
-  }
-
-  function openLabFilePicker(fileType: LabUploadType, source: 'library' | 'camera') {
-    getLabFileInputRef(fileType, source).current?.click();
-  }
-
   function getCurrentLabFileUrl(fileType: LabUploadType) {
     if (fileType === 'xray') return submission?.xrayFileUrl || '';
     if (fileType === 'cbc') return submission?.cbcFileUrl || '';
@@ -1236,7 +1240,9 @@ export default function StaffRecordReview() {
         };
       });
 
-      await invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId);
+      void invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId).catch((error) => {
+        console.error('Failed to refresh staff workflow queries after lab upload:', error);
+      });
       toast.success(`${title} file ${isReplacement ? 'replaced' : 'uploaded'}.`);
       return true;
     } catch (error) {
@@ -1248,14 +1254,13 @@ export default function StaffRecordReview() {
     }
   }
 
-  async function confirmPendingLabReplacement() {
+  function confirmPendingLabReplacement() {
     if (!pendingLabReplacement) return;
 
-    const { file, fileType } = pendingLabReplacement;
-    const uploaded = await uploadLabResultFile(fileType, file, true);
-    if (uploaded) {
-      setPendingLabReplacement(null);
-    }
+    const { file, fileType, title } = pendingLabReplacement;
+    setPendingLabReplacement(null);
+    toast.info(`${title} replacement started. You can keep reviewing while it uploads.`);
+    void uploadLabResultFile(fileType, file, true);
   }
 
   function normalizeCbcOcrFields(fields: CbcOcrExtraction['fields']) {
@@ -1415,6 +1420,10 @@ export default function StaffRecordReview() {
 
       const fields = normalizeCbcOcrFields(result.fields);
       const detectedFieldCount = getCbcDetectedFieldCount(fields);
+      const detectedCbcDate = normalizeDateInputValue(result.fields.date);
+      const detectedDateOutOfRange = Boolean(
+        detectedCbcDate && !isMedicalRecordDateInRange(detectedCbcDate),
+      );
 
       if (!detectedFieldCount) {
         setCbcOcrState({
@@ -1437,12 +1446,20 @@ export default function StaffRecordReview() {
       });
       setCbcOcrState({
         fieldsDetected: detectedFieldCount,
-        message: `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} CBC field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
+        message: detectedDateOutOfRange
+          ? `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} CBC field${detectedFieldCount === 1 ? '' : 's'}, but the detected date is outside the allowed date window. Review before saving.`
+          : `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} CBC field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
         source: result.source,
-        status: 'success',
+        status: detectedDateOutOfRange ? 'warning' : 'success',
       });
-      if (manualRun) toast.success('CBC fields were filled from the uploaded file.');
-      return 'filled';
+      if (manualRun) {
+        if (detectedDateOutOfRange) {
+          toast.warning('CBC date was detected, but it is outside the allowed date window.');
+        } else {
+          toast.success('CBC fields were filled from the uploaded file.');
+        }
+      }
+      return detectedDateOutOfRange ? 'filled_with_warning' : 'filled';
     } catch (error) {
       if (cbcOcrRunRef.current !== runId) return 'skipped';
       const message = error instanceof Error ? error.message : 'Failed to read the CBC result file.';
@@ -1483,6 +1500,10 @@ export default function StaffRecordReview() {
 
       const fields = normalizeUrinalysisOcrFields(result.fields);
       const detectedFieldCount = getUrinalysisDetectedFieldCount(fields);
+      const detectedUrinalysisDate = normalizeDateInputValue(result.fields.date);
+      const detectedDateOutOfRange = Boolean(
+        detectedUrinalysisDate && !isMedicalRecordDateInRange(detectedUrinalysisDate),
+      );
 
       if (!detectedFieldCount) {
         setUrinalysisOcrState({
@@ -1505,12 +1526,20 @@ export default function StaffRecordReview() {
       });
       setUrinalysisOcrState({
         fieldsDetected: detectedFieldCount,
-        message: `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} Urinalysis field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
+        message: detectedDateOutOfRange
+          ? `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} Urinalysis field${detectedFieldCount === 1 ? '' : 's'}, but the detected date is outside the allowed date window. Review before saving.`
+          : `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} Urinalysis field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
         source: result.source,
-        status: 'success',
+        status: detectedDateOutOfRange ? 'warning' : 'success',
       });
-      if (manualRun) toast.success('Urinalysis fields were filled from the uploaded file.');
-      return 'filled';
+      if (manualRun) {
+        if (detectedDateOutOfRange) {
+          toast.warning('Urinalysis date was detected, but it is outside the allowed date window.');
+        } else {
+          toast.success('Urinalysis fields were filled from the uploaded file.');
+        }
+      }
+      return detectedDateOutOfRange ? 'filled_with_warning' : 'filled';
     } catch (error) {
       if (urinalysisOcrRunRef.current !== runId) return 'skipped';
       const message = error instanceof Error ? error.message : 'Failed to read the Urinalysis result file.';
@@ -1858,12 +1887,12 @@ export default function StaffRecordReview() {
     currentReviewStepIndex < REVIEW_STEPS.length - 1 ? REVIEW_STEPS[currentReviewStepIndex + 1] : null;
   const medicalRecordDateBounds = getMedicalRecordDateBounds();
   const finalDecisionLabel = 'Clearance';
-  const pendingReplacementIsUploading = pendingLabReplacement
-    ? uploadingLabFile[pendingLabReplacement.fileType]
-    : false;
   const uploadedLabOcrTypes = getUploadedLabOcrTypes();
   const hasUploadedLabResultFile = uploadedLabOcrTypes.length > 0;
   const isUploadingAnyLabFile = Object.values(uploadingLabFile).some(Boolean);
+  const uploadingLabTitles = (Object.entries(uploadingLabFile) as Array<[LabUploadType, boolean]>)
+    .filter(([, isUploading]) => isUploading)
+    .map(([fileType]) => getLabUploadTitle(fileType));
   const isLabAutoFillProcessing = [xrayOcrState.status, cbcOcrState.status, urinalysisOcrState.status].some(
     (status) => status === 'processing',
   );
@@ -1884,81 +1913,10 @@ export default function StaffRecordReview() {
 
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-6">
-      <input
-        ref={xrayUploadInputRef}
-        type="file"
-        accept={LAB_RESULT_ACCEPT_ATTRIBUTE}
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0] || null;
-          void handleLabResultFileSelected('xray', file);
-          event.currentTarget.value = '';
-        }}
-      />
-      <input
-        ref={cbcUploadInputRef}
-        type="file"
-        accept={LAB_RESULT_ACCEPT_ATTRIBUTE}
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0] || null;
-          void handleLabResultFileSelected('cbc', file);
-          event.currentTarget.value = '';
-        }}
-      />
-      <input
-        ref={urinalysisUploadInputRef}
-        type="file"
-        accept={LAB_RESULT_ACCEPT_ATTRIBUTE}
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0] || null;
-          void handleLabResultFileSelected('urinalysis', file);
-          event.currentTarget.value = '';
-        }}
-      />
-      <input
-        ref={xrayCameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0] || null;
-          void handleLabResultFileSelected('xray', file);
-          event.currentTarget.value = '';
-        }}
-      />
-      <input
-        ref={cbcCameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0] || null;
-          void handleLabResultFileSelected('cbc', file);
-          event.currentTarget.value = '';
-        }}
-      />
-      <input
-        ref={urinalysisCameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0] || null;
-          void handleLabResultFileSelected('urinalysis', file);
-          event.currentTarget.value = '';
-        }}
-      />
       <Dialog
         open={Boolean(pendingLabReplacement)}
         onOpenChange={(open) => {
-          if (!open && !pendingReplacementIsUploading) {
-            setPendingLabReplacement(null);
-          }
+          if (!open) setPendingLabReplacement(null);
         }}
       >
         <DialogContent className="sm:max-w-md">
@@ -1973,17 +1931,14 @@ export default function StaffRecordReview() {
               type="button"
               variant="outline"
               onClick={() => setPendingLabReplacement(null)}
-              disabled={pendingReplacementIsUploading}
             >
               No
             </Button>
             <Button
               type="button"
-              onClick={() => void confirmPendingLabReplacement()}
-              disabled={pendingReplacementIsUploading}
+              onClick={confirmPendingLabReplacement}
             >
-              {pendingReplacementIsUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {pendingReplacementIsUploading ? 'Replacing...' : 'Yes'}
+              Yes
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2084,6 +2039,16 @@ export default function StaffRecordReview() {
             </p>
           </CardContent>
         </Card>
+      ) : null}
+
+      {isUploadingAnyLabFile ? (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+          <p>
+            {uploadingLabTitles.join(', ')} {uploadingLabTitles.length === 1 ? 'file is' : 'files are'} uploading in the background.
+            You can continue to other review steps while this finishes.
+          </p>
+        </div>
       ) : null}
 
       <Tabs value={activeReviewStep} onValueChange={(value) => setActiveReviewStep(value as ReviewStep)} className="space-y-6">
@@ -2302,8 +2267,8 @@ export default function StaffRecordReview() {
               <LabUploadActions
                 title="Chest X-Ray result"
                 isUploading={uploadingLabFile.xray}
-                onChooseFile={() => openLabFilePicker('xray', 'library')}
-                onOpenCamera={() => openLabFilePicker('xray', 'camera')}
+                onChooseFile={(file) => void handleLabResultFileSelected('xray', file)}
+                onOpenCamera={(file) => void handleLabResultFileSelected('xray', file)}
               />
               {submission.xrayFileUrl ? (
                 <div
@@ -2410,8 +2375,8 @@ export default function StaffRecordReview() {
               <LabUploadActions
                 title="CBC result"
                 isUploading={uploadingLabFile.cbc}
-                onChooseFile={() => openLabFilePicker('cbc', 'library')}
-                onOpenCamera={() => openLabFilePicker('cbc', 'camera')}
+                onChooseFile={(file) => void handleLabResultFileSelected('cbc', file)}
+                onOpenCamera={(file) => void handleLabResultFileSelected('cbc', file)}
               />
               {submission.cbcFileUrl ? (
                 <div
@@ -2559,8 +2524,8 @@ export default function StaffRecordReview() {
               <LabUploadActions
                 title="Urinalysis result"
                 isUploading={uploadingLabFile.urinalysis}
-                onChooseFile={() => openLabFilePicker('urinalysis', 'library')}
-                onOpenCamera={() => openLabFilePicker('urinalysis', 'camera')}
+                onChooseFile={(file) => void handleLabResultFileSelected('urinalysis', file)}
+                onOpenCamera={(file) => void handleLabResultFileSelected('urinalysis', file)}
               />
               {submission.urinalysisFileUrl ? (
                 <div
