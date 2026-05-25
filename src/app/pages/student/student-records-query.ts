@@ -4,28 +4,32 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
-import { getStudentRecords } from '../../lib/api';
+import { getStudentRecordSummaries, getStudentRecords } from '../../lib/api';
 import type { SubmissionRecord } from '../../lib/record-types';
 
 const STUDENT_RECORDS_REFRESH_INTERVAL_MS = 60_000;
 const STUDENT_RECORDS_STALE_TIME_MS = 60_000;
 
+type StudentRecordsQueryMode = 'full' | 'summary';
+
 function normalizeStudentId(studentId?: string | null) {
   return String(studentId || '').trim();
 }
 
-export function studentRecordsQueryKey(studentId?: string | null) {
-  return ['studentRecords', normalizeStudentId(studentId)] as const;
+export function studentRecordsQueryKey(studentId?: string | null, mode: StudentRecordsQueryMode = 'full') {
+  return ['studentRecords', normalizeStudentId(studentId), mode] as const;
 }
 
-export function studentRecordsQueryOptions(studentId?: string | null) {
+export function studentRecordsQueryOptions(studentId?: string | null, mode: StudentRecordsQueryMode = 'full') {
   const normalizedStudentId = normalizeStudentId(studentId);
 
   return queryOptions({
-    queryKey: studentRecordsQueryKey(normalizedStudentId),
+    queryKey: studentRecordsQueryKey(normalizedStudentId, mode),
     queryFn: async () => {
       if (!normalizedStudentId) return [] as SubmissionRecord[];
-      const response = await getStudentRecords(normalizedStudentId);
+      const response = mode === 'summary'
+        ? await getStudentRecordSummaries(normalizedStudentId)
+        : await getStudentRecords(normalizedStudentId);
       return Array.isArray(response?.records) ? (response.records as SubmissionRecord[]) : [];
     },
     enabled: Boolean(normalizedStudentId),
@@ -40,8 +44,8 @@ export function studentRecordsQueryOptions(studentId?: string | null) {
   });
 }
 
-export function useStudentRecordsQuery(studentId?: string | null) {
-  return useQuery(studentRecordsQueryOptions(studentId));
+export function useStudentRecordsQuery(studentId?: string | null, mode: StudentRecordsQueryMode = 'full') {
+  return useQuery(studentRecordsQueryOptions(studentId, mode));
 }
 
 export async function invalidateStudentRecordsQuery(
@@ -52,6 +56,6 @@ export async function invalidateStudentRecordsQuery(
   if (!normalizedStudentId) return;
 
   await queryClient.invalidateQueries({
-    queryKey: studentRecordsQueryKey(normalizedStudentId),
+    queryKey: ['studentRecords', normalizedStudentId] as const,
   });
 }

@@ -11,6 +11,7 @@ import {
   staffSubmissionSummariesQueryOptions,
 } from '../pages/staff/staff-workflow-query';
 import { studentRecordsQueryOptions } from '../pages/student/student-records-query';
+import { studentProfileAssetsQueryOptions } from '../pages/student/student-profile-assets-query';
 import { superAdminAdministratorsQueryOptions } from '../pages/super-admin/super-admin-workflow-query';
 import { prefetchPortalRoutes } from '../route-modules';
 
@@ -42,8 +43,12 @@ export function prefetchPortalExperience(role: UserRole, me?: AuthMe | null) {
 
   if (role === 'student') {
     const studentId = me?.student?.student_id || me?.profile.student_id || null;
+    const profileId = me?.student?.profile_id || me?.profile.id || null;
     if (!studentId) return;
-    warmQuery(appQueryClient.prefetchQuery(studentRecordsQueryOptions(studentId)));
+    warmQuery(appQueryClient.prefetchQuery(studentRecordsQueryOptions(studentId, 'summary')));
+    if (profileId) {
+      warmQuery(appQueryClient.prefetchQuery(studentProfileAssetsQueryOptions(studentId, profileId)));
+    }
     return;
   }
 

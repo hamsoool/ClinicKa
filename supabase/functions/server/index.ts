@@ -151,6 +151,10 @@ function resolveTinifyMimeType(mimeType?: string | null, fileName?: string | nul
 function resolveLabUploadMimeType(mimeType?: string | null, fileName?: string | null) {
   const ocrMimeType = resolveOcrSpaceInputMimeType(mimeType, fileName);
   if (ocrMimeType) return ocrMimeType;
+  const normalized = String(mimeType || "").split(";")[0].trim().toLowerCase();
+  const name = String(fileName || "").toLowerCase();
+  if (normalized === "image/heic" || name.endsWith(".heic")) return "image/heic";
+  if (normalized === "image/heif" || name.endsWith(".heif")) return "image/heif";
   return resolveTinifyMimeType(mimeType, fileName);
 }
 
@@ -581,29 +585,34 @@ async function findLatestProfileAssetInStorage(studentId: string, fileType: "pho
   const prefixes = [`${targetStudentId}/`, `profiles/${targetStudentId}/`];
   const candidates: Array<{ name: string; prefix: string; updatedAt: number }> = [];
 
-  for (const prefix of prefixes) {
-    try {
-      const { data, error } = await supabase.storage.from(bucket).list(prefix, {
-        limit: 100,
-        offset: 0,
-      });
-      if (error || !data?.length) continue;
+  const rowsByPrefix = await Promise.all(
+    prefixes.map(async (prefix) => {
+      try {
+        const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+          limit: 100,
+          offset: 0,
+        });
+        if (error || !data?.length) return [];
 
-      for (const item of data) {
-        const name = String(item?.name || "").trim();
-        if (!name) continue;
-        const lowerName = name.toLowerCase();
-        if (!(lowerName === fileType || lowerName.startsWith(`${fileType}.`) || lowerName.startsWith(`${fileType}_`))) {
-          continue;
-        }
-        const updatedAt = new Date(
-          String(item?.updated_at || item?.created_at || item?.last_accessed_at || 0),
-        ).getTime();
-        candidates.push({ name, prefix, updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0 });
+        return data.map((item) => ({ item, prefix }));
+      } catch (error) {
+        console.log(`Profile asset storage list warning (${bucket}):`, error);
+        return [];
       }
-    } catch (error) {
-      console.log(`Profile asset storage list warning (${bucket}):`, error);
+    }),
+  );
+
+  for (const { item, prefix } of rowsByPrefix.flat()) {
+    const name = String(item?.name || "").trim();
+    if (!name) continue;
+    const lowerName = name.toLowerCase();
+    if (!(lowerName === fileType || lowerName.startsWith(`${fileType}.`) || lowerName.startsWith(`${fileType}_`))) {
+      continue;
     }
+    const updatedAt = new Date(
+      String(item?.updated_at || item?.created_at || item?.last_accessed_at || 0),
+    ).getTime();
+    candidates.push({ name, prefix, updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0 });
   }
 
   const latest = candidates.sort((a, b) => b.updatedAt - a.updatedAt)[0];
@@ -1069,14 +1078,14 @@ app.get("/student-profile-assets", async (c) => {
       return acc;
     }, {} as Record<string, any>);
 
-    const storagePhoto =
+    const [storagePhoto, storageSignature] = await Promise.all([
       !latestByType.photo && targetStudentId
-        ? await findLatestProfileAssetInStorage(targetStudentId, "photo")
-        : null;
-    const storageSignature =
+        ? findLatestProfileAssetInStorage(targetStudentId, "photo")
+        : Promise.resolve(null),
       !latestByType.signature && targetStudentId
-        ? await findLatestProfileAssetInStorage(targetStudentId, "signature")
-        : null;
+        ? findLatestProfileAssetInStorage(targetStudentId, "signature")
+        : Promise.resolve(null),
+    ]);
 
     return c.json({
       success: true,
@@ -1794,7 +1803,7 @@ app.post("/upload-file", async (c) => {
     const mimeType = String(file.type || '').trim().toLowerCase();
     const supportedMimeType = resolveLabUploadMimeType(mimeType, file.name);
     if (!supportedMimeType) {
-      return badRequest('Laboratory result files must be PDF, PNG, JPG, WebP, AVIF, GIF, TIF, BMP, or another supported image file.');
+      return badRequest('Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.');
     }
 
     const access = await requireSubmissionAccess(requester, recordId);

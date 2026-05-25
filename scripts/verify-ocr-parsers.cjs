@@ -96,6 +96,59 @@ function verifyUrinalysisParser(parsers) {
     protein: 'Trace',
     date: '2026-05-24',
   });
+
+  const releasedDateFields = parsers.extractUrinalysisFields(`
+    BIOLINE DIAGNOSTIC LABORATORY
+    PATIENT ID: 30H3TKZH8RY
+    PATIENT NAME: AUREO, SEAN ROMEO
+    DATE OF BIRTH: 03/13/2005
+    AGE & SEX: 20 YEARS/ OLD / MALE
+    RECEIVED DATE & TIME: 06/10/2025 8:49:53 AM
+    RELEASED DATE & TIME: 06/10/2025 10:53:55 AM
+    URINALYSIS
+    TEST RESULT REF. RANGE
+    Protein NEGATIVE
+    Sugar NEGATIVE
+  `);
+
+  assert.equal(releasedDateFields.date, '2025-06-10');
+
+  const collapsedHeaderFields = parsers.extractUrinalysisFields(`
+    PATIENT: TEST STUDENT DATE OF BIRTH: 03/13/2005 RECEIVED DATE: 05/20/2026 RELEASED DATE: 05/24/2026
+    URINALYSIS
+    Protein NEGATIVE
+    Glucose NEGATIVE
+  `);
+  assert.equal(collapsedHeaderFields.date, '2026-05-24');
+
+  const splitLabelFields = parsers.extractUrinalysisFields(`
+    ROUTINE URINALYSIS
+    Date Released
+    24-May-2026 02:30 PM
+    DOB
+    03/13/2005
+    Glucose Negative
+    Protein Negative
+  `);
+  assert.equal(splitLabelFields.date, '2026-05-24');
+
+  const resultDateFields = parsers.extractUrinalysisFields(`
+    LABORATORY RESULT
+    Collection Date: 05.20.2026
+    Result Date: 2026.05.24
+    Sugar Negative
+    Albumin Trace
+  `);
+  assert.equal(resultDateFields.date, '2026-05-24');
+
+  const specimenFallbackFields = parsers.extractUrinalysisFields(`
+    URINE TEST REPORT
+    Birthdate: 03/13/2005
+    Specimen Collected: 05/24/2026 9:00 AM
+    Protein Negative
+    Sugar Negative
+  `);
+  assert.equal(specimenFallbackFields.date, '2026-05-24');
 }
 
 const parsers = loadParserModule();

@@ -202,7 +202,7 @@ function haveSnapshotsChanged(previous: Record<string, string>, next: Record<str
 
 export function useStudentNotifications(studentId?: string | null) {
   const normalizedStudentId = String(studentId || '').trim();
-  const { data = [] } = useStudentRecordsQuery(normalizedStudentId);
+  const { data = [] } = useStudentRecordsQuery(normalizedStudentId, 'summary');
   const records = data;
   const [state, setState] = useState<StoredNotificationState>(() => loadStoredState(normalizedStudentId));
   const [notificationStateLoaded, setNotificationStateLoaded] = useState(() => !normalizedStudentId);

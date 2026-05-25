@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, ExternalLink, FileUp, PenLine, ShieldCheck
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Checkbox } from '../../../components/ui/checkbox';
+import FilePickerButton from '../../../components/file-picker-button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../../components/ui/radio-group';
@@ -26,6 +27,7 @@ type Props = {
   hasRequiredProfileFields: boolean;
   hasProfilePhoto: boolean;
   hasProfileSignature: boolean;
+  profileAssetsLoading: boolean;
   hasCbcFile: boolean;
   hasUrinalysisFile: boolean;
   hasXrayFile: boolean;
@@ -49,6 +51,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   hasRequiredProfileFields,
   hasProfilePhoto,
   hasProfileSignature,
+  profileAssetsLoading,
   hasCbcFile,
   hasUrinalysisFile,
   hasXrayFile,
@@ -86,6 +89,10 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     formData.urinalysisTestSite.trim() && (formData.urinalysisTestSite !== 'Others' || formData.urinalysisTestSiteOther.trim()),
   );
   const shouldShowXrayUpload = Boolean(formData.xrayTestSite.trim() && (formData.xrayTestSite !== 'Others' || formData.xrayTestSiteOther.trim()));
+  const getProfileAssetStatusLabel = (isReady: boolean) => (isReady ? 'Ready' : profileAssetsLoading ? 'Loadding' : 'Missing');
+  const getProfileAssetStatusClass = (isReady: boolean) => (isReady ? 'text-green-700' : 'text-amber-700');
+  const getProfileAssetIconClass = (isReady: boolean) =>
+    isReady ? 'text-green-600' : profileAssetsLoading ? 'text-amber-600' : 'text-muted-foreground';
   const getLabFileReviewLabel = (selectedFile: File | null | undefined, existingUrl?: string) => {
     if (selectedFile) {
       return existingUrl ? `Replacement selected: ${selectedFile.name}` : selectedFile.name;
@@ -157,16 +164,15 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             <p className="text-xs font-medium text-muted-foreground">
               {existingUrl ? 'Choose replacement file' : 'Choose file'}
             </p>
-            <Input
-              type="file"
+            <FilePickerButton
               accept={labResultAccept}
-              className={`cursor-pointer bg-white ${existingUrl ? 'border-amber-300' : ''}`}
-              onChange={(event) => {
-                const nextFile = event.target.files?.[0] || null;
-                onLabFileChange(kind, nextFile);
-                event.currentTarget.value = '';
-              }}
-            />
+              ariaLabel={`${existingUrl ? 'Choose replacement' : 'Choose'} ${title}`}
+              className={`w-full justify-center bg-white ${existingUrl ? 'border-amber-300' : ''}`}
+              onFileSelected={(nextFile) => onLabFileChange(kind, nextFile)}
+            >
+              <FileUp className="mr-2 h-4 w-4" />
+              {existingUrl ? 'Choose replacement' : 'Choose file'}
+            </FilePickerButton>
           </div>
         </div>
       </div>
@@ -196,20 +202,20 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
             <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
               <div className="flex items-center gap-3">
-                <CheckCircle2 className={`h-5 w-5 ${hasProfilePhoto ? 'text-green-600' : 'text-muted-foreground'}`} />
+                <CheckCircle2 className={`h-5 w-5 ${getProfileAssetIconClass(hasProfilePhoto)}`} />
                 <span className="text-sm font-medium text-on-surface">1x1 Student Photo</span>
               </div>
-              <span className={`text-sm ${hasProfilePhoto ? 'text-green-700' : 'text-amber-700'}`}>
-                {hasProfilePhoto ? 'Ready' : 'Missing'}
+              <span className={`text-sm ${getProfileAssetStatusClass(hasProfilePhoto)}`}>
+                {getProfileAssetStatusLabel(hasProfilePhoto)}
               </span>
             </div>
             <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
               <div className="flex items-center gap-3">
-                <PenLine className={`h-5 w-5 ${hasProfileSignature ? 'text-green-600' : 'text-muted-foreground'}`} />
+                <PenLine className={`h-5 w-5 ${getProfileAssetIconClass(hasProfileSignature)}`} />
                 <span className="text-sm font-medium text-on-surface">Student Signature</span>
               </div>
-              <span className={`text-sm ${hasProfileSignature ? 'text-green-700' : 'text-amber-700'}`}>
-                {hasProfileSignature ? 'Ready' : 'Missing'}
+              <span className={`text-sm ${getProfileAssetStatusClass(hasProfileSignature)}`}>
+                {getProfileAssetStatusLabel(hasProfileSignature)}
               </span>
             </div>
           </div>

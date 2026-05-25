@@ -41,6 +41,7 @@ export default function StudentMedicalForm() {
     hasRequiredProfileFields,
     hasProfilePhoto,
     hasProfileSignature,
+    profileAssetsLoading,
     hasCbcFile,
     hasUrinalysisFile,
     hasXrayFile,
@@ -106,6 +107,7 @@ export default function StudentMedicalForm() {
                 hasRequiredProfileFields={hasRequiredProfileFields}
                 hasProfilePhoto={hasProfilePhoto}
                 hasProfileSignature={hasProfileSignature}
+                profileAssetsLoading={profileAssetsLoading}
                 hasCbcFile={hasCbcFile}
                 hasUrinalysisFile={hasUrinalysisFile}
                 hasXrayFile={hasXrayFile}

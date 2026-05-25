@@ -672,59 +672,152 @@ function parseCbcDateValue(value: string) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   if (!text) return "";
 
-  const isoMatch = /\b(20\d{2}|19\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/.exec(text);
-  if (isoMatch) return formatIsoDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]));
+  return extractDateCandidates(text)[0]?.date || "";
+}
+
+function extractDateCandidates(value: string) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const candidates: Array<{ date: string; index: number }> = [];
+  if (!text) return candidates;
+
+  function pushDate(match: RegExpExecArray | null, date: string) {
+    if (!match || !date) return;
+    if (candidates.some((candidate) => candidate.index === match.index && candidate.date === date)) return;
+    candidates.push({ date, index: match.index });
+  }
+
+  let isoMatch: RegExpExecArray | null;
+  const isoPattern = /\b(20\d{2}|19\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/g;
+  while ((isoMatch = isoPattern.exec(text))) {
+    pushDate(isoMatch, formatIsoDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3])));
+  }
 
   const monthNamePattern = Object.keys(MONTH_INDEX).join("|");
-  const monthFirstMatch = new RegExp(`\\b(${monthNamePattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?[,]?\\s+(\\d{2,4})\\b`, "i").exec(text);
-  if (monthFirstMatch) {
-    return formatIsoDate(
-      Number(monthFirstMatch[3]),
-      MONTH_INDEX[monthFirstMatch[1].toLowerCase()],
-      Number(monthFirstMatch[2]),
+  let monthFirstMatch: RegExpExecArray | null;
+  const monthFirstPattern = new RegExp(`\\b(${monthNamePattern})\\.?[\\s./-]+(\\d{1,2})(?:st|nd|rd|th)?[,]?[\\s./-]+(\\d{2,4})\\b`, "gi");
+  while ((monthFirstMatch = monthFirstPattern.exec(text))) {
+    pushDate(
+      monthFirstMatch,
+      formatIsoDate(
+        Number(monthFirstMatch[3]),
+        MONTH_INDEX[monthFirstMatch[1].toLowerCase()],
+        Number(monthFirstMatch[2]),
+      ),
     );
   }
 
-  const dayFirstMatch = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthNamePattern})\\.?[,]?\\s+(\\d{2,4})\\b`, "i").exec(text);
-  if (dayFirstMatch) {
-    return formatIsoDate(
-      Number(dayFirstMatch[3]),
-      MONTH_INDEX[dayFirstMatch[2].toLowerCase()],
-      Number(dayFirstMatch[1]),
+  let dayFirstMatch: RegExpExecArray | null;
+  const dayFirstPattern = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?[\\s./-]+(${monthNamePattern})\\.?[,]?[\\s./-]+(\\d{2,4})\\b`, "gi");
+  while ((dayFirstMatch = dayFirstPattern.exec(text))) {
+    pushDate(
+      dayFirstMatch,
+      formatIsoDate(
+        Number(dayFirstMatch[3]),
+        MONTH_INDEX[dayFirstMatch[2].toLowerCase()],
+        Number(dayFirstMatch[1]),
+      ),
     );
   }
 
-  const numericMatch = /\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/.exec(text);
-  if (numericMatch) {
+  let numericMatch: RegExpExecArray | null;
+  const numericPattern = /\b(\d{1,2})[\s./-](\d{1,2})[\s./-](\d{2,4})\b/g;
+  while ((numericMatch = numericPattern.exec(text))) {
     const first = Number(numericMatch[1]);
     const second = Number(numericMatch[2]);
     const year = Number(numericMatch[3]);
 
-    if (first > 12 && second <= 12) return formatIsoDate(year, second, first);
-    if (second > 12 && first <= 12) return formatIsoDate(year, first, second);
+    if (first > 12 && second <= 12) pushDate(numericMatch, formatIsoDate(year, second, first));
+    else if (second > 12 && first <= 12) pushDate(numericMatch, formatIsoDate(year, first, second));
+    else if (first <= 12 && second <= 12) pushDate(numericMatch, formatIsoDate(year, first, second));
   }
 
-  return "";
+  return candidates.sort((a, b) => a.index - b.index);
+}
+
+function hasBirthDateLabel(value: string) {
+  return /\b(?:date\s*of\s*birth|birth\s*date|birthdate|birthday|d\.?\s*o\.?\s*b\.?|dob)\b/i.test(
+    String(value || "").toLowerCase(),
+  );
+}
+
+function getLabResultDateLabelScore(line: string) {
+  const normalized = String(line || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized) return 0;
+
+  const hasDateOrTime = /\b(?:date|time)\b/i.test(normalized);
+  const hasDateValue = Boolean(parseCbcDateValue(normalized));
+  const hasBirthKeyword = hasBirthDateLabel(normalized);
+  const hasIssuanceKeyword = /\b(?:released?|issued?|issuance|reported?|report(?:ed)?|result(?:s)?|validated|verified|approved|completed|finali[sz]ed|certified|posted)\b/i.test(normalized);
+  const hasPerformedKeyword = /\b(?:performed|exam(?:ination)?|test(?:ed)?|service|procedure|run|analy[sz]ed|analysis)\b/i.test(normalized);
+  const hasPrintedKeyword = /\b(?:printed|print|generated|encoded|transcribed)\b/i.test(normalized);
+  const hasCollectionKeyword = /\b(?:received|collected|collection|specimen|sample|drawn|extracted|obtained|taken)\b/i.test(normalized);
+  const hasRequestKeyword = /\b(?:requested|request|ordered|order|registered|transaction|visit|encounter)\b/i.test(normalized);
+  const hasDateMeaningKeyword = hasIssuanceKeyword || hasPerformedKeyword || hasPrintedKeyword || hasCollectionKeyword || hasRequestKeyword;
+  if (!hasDateOrTime && !(hasDateMeaningKeyword && hasDateValue)) return 0;
+
+  if (hasIssuanceKeyword) {
+    return 100;
+  }
+  if (hasPerformedKeyword) {
+    return 80;
+  }
+  if (hasPrintedKeyword) {
+    return 70;
+  }
+  if (hasCollectionKeyword) {
+    return 60;
+  }
+  if (hasRequestKeyword) {
+    return 40;
+  }
+  if (hasBirthKeyword) {
+    return 0;
+  }
+  if (/\bdate\b/i.test(normalized)) {
+    return 20;
+  }
+  return 0;
 }
 
 function extractCbcDate(lines: string[]) {
-  const labelPattern = /\b(?:date(?:\s+(?:collected|released|performed|reported|received|of\s+exam))?|collection\s+date|collected|released|reported|performed|specimen\s+date|result\s+date|test\s+date)\b/i;
+  const candidates: Array<{ date: string; score: number; index: number }> = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    const match = labelPattern.exec(line);
-    if (!match) continue;
+    const score = getLabResultDateLabelScore(line);
+    if (!score) continue;
 
-    const sameLineDate = parseCbcDateValue(line.slice(match.index + match[0].length));
-    if (sameLineDate) return sameLineDate;
+    const sameLineCandidates = extractDateCandidates(line)
+      .map((dateCandidate) => {
+        const candidateContext = line.slice(0, dateCandidate.index);
+        const candidateScore = getLabResultDateLabelScore(candidateContext);
+        const isRejectedBirthDate = hasBirthDateLabel(candidateContext) && !candidateScore;
+        return {
+          date: dateCandidate.date,
+          score: isRejectedBirthDate ? 0 : candidateScore || score,
+          index,
+        };
+      })
+      .filter((candidate) => candidate.score > 0);
+    if (sameLineCandidates.length) {
+      candidates.push(...sameLineCandidates);
+      continue;
+    }
 
     for (const nearbyLine of lines.slice(index + 1, index + 3)) {
+      if (getLabResultDateLabelScore(nearbyLine) === 0 && /\b(?:birth|birthday|dob)\b/i.test(nearbyLine)) {
+        break;
+      }
       const nearbyDate = parseCbcDateValue(nearbyLine);
-      if (nearbyDate) return nearbyDate;
+      if (nearbyDate) {
+        candidates.push({ date: nearbyDate, score: score - 1, index });
+        break;
+      }
     }
   }
 
-  return "";
+  candidates.sort((a, b) => b.score - a.score || a.index - b.index);
+  return candidates[0]?.date || "";
 }
 
 export function extractCbcFields(rawText: string) {

@@ -6,9 +6,10 @@ import { PortalPageSkeleton } from '../../components/project-skeletons';
 import StudentPageIntro from '../../components/student-page-intro';
 import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
-import { getStudentAnnouncements, getStudentProfileAssets } from '../../lib/api';
+import { getStudentAnnouncements } from '../../lib/api';
 import { resolveStudentSubmissionProfile, toCategoryLabel } from '../../lib/student-submission-profile';
 import { useStudentRecordsQuery } from './student-records-query';
+import { useStudentProfileAssetsQuery } from './student-profile-assets-query';
 import type { SubmissionRecord } from '../../lib/record-types';
 
 const yearLabels = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
@@ -51,19 +52,13 @@ export default function StudentDashboard() {
       profileId: me?.student?.profile_id || me?.profile.id || '',
     };
   }, [me]);
-  const { data = [], isLoading: loading, isError, error } = useStudentRecordsQuery(studentId);
+  const { data = [], isLoading: loading, isError, error } = useStudentRecordsQuery(studentId, 'summary');
   const records = data;
   const {
     data: profileAssets,
     isLoading: profileAssetsLoading,
     isError: profileAssetsError,
-  } = useQuery({
-    queryKey: ['studentProfileAssets', studentId, profileId],
-    queryFn: () => getStudentProfileAssets(studentId, profileId),
-    enabled: Boolean(studentId && profileId),
-    staleTime: 60_000,
-    refetchOnWindowFocus: true,
-  });
+  } = useStudentProfileAssetsQuery(studentId, profileId);
   const {
     data: announcementsData,
     isLoading: announcementsLoading,

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Check, ImageIcon, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import FilePickerButton from '../../components/file-picker-button';
 import StudentPageIntro from '../../components/student-page-intro';
 import PasswordChangeCard from '../../components/password-change-card';
 import SettingsLogoutCard from '../../components/settings-logout-card';
 import { StudentProfileFormCard } from '../../components/student-profile-form-card';
-import { Input } from '../../components/ui/input';
 import {
   getStudentProfileAssets,
   updateStudentProfile,
@@ -27,6 +28,7 @@ import {
   normalizeProgramForDepartment,
   resolveDepartmentValue,
 } from './medical-form/constants';
+import { studentProfileAssetsQueryKey } from './student-profile-assets-query';
 
 type StudentProfileFormState = {
   studentId: string;
@@ -47,6 +49,8 @@ type StudentProfileFormState = {
 
 const MAX_NAME_LENGTH = 30;
 const MIN_PROFILE_AGE = 16;
+const PROFILE_ASSET_ACCEPT_ATTRIBUTE = 'image/*,.png,.jpg,.jpeg,.heic,.heif';
+const PROFILE_ASSET_ALLOWED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'heic', 'heif', 'webp']);
 
 function sanitizeName(value: string) {
   return String(value).normalize('NFC').replace(/[^\p{L}\s'-]/gu, '').slice(0, MAX_NAME_LENGTH);
@@ -57,6 +61,17 @@ function sanitizeAddress(value: string) {
     .replace(/[<>`]/g, '')
     .replace(/--|\/\*|\*\//g, '')
     .slice(0, 180);
+}
+
+function getFileExtension(file?: File | null) {
+  const fileName = String(file?.name || '');
+  return fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() || '' : '';
+}
+
+function isAllowedProfileImage(file?: File | null) {
+  if (!file) return false;
+  const mimeType = String(file.type || '').toLowerCase();
+  return mimeType.startsWith('image/') || PROFILE_ASSET_ALLOWED_EXTENSIONS.has(getFileExtension(file));
 }
 
 function parseDateInputValue(dateValue: string) {
@@ -146,6 +161,7 @@ function withCacheBust(url: string | null | undefined) {
 
 export default function StudentProfile() {
   const { me, refresh } = useAuth();
+  const queryClient = useQueryClient();
   const initialFormData = useMemo(() => buildProfileFormState(me), [me]);
   const [formData, setFormData] = useState<StudentProfileFormState>(initialFormData);
   const [saving, setSaving] = useState(false);
@@ -323,7 +339,7 @@ export default function StudentProfile() {
       return;
     }
 
-    if (!file.type.startsWith('image/')) {
+    if (!isAllowedProfileImage(file)) {
       toast.error('Please upload an image file.');
       return;
     }
@@ -392,6 +408,9 @@ export default function StudentProfile() {
         photoFileName: photoFile?.name || assets.photoFileName,
         signatureFileName: signatureFile?.name || assets.signatureFileName,
       });
+      void queryClient.invalidateQueries({
+        queryKey: studentProfileAssetsQueryKey(resolvedStudentId, resolvedProfileId),
+      });
       setPhotoFile(null);
       setSignatureFile(null);
 
@@ -452,22 +471,16 @@ export default function StudentProfile() {
                 <ImageIcon className="h-5 w-5 text-primary" />
                 <div>
                   <p className="font-semibold text-on-surface">1x1 Student Photo</p>
-                  <p className="text-sm text-on-surface-variant">JPEG or PNG, max 5 MB</p>
+                  <p className="text-sm text-on-surface-variant">Image file, including iPhone HEIC, max 5 MB</p>
                 </div>
               </div>
-              <Input
-                id="profilePhoto"
-                type="file"
-                accept="image/png,image/jpeg,image/jpg"
-                onChange={(event) => handleAssetChange('photo', event.target.files?.[0] || null)}
-                className="hidden"
-              />
-              <label
-                htmlFor="profilePhoto"
-                className="inline-flex h-10 cursor-pointer items-center rounded-md border border-outline-variant/40 bg-white px-4 text-sm font-medium text-on-surface hover:bg-surface-container-low"
+              <FilePickerButton
+                accept={PROFILE_ASSET_ACCEPT_ATTRIBUTE}
+                ariaLabel="Choose 1x1 student photo"
+                onFileSelected={(file) => handleAssetChange('photo', file)}
               >
                 Choose Photo
-              </label>
+              </FilePickerButton>
               <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border bg-white">
                   {currentPhotoUrl ? (
@@ -498,22 +511,16 @@ export default function StudentProfile() {
                 <PenLine className="h-5 w-5 text-primary" />
                 <div>
                   <p className="font-semibold text-on-surface">Signature of Student</p>
-                  <p className="text-sm text-on-surface-variant">PNG or JPG, max 5 MB</p>
+                  <p className="text-sm text-on-surface-variant">Image file, including iPhone HEIC, max 5 MB</p>
                 </div>
               </div>
-              <Input
-                id="studentSignature"
-                type="file"
-                accept="image/png,image/jpeg,image/jpg"
-                onChange={(event) => handleAssetChange('signature', event.target.files?.[0] || null)}
-                className="hidden"
-              />
-              <label
-                htmlFor="studentSignature"
-                className="inline-flex h-10 cursor-pointer items-center rounded-md border border-outline-variant/40 bg-white px-4 text-sm font-medium text-on-surface hover:bg-surface-container-low"
+              <FilePickerButton
+                accept={PROFILE_ASSET_ACCEPT_ATTRIBUTE}
+                ariaLabel="Choose student signature image"
+                onFileSelected={(file) => handleAssetChange('signature', file)}
               >
                 Choose Signature
-              </label>
+              </FilePickerButton>
               <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex h-24 w-full max-w-[10rem] items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
                   {currentSignatureUrl ? (

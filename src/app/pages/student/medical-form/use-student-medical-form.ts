@@ -5,8 +5,9 @@ import type { AuthMe } from '../../../lib/api';
 import type { SubmissionRecord } from '../../../lib/record-types';
 import { getYearLevelLabel, resolveStudentYearLevel } from '../../../lib/student-year';
 import { resolveStudentSubmissionProfile } from '../../../lib/student-submission-profile';
-import { getMe, getStudentProfileAssets, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
+import { getMe, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import { invalidateStudentRecordsQuery } from '../student-records-query';
+import { useStudentProfileAssetsQuery } from '../student-profile-assets-query';
 import {
   DEFAULT_MEDICAL_HISTORY,
   formatPhilippinePhoneInput,
@@ -42,8 +43,8 @@ const MIN_AGE = 15;
 const LAB_RESULT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const LAB_RESULT_MAX_FILE_SIZE_LABEL = '5 MB';
 const LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL = '1 MB';
-const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
-const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
+const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
+const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.heic,.heif,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
 const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
 
 const LAB_UPLOAD_FIELD_CONFIG: Record<
@@ -248,10 +249,6 @@ export function useStudentMedicalForm({
       ? submissionProfile.targetYearLevel
       : resolveStudentYearLevel(me);
   const currentYearLabel = getYearLevelLabel(allowedYearLevel);
-  const [profileAssetUrls, setProfileAssetUrls] = useState<{ photoUrl: string | null; signatureUrl: string | null }>({
-    photoUrl: null,
-    signatureUrl: null,
-  });
   const [step, setStep] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -259,6 +256,18 @@ export function useStudentMedicalForm({
   const [originalSubmissionStatus, setOriginalSubmissionStatus] = useState<string | null>(null);
   const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, initialDataPrivacyConsent));
   const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_AGE), []);
+  const profileAssetStudentId = me?.student?.student_id || me?.profile.student_id || '';
+  const profileAssetProfileId = me?.student?.profile_id || me?.profile.id || '';
+  const profileAssetsQuery = useStudentProfileAssetsQuery(profileAssetStudentId, profileAssetProfileId);
+  const profileAssetUrls = {
+    photoUrl: profileAssetsQuery.data?.photoUrl || null,
+    signatureUrl: profileAssetsQuery.data?.signatureUrl || null,
+  };
+  const profileAssetsLoading = Boolean(
+    profileAssetStudentId &&
+      profileAssetProfileId &&
+      (profileAssetsQuery.isLoading || (profileAssetsQuery.isFetching && !profileAssetsQuery.data)),
+  );
 
   useEffect(() => {
     let active = true;
@@ -400,7 +409,7 @@ export function useStudentMedicalForm({
 
     const resolveCategoryAndPrefill = async () => {
       try {
-        const response = await getStudentRecords(studentId);
+        const response = await getStudentRecords(studentId, { includeProfileAssetsFallback: false });
         const records = (response?.records || []) as SubmissionRecord[];
         const targetYear = String(year);
         const hasAnyRecords = records.length > 0;
@@ -450,36 +459,6 @@ export function useStudentMedicalForm({
       active = false;
     };
   }, [editSubmissionId, me?.profile.student_id, me?.student?.student_id, year]);
-
-  useEffect(() => {
-    const studentId = me?.student?.student_id || me?.profile.student_id || '';
-    const profileId = me?.student?.profile_id || me?.profile.id || '';
-    if (!studentId || !profileId) {
-      setProfileAssetUrls({ photoUrl: null, signatureUrl: null });
-      return;
-    }
-
-    let active = true;
-
-    const loadProfileAssets = async () => {
-      try {
-        const assets = await getStudentProfileAssets(studentId, profileId);
-        if (!active) return;
-        setProfileAssetUrls({
-          photoUrl: assets.photoUrl || null,
-          signatureUrl: assets.signatureUrl || null,
-        });
-      } catch {
-        if (!active) return;
-        setProfileAssetUrls({ photoUrl: null, signatureUrl: null });
-      }
-    };
-
-    void loadProfileAssets();
-    return () => {
-      active = false;
-    };
-  }, [me?.profile.id, me?.profile.student_id, me?.student?.profile_id, me?.student?.student_id]);
 
   useEffect(() => {
     setFormData((prev) => ({
@@ -911,7 +890,7 @@ export function useStudentMedicalForm({
       if (!recordId) {
         const myStudentId = formData.studentId.trim();
         if (myStudentId && formData.yearLevel) {
-          const existing = await getStudentRecords(myStudentId);
+          const existing = await getStudentRecords(myStudentId, { includeProfileAssetsFallback: false });
           const latestSameYear = (existing.records || [])
             .filter((item: any) => String(item?.year || '') === String(formData.yearLevel))
             .sort(
@@ -1019,6 +998,7 @@ export function useStudentMedicalForm({
     hasRequiredProfileFields,
     hasProfilePhoto,
     hasProfileSignature,
+    profileAssetsLoading,
     labResultAccept: LAB_RESULT_ACCEPT_ATTRIBUTE,
     labResultMaxFileSizeLabel: LAB_RESULT_MAX_FILE_SIZE_LABEL,
     labResultAutoOptimizeThresholdLabel: LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL,

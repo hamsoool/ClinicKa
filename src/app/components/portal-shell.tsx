@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { Camera, KeyRound, LogOut, X, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import FilePickerButton from './file-picker-button';
 import { cn } from './ui/utils';
 import {
   AlertDialog,
@@ -197,8 +198,7 @@ export default function PortalShell({
     navigate('/');
   };
 
-  const handleProfileUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleProfileUpload = (file: File | null) => {
     if (!file) return;
 
     if (objectUrlRef.current) {
@@ -403,23 +403,15 @@ export default function PortalShell({
                       <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface-container-low">
                         {profileAvatar}
                       </div>
-                      <label
-                        htmlFor={profileUploadId}
-                        className="absolute inset-0 cursor-pointer rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-                        title={profileUploadLabel}
+                      <FilePickerButton
+                        accept="image/*,.heic,.heif"
+                        ariaLabel={profileUploadLabel}
+                        className="absolute inset-0 h-full rounded-full border-0 bg-black/50 p-0 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                        inputClassName="rounded-full"
+                        onFileSelected={handleProfileUpload}
                       >
-                        <span className="flex h-full w-full items-center justify-center text-white">
-                          <Camera className="h-4 w-4" />
-                        </span>
-                      </label>
-                      <input
-                        id={profileUploadId}
-                        type="file"
-                        accept="image/*"
-                        className="sr-only"
-                        aria-label={profileUploadLabel}
-                        onChange={handleProfileUpload}
-                      />
+                        <Camera className="h-4 w-4" />
+                      </FilePickerButton>
                     </div>
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-on-surface">{displayName}</p>
