@@ -967,11 +967,18 @@ export function useStudentMedicalForm({
       ];
 
       const uploadedUrls: Partial<Record<LabUploadKind, string>> = {};
-      for (const uploadItem of uploads) {
-        if (!uploadItem.file) continue;
-        const result = await uploadFile(uploadItem.file, recordId, uploadItem.kind);
+      const uploadedFiles = await Promise.all(
+        uploads
+          .filter((uploadItem): uploadItem is { kind: LabUploadKind; file: File } => Boolean(uploadItem.file))
+          .map(async (uploadItem) => {
+            const result = await uploadFile(uploadItem.file, recordId, uploadItem.kind);
+            return { kind: uploadItem.kind, url: result.url };
+          }),
+      );
+
+      for (const result of uploadedFiles) {
         if (result.url) {
-          uploadedUrls[uploadItem.kind] = result.url;
+          uploadedUrls[result.kind] = result.url;
         }
       }
 

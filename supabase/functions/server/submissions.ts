@@ -86,6 +86,8 @@ const studentRecordsReadCache = new Map<string, TimedValue<any[]>>();
 const studentRecordsReadPromises = new Map<string, Promise<any[]>>();
 let staffDashboardOverviewCache: TimedValue<any> | null = null;
 let staffDashboardOverviewPromise: Promise<any> | null = null;
+let staffSubmissionStatusCountsCache: TimedValue<any> | null = null;
+let staffSubmissionStatusCountsPromise: Promise<any> | null = null;
 const staffSubmissionSummariesCache = new Map<string, TimedValue<any>>();
 const staffSubmissionSummariesPromises = new Map<string, Promise<any>>();
 const staffApprovedStudentsCache = new Map<string, TimedValue<any>>();
@@ -100,6 +102,8 @@ export function invalidateDashboardReadCaches() {
   studentRecordsReadPromises.clear();
   staffDashboardOverviewCache = null;
   staffDashboardOverviewPromise = null;
+  staffSubmissionStatusCountsCache = null;
+  staffSubmissionStatusCountsPromise = null;
   staffSubmissionSummariesCache.clear();
   staffSubmissionSummariesPromises.clear();
   staffApprovedStudentsCache.clear();
@@ -481,6 +485,70 @@ function buildSubmissionSummaryCacheKey(input: Record<string, unknown>) {
   return JSON.stringify(input);
 }
 
+async function loadStaffSubmissionStatusCounts() {
+  const [
+    { count: pendingRecords, error: pendingError },
+    { count: inReviewRecords, error: inReviewError },
+    { count: returnedRecords, error: returnedError },
+    { count: resubmittedRecords, error: resubmittedError },
+    { count: actionNeededRecords, error: actionNeededError },
+  ] = await Promise.all([
+    supabase
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+    supabase
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "in_review"),
+    supabase
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "returned"),
+    supabase
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "resubmitted"),
+    supabase
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .in("status", ACTIONABLE_SUBMISSION_STATUSES),
+  ]);
+
+  if (pendingError) throw new Error(pendingError.message);
+  if (inReviewError) throw new Error(inReviewError.message);
+  if (returnedError) throw new Error(returnedError.message);
+  if (resubmittedError) throw new Error(resubmittedError.message);
+  if (actionNeededError) throw new Error(actionNeededError.message);
+
+  return {
+    pending: (pendingRecords || 0) + (inReviewRecords || 0),
+    inReview: inReviewRecords || 0,
+    returned: returnedRecords || 0,
+    resubmitted: resubmittedRecords || 0,
+    actionNeeded: actionNeededRecords || 0,
+  };
+}
+
+async function getCachedStaffSubmissionStatusCounts() {
+  const cached = getValidCachedValue(staffSubmissionStatusCountsCache);
+  if (cached) return cached;
+  if (staffSubmissionStatusCountsPromise) return staffSubmissionStatusCountsPromise;
+
+  staffSubmissionStatusCountsPromise = (async () => {
+    const counts = await loadStaffSubmissionStatusCounts();
+    staffSubmissionStatusCountsCache = createTimedValue(
+      counts,
+      STAFF_SUBMISSION_SUMMARIES_TTL_MS,
+    );
+    return counts;
+  })().finally(() => {
+    staffSubmissionStatusCountsPromise = null;
+  });
+
+  return staffSubmissionStatusCountsPromise;
+}
+
 function applySubmissionSummaryFilters(queryBuilder: any, options: any = {}) {
   let query = queryBuilder;
   const statusFilter = normalizeSubmissionStatusFilter(options.statusFilter);
@@ -634,19 +702,41 @@ async function loadStaffDashboardOverview() {
   const [
     { count: totalSubmissions, error: totalSubmissionsError },
     { count: approvedRecords, error: approvedError },
+    { count: pendingRecords, error: pendingError },
+    { count: inReviewRecords, error: inReviewError },
+    { count: returnedRecords, error: returnedError },
+    { count: resubmittedRecords, error: resubmittedError },
     { count: submittedToday, error: todayError },
     { count: submittedYesterday, error: yesterdayError },
     { count: submittedThisWeek, error: weekError },
     { count: submittedThisMonth, error: monthError },
     { count: submittedThisAcademicYear, error: academicYearError },
-    { data: actionableRows, error: actionableRowsError },
-    { data: latestRowsUniverse, error: latestRowsUniverseError },
-    { data: departmentSourceRows, error: departmentSourceError },
+    { data: pendingQueueRows, error: pendingQueueError },
+    { data: inReviewQueueRows, error: inReviewQueueError },
+    { data: returnedQueueRows, error: returnedQueueError },
+    { data: resubmittedQueueRows, error: resubmittedQueueError },
+    departmentCountResults,
   ] = await Promise.all([
     supabase.from("submissions").select("id", { count: "exact", head: true }),
     supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
       "status",
       "approved",
+    ),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
+      "status",
+      "pending",
+    ),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
+      "status",
+      "in_review",
+    ),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
+      "status",
+      "returned",
+    ),
+    supabase.from("submissions").select("id", { count: "exact", head: true }).eq(
+      "status",
+      "resubmitted",
     ),
     supabase.from("submissions").select("id", { count: "exact", head: true }).gte(
       "submitted_at",
@@ -671,80 +761,63 @@ async function loadStaffDashboardOverview() {
     supabase
       .from("submissions")
       .select(SUBMISSION_SUMMARY_COLUMNS)
-      .in("status", ACTIONABLE_SUBMISSION_STATUSES)
+      .eq("status", "pending")
       .order("submitted_at", { ascending: false })
-      .limit(2000),
+      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
     supabase
       .from("submissions")
       .select(SUBMISSION_SUMMARY_COLUMNS)
+      .eq("status", "in_review")
       .order("submitted_at", { ascending: false })
-      .limit(5000),
-    supabase.from("submissions").select("student_id,department,course"),
+      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+    supabase
+      .from("submissions")
+      .select(SUBMISSION_SUMMARY_COLUMNS)
+      .eq("status", "returned")
+      .order("submitted_at", { ascending: false })
+      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+    supabase
+      .from("submissions")
+      .select(SUBMISSION_SUMMARY_COLUMNS)
+      .eq("status", "resubmitted")
+      .order("submitted_at", { ascending: false })
+      .limit(STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS),
+    Promise.all(
+      STAFF_DASHBOARD_DEPARTMENTS.map((department) =>
+        supabase
+          .from("submissions")
+          .select("id", { count: "exact", head: true })
+          .or(`department.eq.${department},course.ilike.%${department}%`)
+          .then((result) => ({ department, ...result })),
+      ),
+    ),
   ]);
 
   if (totalSubmissionsError) throw new Error(totalSubmissionsError.message);
   if (approvedError) throw new Error(approvedError.message);
+  if (pendingError) throw new Error(pendingError.message);
+  if (inReviewError) throw new Error(inReviewError.message);
+  if (returnedError) throw new Error(returnedError.message);
+  if (resubmittedError) throw new Error(resubmittedError.message);
   if (todayError) throw new Error(todayError.message);
   if (yesterdayError) throw new Error(yesterdayError.message);
   if (weekError) throw new Error(weekError.message);
   if (monthError) throw new Error(monthError.message);
   if (academicYearError) throw new Error(academicYearError.message);
-  if (actionableRowsError) throw new Error(actionableRowsError.message);
-  if (latestRowsUniverseError) throw new Error(latestRowsUniverseError.message);
-  if (departmentSourceError) throw new Error(departmentSourceError.message);
+  if (pendingQueueError) throw new Error(pendingQueueError.message);
+  if (inReviewQueueError) throw new Error(inReviewQueueError.message);
+  if (returnedQueueError) throw new Error(returnedQueueError.message);
+  if (resubmittedQueueError) throw new Error(resubmittedQueueError.message);
 
-  const latestByStudentYear = new Map<string, any>();
-  for (const row of latestRowsUniverse || []) {
-    const key = `${String(row?.student_id || "").trim()}:${String(row?.year_level || "").trim()}`;
-    if (!key || key === ":") continue;
-    const existing = latestByStudentYear.get(key);
-    if (!existing) {
-      latestByStudentYear.set(key, row);
-      continue;
-    }
-    const existingTs = new Date(existing.updated_at || existing.submitted_at || 0).getTime();
-    const nextTs = new Date(row.updated_at || row.submitted_at || 0).getTime();
-    if (nextTs >= existingTs) {
-      latestByStudentYear.set(key, row);
-    }
+  for (const result of departmentCountResults || []) {
+    if (result.error) throw new Error(result.error.message);
   }
 
-  const latestActionableRows = [...latestByStudentYear.values()].filter((row) =>
-    ACTIONABLE_SUBMISSION_STATUSES.includes(String(row?.status || "")),
-  );
-  const pendingRowsAll = latestActionableRows
-    .filter((row) => row.status === "pending")
-    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
-  const inReviewRowsAll = latestActionableRows
-    .filter((row) => row.status === "in_review")
-    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
-  const returnedRowsAll = latestActionableRows
-    .filter((row) => row.status === "returned")
-    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
-  const resubmittedRowsAll = latestActionableRows
-    .filter((row) => row.status === "resubmitted")
-    .sort((a, b) => new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime());
-
-  const pendingQueueRows = pendingRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
-  const inReviewQueueRows = inReviewRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
-  const returnedQueueRows = returnedRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
-  const resubmittedQueueRows = resubmittedRowsAll.slice(0, STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS);
-
-  const pendingRecords = pendingRowsAll.length;
-  const inReviewRecords = inReviewRowsAll.length;
-  const returnedRecords = returnedRowsAll.length;
-  const resubmittedRecords = resubmittedRowsAll.length;
-
-  const [reviewerDirectory, studentDepartmentDirectory] = await Promise.all([
-    loadStaffUsersByIds([
-      ...(pendingQueueRows || []).map((row: any) => row.reviewed_by),
-      ...(inReviewQueueRows || []).map((row: any) => row.reviewed_by),
-      ...(returnedQueueRows || []).map((row: any) => row.reviewed_by),
-      ...(resubmittedQueueRows || []).map((row: any) => row.reviewed_by),
-    ]),
-    loadStudentDepartmentDirectory(
-      (departmentSourceRows || []).map((row: any) => row.student_id),
-    ),
+  const reviewerDirectory = await loadStaffUsersByIds([
+    ...(pendingQueueRows || []).map((row: any) => row.reviewed_by),
+    ...(inReviewQueueRows || []).map((row: any) => row.reviewed_by),
+    ...(returnedQueueRows || []).map((row: any) => row.reviewed_by),
+    ...(resubmittedQueueRows || []).map((row: any) => row.reviewed_by),
   ]);
 
   const [
@@ -758,23 +831,9 @@ async function loadStaffDashboardOverview() {
     mapSubmissionSummaries(returnedQueueRows || [], reviewerDirectory),
     mapSubmissionSummaries(resubmittedQueueRows || [], reviewerDirectory),
   ]);
-  const departmentCounts = STAFF_DASHBOARD_DEPARTMENTS.reduce((acc, department) => {
-    acc[department] = 0;
-    return acc;
-  }, {} as Record<string, number>);
-
-  (departmentSourceRows || []).forEach((row: any) => {
-    const department = resolveDashboardDepartmentForRow(
-      row,
-      studentDepartmentDirectory,
-    );
-    if (!department) return;
-    departmentCounts[department] = (departmentCounts[department] || 0) + 1;
-  });
-
-  const departmentBreakdown = STAFF_DASHBOARD_DEPARTMENTS.map((department) => ({
-    department,
-    count: departmentCounts[department] || 0,
+  const departmentBreakdown = (departmentCountResults || []).map((result: any) => ({
+    department: result.department,
+    count: result.count || 0,
   }));
 
   return {
@@ -838,9 +897,9 @@ async function loadStaffSubmissionSummaries(options: any = {}) {
     ascending: sortOrder === "asc",
   }).range(from, to);
 
-  const [{ data, error, count }, overview] = await Promise.all([
+  const [{ data, error, count }, statusCounts] = await Promise.all([
     query,
-    getCachedStaffDashboardOverview(),
+    getCachedStaffSubmissionStatusCounts(),
   ]);
 
   if (error) throw new Error(error.message);
@@ -851,13 +910,7 @@ async function loadStaffSubmissionSummaries(options: any = {}) {
     total: count || 0,
     page,
     pageSize,
-    counts: {
-      pending: (overview.pendingRecords || 0) + (overview.inReviewRecords || 0),
-      inReview: overview.inReviewRecords,
-      returned: overview.returnedRecords,
-      resubmitted: overview.resubmittedRecords,
-      actionNeeded: overview.actionableRecords,
-    },
+    counts: statusCounts,
   };
 }
 

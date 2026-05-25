@@ -1236,7 +1236,9 @@ export default function StaffRecordReview() {
         };
       });
 
-      await invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId);
+      void invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId).catch((error) => {
+        console.error('Failed to refresh staff workflow queries after lab upload:', error);
+      });
       toast.success(`${title} file ${isReplacement ? 'replaced' : 'uploaded'}.`);
       return true;
     } catch (error) {
@@ -1248,14 +1250,13 @@ export default function StaffRecordReview() {
     }
   }
 
-  async function confirmPendingLabReplacement() {
+  function confirmPendingLabReplacement() {
     if (!pendingLabReplacement) return;
 
-    const { file, fileType } = pendingLabReplacement;
-    const uploaded = await uploadLabResultFile(fileType, file, true);
-    if (uploaded) {
-      setPendingLabReplacement(null);
-    }
+    const { file, fileType, title } = pendingLabReplacement;
+    setPendingLabReplacement(null);
+    toast.info(`${title} replacement started. You can keep reviewing while it uploads.`);
+    void uploadLabResultFile(fileType, file, true);
   }
 
   function normalizeCbcOcrFields(fields: CbcOcrExtraction['fields']) {
@@ -1858,12 +1859,12 @@ export default function StaffRecordReview() {
     currentReviewStepIndex < REVIEW_STEPS.length - 1 ? REVIEW_STEPS[currentReviewStepIndex + 1] : null;
   const medicalRecordDateBounds = getMedicalRecordDateBounds();
   const finalDecisionLabel = 'Clearance';
-  const pendingReplacementIsUploading = pendingLabReplacement
-    ? uploadingLabFile[pendingLabReplacement.fileType]
-    : false;
   const uploadedLabOcrTypes = getUploadedLabOcrTypes();
   const hasUploadedLabResultFile = uploadedLabOcrTypes.length > 0;
   const isUploadingAnyLabFile = Object.values(uploadingLabFile).some(Boolean);
+  const uploadingLabTitles = (Object.entries(uploadingLabFile) as Array<[LabUploadType, boolean]>)
+    .filter(([, isUploading]) => isUploading)
+    .map(([fileType]) => getLabUploadTitle(fileType));
   const isLabAutoFillProcessing = [xrayOcrState.status, cbcOcrState.status, urinalysisOcrState.status].some(
     (status) => status === 'processing',
   );
@@ -1956,9 +1957,7 @@ export default function StaffRecordReview() {
       <Dialog
         open={Boolean(pendingLabReplacement)}
         onOpenChange={(open) => {
-          if (!open && !pendingReplacementIsUploading) {
-            setPendingLabReplacement(null);
-          }
+          if (!open) setPendingLabReplacement(null);
         }}
       >
         <DialogContent className="sm:max-w-md">
@@ -1973,17 +1972,14 @@ export default function StaffRecordReview() {
               type="button"
               variant="outline"
               onClick={() => setPendingLabReplacement(null)}
-              disabled={pendingReplacementIsUploading}
             >
               No
             </Button>
             <Button
               type="button"
-              onClick={() => void confirmPendingLabReplacement()}
-              disabled={pendingReplacementIsUploading}
+              onClick={confirmPendingLabReplacement}
             >
-              {pendingReplacementIsUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {pendingReplacementIsUploading ? 'Replacing...' : 'Yes'}
+              Yes
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2084,6 +2080,16 @@ export default function StaffRecordReview() {
             </p>
           </CardContent>
         </Card>
+      ) : null}
+
+      {isUploadingAnyLabFile ? (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+          <p>
+            {uploadingLabTitles.join(', ')} {uploadingLabTitles.length === 1 ? 'file is' : 'files are'} uploading in the background.
+            You can continue to other review steps while this finishes.
+          </p>
+        </div>
       ) : null}
 
       <Tabs value={activeReviewStep} onValueChange={(value) => setActiveReviewStep(value as ReviewStep)} className="space-y-6">

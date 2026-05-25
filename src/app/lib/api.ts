@@ -46,6 +46,10 @@ const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
   cbc: 'lab_cbc',
   urinalysis: 'lab_urinalysis',
 };
+const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
+const LAB_UPLOAD_TARGET_BYTES = 950 * 1024;
+const LAB_UPLOAD_CANVAS_MAX_DIMENSIONS = [2200, 1800, 1500, 1200];
+const LAB_UPLOAD_CANVAS_QUALITIES = [0.86, 0.76, 0.66, 0.56];
 let studentProfileAssetsRouteUnavailable = false;
 const disabledStorageListBuckets = new Set<string>();
 let authClient: SupabaseClient | null = null;
@@ -111,6 +115,92 @@ function buildStorageObjectName(fileType: string, file?: File | null) {
 
   const timestamp = Date.now();
   return ext ? `${normalizedType}_${timestamp}.${ext}` : `${normalizedType}_${timestamp}`;
+}
+
+function getCanvasUploadFileName(fileName: string) {
+  const cleanedName = String(fileName || 'lab-result').trim() || 'lab-result';
+  const withoutExtension = cleanedName.includes('.') ? cleanedName.replace(/\.[^.]+$/, '') : cleanedName;
+  return `${withoutExtension || 'lab-result'}.jpg`;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality);
+  });
+}
+
+async function loadImageForUpload(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.decoding = 'async';
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Unable to read image for upload optimization.'));
+      image.src = objectUrl;
+    });
+    return image;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function optimizeLabImageInBrowser(file: File) {
+  if (
+    file.size <= LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES ||
+    !file.type.toLowerCase().startsWith('image/') ||
+    typeof window === 'undefined' ||
+    typeof document === 'undefined' ||
+    typeof URL === 'undefined'
+  ) {
+    return file;
+  }
+
+  try {
+    const image = await loadImageForUpload(file);
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    if (!sourceWidth || !sourceHeight) return file;
+
+    let bestBlob: Blob | null = null;
+    for (const maxDimension of LAB_UPLOAD_CANVAS_MAX_DIMENSIONS) {
+      const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) continue;
+
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+
+      for (const quality of LAB_UPLOAD_CANVAS_QUALITIES) {
+        const blob = await canvasToBlob(canvas, 'image/jpeg', quality);
+        if (!blob) continue;
+        if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
+        if (blob.size <= LAB_UPLOAD_TARGET_BYTES) {
+          return new File([blob], getCanvasUploadFileName(file.name), {
+            type: 'image/jpeg',
+            lastModified: file.lastModified,
+          });
+        }
+      }
+    }
+
+    if (bestBlob && bestBlob.size < file.size) {
+      return new File([bestBlob], getCanvasUploadFileName(file.name), {
+        type: 'image/jpeg',
+        lastModified: file.lastModified,
+      });
+    }
+  } catch {
+    return file;
+  }
+
+  return file;
 }
 
 async function createSignedStorageUrlWithBucketFallbacks(
@@ -4091,8 +4181,9 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
     throw new Error('You must be signed in to upload files.');
   }
 
+  const transportFile = await optimizeLabImageInBrowser(file);
   const formData = new FormData();
-  formData.set('file', file);
+  formData.set('file', transportFile);
   formData.set('recordId', String(recordId || '').trim());
   formData.set('fileType', String(fileType || '').trim().toLowerCase());
 

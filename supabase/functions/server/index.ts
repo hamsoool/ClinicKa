@@ -240,26 +240,95 @@ async function prepareLabUploadFile(file: File, supportedMimeType: string) {
   const originalBytes = await file.arrayBuffer();
   const tinifyMimeType = resolveTinifyMimeType(supportedMimeType || file.type, file.name);
 
-  if (originalBytes.byteLength <= LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES || !tinifyMimeType) {
-    return {
-      bytes: originalBytes,
-      mimeType: supportedMimeType || file.type || "application/octet-stream",
-      optimized: false,
-      originalSize: originalBytes.byteLength,
-      storedSize: originalBytes.byteLength,
-    };
+  return {
+    bytes: originalBytes,
+    mimeType: supportedMimeType || file.type || "application/octet-stream",
+    optimizationPending: originalBytes.byteLength > LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES && Boolean(tinifyMimeType),
+    tinifyMimeType,
+    optimized: false,
+    originalSize: originalBytes.byteLength,
+    storedSize: originalBytes.byteLength,
+  };
+}
+
+function runBackgroundTask(label: string, task: () => Promise<void>) {
+  const promise = Promise.resolve()
+    .then(task)
+    .catch((error) => {
+      console.log(`${label} warning:`, error);
+    });
+  const edgeRuntime = (globalThis as any).EdgeRuntime;
+  if (typeof edgeRuntime?.waitUntil === "function") {
+    edgeRuntime.waitUntil(promise);
+  }
+}
+
+async function isLabFileStillCurrent(fileId: string, bucket: string, storagePath: string) {
+  const { data, error } = await supabase
+    .from("files")
+    .select("id,storage_bucket,storage_path")
+    .eq("id", fileId)
+    .maybeSingle();
+
+  if (error || !data) return false;
+  return data.storage_bucket === bucket && data.storage_path === storagePath;
+}
+
+async function optimizeStoredLabUpload(options: {
+  fileId: string;
+  bucket: string;
+  storagePath: string;
+  bytes: ArrayBuffer;
+  tinifyMimeType?: string | null;
+  fallbackMimeType?: string | null;
+}) {
+  const tinifyMimeType = String(options.tinifyMimeType || "").trim();
+  if (!tinifyMimeType) return;
+
+  const optimized = await compressImageWithTinify(options.bytes, tinifyMimeType);
+  if (optimized.bytes.byteLength >= options.bytes.byteLength) return;
+
+  const stillCurrent = await isLabFileStillCurrent(options.fileId, options.bucket, options.storagePath);
+  if (!stillCurrent) return;
+
+  const optimizedMimeType = optimized.mimeType || options.fallbackMimeType || tinifyMimeType;
+  const { error: uploadError } = await supabase.storage
+    .from(options.bucket)
+    .upload(options.storagePath, optimized.bytes, {
+      contentType: optimizedMimeType,
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw new Error(uploadError.message);
   }
 
-  const optimized = await compressImageWithTinify(originalBytes, tinifyMimeType);
-  const shouldUseOptimized = optimized.bytes.byteLength < originalBytes.byteLength;
+  const { error: updateError } = await supabase
+    .from("files")
+    .update({ mime_type: optimizedMimeType })
+    .eq("id", options.fileId);
 
-  return {
-    bytes: shouldUseOptimized ? optimized.bytes : originalBytes,
-    mimeType: shouldUseOptimized ? optimized.mimeType : supportedMimeType,
-    optimized: shouldUseOptimized,
-    originalSize: originalBytes.byteLength,
-    storedSize: shouldUseOptimized ? optimized.bytes.byteLength : originalBytes.byteLength,
-  };
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+}
+
+async function cleanupStaleLabFiles(staleFiles: any[]) {
+  if (!staleFiles.length) return;
+  let cleanupError: unknown = null;
+  try {
+    await deleteStoredFiles(staleFiles);
+  } catch (error) {
+    cleanupError = error;
+  }
+
+  const { error } = await supabase.from("files").delete().in("id", staleFiles.map((item) => item.id));
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (cleanupError) {
+    throw cleanupError;
+  }
 }
 
 function isLikelyChestXrayFile(file: any) {
@@ -1741,13 +1810,13 @@ app.post("/upload-file", async (c) => {
 
     const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${recordId}/${fileType}_${Date.now()}_${safeFileName}`;
-    const preparedFile = await prepareLabUploadFile(file, supportedMimeType);
-
-    const { data: previousFiles, error: previousFilesError } = await supabase
+    const previousFilesPromise = supabase
       .from('files')
       .select('id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by')
       .eq('submission_id', recordId)
       .eq('type', fileType);
+    const preparedFile = await prepareLabUploadFile(file, supportedMimeType);
+    const { data: previousFiles, error: previousFilesError } = await previousFilesPromise;
 
     if (previousFilesError) {
       throw new Error(previousFilesError.message);
@@ -1803,18 +1872,25 @@ app.post("/upload-file", async (c) => {
     }
 
     const staleFiles = (previousFiles || []).filter((item) => item?.id && item.id !== insertedFile.id);
-    if (staleFiles.length) {
-      try {
-        await deleteStoredFiles(staleFiles);
-      } catch (cleanupError) {
-        console.log('Laboratory file storage cleanup warning:', cleanupError);
-      }
+    if (preparedFile.optimizationPending) {
+      runBackgroundTask("Laboratory file optimization", async () => {
+        await optimizeStoredLabUpload({
+          fileId: insertedFile.id,
+          bucket: targetBucket,
+          storagePath,
+          bytes: preparedFile.bytes,
+          tinifyMimeType: preparedFile.tinifyMimeType,
+          fallbackMimeType: preparedFile.mimeType,
+        });
+        invalidateDashboardReadCaches();
+      });
+    }
 
-      try {
-        await supabase.from('files').delete().in('id', staleFiles.map((item) => item.id));
-      } catch (cleanupError) {
-        console.log('Laboratory file metadata cleanup warning:', cleanupError);
-      }
+    if (staleFiles.length) {
+      runBackgroundTask("Laboratory file cleanup", async () => {
+        await cleanupStaleLabFiles(staleFiles);
+        invalidateDashboardReadCaches();
+      });
     }
 
     invalidateDashboardReadCaches();
@@ -1823,6 +1899,7 @@ app.post("/upload-file", async (c) => {
       url: signedUrlData?.signedUrl,
       fileName: storagePath,
       optimized: preparedFile.optimized,
+      optimizationPending: preparedFile.optimizationPending,
       originalSize: preparedFile.originalSize,
       storedSize: preparedFile.storedSize,
     });
