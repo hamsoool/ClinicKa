@@ -79,7 +79,26 @@ import {
 const app = new Hono().basePath("/server");
 const LAB_UPLOAD_TYPES = new Set(["xray", "cbc", "urinalysis"]);
 const OCR_SPACE_DEFAULT_MAX_BYTES = 1 * 1024 * 1024;
+const LAB_UPLOAD_DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
+const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
+const TINIFY_COMPRESSIBLE_MIME_TYPES = new Set([
+  "image/avif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 const FILE_SELECT_COLUMNS = "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by";
+
+class TinifyConfigurationError extends Error {}
+
+class TinifyRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status = 502) {
+    super(message);
+    this.status = status;
+  }
+}
 
 function isSupportedOcrFile(file: any) {
   return Boolean(
@@ -97,9 +116,150 @@ function getOcrSpaceMaxBytes() {
     : OCR_SPACE_DEFAULT_MAX_BYTES;
 }
 
+function getLabUploadMaxBytes() {
+  const configuredMaxBytes = Number(Deno.env.get("LAB_UPLOAD_MAX_BYTES") || "");
+  return Number.isFinite(configuredMaxBytes) && configuredMaxBytes > 0
+    ? Math.floor(configuredMaxBytes)
+    : LAB_UPLOAD_DEFAULT_MAX_BYTES;
+}
+
 function formatFileSize(bytes: number) {
   const megabytes = bytes / (1024 * 1024);
   return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`;
+}
+
+function getTinifyApiKey() {
+  return String(
+    Deno.env.get("TINIFY_API_KEY") ||
+      Deno.env.get("TINYPNG_API_KEY") ||
+      "",
+  ).trim();
+}
+
+function resolveTinifyMimeType(mimeType?: string | null, fileName?: string | null) {
+  const normalized = String(mimeType || "").split(";")[0].trim().toLowerCase();
+  const name = String(fileName || "").toLowerCase();
+  if (normalized === "image/jpg") return "image/jpeg";
+  if (TINIFY_COMPRESSIBLE_MIME_TYPES.has(normalized)) return normalized;
+  if (name.endsWith(".avif")) return "image/avif";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".png")) return "image/png";
+  if (/\.(jpe?g)$/i.test(name)) return "image/jpeg";
+  return "";
+}
+
+function resolveLabUploadMimeType(mimeType?: string | null, fileName?: string | null) {
+  const ocrMimeType = resolveOcrSpaceInputMimeType(mimeType, fileName);
+  if (ocrMimeType) return ocrMimeType;
+  return resolveTinifyMimeType(mimeType, fileName);
+}
+
+async function readTinifyError(response: Response) {
+  try {
+    const payload = await response.json();
+    return String(payload?.message || payload?.error || response.statusText || "").trim();
+  } catch {
+    return response.statusText || "";
+  }
+}
+
+function getTinifyErrorMessage(response: Response, detail: string) {
+  if (response.status === 401 || response.status === 403) {
+    return "TinyPNG API key was rejected. Check TINIFY_API_KEY in Supabase Edge Function secrets.";
+  }
+  if (response.status === 429) {
+    return "TinyPNG compression limit was reached. Check your TinyPNG account usage.";
+  }
+  if (response.status === 415 || response.status === 400) {
+    return detail || "TinyPNG could not optimize this image type.";
+  }
+  return detail || "TinyPNG could not optimize the lab result image.";
+}
+
+async function compressImageWithTinify(bytes: ArrayBuffer, mimeType: string) {
+  const apiKey = getTinifyApiKey();
+  if (!apiKey) {
+    throw new TinifyConfigurationError(
+      "TinyPNG compression is not configured. Set TINIFY_API_KEY in Supabase Edge Function secrets.",
+    );
+  }
+
+  const authorization = `Basic ${btoa(`api:${apiKey}`)}`;
+  const shrinkResponse = await fetch("https://api.tinify.com/shrink", {
+    method: "POST",
+    headers: {
+      Authorization: authorization,
+      "Content-Type": mimeType,
+    },
+    body: bytes,
+  });
+
+  if (!shrinkResponse.ok) {
+    const detail = await readTinifyError(shrinkResponse);
+    throw new TinifyRequestError(
+      getTinifyErrorMessage(shrinkResponse, detail),
+      shrinkResponse.status === 401 || shrinkResponse.status === 403 || shrinkResponse.status === 429
+        ? 503
+        : 400,
+    );
+  }
+
+  const outputUrl = shrinkResponse.headers.get("location");
+  if (!outputUrl) {
+    throw new TinifyRequestError("TinyPNG did not return an optimized image URL.");
+  }
+
+  const outputResponse = await fetch(outputUrl, {
+    headers: {
+      Authorization: authorization,
+    },
+  });
+
+  if (!outputResponse.ok) {
+    const detail = await readTinifyError(outputResponse);
+    throw new TinifyRequestError(
+      getTinifyErrorMessage(outputResponse, detail),
+      outputResponse.status === 401 || outputResponse.status === 403 || outputResponse.status === 429
+        ? 503
+        : 502,
+    );
+  }
+
+  const outputMimeType = String(outputResponse.headers.get("content-type") || mimeType)
+    .split(";")[0]
+    .trim()
+    .toLowerCase() || mimeType;
+
+  return {
+    bytes: await outputResponse.arrayBuffer(),
+    mimeType: outputMimeType,
+  };
+}
+
+async function prepareLabUploadFile(file: File, supportedMimeType: string) {
+  const originalBytes = await file.arrayBuffer();
+  const tinifyMimeType = resolveTinifyMimeType(supportedMimeType || file.type, file.name);
+
+  if (originalBytes.byteLength <= LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES || !tinifyMimeType) {
+    return {
+      bytes: originalBytes,
+      mimeType: supportedMimeType || file.type || "application/octet-stream",
+      optimized: false,
+      originalSize: originalBytes.byteLength,
+      storedSize: originalBytes.byteLength,
+    };
+  }
+
+  const optimized = await compressImageWithTinify(originalBytes, tinifyMimeType);
+  const shouldUseOptimized = optimized.bytes.byteLength < originalBytes.byteLength;
+
+  return {
+    bytes: shouldUseOptimized ? optimized.bytes : originalBytes,
+    mimeType: shouldUseOptimized ? optimized.mimeType : supportedMimeType,
+    optimized: shouldUseOptimized,
+    originalSize: originalBytes.byteLength,
+    storedSize: shouldUseOptimized ? optimized.bytes.byteLength : originalBytes.byteLength,
+  };
 }
 
 function isLikelyChestXrayFile(file: any) {
@@ -1558,14 +1718,14 @@ app.post("/upload-file", async (c) => {
     if (!LAB_UPLOAD_TYPES.has(fileType)) {
       return badRequest('Unsupported laboratory file type');
     }
-    const maxLabUploadBytes = getOcrSpaceMaxBytes();
+    const maxLabUploadBytes = getLabUploadMaxBytes();
     if (file.size > maxLabUploadBytes) {
       return badRequest(`Laboratory result files must be ${formatFileSize(maxLabUploadBytes)} or smaller.`);
     }
     const mimeType = String(file.type || '').trim().toLowerCase();
-    const supportedMimeType = resolveOcrSpaceInputMimeType(mimeType, file.name);
+    const supportedMimeType = resolveLabUploadMimeType(mimeType, file.name);
     if (!supportedMimeType) {
-      return badRequest('Laboratory result files must be PDF, PNG, JPG, GIF, TIF, BMP, or another supported image file.');
+      return badRequest('Laboratory result files must be PDF, PNG, JPG, WebP, AVIF, GIF, TIF, BMP, or another supported image file.');
     }
 
     const access = await requireSubmissionAccess(requester, recordId);
@@ -1581,7 +1741,7 @@ app.post("/upload-file", async (c) => {
 
     const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${recordId}/${fileType}_${Date.now()}_${safeFileName}`;
-    const fileBuffer = await file.arrayBuffer();
+    const preparedFile = await prepareLabUploadFile(file, supportedMimeType);
 
     const { data: previousFiles, error: previousFilesError } = await supabase
       .from('files')
@@ -1595,8 +1755,8 @@ app.post("/upload-file", async (c) => {
 
     const { error: uploadError } = await supabase.storage
       .from(targetBucket)
-      .upload(storagePath, fileBuffer, {
-        contentType: supportedMimeType || 'application/octet-stream',
+      .upload(storagePath, preparedFile.bytes, {
+        contentType: preparedFile.mimeType || 'application/octet-stream',
         upsert: true,
       });
 
@@ -1616,7 +1776,7 @@ app.post("/upload-file", async (c) => {
         submission_id: recordId,
         type: fileType,
         file_name: file.name,
-        mime_type: supportedMimeType || 'application/octet-stream',
+        mime_type: preparedFile.mimeType || 'application/octet-stream',
         url: null,
         storage_bucket: targetBucket,
         storage_path: storagePath,
@@ -1662,8 +1822,17 @@ app.post("/upload-file", async (c) => {
       success: true,
       url: signedUrlData?.signedUrl,
       fileName: storagePath,
+      optimized: preparedFile.optimized,
+      originalSize: preparedFile.originalSize,
+      storedSize: preparedFile.storedSize,
     });
   } catch (error) {
+    if (error instanceof TinifyConfigurationError) {
+      return c.json({ error: error.message }, 503);
+    }
+    if (error instanceof TinifyRequestError) {
+      return c.json({ error: error.message }, error.status || 502);
+    }
     console.log('Error in file upload:', error);
     return internalServerError(c, 'Failed to upload file', error);
   }

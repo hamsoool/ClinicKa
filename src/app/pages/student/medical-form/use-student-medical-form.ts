@@ -39,10 +39,11 @@ const MAX_CLINIC_NAME_LENGTH = 60;
 const MAX_TEST_SITE_OTHER_LENGTH = 50;
 const MAX_OTHER_MEDICAL_HISTORY_LENGTH = 20;
 const MIN_AGE = 15;
-const LAB_RESULT_MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024;
-const LAB_RESULT_MAX_FILE_SIZE_LABEL = '1 MB';
-const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff'];
-const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
+const LAB_RESULT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const LAB_RESULT_MAX_FILE_SIZE_LABEL = '5 MB';
+const LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL = '1 MB';
+const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
+const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
 const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
 
 const LAB_UPLOAD_FIELD_CONFIG: Record<
@@ -1013,6 +1014,7 @@ export function useStudentMedicalForm({
     hasProfileSignature,
     labResultAccept: LAB_RESULT_ACCEPT_ATTRIBUTE,
     labResultMaxFileSizeLabel: LAB_RESULT_MAX_FILE_SIZE_LABEL,
+    labResultAutoOptimizeThresholdLabel: LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL,
     hasCbcFile,
     hasUrinalysisFile,
     hasXrayFile,

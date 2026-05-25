@@ -221,10 +221,11 @@ const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }
   { key: 'uti', label: 'UTI' },
 ];
 
-const LAB_RESULT_MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024;
-const LAB_RESULT_MAX_FILE_SIZE_LABEL = '1 MB';
-const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
-const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff'];
+const LAB_RESULT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const LAB_RESULT_MAX_FILE_SIZE_LABEL = '5 MB';
+const LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL = '1 MB';
+const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
+const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
 const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'] as const;
 const BLOOD_PRESSURE_PATTERN = /^\d{2,3}\/\d{2,3}$/;
@@ -286,7 +287,8 @@ function LabUploadActions({
         <div>
           <p className="text-sm font-medium text-on-surface">Add or replace {title} file</p>
           <p className="text-xs text-on-surface-variant">
-            PDF or image only, up to {LAB_RESULT_MAX_FILE_SIZE_LABEL}. Camera opens on supported mobile devices.
+            PDF or image only, up to {LAB_RESULT_MAX_FILE_SIZE_LABEL}. Images over{' '}
+            {LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL} are optimized automatically.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
