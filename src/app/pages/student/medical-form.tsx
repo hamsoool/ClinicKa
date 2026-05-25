@@ -46,6 +46,7 @@ export default function StudentMedicalForm() {
     hasXrayFile,
     labResultAccept,
     labResultMaxFileSizeLabel,
+    labResultAutoOptimizeThresholdLabel,
     updateField,
     updateEmergencyContact,
     updateMedicalCondition,
@@ -113,6 +114,7 @@ export default function StudentMedicalForm() {
                 requiresXrayFile={requiresXrayFile}
                 labResultAccept={labResultAccept}
                 labResultMaxFileSizeLabel={labResultMaxFileSizeLabel}
+                labResultAutoOptimizeThresholdLabel={labResultAutoOptimizeThresholdLabel}
                 submitBlockers={submitBlockers}
                 onGoToProfile={() => navigate('/student/profile')}
                 onLabFileChange={updateLabFile}

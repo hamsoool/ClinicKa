@@ -192,6 +192,11 @@ Tip: on Supabase Edge Functions, SMTP port `465` is commonly the one that works.
 
 - `OCR_SPACE_API_KEY` (or `OCRSPACE_API_KEY`)
 
+### TinyPNG/Tinify (Optional)
+
+- `TINIFY_API_KEY` (or `TINYPNG_API_KEY`)
+- Lab uploads accept files up to 5 MB. Supported image uploads above 1 MB are optimized through TinyPNG/Tinify before they are stored.
+
 ## Useful Scripts
 
 - `npm run dev` - Start local dev server

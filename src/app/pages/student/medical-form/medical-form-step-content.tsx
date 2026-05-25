@@ -34,6 +34,7 @@ type Props = {
   requiresXrayFile: boolean;
   labResultAccept: string;
   labResultMaxFileSizeLabel: string;
+  labResultAutoOptimizeThresholdLabel: string;
   submitBlockers: string[];
   onGoToProfile: () => void;
   onLabFileChange: (kind: LabUploadKind, file: File | null) => void;
@@ -56,6 +57,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   requiresXrayFile,
   labResultAccept,
   labResultMaxFileSizeLabel,
+  labResultAutoOptimizeThresholdLabel,
   submitBlockers,
   onGoToProfile,
   onLabFileChange,
@@ -116,7 +118,8 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <p className="text-sm font-semibold text-on-surface">{title}</p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Upload a clear PDF or image copy. Maximum file size is {labResultMaxFileSizeLabel}.
+              Upload a clear PDF or image copy. Maximum file size is {labResultMaxFileSizeLabel}. Images over{' '}
+              {labResultAutoOptimizeThresholdLabel} are optimized automatically.
             </p>
             {selectedFile ? (
               <div className={`rounded-md border px-3 py-2 text-xs ${
