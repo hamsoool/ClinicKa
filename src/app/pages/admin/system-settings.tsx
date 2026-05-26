@@ -13,7 +13,7 @@ import {
   SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import PasswordChangeCard from '../../components/password-change-card';
 import SettingsLogoutCard from '../../components/settings-logout-card';
 import { Input } from '../../components/ui/input';
@@ -48,17 +48,15 @@ const autoArchiveOptions = [
 type SettingSectionProps = {
   icon: LucideIcon;
   title: string;
-  description: string;
   children: ReactNode;
 };
 
 type SettingRowProps = {
   title: string;
-  description: string;
   children: ReactNode;
 };
 
-function SettingSection({ icon: Icon, title, description, children }: SettingSectionProps) {
+function SettingSection({ icon: Icon, title, children }: SettingSectionProps) {
   return (
     <Card className="overflow-hidden border-outline-variant/35 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
       <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
@@ -68,7 +66,6 @@ function SettingSection({ icon: Icon, title, description, children }: SettingSec
           </span>
           <div>
             <CardTitle className="text-lg font-semibold text-on-surface">{title}</CardTitle>
-            <CardDescription className="mt-1 text-sm leading-6">{description}</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -77,12 +74,11 @@ function SettingSection({ icon: Icon, title, description, children }: SettingSec
   );
 }
 
-function SettingRow({ title, description, children }: SettingRowProps) {
+function SettingRow({ title, children }: SettingRowProps) {
   return (
     <div className="grid gap-4 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,22rem)] sm:items-center sm:px-6">
       <div className="min-w-0">
         <p className="font-medium text-on-surface">{title}</p>
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
       </div>
       <div className="min-w-0 sm:justify-self-end">{children}</div>
     </div>
@@ -148,25 +144,21 @@ export default function AdminSystemSettings() {
     {
       label: 'Academic Term',
       value: draftSettings.academicYear,
-      detail: draftSettings.semester,
       icon: CalendarRange,
     },
     {
       label: 'Student Intake',
       value: draftSettings.acceptingSubmissions ? 'Open' : 'Paused',
-      detail: draftSettings.acceptingSubmissions ? 'Students can submit records' : 'New submissions are paused',
       icon: SlidersHorizontal,
     },
     {
       label: 'Admin Session',
       value: `${draftSettings.sessionTimeoutMinutes} min`,
-      detail: 'Automatic inactivity timeout',
       icon: Clock3,
     },
     {
       label: 'Record Retention',
       value: formatArchiveLabel(draftSettings.autoArchiveAfterMonths),
-      detail: 'Graduated or inactive records',
       icon: FileArchive,
     },
   ] as const;
@@ -179,7 +171,6 @@ export default function AdminSystemSettings() {
     <div className="mx-auto w-full max-w-[100rem] space-y-6">
       <PortalPageIntro
         title="Administrative Settings"
-        description="Configure the school year, clinic intake, review notifications, account safeguards, and record retention policies for ClinicKa."
         actions={(
           <Badge className={hasChanges ? 'bg-amber-100 px-3 py-1 text-amber-700' : 'bg-emerald-100 px-3 py-1 text-emerald-700'}>
             {hasChanges ? 'Unsaved changes' : 'Up to date'}
@@ -199,7 +190,6 @@ export default function AdminSystemSettings() {
                 <div className="min-w-0">
                   <p className="text-sm text-muted-foreground">{item.label}</p>
                   <p className="mt-2 truncate text-xl font-bold text-on-surface">{item.value}</p>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">{item.detail}</p>
                 </div>
                 <Icon className="h-6 w-6 shrink-0 text-primary" />
               </div>
@@ -210,11 +200,10 @@ export default function AdminSystemSettings() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
         <div className="space-y-6">
-      <SettingSection
-        icon={CalendarRange}
-        title="Academic Term and Student Intake"
-        description="Set the active school term and control whether students can submit medical records."
-      >
+          <SettingSection
+            icon={CalendarRange}
+            title="Academic Term and Student Intake"
+          >
         <div className="grid gap-4 px-5 py-5 sm:grid-cols-2 sm:px-6">
           <div className="space-y-2">
             <Label htmlFor="academicYear">Academic Year</Label>
@@ -248,7 +237,6 @@ export default function AdminSystemSettings() {
         </div>
         <SettingRow
           title="Student medical record submissions"
-          description="Pause this during clinic maintenance, records cutoff, or term transition periods."
         >
           <div className="flex items-center justify-between gap-3 sm:justify-end">
             <Badge className={draftSettings.acceptingSubmissions ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>
@@ -262,14 +250,12 @@ export default function AdminSystemSettings() {
         </SettingRow>
       </SettingSection>
 
-      <SettingSection
-        icon={Bell}
-        title="Clinic Review Communication"
-        description="Control how students and clinic staff are notified as medical records move through review."
-      >
+          <SettingSection
+            icon={Bell}
+            title="Clinic Review Communication"
+          >
         <SettingRow
           title="Student status email notifications"
-          description="Send email updates when records are approved, returned for correction, or marked for final review."
         >
           <Switch
             checked={draftSettings.approvalEmailNotifications}
@@ -278,7 +264,6 @@ export default function AdminSystemSettings() {
         </SettingRow>
         <SettingRow
           title="Pending review reminders"
-          description="Keep pending submissions visible as records wait for clinic staff action."
         >
           <Switch
             checked={draftSettings.pendingReviewReminders}
@@ -287,14 +272,12 @@ export default function AdminSystemSettings() {
         </SettingRow>
       </SettingSection>
 
-      <SettingSection
-        icon={ShieldCheck}
-        title="Account Access and Admin Safeguards"
-        description="Set access policies for administrators and clinic personnel who handle student health records."
-      >
+          <SettingSection
+            icon={ShieldCheck}
+            title="Account Access and Admin Safeguards"
+          >
         <SettingRow
           title="Require two-factor authentication policy"
-          description="Mark elevated accounts as requiring an extra sign-in verification step when available."
         >
           <Switch
             checked={draftSettings.requireTwoFactorAuth}
@@ -303,7 +286,6 @@ export default function AdminSystemSettings() {
         </SettingRow>
         <SettingRow
           title="Inactive session timeout"
-          description="Automatically sign out idle admin and clinic staff sessions after the selected period."
         >
           <Select
             value={String(draftSettings.sessionTimeoutMinutes)}
@@ -323,7 +305,6 @@ export default function AdminSystemSettings() {
         </SettingRow>
         <SettingRow
           title="Admin activity trail"
-          description="Keep the audit policy enabled for account, archive, and settings changes."
         >
           <Switch
             checked={draftSettings.auditLogging}
@@ -332,14 +313,12 @@ export default function AdminSystemSettings() {
         </SettingRow>
       </SettingSection>
 
-      <SettingSection
-        icon={DatabaseBackup}
-        title="Records Retention"
-        description="Choose how long older student health records remain in the active administrative workspace."
-      >
+          <SettingSection
+            icon={DatabaseBackup}
+            title="Records Retention"
+          >
         <SettingRow
           title="Auto-archive graduated or inactive records"
-          description="Move older records out of active work views while preserving them for administrative review."
         >
           <Select
             value={String(draftSettings.autoArchiveAfterMonths)}
@@ -362,19 +341,14 @@ export default function AdminSystemSettings() {
         </div>
 
         <div className="space-y-6 xl:sticky xl:top-24">
-      <PasswordChangeCard title="Administrator Password" description="Update the password for your administrator account." />
+          <PasswordChangeCard title="Administrator Password" />
 
-      <Card className="border-outline-variant/35 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+          <Card className="border-outline-variant/35 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
         <CardHeader>
           <div className="flex items-center gap-3">
             <MailCheck className="h-5 w-5 text-primary" />
             <div>
               <CardTitle className="text-lg font-semibold text-on-surface">Save Administrative Settings</CardTitle>
-              <CardDescription>
-                {hasChanges
-                  ? 'Review and save your policy changes before leaving this page.'
-                  : 'The saved administrative policies match the current form.'}
-              </CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -394,7 +368,7 @@ export default function AdminSystemSettings() {
         </CardContent>
       </Card>
 
-      <SettingsLogoutCard className="flex justify-end" />
+          <SettingsLogoutCard className="flex justify-end" />
         </div>
       </div>
     </div>

@@ -27,6 +27,8 @@ const EXAM_FIELD_MAP: Record<string, string> = {
   'Others, specify': 'others',
 };
 
+const CLEARANCE_SIGNATORY_NAMES = ['GERALD S. BERNAL, MD', 'ARMANDO TAMAYO, MD'] as const;
+
 const MEDICAL_HISTORY_ROWS: { key: string; label: string }[][] = [
   [
     { key: 'allergy', label: 'Allergy' },
@@ -192,6 +194,31 @@ function formatLocalPhone(value: string) {
   return String(value || '').trim();
 }
 
+function normalizeExaminerName(value?: string | null) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b(m\.?\s*d\.?|doctor|dr\.?|rn|r\.?\s*n\.?)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isClearanceSignatoryName(value?: string | null) {
+  const normalized = normalizeExaminerName(value);
+  return Boolean(
+    normalized &&
+    CLEARANCE_SIGNATORY_NAMES.some((name) => normalizeExaminerName(name) === normalized),
+  );
+}
+
+function formatXrayResult(value?: string | null) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'normal') return 'Normal';
+  if (normalized === 'abnormal') return 'Abnormal';
+  return '';
+}
+
 const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
   { record, yearlyRecords }: Props,
   ref: ForwardedRef<HTMLDivElement>
@@ -234,6 +261,51 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
       return year - 1 === yrIndex ? lab : {};
     };
 
+    const getYearExaminer = (year: number) => {
+      const yearRecord = yearlyRecords?.[year as 1 | 2 | 3 | 4];
+      const sourceExam = yearRecord?.staffMeasurements || (year - 1 === yrIndex ? exam : {});
+      return {
+        name: String(sourceExam?.examinedBy || '').trim(),
+        signatureUrl: String(sourceExam?.examinedBySignatureUrl || '').trim(),
+      };
+    };
+
+    const renderExaminer = (year: number) => {
+      const examiner = getYearExaminer(year);
+      const displayName = isClearanceSignatoryName(examiner.name) ? '' : examiner.name;
+      if (!examiner.signatureUrl) return displayName;
+
+      return (
+        <div
+          style={{
+            display: 'flex',
+            minHeight: '32px',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '1px',
+            textAlign: 'center',
+          }}
+        >
+          <img
+            src={examiner.signatureUrl}
+            alt="Examiner signature"
+            style={{
+              maxWidth: '112px',
+              maxHeight: '20px',
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+          {displayName ? (
+            <span style={{ fontSize: '7.5px', lineHeight: '1.05' }}>{displayName}</span>
+          ) : null}
+        </div>
+      );
+    };
+
     const inlineField = (value: unknown, minWidth = '44px') => {
       const text = String(value || '').trim();
       return (
@@ -261,6 +333,22 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               zIndex: 0,
             }}
           />
+        </span>
+      );
+    };
+
+    const wrappedField = (value: unknown) => {
+      const text = String(value || '').trim();
+      return (
+        <span
+          style={{
+            display: 'inline',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+            lineHeight: '1.25',
+          }}
+        >
+          {text}
         </span>
       );
     };
@@ -676,15 +764,10 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               </tr>
             ))}
             <tr>
-              <td style={{ ...S.td, fontWeight: 'bold', height: '20px' }}>Examined by:</td>
+              <td style={{ ...S.td, fontWeight: 'bold', height: '38px' }}>Examined by:</td>
               {[0, 1, 2, 3].map((i) => (
-                <td key={i} style={{ ...S.td, height: '20px' }}>
-                  {yearlyRecords
-                    ? yearlyRecords[(i + 1) as 1 | 2 | 3 | 4]?.staffMeasurements
-                        ?.examinedBy || ''
-                    : i === yrIndex
-                    ? exam.examinedBy || ''
-                    : ''}
+                <td key={i} style={{ ...S.td, height: '38px', padding: '2px 4px' }}>
+                  {renderExaminer(i + 1)}
                 </td>
               ))}
             </tr>
@@ -719,8 +802,18 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                     }}
                   >
                     <div>Date: {inlineField(y.xrayDate, '52px')}</div>
-                    <div>Normal ( {y.xrayResult === 'normal' ? 'X' : ' '} )</div>
-                    <div>Abnormal findings {inlineField(y.xrayFindings, '56px')}</div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        justifyContent: 'space-between',
+                        gap: '4px',
+                      }}
+                    >
+                      <span>Abnormal findings</span>
+                      <span>Result: {inlineField(formatXrayResult(y.xrayResult), '42px')}</span>
+                    </div>
+                    <div>{wrappedField(y.xrayFindings)}</div>
                   </td>
                 );
               })}

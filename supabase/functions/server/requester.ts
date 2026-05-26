@@ -157,7 +157,7 @@ export async function loadStaffUsersByIds(staffIds: string[]) {
 
   const { data, error } = await supabase
     .from("staff_users")
-    .select("id,first_name,last_name,middle_initial,position,name")
+    .select("id,profile_id,first_name,last_name,middle_initial,position,name")
     .in("id", uniqueStaffIds);
 
   if (error) {

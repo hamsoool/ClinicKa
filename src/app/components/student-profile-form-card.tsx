@@ -166,9 +166,6 @@ export function StudentProfileFormCard({
 
   const canGoToPreviousBirthdayMonth = birthdayPickerMonth > birthdayMinMonth;
   const canGoToNextBirthdayMonth = birthdayPickerMonth < birthdayMaxMonth;
-  const requiresYearOverride =
-    value.submissionCategory === 'returning' || value.submissionCategory === 'repeater_irregular';
-
   const handleChange = (field: keyof StudentProfileFormValue, nextValue: string) => {
     if (!readOnly) {
       onChange?.(field, nextValue);
@@ -510,35 +507,6 @@ export function StudentProfileFormCard({
                 </Select>
               )}
             </div>
-            {requiresYearOverride ? (
-              <div className="min-w-0">
-                <Label htmlFor="submissionTargetYearLevel">Submission Year{readOnly ? '' : ' *'}</Label>
-                {readOnly ? (
-                  <Input
-                    id="submissionTargetYearLevel"
-                    value={value.submissionTargetYearLevel ? `${value.submissionTargetYearLevel}${value.submissionTargetYearLevel === '1' ? 'st' : value.submissionTargetYearLevel === '2' ? 'nd' : value.submissionTargetYearLevel === '3' ? 'rd' : 'th'} Year` : ''}
-                    readOnly
-                    disabled
-                    className="cursor-not-allowed opacity-80"
-                  />
-                ) : (
-                  <Select
-                    value={value.submissionTargetYearLevel || undefined}
-                    onValueChange={(nextValue) => handleChange('submissionTargetYearLevel', nextValue)}
-                  >
-                    <SelectTrigger id="submissionTargetYearLevel" className={requiredFieldClass(!value.submissionTargetYearLevel)}>
-                      <SelectValue placeholder="Select year to open" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1st Year</SelectItem>
-                      <SelectItem value="2">2nd Year</SelectItem>
-                      <SelectItem value="3">3rd Year</SelectItem>
-                      <SelectItem value="4">4th Year</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            ) : null}
           </>
         ) : null}
       </CardContent>

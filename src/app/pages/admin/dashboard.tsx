@@ -186,28 +186,24 @@ export default function AdminDashboard() {
       value: userAccounts.length,
       icon: Users,
       tone: 'text-primary',
-      detail: 'All student, clinic, and admin accounts',
     },
     {
       label: 'Active Clinic Staff',
       value: activeStaffCount,
       icon: UserCog,
       tone: 'text-emerald-700',
-      detail: 'Staff accounts currently available for operations',
     },
     {
       label: 'Pending Reviews',
       value: analytics?.pendingRecords || 0,
       icon: Clock3,
       tone: 'text-amber-600',
-      detail: 'Submissions still waiting for clinic processing',
     },
     {
       label: 'Returned Cases',
       value: analytics?.returnedRecords || 0,
       icon: ShieldAlert,
       tone: 'text-rose-700',
-      detail: 'Records requiring student correction or follow-up',
     },
   ] as const;
 
@@ -229,7 +225,6 @@ export default function AdminDashboard() {
           </div>
         )}
         title={`Welcome, ${displayName}`}
-        description="Monitor platform health, manage user access, and keep clinic operations aligned from one shared administrative workspace."
         actions={(
           <div className="grid gap-3 min-[440px]:grid-cols-2 lg:min-w-[24rem]">
             <button
@@ -257,7 +252,7 @@ export default function AdminDashboard() {
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-on-surface">
                   <Settings className="h-5 w-5 text-primary" />
-                  <span className="text-sm font-semibold">Calendar, security, notifications</span>
+                  <span className="text-base font-semibold">Settings</span>
                 </div>
                 <ArrowRight className="h-4 w-4 text-on-surface-variant" />
               </div>
@@ -294,7 +289,6 @@ export default function AdminDashboard() {
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
-              <p className="mt-4 text-[13px] text-on-surface-variant sm:text-sm">{card.detail}</p>
             </div>
           );
         })}
@@ -305,9 +299,6 @@ export default function AdminDashboard() {
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Admin Action Queue</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">
-                Records that still need administrative visibility because they are pending or have been returned.
-              </p>
             </div>
             <button
               onClick={() => navigate('/admin/reports')}
@@ -362,9 +353,6 @@ export default function AdminDashboard() {
         <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-on-surface">Role Distribution</h2>
-            <p className="mt-1 text-sm text-on-surface-variant">
-              Snapshot of who is currently represented in the system.
-            </p>
           </div>
           <div className="space-y-4">
             {roleDistribution.map((role) => (
@@ -390,7 +378,6 @@ export default function AdminDashboard() {
             >
               <div>
                 <p className="text-sm font-semibold text-on-surface">Clinic Staff Accounts</p>
-                <p className="mt-1 text-xs text-on-surface-variant">Staff access and status</p>
               </div>
               <UserCog className="h-5 w-5 text-primary" />
             </button>
@@ -400,7 +387,6 @@ export default function AdminDashboard() {
             >
               <div>
                 <p className="text-sm font-semibold text-on-surface">Review Accounts</p>
-                <p className="mt-1 text-xs text-on-surface-variant">Account health and access</p>
               </div>
               <Users className="h-5 w-5 text-primary" />
             </button>
@@ -413,9 +399,6 @@ export default function AdminDashboard() {
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Recent Account Activity</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">
-                Recently active users across the platform.
-              </p>
             </div>
             <button
               onClick={() => navigate('/admin/users')}
@@ -458,9 +441,6 @@ export default function AdminDashboard() {
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">System Health Snapshot</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">
-                A lightweight admin overview of platform readiness.
-              </p>
             </div>
             <button
               onClick={() => navigate('/admin/settings')}

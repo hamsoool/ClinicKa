@@ -5,11 +5,17 @@ import { getSafeAdminSystemSettings } from "./settings.ts";
 
 function getYearLevelLabel(yearLevel: unknown) {
   const value = Number(yearLevel);
-  if (value === 1) return "1st Year";
-  if (value === 2) return "2nd Year";
-  if (value === 3) return "3rd Year";
-  if (value === 4) return "4th Year";
-  return "your current year level";
+  if (value === 1) return "Year I";
+  if (value === 2) return "Year II";
+  if (value === 3) return "Year III";
+  if (value === 4) return "Year IV";
+  return "your current school year";
+}
+
+function getSubmissionLabel(yearLevel: unknown, academicYear?: string | null) {
+  const normalizedAcademicYear = String(academicYear || "").trim();
+  if (normalizedAcademicYear) return `SY ${normalizedAcademicYear}`;
+  return getYearLevelLabel(yearLevel);
 }
 
 function getStatusEmailContent(
@@ -77,7 +83,7 @@ export async function sendStatusNotificationEmail(
 
   const { data: submission, error: submissionError } = await supabase
     .from("submissions")
-    .select("student_id, year_level")
+    .select("student_id, year_level, academic_year")
     .eq("id", submissionId)
     .maybeSingle();
 
@@ -114,7 +120,7 @@ export async function sendStatusNotificationEmail(
   const emailContent = getStatusEmailContent(
     status,
     studentName,
-    getYearLevelLabel(submission.year_level),
+    getSubmissionLabel(submission.year_level, submission.academic_year),
     staffNotes,
   );
 

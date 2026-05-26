@@ -30,7 +30,6 @@ export default function StudentAnnouncements() {
   const pageIntro = (
     <StudentPageIntro
       title="Announcements"
-      description="Stay updated with clinic notices, deadlines, and health service announcements."
     />
   );
 

@@ -7,12 +7,12 @@ import StudentPageIntro from '../../components/student-page-intro';
 import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { getStudentAnnouncements } from '../../lib/api';
-import { resolveStudentSubmissionProfile, toCategoryLabel } from '../../lib/student-submission-profile';
 import { useStudentRecordsQuery } from './student-records-query';
 import { useStudentProfileAssetsQuery } from './student-profile-assets-query';
 import type { SubmissionRecord } from '../../lib/record-types';
+import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel } from '../../lib/academic-year';
 
-const yearLabels = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+const yearLabels = ['Year I', 'Year II', 'Year III', 'Year IV'];
 const dashboardDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   day: '2-digit',
@@ -179,14 +179,9 @@ export default function StudentDashboard() {
       recordsByYear.set(yearNum, bucket);
     }
 
-    const latestYear = Math.max(...Array.from(recordsByYear.keys(), (year) => year), 0);
-    const latestYearRecords = latestYear > 0 ? recordsByYear.get(latestYear) || [] : [];
-    const preferredLatest =
-      latestYearRecords.find((item) => String(item.status || '').toLowerCase() !== 'returned') ||
-      latestYearRecords[0] ||
+    const latest =
+      sorted.find((item) => String(item.status || '').toLowerCase() !== 'returned') ||
       sorted[0];
-
-    const latest = preferredLatest;
     const yearly = yearLabels.map((label, index) => {
       const year = index + 1;
       const record = sorted.find((item) => Number.parseInt(item.year || '', 10) === year);
@@ -197,7 +192,6 @@ export default function StudentDashboard() {
       yearlyRecords: yearly,
     };
   }, [records]);
-  const submissionProfile = useMemo(() => resolveStudentSubmissionProfile(me), [me]);
   const completionReminders = useMemo<CompletionReminder[]>(() => {
     const reminders: CompletionReminder[] = [];
     const student = me?.student;
@@ -293,7 +287,6 @@ export default function StudentDashboard() {
     <div className="mx-auto w-full max-w-[100rem] space-y-4 sm:space-y-6 lg:space-y-8">
       <StudentPageIntro
         title={`Welcome, ${displayName}`}
-        description="Check your latest record status, finish missing requirements, and stay updated with clinic announcements from one place."
       />
 
       <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.8fr)] xl:items-start">
@@ -378,7 +371,7 @@ export default function StudentDashboard() {
               <div>
                 <h3 className="text-base font-bold tracking-tight text-amber-900 sm:text-lg">Action Required: Correction Needed</h3>
                 <p className="mt-1 text-xs text-on-surface-variant sm:text-sm">
-                  Your medical record submission for <span className="font-semibold">{yearLabels[Number(latestRecord.year) - 1] || 'current year'}</span> has been returned by the clinic staff.
+                  Your medical record submission for <span className="font-semibold">{getSubmissionSlotLabel(latestRecord.year)}</span> has been returned by the clinic staff.
                 </p>
               </div>
               
@@ -411,7 +404,7 @@ export default function StudentDashboard() {
 
       <div className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
         <div className="border-b border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6">
-          <h3 className="text-lg font-semibold text-on-surface">Yearly Status Overview</h3>
+          <h3 className="text-lg font-semibold text-on-surface">Record Cycle Overview</h3>
         </div>
         <div className="sm:hidden">
           {yearlyRecords.map(({ label, record }) => (
@@ -429,12 +422,6 @@ export default function StudentDashboard() {
                   ) : null}
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {record && submissionProfile.targetYearLevel === Number.parseInt(label, 10) &&
-                  (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') ? (
-                    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-800">
-                      {toCategoryLabel(submissionProfile.category)}
-                    </span>
-                  ) : null}
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${getStatusStyles(record?.status)}`}
                   >
@@ -443,6 +430,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
               <p className={`mt-1 text-xs ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
+                {record ? `${formatAcademicYearLabel(getRecordAcademicYear(record))} - ` : ''}
                 Last action: {formatDate(record?.updatedAt || record?.submittedAt)}
               </p>
             </div>
@@ -452,9 +440,9 @@ export default function StudentDashboard() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-outline-variant/30 bg-surface-container-low text-xs uppercase tracking-[0.16em] text-on-surface-variant">
-                <th className="px-4 py-3 font-semibold sm:px-6">Year Level</th>
+                <th className="px-4 py-3 font-semibold sm:px-6">Record Slot</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Status</th>
-                <th className="px-4 py-3 font-semibold sm:px-6">Category</th>
+                <th className="px-4 py-3 font-semibold sm:px-6">Academic Year</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Last Action Date</th>
               </tr>
             </thead>
@@ -479,14 +467,7 @@ export default function StudentDashboard() {
                     </span>
                   </td>
                   <td className={`px-4 py-4 text-sm sm:px-6 ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
-                    {record && submissionProfile.targetYearLevel === Number.parseInt(label, 10) &&
-                    (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') ? (
-                      <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-800">
-                        {toCategoryLabel(submissionProfile.category)}
-                      </span>
-                    ) : (
-                      '--'
-                    )}
+                    {record ? formatAcademicYearLabel(getRecordAcademicYear(record)) : '--'}
                   </td>
                   <td
                     className={`px-4 py-4 text-sm sm:px-6 ${
@@ -542,7 +523,7 @@ export default function StudentDashboard() {
                   <div className="min-w-0">
                     <p className="text-sm text-on-surface-variant">Latest submission</p>
                     <p className="text-base font-semibold text-on-surface sm:text-lg">
-                      Year {latestRecord?.year || '--'} Medical Record
+                      {latestRecord ? formatAcademicYearLabel(getRecordAcademicYear(latestRecord)) : 'School Year'} Medical Record
                     </p>
                   </div>
                   <span
@@ -566,7 +547,7 @@ export default function StudentDashboard() {
                 onClick={() => navigate('/student/year-selection')}
               >
                 <Plus className="h-4 w-4" />
-                Submit Another Record
+                Submit for Current School Year
               </button>
             </div>
           )}

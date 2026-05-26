@@ -13,6 +13,7 @@ import MedicalClearancePreview from '../../components/medical-clearance-preview'
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
+import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel } from '../../lib/academic-year';
 import { useStudentRecordsQuery } from './student-records-query';
 
 type StudentClearanceTab = 'history' | 'form' | 'medical-clearance';
@@ -352,7 +353,6 @@ export default function StudentClearance() {
     <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-6">
       <StudentPageIntro
         title="Records & Clearance"
-        description="Track your submissions, open your medical form, and download your clearance when approved."
       />
 
       <Tabs className="min-w-0" value={activeTab} onValueChange={handleTabChange}>
@@ -366,7 +366,6 @@ export default function StudentClearance() {
           <Card>
             <CardHeader>
               <CardTitle>Medical Record History</CardTitle>
-              <p className="text-sm text-muted-foreground">Track every submitted record and review status by year.</p>
             </CardHeader>
             <CardContent>
               {records.length === 0 ? (
@@ -387,7 +386,7 @@ export default function StudentClearance() {
                           <FileText className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-base font-bold leading-tight">Year {entry.year} Medical Record</p>
+                          <p className="text-base font-bold leading-tight">{formatAcademicYearLabel(getRecordAcademicYear(entry))} Medical Record</p>
                           <div className="mt-1.5 flex flex-col gap-0.5">
                             <p className="flex items-center text-xs text-muted-foreground sm:text-sm">
                               <span className="mr-1 font-medium text-foreground">Submitted:</span>
@@ -474,7 +473,7 @@ export default function StudentClearance() {
               <div className="min-w-0">
                 <CardTitle className="text-base sm:text-lg">Medical Record Form</CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Submit a new yearly medical record or continue an existing one before clearance is issued.
+                  Submit the active school year medical record or continue an existing one before clearance is issued.
                 </p>
               </div>
               <Button onClick={() => navigate('/student/year-selection')} className="w-full shrink-0 sm:w-auto">
@@ -530,16 +529,16 @@ export default function StudentClearance() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col gap-2 sm:max-w-xs">
-                <p className="text-sm font-medium">Filter by Year</p>
+                <p className="text-sm font-medium">Filter by Record Slot</p>
                 <Select value={selectedYear} onValueChange={handleYearChange}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select year" />
+                    <SelectValue placeholder="Select record slot" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Years</SelectItem>
+                    <SelectItem value="all">All Record Slots</SelectItem>
                     {yearOptions.map((year) => (
                       <SelectItem key={year} value={year}>
-                        Year {year}
+                        {getSubmissionSlotLabel(year)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -554,7 +553,7 @@ export default function StudentClearance() {
                 <FileText className="mb-4 h-16 w-16 text-muted-foreground" />
                 <p className="mb-2 text-lg font-medium">No Record Found</p>
                 <p className="max-w-md text-muted-foreground">
-                  No medical record matched the selected year. Try another year or submit a form first.
+                  No medical record matched the selected slot. Try another slot or submit a form first.
                 </p>
               </CardContent>
             </Card>

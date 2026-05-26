@@ -14,7 +14,13 @@ import {
   loadStaffUsersByIds,
 } from "./requester.ts";
 import { getSafeAdminSystemSettings } from "./settings.ts";
-import { normalizeFileRows } from "./storage.ts";
+import {
+  listProfileAssetsFromStorage,
+  listStaffSignatureFromStorage,
+  normalizeFileRows,
+  normalizeProfileAssetRows,
+  normalizeStaffSignatureRows,
+} from "./storage.ts";
 
 const ANALYTICS_CACHE_TTL_MS = 30_000;
 const SUBMISSIONS_CACHE_TTL_MS = 15_000;
@@ -38,6 +44,7 @@ export const SUBMISSION_LIST_COLUMNS = [
   "course",
   "department",
   "year_level",
+  "academic_year",
   "status",
   "reviewed_by",
   "submitted_at",
@@ -72,6 +79,7 @@ const SUBMISSION_SUMMARY_COLUMNS = [
   "course",
   "department",
   "year_level",
+  "academic_year",
   "status",
   "reviewed_by",
   "submitted_at",
@@ -135,7 +143,7 @@ function mapMedicalHistory(row: any) {
   };
 }
 
-function mapStaffMeasurements(row: any) {
+function mapStaffMeasurements(row: any, examinedBySignatureUrl?: string | null) {
   if (!row) return undefined;
 
   return {
@@ -155,6 +163,7 @@ function mapStaffMeasurements(row: any) {
     extremities: row.extremities,
     others: row.others,
     examinedBy: row.examined_by,
+    examinedBySignatureUrl: examinedBySignatureUrl || undefined,
   };
 }
 
@@ -172,17 +181,86 @@ function latestFilesByType(files: any[]) {
   }, {} as Record<string, any>);
 }
 
+const CLEARANCE_SIGNATORY_NAMES = ["GERALD S. BERNAL, MD", "ARMANDO TAMAYO, MD"] as const;
+
+function normalizeSignatureName(value?: string | null) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\b(m\.?\s*d\.?|doctor|dr\.?|rn|r\.?\s*n\.?)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isClearanceSignatoryName(value?: string | null) {
+  const normalized = normalizeSignatureName(value);
+  return Boolean(
+    normalized &&
+    CLEARANCE_SIGNATORY_NAMES.some((name) => normalizeSignatureName(name) === normalized),
+  );
+}
+
+function staffNameMatchesExaminer(staff: any, examinerName?: string | null) {
+  const normalizedExaminer = normalizeSignatureName(examinerName);
+  if (!staff || !normalizedExaminer) return false;
+
+  const candidates = [
+    formatStaffDisplayName(staff),
+    staff?.name,
+    [staff?.first_name, staff?.middle_initial, staff?.last_name].filter(Boolean).join(" "),
+    [staff?.first_name, staff?.last_name].filter(Boolean).join(" "),
+  ]
+    .map((value) => normalizeSignatureName(value))
+    .filter(Boolean);
+
+  if (candidates.includes(normalizedExaminer)) return true;
+
+  const examinerTokens = new Set(normalizedExaminer.split(" ").filter(Boolean));
+  const firstName = normalizeSignatureName(staff?.first_name).split(" ")[0] || "";
+  const lastNameParts = normalizeSignatureName(staff?.last_name).split(" ").filter(Boolean);
+  const lastName = lastNameParts[lastNameParts.length - 1] || "";
+
+  return Boolean(firstName && lastName && examinerTokens.has(firstName) && examinerTokens.has(lastName));
+}
+
+function resolveExaminerSignature(row: any, staffMeasurements: any, related: Record<string, any>) {
+  const examinedBy = staffMeasurements?.examined_by || "";
+  const certificate = related.certificates?.[row.id] || {};
+  const staffRows = related.staffRows || [];
+  const matchedStaff = staffRows.find(
+    (staff: any) => staffNameMatchesExaminer(staff, examinedBy) && related.staffSignaturesByStaffId?.[staff.id],
+  );
+  if (matchedStaff) {
+    return related.staffSignaturesByStaffId[matchedStaff.id];
+  }
+
+  const examinerStaffId = staffMeasurements?.updated_by || row.reviewed_by || certificate?.issued_by || null;
+  const examinerStaff = examinerStaffId ? related.reviewers?.[examinerStaffId] : null;
+  const canUseStaffIdSignature =
+    !String(examinedBy || "").trim() ||
+    isClearanceSignatoryName(examinedBy) ||
+    staffNameMatchesExaminer(examinerStaff, examinedBy);
+  return canUseStaffIdSignature && examinerStaffId
+    ? related.staffSignaturesByStaffId?.[examinerStaffId]
+    : null;
+}
+
 function mapSubmission(row: any, related: Record<string, any>) {
   const student = related.students[row.student_id] || {};
   const emergencyContact = related.emergencyContacts[row.id];
   const medicalHistory = related.medicalHistory[row.id];
   const staffMeasurements = related.staffMeasurements[row.id];
   const reviewer = related.reviewers[row.reviewed_by] || null;
+  const examinerSignature = resolveExaminerSignature(row, staffMeasurements, related);
   const xray = related.xray[row.id];
   const cbc = related.cbc[row.id];
   const urinalysis = related.urinalysis[row.id];
   const certificate = related.certificates[row.id];
   const files = latestFilesByType(related.files[row.id] || []);
+  const profileAssets = student?.profile_id
+    ? related.profileAssetsByProfileId?.[student.profile_id] || {}
+    : related.profileAssetsByStudentId?.[row.student_id] || {};
 
   return {
     id: row.id,
@@ -192,7 +270,8 @@ function mapSubmission(row: any, related: Record<string, any>) {
     middleInitial: row.middle_initial || student.middle_initial || "",
     course: row.course || student.course || "",
     department: row.department || student.department || "",
-    year: String(row.year_level || student.year_level || ""),
+    year: String(row.year_level || ""),
+    academicYear: row.academic_year || undefined,
     status: row.status,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
@@ -222,7 +301,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
         }
       : undefined,
     medicalHistory: mapMedicalHistory(medicalHistory),
-    staffMeasurements: mapStaffMeasurements(staffMeasurements),
+    staffMeasurements: mapStaffMeasurements(staffMeasurements, examinerSignature?.url),
     labResults: {
       xrayDate: xray?.xray_date,
       xrayResult: xray?.xray_result,
@@ -248,10 +327,11 @@ function mapSubmission(row: any, related: Record<string, any>) {
           controlNo: certificate.control_no,
           issuedDate: certificate.issued_date || certificate.issued_at,
           licenseNo: certificate.license_no,
+          signatoryName: certificate.signatory_name,
         }
       : undefined,
-    photoUrl: files.photo?.url,
-    signatureUrl: files.signature?.url,
+    photoUrl: files.photo?.url || profileAssets.photo?.url,
+    signatureUrl: files.signature?.url || profileAssets.signature?.url,
     xrayFileUrl: files.xray?.url,
     cbcFileUrl: files.cbc?.url,
     urinalysisFileUrl: files.urinalysis?.url,
@@ -309,14 +389,14 @@ async function loadRelatedData(rows: any[]) {
       ? supabase
           .from("staff_measurements")
           .select(
-            "submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by",
+            "submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by",
           )
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     reviewerIds.length
       ? supabase
           .from("staff_users")
-          .select("id,first_name,last_name,middle_initial,position,name")
+          .select("id,profile_id,first_name,last_name,middle_initial,position,name")
           .in("id", reviewerIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
@@ -342,9 +422,7 @@ async function loadRelatedData(rows: any[]) {
     submissionIds.length
       ? supabase
           .from("certificates")
-          .select(
-            "submission_id,findings_normal,diagnosis,remarks,purpose,control_no,issued_date,issued_at,pdf_url",
-          )
+          .select("*")
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
@@ -369,17 +447,190 @@ async function loadRelatedData(rows: any[]) {
     acc[file.submission_id].push(file);
     return acc;
   }, {} as Record<string, any[]>);
+  const initialReviewerRows = reviewersRes.data || [];
+  const knownReviewerIds = new Set(
+    initialReviewerRows.map((staff) => String(staff?.id || "").trim()).filter(Boolean),
+  );
+  const measurementUpdaterIds = [
+    ...new Set(
+      (staffMeasurementsRes.data || [])
+        .map((row) => String(row?.updated_by || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  const certificateIssuerIds = [
+    ...new Set(
+      (certificatesRes.data || [])
+        .map((row) => String(row?.issued_by || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  const missingReviewerIds = [
+    ...new Set([...measurementUpdaterIds, ...certificateIssuerIds]),
+  ].filter((id) => !knownReviewerIds.has(id));
+  const extraReviewersRes = missingReviewerIds.length
+    ? await supabase
+        .from("staff_users")
+        .select("id,profile_id,first_name,last_name,middle_initial,position,name")
+        .in("id", missingReviewerIds)
+    : { data: [] as any[], error: null };
+
+  if (extraReviewersRes.error) {
+    throw new Error(extraReviewersRes.error.message);
+  }
+
+  const examinedByNames = [
+    ...new Set(
+      (staffMeasurementsRes.data || [])
+        .map((row) => String(row?.examined_by || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  const examinerDirectoryRes = examinedByNames.length
+    ? await supabase
+        .from("staff_users")
+        .select("id,profile_id,first_name,last_name,middle_initial,position,name,is_active")
+        .eq("is_active", true)
+        .limit(200)
+    : { data: [] as any[], error: null };
+
+  if (examinerDirectoryRes.error) {
+    throw new Error(examinerDirectoryRes.error.message);
+  }
+
+  const staffRows = Object.values(
+    [...initialReviewerRows, ...(extraReviewersRes.data || []), ...(examinerDirectoryRes.data || [])]
+      .reduce((acc, staff) => {
+        if (staff?.id) acc[staff.id] = staff;
+        return acc;
+      }, {} as Record<string, any>),
+  );
+  const staffProfileIds = [
+    ...new Set(staffRows.map((staff) => staff?.profile_id).filter(Boolean)),
+  ];
+  const staffSignatureFilesRes = staffProfileIds.length
+    ? await supabase
+        .from("files")
+        .select(
+          "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by",
+        )
+        .in("uploaded_by", staffProfileIds)
+        .is("submission_id", null)
+        .order("uploaded_at", { ascending: false })
+    : { data: [] as any[], error: null };
+
+  if (staffSignatureFilesRes.error) {
+    throw new Error(staffSignatureFilesRes.error.message);
+  }
+
+  const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
+    await normalizeFileRows(staffSignatureFilesRes.data || []),
+  );
+  const staffSignatureProfileIds = [
+    ...new Set(normalizedStaffSignatureFiles.map((file) => file?.uploaded_by).filter(Boolean)),
+  ];
+  const missingStaffSignatureProfileIds = staffProfileIds.filter(
+    (profileId) => !staffSignatureProfileIds.includes(profileId),
+  );
+  const staffSignatureStorageFiles = (
+    await Promise.all(
+      missingStaffSignatureProfileIds.map((profileId) => listStaffSignatureFromStorage(profileId)),
+    )
+  ).flat();
+  const allStaffSignatureFiles = [
+    ...normalizedStaffSignatureFiles,
+    ...staffSignatureStorageFiles,
+  ];
+  const staffSignaturesByProfileId = allStaffSignatureFiles.reduce((acc, file) => {
+    if (!file?.uploaded_by) return acc;
+    const existing = acc[file.uploaded_by];
+    if (
+      !existing ||
+      new Date(file.uploaded_at || 0).getTime() >
+        new Date(existing.uploaded_at || 0).getTime()
+    ) {
+      acc[file.uploaded_by] = file;
+    }
+    return acc;
+  }, {} as Record<string, any>);
+  const staffSignaturesByStaffId = staffRows.reduce((acc, staff) => {
+    if (!staff?.id || !staff?.profile_id) return acc;
+    const signature = staffSignaturesByProfileId[staff.profile_id];
+    if (signature) acc[staff.id] = signature;
+    return acc;
+  }, {} as Record<string, any>);
+  const studentRows = studentsRes.data || [];
+  const studentProfileIds = [
+    ...new Set(studentRows.map((student) => student?.profile_id).filter(Boolean)),
+  ];
+  const profileAssetFilesRes = studentProfileIds.length
+    ? await supabase
+        .from("files")
+        .select(
+          "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by",
+        )
+        .in("uploaded_by", studentProfileIds)
+        .is("submission_id", null)
+        .order("uploaded_at", { ascending: false })
+    : { data: [] as any[], error: null };
+
+  if (profileAssetFilesRes.error) {
+    throw new Error(profileAssetFilesRes.error.message);
+  }
+
+  const normalizedProfileAssetFiles = normalizeProfileAssetRows(
+    await normalizeFileRows(profileAssetFilesRes.data || []),
+  );
+  const profileAssetsByUploadedBy = normalizedProfileAssetFiles.reduce((acc, file) => {
+    if (!file?.uploaded_by) return acc;
+    acc[file.uploaded_by] = acc[file.uploaded_by] || [];
+    acc[file.uploaded_by].push(file);
+    return acc;
+  }, {} as Record<string, any[]>);
+  const missingProfileAssetStudents = studentRows.filter((student) => {
+    const latest = latestFilesByType(profileAssetsByUploadedBy[student?.profile_id] || []);
+    return !latest.photo || !latest.signature;
+  });
+  const storageProfileAssets = await Promise.all(
+    missingProfileAssetStudents.map(async (student) => ({
+      profileId: student.profile_id,
+      studentId: student.student_id,
+      files: await listProfileAssetsFromStorage(student.student_id),
+    })),
+  );
+  const profileAssetsByProfileId = studentRows.reduce((acc, student) => {
+    if (!student?.profile_id) return acc;
+    const metadataFiles = profileAssetsByUploadedBy[student.profile_id] || [];
+    const fallbackFiles =
+      storageProfileAssets.find((entry) => entry.profileId === student.profile_id)?.files || [];
+    acc[student.profile_id] = latestFilesByType([...metadataFiles, ...fallbackFiles]);
+    return acc;
+  }, {} as Record<string, Record<string, any>>);
+  const profileAssetsByStudentId = studentRows.reduce((acc, student) => {
+    if (!student?.student_id) return acc;
+    const metadataFiles = student?.profile_id
+      ? profileAssetsByUploadedBy[student.profile_id] || []
+      : [];
+    const fallbackFiles =
+      storageProfileAssets.find((entry) => entry.studentId === student.student_id)?.files || [];
+    acc[student.student_id] = latestFilesByType([...metadataFiles, ...fallbackFiles]);
+    return acc;
+  }, {} as Record<string, Record<string, any>>);
 
   return {
     students: byKey(studentsRes.data, "student_id"),
     emergencyContacts: byKey(emergencyContactsRes.data, "submission_id"),
     medicalHistory: byKey(medicalHistoryRes.data, "submission_id"),
     staffMeasurements: byKey(staffMeasurementsRes.data, "submission_id"),
-    reviewers: byKey(reviewersRes.data, "id"),
+    reviewers: byKey(staffRows, "id"),
+    staffRows,
+    staffSignaturesByStaffId,
     xray: byKey(xrayRes.data, "submission_id"),
     cbc: byKey(cbcRes.data, "submission_id"),
     urinalysis: byKey(urinalysisRes.data, "submission_id"),
     certificates: byKey(certificatesRes.data, "submission_id"),
+    profileAssetsByProfileId,
+    profileAssetsByStudentId,
     files: filesBySubmission,
   };
 }
@@ -416,6 +667,7 @@ function mapSubmissionSummary(row: any, reviewers: Record<string, any> = {}) {
     course: row.course || "",
     department: row.department || "",
     year: String(row.year_level || ""),
+    academicYear: row.academic_year || undefined,
     status: row.status,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,

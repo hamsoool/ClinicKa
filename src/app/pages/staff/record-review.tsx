@@ -54,6 +54,7 @@ import {
   type UrinalysisOcrExtraction,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { getSubmissionSlotLabel } from '../../lib/academic-year';
 import type { MedicalHistory, SubmissionRecord } from '../../lib/record-types';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
 import {
@@ -185,6 +186,7 @@ type ClearanceForm = {
   controlNo: string;
   issuedDate: string;
   licenseNo: string;
+  signatoryName: string;
 };
 
 type ClearancePurpose = 'enrolment' | 'ojt' | 'rle';
@@ -556,6 +558,29 @@ function sanitizeLicenseNo(value: string) {
   return String(value || '').replace(/\D/g, '').slice(0, 15);
 }
 
+function normalizeSignatoryNameForMatch(value?: string | null) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b(m\.?\s*d\.?|doctor|dr\.?)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchClearanceSignatoryName(value?: string | null) {
+  const normalized = normalizeSignatoryNameForMatch(value);
+  return CLEARANCE_DOCTORS.find((doctor) => normalizeSignatoryNameForMatch(doctor) === normalized) || '';
+}
+
+function normalizeClearanceSignatoryName(value?: string | null) {
+  return matchClearanceSignatoryName(value) || CLEARANCE_DOCTORS[0];
+}
+
+function isClearanceSignatoryName(value?: string | null) {
+  return Boolean(matchClearanceSignatoryName(value));
+}
+
 function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
   const department = resolveDepartmentValue(submission?.department || '');
   return {
@@ -639,6 +664,8 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
 
 function createClearanceForm(submission?: SubmissionDetails | null): ClearanceForm {
   const fallbackIssuedDate = getTodayDateInputValue();
+  const savedSignatory = matchClearanceSignatoryName(submission?.clearanceInfo?.signatoryName);
+  const legacySignatory = matchClearanceSignatoryName(submission?.staffMeasurements?.examinedBy);
   return {
     findingsNormal: submission?.clearanceInfo?.findingsNormal ?? true,
     diagnosis: sanitizeSafeText(submission?.clearanceInfo?.diagnosis || '', MAX_CLEARANCE_DIAGNOSIS_LENGTH),
@@ -647,6 +674,7 @@ function createClearanceForm(submission?: SubmissionDetails | null): ClearanceFo
     controlNo: submission?.clearanceInfo?.controlNo || generateClearanceControlNo(submission),
     issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate) || fallbackIssuedDate,
     licenseNo: sanitizeLicenseNo(submission?.clearanceInfo?.licenseNo || DEFAULT_LICENSE_NO),
+    signatoryName: savedSignatory || legacySignatory || CLEARANCE_DOCTORS[0],
   };
 }
 
@@ -838,6 +866,10 @@ export default function StaffRecordReview() {
     setSubmission(loadedSubmission);
     setRecordForm(createRecordForm(loadedSubmission));
     const nextAssessmentForm = createAssessmentForm(loadedSubmission);
+    const nextClearanceForm = createClearanceForm(loadedSubmission);
+    if (isClearanceSignatoryName(nextAssessmentForm.examinedBy)) {
+      nextAssessmentForm.examinedBy = defaultSignatoryName || '';
+    }
     if (!nextAssessmentForm.examinedBy && defaultSignatoryName) {
       nextAssessmentForm.examinedBy = defaultSignatoryName;
     }
@@ -864,7 +896,7 @@ export default function StaffRecordReview() {
       : nextAssessmentForm;
     assessmentFormRef.current = hydratedAssessmentForm;
     setAssessmentForm(hydratedAssessmentForm);
-    setClearanceForm(createClearanceForm(loadedSubmission));
+    setClearanceForm(nextClearanceForm);
     setStaffNotes(loadedSubmission.staffNotes || '');
     setReviewStatus(loadedSubmission.status);
     hydratedSubmissionIdRef.current = loadedSubmission.id;
@@ -1152,6 +1184,8 @@ export default function StaffRecordReview() {
           ? normalizeClearancePurposes(value as ClearanceForm['purpose'])
           : field === 'licenseNo'
           ? sanitizeLicenseNo(String(value))
+          : field === 'signatoryName'
+          ? normalizeClearanceSignatoryName(String(value))
           : value,
     }));
   }
@@ -1696,6 +1730,9 @@ export default function StaffRecordReview() {
         if (trimmedIncoming) return incoming;
         return (submission.staffMeasurements as any)?.[field] || '';
       };
+      const examinedByForMedicalRecord = isClearanceSignatoryName(assessmentForm.examinedBy)
+        ? defaultSignatoryName || ''
+        : assessmentForm.examinedBy;
 
       const staffMeasurementsPayload = {
         bloodPressure: assessmentForm.bloodPressure,
@@ -1713,8 +1750,13 @@ export default function StaffRecordReview() {
         abdomen: preserveDoctorField('abdomen', assessmentForm.abdomen),
         extremities: preserveDoctorField('extremities', assessmentForm.extremities),
         others: preserveDoctorField('others', assessmentForm.others),
-        examinedBy: preserveDoctorField('examinedBy', assessmentForm.examinedBy),
+        examinedBy: preserveDoctorField('examinedBy', examinedByForMedicalRecord),
         staff_notes: notesToSave,
+      };
+      const clearanceInfoPayload = {
+        ...clearanceForm,
+        signatoryName: normalizeClearanceSignatoryName(clearanceForm.signatoryName),
+        purpose: serializeClearancePurposes(clearanceForm.purpose),
       };
 
       await saveSubmissionReview(submissionId, {
@@ -1760,10 +1802,7 @@ export default function StaffRecordReview() {
           urinalysisGlucose: assessmentForm.urinalysisGlucose,
           urinalysisProtein: assessmentForm.urinalysisProtein,
         },
-        clearanceInfo: {
-          ...clearanceForm,
-          purpose: serializeClearancePurposes(clearanceForm.purpose),
-        },
+        clearanceInfo: clearanceInfoPayload,
         staffNotes: notesToSave,
         status: statusToSave,
       });
@@ -1790,7 +1829,10 @@ export default function StaffRecordReview() {
         bmi: recordForm.bmi,
         emergencyContact: recordForm.emergencyContact,
         medicalHistory: recordForm.medicalHistory,
-        staffMeasurements: staffMeasurementsPayload,
+        staffMeasurements: {
+          ...staffMeasurementsPayload,
+          examinedBySignatureUrl: submission.staffMeasurements?.examinedBySignatureUrl,
+        },
         labResults: {
           xrayDate: assessmentForm.xrayDate,
           xrayResult: assessmentForm.xrayResult,
@@ -1807,10 +1849,7 @@ export default function StaffRecordReview() {
           urinalysisGlucose: assessmentForm.urinalysisGlucose,
           urinalysisProtein: assessmentForm.urinalysisProtein,
         },
-        clearanceInfo: {
-          ...clearanceForm,
-          purpose: serializeClearancePurposes(clearanceForm.purpose),
-        },
+        clearanceInfo: clearanceInfoPayload,
         staffNotes: notesToSave,
         status: statusToSave,
         updatedAt: new Date().toISOString(),
@@ -2085,14 +2124,11 @@ export default function StaffRecordReview() {
             }}
             readOnly
             title="Student Profile"
-            description={isDoctorWorkspace
-              ? 'This uses the same profile editor shown to students, but doctors can only view it here.'
-              : 'This uses the same profile editor shown to students, but clinic staff can only view it here.'}
             extraFields={[
               {
                 id: 'yearLevel',
-                label: 'Year Level',
-                value: recordForm.year ? `Year ${recordForm.year}` : '',
+                label: 'Record Slot',
+                value: recordForm.year ? getSubmissionSlotLabel(recordForm.year) : '',
               },
             ]}
           />
@@ -2288,9 +2324,9 @@ export default function StaffRecordReview() {
                       )}
                       <div className="min-w-0">
                         <p className="font-medium">Chest X-Ray OCR</p>
-                        <p className="mt-1 text-xs opacity-85">
-                          {xrayOcrState.message || 'Press Auto Fill to scan the uploaded result.'}
-                        </p>
+                        {xrayOcrState.message ? (
+                          <p className="mt-1 text-xs opacity-85">{xrayOcrState.message}</p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -2396,9 +2432,9 @@ export default function StaffRecordReview() {
                       )}
                       <div className="min-w-0">
                         <p className="font-medium">CBC OCR</p>
-                        <p className="mt-1 text-xs opacity-85">
-                          {cbcOcrState.message || 'Press Auto Fill to scan the uploaded result.'}
-                        </p>
+                        {cbcOcrState.message ? (
+                          <p className="mt-1 text-xs opacity-85">{cbcOcrState.message}</p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -2440,7 +2476,6 @@ export default function StaffRecordReview() {
                     maxLength={4}
                     className={cn('mt-2', getUpdatedFieldClass('hemoglobin'))}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">Decimal value, e.g. 13.5</p>
                 </div>
                 <div>
                   <Label htmlFor="hematocrit">Hematocrit (%)</Label>
@@ -2453,7 +2488,6 @@ export default function StaffRecordReview() {
                     maxLength={5}
                     className={cn('mt-2', getUpdatedFieldClass('hematocrit'))}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">Decimal value, e.g. 40.2</p>
                 </div>
                 <div>
                   <Label htmlFor="wbc">White Blood Cell Count (x10⁹/L)</Label>
@@ -2466,7 +2500,6 @@ export default function StaffRecordReview() {
                     maxLength={9}
                     className={cn('mt-2', getUpdatedFieldClass('wbc'))}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">If value is over 1000, it auto-converts to x10⁹/L</p>
                 </div>
                 <div>
                   <Label htmlFor="plateletCount">Platelet Count (x10⁹/L)</Label>
@@ -2479,7 +2512,6 @@ export default function StaffRecordReview() {
                     maxLength={10}
                     className={cn('mt-2', getUpdatedFieldClass('plateletCount'))}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">Whole number preferred; values over 1000 auto-convert</p>
                 </div>
                 <div>
                   <Label htmlFor="bloodType">Blood Type</Label>
@@ -2545,9 +2577,9 @@ export default function StaffRecordReview() {
                       )}
                       <div className="min-w-0">
                         <p className="font-medium">Urinalysis OCR</p>
-                        <p className="mt-1 text-xs opacity-85">
-                          {urinalysisOcrState.message || 'Press Auto Fill to scan the uploaded result.'}
-                        </p>
+                        {urinalysisOcrState.message ? (
+                          <p className="mt-1 text-xs opacity-85">{urinalysisOcrState.message}</p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -2631,10 +2663,6 @@ export default function StaffRecordReview() {
               <CardTitle>Clinic Measurements and Verification</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-                Compare the student-submitted values with the verified clinic examination values below before saving the review.
-              </div>
-
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <Label htmlFor="clinicBp">Verified Blood Pressure</Label>
@@ -2723,7 +2751,6 @@ export default function StaffRecordReview() {
                     maxLength={20}
                     className="mt-2"
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">Examples: 20/20, 20/40, 6/6, OD 20/20, OS 20/40</p>
                 </div>
               </div>
             </CardContent>
@@ -2909,8 +2936,8 @@ export default function StaffRecordReview() {
                 <div className="md:col-span-2 xl:col-span-6">
                   <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
                   <Select
-                    value={assessmentForm.examinedBy || CLEARANCE_DOCTORS[0]}
-                    onValueChange={(value) => updateAssessmentField('examinedBy', value)}
+                    value={clearanceForm.signatoryName || CLEARANCE_DOCTORS[0]}
+                    onValueChange={(value) => updateClearanceField('signatoryName', value)}
                   >
                     <SelectTrigger id="clearanceSignatory" className="mt-2">
                       <SelectValue placeholder="Select doctor" />
@@ -3025,11 +3052,6 @@ export default function StaffRecordReview() {
             <p className="font-semibold text-foreground">
               Step {currentReviewStepIndex + 1} of {REVIEW_STEPS.length}: {getReviewStepLabel(activeReviewStep)}
             </p>
-            <p className="text-sm text-muted-foreground">
-              {nextReviewStep
-                ? `Continue to ${getReviewStepLabel(nextReviewStep)} when this section is complete.`
-                : `You are on the final review step. Finalize the ${isDoctorWorkspace ? 'clinic decision' : 'clearance'} below.`}
-            </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Button
@@ -3053,18 +3075,9 @@ export default function StaffRecordReview() {
 
       <Card className="border-primary/20">
         <CardContent className="flex flex-col gap-4 pt-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1">
+          <div>
             <p className="font-semibold text-foreground">
               {isDoctorWorkspace ? 'Finalize the clinic review' : 'Finalize the clearance'}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {isApprovedLocked
-                ? 'This submission is already approved. Actions are locked to prevent accidental changes.'
-                : persistedStatus === 'approved' && isArchiveEditMode
-                  ? 'Archive edit mode is enabled. Save changes keeps this record approved while updating corrected details or replacement files.'
-                : canFinalizeClearance
-                  ? `Save draft edits at any time, mark the record pending when needed, or ${isDoctorWorkspace ? 'mark it cleared' : 'mark the record cleared'} once everything is complete.`
-                  : 'Save draft edits at any time or mark the record pending when updates are needed.'}
             </p>
           </div>
 

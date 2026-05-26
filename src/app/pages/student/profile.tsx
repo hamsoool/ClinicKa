@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Check, ImageIcon, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import FilePickerButton from '../../components/file-picker-button';
 import StudentPageIntro from '../../components/student-page-intro';
 import PasswordChangeCard from '../../components/password-change-card';
@@ -249,8 +249,6 @@ export default function StudentProfile() {
     !formData.contactNumber.trim() || isValidPhilippinePhoneNumber(formData.contactNumber);
   const hasValidBirthday =
     !formData.birthday.trim() || isAtLeastAge(formData.birthday, MIN_PROFILE_AGE);
-  const requiresYearOverride =
-    formData.submissionCategory === 'returning' || formData.submissionCategory === 'repeater_irregular';
 
   const isValid =
     Boolean(formData.studentId.trim()) &&
@@ -264,8 +262,7 @@ export default function StudentProfile() {
     Boolean(formData.birthday.trim()) &&
     Boolean(formData.civilStatus.trim()) &&
     hasValidBirthday &&
-    hasValidContactNumber &&
-    (!requiresYearOverride || Boolean(formData.submissionTargetYearLevel));
+    hasValidContactNumber;
 
   const currentPhotoUrl = photoPreviewUrl || profileAssets.photoUrl || null;
   const currentSignatureUrl = signaturePreviewUrl || profileAssets.signatureUrl || null;
@@ -317,10 +314,7 @@ export default function StudentProfile() {
         : field === 'submissionCategory'
         ? {
             submissionCategory: String(value) as StudentSubmissionCategory,
-            submissionTargetYearLevel:
-              String(value) === 'returning' || String(value) === 'repeater_irregular'
-                ? prev.submissionTargetYearLevel
-                : '',
+            submissionTargetYearLevel: '',
           }
         : field === 'submissionTargetYearLevel'
         ? {
@@ -376,9 +370,7 @@ export default function StudentProfile() {
     try {
       const result = await updateStudentProfile({
         ...formData,
-        submissionTargetYearLevel: formData.submissionTargetYearLevel
-          ? Number.parseInt(formData.submissionTargetYearLevel, 10)
-          : null,
+        submissionTargetYearLevel: null,
       });
       const nextStateFromResult = buildProfileFormState({
         profile: result.profile,
@@ -419,9 +411,7 @@ export default function StudentProfile() {
       if (resolvedStudentId) {
         writeStudentSubmissionProfile(resolvedStudentId, {
           category: formData.submissionCategory,
-          targetYearLevel: formData.submissionTargetYearLevel
-            ? Number.parseInt(formData.submissionTargetYearLevel, 10)
-            : null,
+          targetYearLevel: null,
         });
       }
       void refresh();
@@ -443,16 +433,14 @@ export default function StudentProfile() {
     <div className="mx-auto w-full max-w-[100rem] space-y-8">
       <StudentPageIntro
         title="Profile"
-        description="Keep your student information, 1x1 photo, and signature up to date. These saved assets are reused for your student records."
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
-      <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
         <StudentProfileFormCard
           value={formData}
           onChange={(field, value) => updateField(field as keyof StudentProfileFormState, value as StudentProfileFormState[keyof StudentProfileFormState])}
           title="Student Information"
-          description="Your student ID is managed by your account. The rest of these details can be updated any time."
           showSubmissionFields
           hasValidBirthday={hasValidBirthday}
           hasValidContactNumber={hasValidContactNumber}
@@ -461,9 +449,6 @@ export default function StudentProfile() {
         <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
           <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
             <CardTitle className="text-xl font-semibold text-on-surface">Student Assets</CardTitle>
-            <CardDescription>
-              Upload your 1x1 photo and signature here. These are no longer attached during Submit Record.
-            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 pt-6 sm:gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
@@ -471,7 +456,6 @@ export default function StudentProfile() {
                 <ImageIcon className="h-5 w-5 text-primary" />
                 <div>
                   <p className="font-semibold text-on-surface">1x1 Student Photo</p>
-                  <p className="text-sm text-on-surface-variant">Image file, including iPhone HEIC, max 5 MB</p>
                 </div>
               </div>
               <FilePickerButton
@@ -511,7 +495,6 @@ export default function StudentProfile() {
                 <PenLine className="h-5 w-5 text-primary" />
                 <div>
                   <p className="font-semibold text-on-surface">Signature of Student</p>
-                  <p className="text-sm text-on-surface-variant">Image file, including iPhone HEIC, max 5 MB</p>
                 </div>
               </div>
               <FilePickerButton
@@ -555,12 +538,12 @@ export default function StudentProfile() {
             </Button>
           </CardFooter>
         </Card>
-      </form>
+        </form>
 
         <div className="space-y-6 xl:sticky xl:top-24">
-      <PasswordChangeCard title="Change Password" description="Update the password for your student account." />
+          <PasswordChangeCard title="Change Password" />
 
-      <SettingsLogoutCard className="flex justify-end" />
+          <SettingsLogoutCard className="flex justify-end" />
         </div>
       </div>
     </div>

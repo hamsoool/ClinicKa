@@ -251,11 +251,6 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
         <PortalPageIntro
           className="mb-8"
           title={isAdmin ? 'Announcement Hub' : 'My Announcements'}
-          description={
-            isAdmin
-              ? 'Manage all announcements across the platform. Create, edit, and delete posts to keep everyone informed.'
-              : 'Create and manage your own announcements. Share important updates and information with your audience.'
-          }
         />
 
         <section className="grid gap-6 xl:grid-cols-[minmax(22rem,0.78fr)_minmax(0,1.45fr)] xl:items-start">

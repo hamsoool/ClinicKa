@@ -52,7 +52,11 @@ import {
   deleteStoragePrefixes,
   ensureStorageBucket,
   inferStorageBucket,
+  listProfileAssetsFromStorage,
+  listStaffSignatureFromStorage,
   normalizeFileRows,
+  normalizeProfileAssetRows,
+  normalizeStaffSignatureRows,
   normalizeStoragePath,
 } from "./storage.ts";
 import {
@@ -81,6 +85,8 @@ const LAB_UPLOAD_TYPES = new Set(["xray", "cbc", "urinalysis"]);
 const OCR_SPACE_DEFAULT_MAX_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
+const STAFF_SIGNATURE_BUCKET = "staff_signature";
+const STAFF_SIGNATURE_MAX_BYTES = 5 * 1024 * 1024;
 const TINIFY_COMPRESSIBLE_MIME_TYPES = new Set([
   "image/avif",
   "image/jpeg",
@@ -90,6 +96,51 @@ const TINIFY_COMPRESSIBLE_MIME_TYPES = new Set([
 const FILE_SELECT_COLUMNS = "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by";
 
 class TinifyConfigurationError extends Error {}
+
+function normalizeAcademicYear(value: unknown, fallback = "") {
+  const match = String(value || "").trim().match(/^(\d{4})\s*-\s*(\d{4})$/);
+  if (!match) return fallback;
+  const startYear = Number.parseInt(match[1], 10);
+  const endYear = Number.parseInt(match[2], 10);
+  return Number.isFinite(startYear) && endYear - startYear === 1
+    ? `${startYear}-${endYear}`
+    : fallback;
+}
+
+function normalizeSubmissionSlot(value: unknown) {
+  const slot = Number.parseInt(String(value || "").trim(), 10);
+  return Number.isInteger(slot) && slot >= 1 && slot <= 4 ? slot : null;
+}
+
+function inferAcademicYearFromDate(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const startYear = date.getUTCMonth() >= 6 ? date.getUTCFullYear() : date.getUTCFullYear() - 1;
+  return `${startYear}-${startYear + 1}`;
+}
+
+function getSubmissionRowAcademicYear(row: any, fallback = "") {
+  return normalizeAcademicYear(row?.academic_year, "") || inferAcademicYearFromDate(row?.submitted_at) || fallback;
+}
+
+function getNextSubmissionSlot(rows: any[], academicYear: string) {
+  const currentAcademicYearRow = [...(rows || [])]
+    .filter((row) => getSubmissionRowAcademicYear(row, academicYear) === academicYear)
+    .sort(
+      (a, b) =>
+        new Date(b?.updated_at || b?.submitted_at || 0).getTime() -
+        new Date(a?.updated_at || a?.submitted_at || 0).getTime(),
+    )[0];
+  const currentSlot = normalizeSubmissionSlot(currentAcademicYearRow?.year_level);
+  if (currentSlot) return currentSlot;
+
+  const maxSlot = (rows || []).reduce((max, row) => {
+    const slot = normalizeSubmissionSlot(row?.year_level);
+    return slot ? Math.max(max, slot) : max;
+  }, 0);
+  return maxSlot >= 4 ? null : maxSlot + 1;
+}
 
 class TinifyRequestError extends Error {
   status: number;
@@ -367,6 +418,57 @@ function pickLatestFile(files: any[]) {
   })[0] || null;
 }
 
+function isSupportedSignatureImage(file: File | null) {
+  if (!file) return false;
+  const mimeType = String(file.type || "").trim().toLowerCase();
+  if (mimeType.startsWith("image/")) return true;
+  const extension = String(file.name || "").split(".").pop()?.toLowerCase() || "";
+  return ["png", "jpg", "jpeg", "heic", "heif", "webp"].includes(extension);
+}
+
+async function loadLatestStaffSignature(profileId: string) {
+  const targetProfileId = String(profileId || "").trim();
+  if (!targetProfileId) return null;
+
+  const { data, error } = await supabase
+    .from("files")
+    .select(FILE_SELECT_COLUMNS)
+    .eq("uploaded_by", targetProfileId)
+    .is("submission_id", null)
+    .order("uploaded_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw new Error(error.message);
+
+  const normalizedRows = normalizeStaffSignatureRows(await normalizeFileRows(data || []));
+  const storageRows = await listStaffSignatureFromStorage(targetProfileId);
+  if (!normalizedRows.length) {
+    return pickLatestFile(storageRows);
+  }
+  if (!storageRows.length) {
+    return pickLatestFile(normalizedRows);
+  }
+
+  return pickLatestFile([...normalizedRows, ...storageRows]);
+}
+
+async function insertStaffSignatureMetadata(payload: Record<string, unknown>) {
+  const { data: insertedFile, error: fileInsertError } = await supabase
+    .from("files")
+    .insert({
+      ...payload,
+      type: "signature",
+    })
+    .select("*")
+    .single();
+
+  if (fileInsertError || !insertedFile) {
+    throw new Error(fileInsertError?.message || "Failed to save staff signature metadata");
+  }
+
+  return insertedFile;
+}
+
 async function findChestXrayOcrFile(submissionId: string) {
   const { data: labRow, error: labError } = await supabase
     .from("lab_chest_xray")
@@ -577,63 +679,6 @@ async function loadUrinalysisOcrInput(file: any) {
   };
 }
 
-async function findLatestProfileAssetInStorage(studentId: string, fileType: "photo" | "signature") {
-  const targetStudentId = String(studentId || "").trim();
-  if (!targetStudentId) return null;
-
-  const bucket = fileType === "photo" ? "profile" : "student_signature";
-  const prefixes = [`${targetStudentId}/`, `profiles/${targetStudentId}/`];
-  const candidates: Array<{ name: string; prefix: string; updatedAt: number }> = [];
-
-  const rowsByPrefix = await Promise.all(
-    prefixes.map(async (prefix) => {
-      try {
-        const { data, error } = await supabase.storage.from(bucket).list(prefix, {
-          limit: 100,
-          offset: 0,
-        });
-        if (error || !data?.length) return [];
-
-        return data.map((item) => ({ item, prefix }));
-      } catch (error) {
-        console.log(`Profile asset storage list warning (${bucket}):`, error);
-        return [];
-      }
-    }),
-  );
-
-  for (const { item, prefix } of rowsByPrefix.flat()) {
-    const name = String(item?.name || "").trim();
-    if (!name) continue;
-    const lowerName = name.toLowerCase();
-    if (!(lowerName === fileType || lowerName.startsWith(`${fileType}.`) || lowerName.startsWith(`${fileType}_`))) {
-      continue;
-    }
-    const updatedAt = new Date(
-      String(item?.updated_at || item?.created_at || item?.last_accessed_at || 0),
-    ).getTime();
-    candidates.push({ name, prefix, updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0 });
-  }
-
-  const latest = candidates.sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  if (!latest) return null;
-
-  const storagePath = `${latest.prefix}${latest.name}`;
-  const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
-
-  if (signedUrlError) {
-    console.log(`Profile asset signed URL warning (${bucket}):`, signedUrlError.message);
-    return null;
-  }
-
-  return {
-    url: signedUrlData?.signedUrl || null,
-    fileName: latest.name,
-  };
-}
-
 if (requestLoggingEnabled) {
   app.use('*', logger(console.log));
 }
@@ -664,6 +709,34 @@ app.options('*', (c) => new Response(null, {
 
 function getRequesterStudentId(requester: Requester) {
   return String(requester.student?.student_id || requester.profile?.student_id || '').trim();
+}
+
+async function findProfileIdForStudentId(studentId: string) {
+  const targetStudentId = String(studentId || "").trim();
+  if (!targetStudentId) return "";
+
+  const { data: student, error: studentError } = await supabase
+    .from("students")
+    .select("profile_id")
+    .eq("student_id", targetStudentId)
+    .maybeSingle();
+
+  if (studentError) {
+    throw new Error(studentError.message);
+  }
+  if (student?.profile_id) return student.profile_id;
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("student_id", targetStudentId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new Error(profileError.message);
+  }
+
+  return profile?.id || "";
 }
 
 app.get("/health", (c) => c.json({ status: "ok" }));
@@ -925,6 +998,123 @@ app.put("/staff-profile", async (c) => {
   }
 });
 
+app.get("/staff-signature", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const latestSignature = await loadLatestStaffSignature(requester.profile.id);
+    return c.json({
+      success: true,
+      signatureUrl: latestSignature?.url || null,
+      signatureFileName: latestSignature?.file_name || null,
+    });
+  } catch (error) {
+    console.log("Error loading staff signature:", error);
+    return internalServerError(c, "Failed to load staff signature", error);
+  }
+});
+
+app.post("/staff-signature", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const formData = await c.req.formData();
+    const file = formData.get("file") as File | null;
+    const profileId = String(requester.profile.id || "").trim();
+
+    if (!file) {
+      return badRequest("file is required");
+    }
+    if (!profileId) {
+      return badRequest("Staff profile is required");
+    }
+    if (!isSupportedSignatureImage(file)) {
+      return badRequest("Staff signature must be an image file.");
+    }
+    if (file.size > STAFF_SIGNATURE_MAX_BYTES) {
+      return badRequest("Staff signature must be 5 MB or smaller.");
+    }
+
+    const safeFileName = String(file.name || "signature.bin").replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = `${profileId}/staff_signature_${Date.now()}_${safeFileName}`;
+    const fileBuffer = await file.arrayBuffer();
+
+    await ensureStorageBucket(STAFF_SIGNATURE_BUCKET);
+
+    try {
+      await deleteStoragePrefixes([STAFF_SIGNATURE_BUCKET], [`${profileId}/`]);
+    } catch (cleanupError) {
+      console.log("Staff signature cleanup warning:", cleanupError);
+    }
+
+    const { error: uploadError } = await supabase.storage
+      .from(STAFF_SIGNATURE_BUCKET)
+      .upload(storagePath, fileBuffer, {
+        contentType: file.type || "application/octet-stream",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new Error(uploadError.message);
+    }
+
+    let insertedFile: any = null;
+    try {
+      insertedFile = await insertStaffSignatureMetadata({
+        submission_id: null,
+        file_name: file.name,
+        mime_type: file.type || "application/octet-stream",
+        url: null,
+        storage_bucket: STAFF_SIGNATURE_BUCKET,
+        storage_path: storagePath,
+        uploaded_by: profileId,
+      });
+    } catch (metadataError) {
+      console.log("Staff signature metadata warning:", metadataError);
+    }
+
+    try {
+      if (insertedFile?.id) {
+        await supabase
+          .from("files")
+          .delete()
+          .eq("uploaded_by", profileId)
+          .is("submission_id", null)
+          .eq("storage_bucket", STAFF_SIGNATURE_BUCKET)
+          .like("storage_path", `${profileId}/%`)
+          .neq("id", insertedFile.id);
+      }
+    } catch (metadataCleanupError) {
+      console.log("Staff signature metadata cleanup warning:", metadataCleanupError);
+    }
+
+    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+      .from(STAFF_SIGNATURE_BUCKET)
+      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+
+    if (signedUrlError) {
+      throw new Error(signedUrlError.message);
+    }
+
+    invalidateDashboardReadCaches();
+
+    return c.json({
+      success: true,
+      signatureUrl: signedUrlData?.signedUrl || null,
+      signatureFileName: storagePath,
+    });
+  } catch (error) {
+    console.log("Error uploading staff signature:", error);
+    return internalServerError(c, "Failed to upload staff signature", error);
+  }
+});
+
 app.post("/student-profile-asset", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
@@ -951,6 +1141,34 @@ app.post("/student-profile-asset", async (c) => {
 
     if (!studentId) {
       return badRequest('Student ID is required');
+    }
+    const requestedSlot = normalizeSubmissionSlot(data.yearLevel);
+    if (!requestedSlot) {
+      return badRequest('Submission slot is required');
+    }
+
+    const settings = await getSafeAdminSystemSettings();
+    const activeAcademicYear = normalizeAcademicYear(data.academicYear, settings.academicYear);
+    const { data: existingRows, error: existingRowsError } = await supabase
+      .from('submissions')
+      .select('id,status,year_level,academic_year,submitted_at,updated_at')
+      .eq('student_id', studentId)
+      .order('submitted_at', { ascending: false });
+
+    if (existingRowsError) throw new Error(existingRowsError.message);
+
+    const expectedSlot = getNextSubmissionSlot(existingRows || [], activeAcademicYear);
+    if (!expectedSlot) {
+      return badRequest('All four medical record slots have already been used.');
+    }
+    if (requestedSlot !== expectedSlot) {
+      return badRequest(`This school year submission must use Year ${expectedSlot}.`);
+    }
+    const existingCurrentAcademicYear = (existingRows || []).find(
+      (row) => getSubmissionRowAcademicYear(row, activeAcademicYear) === activeAcademicYear,
+    );
+    if (existingCurrentAcademicYear) {
+      return badRequest(`A submission for SY ${activeAcademicYear} already exists.`);
     }
 
     if (file.size > 5 * 1024 * 1024) {
@@ -1046,8 +1264,12 @@ app.get("/student-profile-assets", async (c) => {
       return forbidden();
     }
 
-    const targetProfileId = requester.student?.profile_id || requester.profile.id;
-    if (!targetProfileId) {
+    const targetProfileId = requester.profile.role === "student"
+      ? requester.student?.profile_id || requester.profile.id
+      : targetStudentId
+        ? await findProfileIdForStudentId(targetStudentId)
+        : requester.student?.profile_id || requester.profile.id;
+    if (!targetProfileId && !targetStudentId) {
       return c.json({
         success: true,
         photoUrl: null,
@@ -1057,20 +1279,21 @@ app.get("/student-profile-assets", async (c) => {
       });
     }
 
-    const { data: assetRows, error: assetError } = await supabase
-      .from("files")
-      .select("id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url")
-      .eq("uploaded_by", targetProfileId)
-      .is("submission_id", null)
-      .in("type", ["photo", "signature"])
-      .order("uploaded_at", { ascending: false })
-      .limit(20);
+    const { data: assetRows, error: assetError } = targetProfileId
+      ? await supabase
+          .from("files")
+          .select("id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url")
+          .eq("uploaded_by", targetProfileId)
+          .is("submission_id", null)
+          .order("uploaded_at", { ascending: false })
+          .limit(50)
+      : { data: [] as any[], error: null };
 
     if (assetError) {
       throw new Error(assetError.message);
     }
 
-    const normalizedRows = await normalizeFileRows(assetRows || []);
+    const normalizedRows = normalizeProfileAssetRows(await normalizeFileRows(assetRows || []));
     const latestByType = (normalizedRows || []).reduce((acc, row) => {
       const type = String(row?.type || "").trim().toLowerCase();
       if (!type || acc[type]) return acc;
@@ -1078,21 +1301,22 @@ app.get("/student-profile-assets", async (c) => {
       return acc;
     }, {} as Record<string, any>);
 
-    const [storagePhoto, storageSignature] = await Promise.all([
-      !latestByType.photo && targetStudentId
-        ? findLatestProfileAssetInStorage(targetStudentId, "photo")
-        : Promise.resolve(null),
-      !latestByType.signature && targetStudentId
-        ? findLatestProfileAssetInStorage(targetStudentId, "signature")
-        : Promise.resolve(null),
-    ]);
+    const storageAssets = targetStudentId && (!latestByType.photo || !latestByType.signature)
+      ? await listProfileAssetsFromStorage(targetStudentId)
+      : [];
+    const latestStorageByType = (storageAssets || []).reduce((acc, row) => {
+      const type = String(row?.type || "").trim().toLowerCase();
+      if (!type || acc[type]) return acc;
+      acc[type] = row;
+      return acc;
+    }, {} as Record<string, any>);
 
     return c.json({
       success: true,
-      photoUrl: latestByType.photo?.url || storagePhoto?.url || null,
-      signatureUrl: latestByType.signature?.url || storageSignature?.url || null,
-      photoFileName: latestByType.photo?.file_name || storagePhoto?.fileName || null,
-      signatureFileName: latestByType.signature?.file_name || storageSignature?.fileName || null,
+      photoUrl: latestByType.photo?.url || latestStorageByType.photo?.url || null,
+      signatureUrl: latestByType.signature?.url || latestStorageByType.signature?.url || null,
+      photoFileName: latestByType.photo?.file_name || latestStorageByType.photo?.file_name || null,
+      signatureFileName: latestByType.signature?.file_name || latestStorageByType.signature?.file_name || null,
     });
   } catch (error) {
     return internalServerError(c, "Failed to load student profile assets", error);
@@ -1139,7 +1363,8 @@ app.post("/submit-record", async (c) => {
       .from('submissions')
       .insert({
         student_id: studentId,
-        year_level: Number(data.yearLevel),
+        year_level: requestedSlot,
+        academic_year: activeAcademicYear,
         status: 'pending',
         first_name: data.firstName,
         last_name: data.lastName,
@@ -1245,6 +1470,28 @@ app.get("/student-records/:studentId", async (c) => {
   }
 });
 
+app.get("/staff/certificate-records/:studentId", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const studentId = String(c.req.param("studentId") || "").trim();
+    if (!studentId) return badRequest("Student ID is required");
+
+    const records = await getCachedStudentRecords(studentId);
+    return c.json({
+      records: (records || []).filter(
+        (record: any) => String(record?.status || "").toLowerCase() === "approved",
+      ),
+    });
+  } catch (error) {
+    console.log("Error fetching staff certificate records:", error);
+    return internalServerError(c, "Failed to fetch certificate records", error);
+  }
+});
+
 // Staff review routes.
 app.get("/submissions", async (c) => {
   const requester = await authenticate(c);
@@ -1286,6 +1533,24 @@ app.get("/reporting-term", async (c) => {
   } catch (error) {
     console.log('Error fetching reporting term settings:', error);
     return internalServerError(c, 'Failed to fetch reporting term settings', error);
+  }
+});
+
+app.get("/academic-year", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+
+  try {
+    const settings = await getSafeAdminSystemSettings();
+    return c.json({
+      academicYear: settings.academicYear,
+      semester: settings.semester,
+      acceptingSubmissions: settings.acceptingSubmissions,
+    });
+  } catch (error) {
+    console.log('Error fetching academic year settings:', error);
+    return internalServerError(c, 'Failed to fetch academic year settings', error);
   }
 });
 
@@ -2702,11 +2967,20 @@ app.post("/issue-certificate", async (c) => {
   }
 
   try {
-    const { submissionId, findingsNormal, diagnosis, remarks, purpose, controlNo, licenseNo } = await c.req.json();
+    const {
+      submissionId,
+      findingsNormal,
+      diagnosis,
+      remarks,
+      purpose,
+      controlNo,
+      licenseNo,
+      signatoryName,
+    } = await c.req.json();
 
     if (!submissionId) return badRequest('submissionId is required');
 
-    const { error } = await supabase.from('certificates').upsert({
+    const baseCertificatePayload = {
       submission_id: submissionId,
       findings_normal: findingsNormal ?? true,
       diagnosis: diagnosis || null,
@@ -2716,7 +2990,25 @@ app.post("/issue-certificate", async (c) => {
       license_no: licenseNo || null,
       issued_by: requester.staff?.id || null,
       issued_at: new Date().toISOString(),
-    }, { onConflict: 'submission_id' });
+    };
+    const normalizedSignatoryName = String(signatoryName || "").trim();
+    const certificatePayload = normalizedSignatoryName
+      ? { ...baseCertificatePayload, signatory_name: normalizedSignatoryName }
+      : baseCertificatePayload;
+
+    let { error } = await supabase
+      .from('certificates')
+      .upsert(certificatePayload, { onConflict: 'submission_id' });
+
+    if (
+      error &&
+      normalizedSignatoryName &&
+      String(error.message || "").toLowerCase().includes("signatory_name")
+    ) {
+      ({ error } = await supabase
+        .from('certificates')
+        .upsert(baseCertificatePayload, { onConflict: 'submission_id' }));
+    }
 
     if (error) throw new Error(error.message);
 

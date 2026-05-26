@@ -20,7 +20,7 @@ type PasswordChangeCardProps = {
 
 export default function PasswordChangeCard({
   title = 'Password',
-  description = 'Update the password for your signed-in Gordon College account.',
+  description,
 }: PasswordChangeCardProps) {
   const { changePassword, me } = useAuth();
   const [form, setForm] = useState({
@@ -77,7 +77,7 @@ export default function PasswordChangeCard({
           <LockKeyhole className="h-5 w-5 text-primary" />
           <div>
             <CardTitle className="text-xl font-semibold text-on-surface">{title}</CardTitle>
-            <CardDescription className="mt-1">{description}</CardDescription>
+            {description ? <CardDescription className="mt-1">{description}</CardDescription> : null}
           </div>
         </div>
       </CardHeader>

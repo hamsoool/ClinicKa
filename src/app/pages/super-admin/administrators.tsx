@@ -245,7 +245,6 @@ export default function SuperAdminAdministrators() {
           </div>
         )}
         title="Administrator Management"
-        description="Create administrator access for system operators, archive accounts that should no longer sign in, and restore them when access needs to be returned."
         actions={(
           <Button className="w-full sm:w-fit" onClick={() => setOpenCreate(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
@@ -521,10 +520,7 @@ export default function SuperAdminAdministrators() {
         </Card>
 
         <div className="space-y-6 2xl:sticky 2xl:top-24">
-          <PasswordChangeCard
-            title="Super Admin Password"
-            description="Update the password for your super administrator account."
-          />
+          <PasswordChangeCard title="Super Admin Password" />
         </div>
       </div>
 

@@ -36,6 +36,7 @@ export type PhysicalExamination = {
   extremities?: string;
   others?: string;
   examinedBy?: string;
+  examinedBySignatureUrl?: string;
 };
 
 export type LabResults = {
@@ -64,6 +65,7 @@ export type ClearanceInfo = {
   controlNo?: string;
   issuedDate?: string;
   licenseNo?: string;
+  signatoryName?: string;
 };
 
 export type StudentProfileRecord = {
@@ -101,6 +103,7 @@ export type SubmissionRecord = {
   course: string;
   department?: string;
   year: string;
+  academicYear?: string;
   status: SubmissionStatus;
   submittedAt: string;
   updatedAt?: string;
@@ -152,6 +155,7 @@ export type SubmissionSummaryRecord = {
   course: string;
   department?: string;
   year: string;
+  academicYear?: string;
   status: SubmissionStatus;
   submittedAt: string;
   updatedAt?: string;

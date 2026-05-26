@@ -30,6 +30,15 @@ import {
   supabaseUrl,
 } from './supabase-config';
 import { getYearLevelLabel, normalizeYearLevel, resolveStudentYearLevel } from './student-year';
+import {
+  getAcademicYearRange,
+  getDefaultAcademicYear,
+  getLatestRecordForAcademicYear,
+  getNextSubmissionSlot,
+  getRecordAcademicYear,
+  getSubmissionSlotLabel,
+  normalizeAcademicYear,
+} from './academic-year';
 
 export { createDefaultAdminSystemSettings } from './admin-system-settings';
 export type { AdminSystemSettings } from './admin-system-settings';
@@ -46,6 +55,7 @@ const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
   cbc: 'lab_cbc',
   urinalysis: 'lab_urinalysis',
 };
+const EXTRA_STORAGE_BUCKETS = ['staff_signature'];
 const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_TARGET_BYTES = 950 * 1024;
 const LAB_UPLOAD_CANVAS_MAX_DIMENSIONS = [2200, 1800, 1500, 1200];
@@ -75,12 +85,15 @@ function inferBucketFromStoragePath(storagePath?: string | null) {
   if (!path) return null;
   const first = path.split('/')[0]?.trim();
   if (!first) return null;
-  const known = new Set([STORAGE_BUCKET, ...Object.values(STORAGE_BUCKET_BY_FILE_TYPE)]);
+  const known = new Set([STORAGE_BUCKET, ...Object.values(STORAGE_BUCKET_BY_FILE_TYPE), ...EXTRA_STORAGE_BUCKETS]);
   return known.has(first) ? first : null;
 }
 
 function inferBucketFromType(fileType?: string | null) {
   const key = String(fileType || '').trim().toLowerCase();
+  if (key === 'profile' || key === 'profile_photo' || key === 'student_photo') return 'profile';
+  if (key === 'student_signature') return 'student_signature';
+  if (key === 'staff_signature' || key === 'staff-signature') return 'staff_signature';
   return STORAGE_BUCKET_BY_FILE_TYPE[key] || null;
 }
 
@@ -89,6 +102,7 @@ function inferBucketFromNameOrPath(fileName?: string | null, storagePath?: strin
   if (haystack.includes('xray_') || haystack.includes('chest_xray')) return 'lab_chest_xray';
   if (haystack.includes('cbc_')) return 'lab_cbc';
   if (haystack.includes('urinalysis_') || haystack.includes('ua_')) return 'lab_urinalysis';
+  if (haystack.includes('staff_signature') || haystack.includes('staff-signature')) return 'staff_signature';
   if (haystack.includes('signature_')) return 'student_signature';
   if (haystack.includes('photo_') || haystack.includes('profile_')) return 'profile';
   return null;
@@ -302,6 +316,7 @@ export type AuthMe = {
   } | null;
   staff?: {
     id: string;
+    profile_id?: string | null;
     email?: string | null;
     first_name?: string | null;
     last_name?: string | null;
@@ -316,6 +331,11 @@ export type StudentProfileAssets = {
   photoUrl: string | null;
   signatureUrl: string | null;
   photoFileName?: string | null;
+  signatureFileName?: string | null;
+};
+
+export type StaffSignatureAsset = {
+  signatureUrl: string | null;
   signatureFileName?: string | null;
 };
 
@@ -1116,7 +1136,7 @@ function mapMedicalHistory(row: any) {
   };
 }
 
-function mapStaffMeasurements(row: any) {
+function mapStaffMeasurements(row: any, examinedBySignatureUrl?: string | null) {
   if (!row) return undefined;
 
   return {
@@ -1136,6 +1156,7 @@ function mapStaffMeasurements(row: any) {
     extremities: row.extremities,
     others: row.others,
     examinedBy: row.examined_by,
+    examinedBySignatureUrl: normalizeStorageFileUrl(examinedBySignatureUrl || null),
   };
 }
 
@@ -1147,6 +1168,93 @@ function latestFilesByType(files: any[]) {
     }
     return acc;
   }, {} as Record<string, any>);
+}
+
+function normalizeProfileAssetType(file: any) {
+  const rawType = String(file?.type || '').trim().toLowerCase();
+  const bucket = String(file?.storage_bucket || '').trim().toLowerCase();
+  const haystack = [
+    rawType,
+    file?.file_name,
+    file?.storage_path,
+    file?.url,
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean)
+    .join(' ');
+
+  if (
+    rawType === 'staff_signature' ||
+    rawType === 'staff-signature' ||
+    bucket === 'staff_signature' ||
+    haystack.includes('staff_signature') ||
+    haystack.includes('staff-signature') ||
+    haystack.includes('staff-signatures')
+  ) {
+    return '';
+  }
+
+  if (['photo', 'profile', 'profile_photo', 'student_photo'].includes(rawType)) return 'photo';
+  if (['signature', 'student_signature', 'student-signature'].includes(rawType)) return 'signature';
+
+  if (bucket === 'profile') return 'photo';
+  if (bucket === 'student_signature') return 'signature';
+
+  if (
+    haystack.includes('student_signature') ||
+    /(^|[\/_\-\s])signature([._\-\s]|$)/.test(haystack) ||
+    /(^|[\/_\-\s])sign([._\-\s]|$)/.test(haystack)
+  ) {
+    return 'signature';
+  }
+
+  if (
+    haystack.includes('profile') ||
+    haystack.includes('photo') ||
+    haystack.includes('1x1') ||
+    haystack.includes('picture')
+  ) {
+    return 'photo';
+  }
+
+  return '';
+}
+
+function normalizeProfileAssetRows(files: any[] | null | undefined) {
+  return (files || [])
+    .map((file) => {
+      const type = normalizeProfileAssetType(file);
+      return type ? { ...file, type } : null;
+    })
+    .filter(Boolean);
+}
+
+function normalizeStaffSignatureRows(files: any[] | null | undefined) {
+  return (files || [])
+    .map((file) => {
+      const rawType = String(file?.type || '').trim().toLowerCase();
+      const bucket = String(file?.storage_bucket || '').trim().toLowerCase();
+      const haystack = [
+        rawType,
+        bucket,
+        file?.file_name,
+        file?.storage_path,
+        file?.url,
+      ]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+        .join(' ');
+      const isStaffSignature =
+        rawType === 'staff_signature' ||
+        rawType === 'staff-signature' ||
+        bucket === 'staff_signature' ||
+        haystack.includes('staff_signature') ||
+        haystack.includes('staff-signature') ||
+        haystack.includes('staff-signatures');
+
+      return isStaffSignature ? { ...file, type: 'staff_signature' } : null;
+    })
+    .filter(Boolean);
 }
 
 function byId(rows: any[] | null | undefined) {
@@ -1349,12 +1457,78 @@ function formatStaffDisplayName(staff?: any) {
   return normalizeNamePart(staff?.name);
 }
 
+const CLEARANCE_SIGNATORY_NAMES = ['GERALD S. BERNAL, MD', 'ARMANDO TAMAYO, MD'] as const;
+
+function normalizeSignatureName(value?: string | null) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b(m\.?\s*d\.?|doctor|dr\.?|rn|r\.?\s*n\.?)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isClearanceSignatoryName(value?: string | null) {
+  const normalized = normalizeSignatureName(value);
+  return Boolean(
+    normalized &&
+    CLEARANCE_SIGNATORY_NAMES.some((name) => normalizeSignatureName(name) === normalized),
+  );
+}
+
+function staffNameMatchesExaminer(staff: any, examinerName?: string | null) {
+  const normalizedExaminer = normalizeSignatureName(examinerName);
+  if (!staff || !normalizedExaminer) return false;
+
+  const candidates = [
+    formatStaffDisplayName(staff),
+    staff?.name,
+    [staff?.first_name, staff?.middle_initial, staff?.last_name].filter(Boolean).join(' '),
+    [staff?.first_name, staff?.last_name].filter(Boolean).join(' '),
+  ]
+    .map((value) => normalizeSignatureName(value))
+    .filter(Boolean);
+
+  if (candidates.includes(normalizedExaminer)) return true;
+
+  const examinerTokens = new Set(normalizedExaminer.split(' ').filter(Boolean));
+  const firstName = normalizeSignatureName(staff?.first_name).split(' ')[0] || '';
+  const lastNameParts = normalizeSignatureName(staff?.last_name).split(' ').filter(Boolean);
+  const lastName = lastNameParts[lastNameParts.length - 1] || '';
+
+  return Boolean(firstName && lastName && examinerTokens.has(firstName) && examinerTokens.has(lastName));
+}
+
+function resolveExaminerSignature(row: any, staffMeasurements: any, related: Record<string, any>) {
+  const examinedBy = staffMeasurements?.examined_by || '';
+  const certificate = related.certificates?.[row.id] || {};
+  const staffRows = related.staffRows || [];
+  const matchedStaff = staffRows.find(
+    (staff: any) => staffNameMatchesExaminer(staff, examinedBy) && related.staffSignaturesByStaffId?.[staff.id],
+  );
+  if (matchedStaff) {
+    return related.staffSignaturesByStaffId[matchedStaff.id];
+  }
+
+  const examinerStaffId = staffMeasurements?.updated_by || row.reviewed_by || certificate?.issued_by || null;
+  const examinerStaff = examinerStaffId ? related.reviewers?.[examinerStaffId] : null;
+  const canUseStaffIdSignature =
+    !String(examinedBy || '').trim() ||
+    isClearanceSignatoryName(examinedBy) ||
+    staffNameMatchesExaminer(examinerStaff, examinedBy);
+  return canUseStaffIdSignature && examinerStaffId
+    ? related.staffSignaturesByStaffId?.[examinerStaffId]
+    : null;
+}
+
 function mapSubmission(row: any, related: Record<string, any>) {
   const student = related.students[row.student_id] || {};
   const emergencyContact = related.emergencyContacts[row.id];
   const medicalHistory = related.medicalHistory[row.id];
   const staffMeasurements = related.staffMeasurements[row.id];
   const reviewer = related.reviewers[row.reviewed_by] || null;
+  const examinerSignature = resolveExaminerSignature(row, staffMeasurements, related);
   const xray = related.xray[row.id];
   const cbc = related.cbc[row.id];
   const urinalysis = related.urinalysis[row.id];
@@ -1378,7 +1552,8 @@ function mapSubmission(row: any, related: Record<string, any>) {
     middleInitial: row.middle_initial || student.middle_initial || '',
     course: row.course || student.course || row.department || student.department || '',
     department: row.department || student.department || row.course || student.course || '',
-    year: String(row.year_level || student.year_level || ''),
+    year: String(row.year_level || ''),
+    academicYear: row.academic_year || undefined,
     status: row.status,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
@@ -1408,7 +1583,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
         }
       : undefined,
     medicalHistory: mapMedicalHistory(medicalHistory),
-    staffMeasurements: mapStaffMeasurements(staffMeasurements),
+    staffMeasurements: mapStaffMeasurements(staffMeasurements, examinerSignature?.url),
     labResults: {
       xrayDate: xray?.xray_date,
       xrayResult: xray?.xray_result,
@@ -1434,6 +1609,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
           controlNo: certificate.control_no,
           issuedDate: certificate.issued_date || certificate.issued_at,
           licenseNo: certificate.license_no,
+          signatoryName: certificate.signatory_name,
         }
       : undefined,
     photoUrl: normalizeStorageFileUrl(files.photo?.url || profileAssets.photo?.url),
@@ -1486,7 +1662,7 @@ async function loadRelatedData(rows: any[]) {
     reviewerIds.length
       ? restRequest<any[]>(
           'staff_users',
-          `id=in.(${reviewerIdList})&select=id,first_name,last_name,middle_initial,position,name`,
+          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
         )
       : Promise.resolve([]),
     submissionIds.length
@@ -1513,6 +1689,93 @@ async function loadRelatedData(rows: any[]) {
     acc[file.submission_id].push(file);
     return acc;
   }, {} as Record<string, any[]>);
+  const initialReviewerRows = reviewers || [];
+  const knownReviewerIds = new Set(
+    initialReviewerRows.map((staff) => String(staff?.id || '').trim()).filter(Boolean),
+  );
+  const measurementUpdaterIds = [
+    ...new Set(
+      (staffMeasurements || [])
+        .map((row) => String(row?.updated_by || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  const certificateIssuerIds = [
+    ...new Set(
+      (certificates || [])
+        .map((row) => String(row?.issued_by || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  const missingReviewerIds = [
+    ...new Set([...measurementUpdaterIds, ...certificateIssuerIds]),
+  ].filter((id) => !knownReviewerIds.has(id));
+  const missingReviewerIdList = missingReviewerIds.map((id) => encodeURIComponent(id)).join(',');
+  const extraReviewers = missingReviewerIds.length
+    ? await restRequest<any[]>(
+        'staff_users',
+        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+      ).catch(() => [])
+    : [];
+  const examinedByNames = [
+    ...new Set(
+      (staffMeasurements || [])
+        .map((row) => String(row?.examined_by || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  const examinerDirectory = examinedByNames.length
+    ? await restRequest<any[]>(
+        'staff_users',
+        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
+      ).catch(() => [])
+    : [];
+  const staffRows = Object.values(
+    [...initialReviewerRows, ...(extraReviewers || []), ...(examinerDirectory || [])].reduce<Record<string, any>>((acc, staff: any) => {
+      if (staff?.id) acc[staff.id] = staff;
+      return acc;
+    }, {} as Record<string, any>),
+  ) as any[];
+  const staffProfileIds = [...new Set(staffRows.map((staff) => staff?.profile_id).filter(Boolean))];
+  const staffProfileIdList = staffProfileIds.map((id) => encodeURIComponent(id)).join(',');
+  const staffSignatureFilesRaw = staffProfileIds.length
+    ? await restRequest<any[]>(
+        'files',
+        `select=id,submission_id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
+      ).catch(() => [])
+    : [];
+  const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
+    await normalizeFileRows(staffSignatureFilesRaw, token),
+  );
+  const staffSignatureProfileIds = [
+    ...new Set(normalizedStaffSignatureFiles.map((file) => file?.uploaded_by).filter(Boolean)),
+  ];
+  const missingStaffSignatureProfileIds = staffProfileIds.filter(
+    (profileId) => !staffSignatureProfileIds.includes(profileId),
+  );
+  const staffSignatureStorageFiles = (
+    await Promise.all(
+      missingStaffSignatureProfileIds.map((profileId) => listStaffSignatureFromStorage(profileId, token)),
+    )
+  ).flat();
+  const allStaffSignatureFiles = [
+    ...normalizedStaffSignatureFiles,
+    ...staffSignatureStorageFiles,
+  ];
+  const staffSignaturesByProfileId = allStaffSignatureFiles.reduce((acc, file) => {
+    if (!file?.uploaded_by) return acc;
+    const existing = acc[file.uploaded_by];
+    if (!existing || new Date(file.uploaded_at || 0).getTime() > new Date(existing.uploaded_at || 0).getTime()) {
+      acc[file.uploaded_by] = file;
+    }
+    return acc;
+  }, {} as Record<string, any>);
+  const staffSignaturesByStaffId = staffRows.reduce((acc, staff) => {
+    if (!staff?.id || !staff?.profile_id) return acc;
+    const signature = staffSignaturesByProfileId[staff.profile_id];
+    if (signature) acc[staff.id] = signature;
+    return acc;
+  }, {} as Record<string, any>);
 
   const shouldRunStorageFallback = submissionIds.length <= STORAGE_FALLBACK_MAX_SUBMISSIONS;
   const submissionsMissingFiles = shouldRunStorageFallback
@@ -1533,10 +1796,12 @@ async function loadRelatedData(rows: any[]) {
   const profileAssetFilesRaw = studentProfileIds.length
     ? await restRequest<any[]>(
         'files',
-        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc`,
+        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
       ).catch(() => [])
     : [];
-  const normalizedProfileAssetFiles = await normalizeFileRows(profileAssetFilesRaw, token);
+  const normalizedProfileAssetFiles = normalizeProfileAssetRows(
+    await normalizeFileRows(profileAssetFilesRaw, token),
+  );
   const profileAssetsByUploadedBy = normalizedProfileAssetFiles.reduce((acc, file) => {
     if (!file?.uploaded_by) return acc;
     acc[file.uploaded_by] = acc[file.uploaded_by] || [];
@@ -1582,7 +1847,9 @@ async function loadRelatedData(rows: any[]) {
     emergencyContacts: byKey(emergencyContacts, 'submission_id'),
     medicalHistory: byKey(medicalHistory, 'submission_id'),
     staffMeasurements: byKey(staffMeasurements, 'submission_id'),
-    reviewers: byKey(reviewers, 'id'),
+    reviewers: byKey(staffRows, 'id'),
+    staffRows,
+    staffSignaturesByStaffId,
     xray: byKey(xray, 'submission_id'),
     cbc: byKey(cbc, 'submission_id'),
     urinalysis: byKey(urinalysis, 'submission_id'),
@@ -1596,8 +1863,10 @@ async function loadRelatedData(rows: any[]) {
 async function loadCertificatePreviewRelatedData(rows: any[]) {
   const submissionIds = rows.map((row) => row.id).filter(Boolean);
   const studentIds = [...new Set(rows.map((row) => row.student_id).filter(Boolean))];
+  const reviewerIds = [...new Set(rows.map((row) => row.reviewed_by).filter(Boolean))];
   const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
   const studentIdList = studentIds.map((id) => encodeURIComponent(id)).join(',');
+  const reviewerIdList = reviewerIds.map((id) => encodeURIComponent(id)).join(',');
   const token = getAccessToken();
 
   const [
@@ -1610,6 +1879,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     urinalysis,
     certificates,
     submissionAssetFilesRaw,
+    reviewers,
   ] = await Promise.all([
     studentIds.length
       ? restRequest<any[]>(
@@ -1644,9 +1914,106 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
           `submission_id=in.(${idList})&type=in.(photo,signature)&order=uploaded_at.desc`,
         ).catch(() => [])
       : Promise.resolve([]),
+    reviewerIds.length
+      ? restRequest<any[]>(
+          'staff_users',
+          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+        ).catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   const normalizedSubmissionAssetFiles = await normalizeFileRows(submissionAssetFilesRaw, token);
+  const initialReviewerRows = reviewers || [];
+  const knownReviewerIds = new Set(
+    initialReviewerRows.map((staff) => String(staff?.id || '').trim()).filter(Boolean),
+  );
+  const measurementUpdaterIds = [
+    ...new Set(
+      (staffMeasurements || [])
+        .map((row) => String(row?.updated_by || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  const certificateIssuerIds = [
+    ...new Set(
+      (certificates || [])
+        .map((row) => String(row?.issued_by || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  const missingReviewerIds = [
+    ...new Set([...measurementUpdaterIds, ...certificateIssuerIds]),
+  ].filter((id) => !knownReviewerIds.has(id));
+  const missingReviewerIdList = missingReviewerIds
+    .map((id) => encodeURIComponent(id))
+    .join(',');
+  const extraReviewers = missingReviewerIds.length
+    ? await restRequest<any[]>(
+        'staff_users',
+        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+      ).catch(() => [])
+    : [];
+  const examinedByNames = [
+    ...new Set(
+      (staffMeasurements || [])
+        .map((row) => String(row?.examined_by || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  const examinerDirectory = examinedByNames.length
+    ? await restRequest<any[]>(
+        'staff_users',
+        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
+      ).catch(() => [])
+    : [];
+  const staffRows = Object.values(
+    [...initialReviewerRows, ...(extraReviewers || []), ...(examinerDirectory || [])].reduce<Record<string, any>>((acc, staff: any) => {
+      if (staff?.id) acc[staff.id] = staff;
+      return acc;
+    }, {} as Record<string, any>),
+  ) as any[];
+  const staffProfileIds = [...new Set(staffRows.map((staff) => staff?.profile_id).filter(Boolean))];
+  const staffProfileIdList = staffProfileIds
+    .map((id) => encodeURIComponent(id))
+    .join(',');
+  const staffSignatureFilesRaw = staffProfileIds.length
+    ? await restRequest<any[]>(
+        'files',
+        `select=id,submission_id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
+      ).catch(() => [])
+    : [];
+  const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
+    await normalizeFileRows(staffSignatureFilesRaw, token),
+  );
+  const staffSignatureProfileIds = [
+    ...new Set(normalizedStaffSignatureFiles.map((file) => file?.uploaded_by).filter(Boolean)),
+  ];
+  const missingStaffSignatureProfileIds = staffProfileIds.filter(
+    (profileId) => !staffSignatureProfileIds.includes(profileId),
+  );
+  const staffSignatureStorageFiles = (
+    await Promise.all(
+      missingStaffSignatureProfileIds.map((profileId) => listStaffSignatureFromStorage(profileId, token)),
+    )
+  ).flat();
+  const allStaffSignatureFiles = [
+    ...normalizedStaffSignatureFiles,
+    ...staffSignatureStorageFiles,
+  ];
+  const staffSignaturesByProfileId = allStaffSignatureFiles.reduce((acc, file) => {
+    if (!file?.uploaded_by) return acc;
+    const existing = acc[file.uploaded_by];
+    if (!existing || new Date(file.uploaded_at || 0).getTime() > new Date(existing.uploaded_at || 0).getTime()) {
+      acc[file.uploaded_by] = file;
+    }
+    return acc;
+  }, {} as Record<string, any>);
+  const staffSignaturesByStaffId = staffRows.reduce((acc, staff) => {
+    if (!staff?.id || !staff?.profile_id) return acc;
+    const signature = staffSignaturesByProfileId[staff.profile_id];
+    if (signature) acc[staff.id] = signature;
+    return acc;
+  }, {} as Record<string, any>);
   const studentRows = students || [];
   const studentProfileIds = [
     ...new Set(studentRows.map((student) => student?.profile_id).filter(Boolean)),
@@ -1657,10 +2024,12 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   const profileAssetFilesRaw = studentProfileIds.length
     ? await restRequest<any[]>(
         'files',
-        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc`,
+        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
       ).catch(() => [])
     : [];
-  const normalizedProfileAssetFiles = await normalizeFileRows(profileAssetFilesRaw, token);
+  const normalizedProfileAssetFiles = normalizeProfileAssetRows(
+    await normalizeFileRows(profileAssetFilesRaw, token),
+  );
   const profileAssetsByUploadedBy = normalizedProfileAssetFiles.reduce((acc, file) => {
     if (!file?.uploaded_by) return acc;
     acc[file.uploaded_by] = acc[file.uploaded_by] || [];
@@ -1712,7 +2081,9 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     emergencyContacts: byKey(emergencyContacts, 'submission_id'),
     medicalHistory: byKey(medicalHistory, 'submission_id'),
     staffMeasurements: byKey(staffMeasurements, 'submission_id'),
-    reviewers: {} as Record<string, any>,
+    reviewers: byKey(staffRows, 'id'),
+    staffRows,
+    staffSignaturesByStaffId,
     xray: byKey(xray, 'submission_id'),
     cbc: byKey(cbc, 'submission_id'),
     urinalysis: byKey(urinalysis, 'submission_id'),
@@ -2192,11 +2563,7 @@ async function listProfileAssetsFromStorage(studentId: string, token?: string | 
             if (!Array.isArray(payload)) return [] as any[];
 
             const candidates = payload
-              .filter((item: any) => item?.name)
-              .filter((item: any) => {
-                const name = String(item?.name || '').trim().toLowerCase();
-                return name === type || name.startsWith(`${type}.`) || name.startsWith(`${type}_`);
-              })
+              .filter((item: any) => item?.name && (item?.id || item?.metadata))
               .sort((a: any, b: any) => {
                 const aTime = new Date(String(a?.updated_at || a?.created_at || a?.last_accessed_at || 0)).getTime();
                 const bTime = new Date(String(b?.updated_at || b?.created_at || b?.last_accessed_at || 0)).getTime();
@@ -2225,6 +2592,83 @@ async function listProfileAssetsFromStorage(studentId: string, token?: string | 
         );
 
         return rowsByPrefix.flat();
+      }),
+    );
+
+    return results.flat();
+  } catch {
+    return [] as any[];
+  }
+}
+
+async function listStaffSignatureFromStorage(profileId: string, token?: string | null) {
+  const targetProfileId = String(profileId || '').trim();
+  if (!targetProfileId || !supabaseUrl || !publicAnonKey) return [] as any[];
+
+  const storageConfigs = [
+    { bucket: 'staff_signature', prefix: `${targetProfileId}/` },
+    { bucket: 'staff_signature', prefix: `staff-signatures/${targetProfileId}/` },
+    { bucket: 'student_signature', prefix: `staff-signatures/${targetProfileId}/` },
+  ] as const;
+
+  try {
+    const results = await Promise.all(
+      storageConfigs.map(async ({ bucket, prefix }) => {
+        if (disabledStorageListBuckets.has(bucket)) {
+          return [] as any[];
+        }
+
+        const response = await fetch(
+          `${supabaseUrl}/storage/v1/object/list/${bucket}`,
+          {
+            method: 'POST',
+            headers: {
+              apikey: publicAnonKey,
+              Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prefix,
+              limit: 50,
+              offset: 0,
+            }),
+          },
+        );
+
+        const payload = await response.json().catch(() => []);
+        if (!response.ok) {
+          if (response.status >= 500) {
+            disabledStorageListBuckets.add(bucket);
+          }
+          return [] as any[];
+        }
+        if (!Array.isArray(payload)) return [] as any[];
+
+        const latest = payload
+          .filter((item: any) => item?.name && (item?.id || item?.metadata))
+          .sort((a: any, b: any) => {
+            const aTime = new Date(String(a?.updated_at || a?.created_at || a?.last_accessed_at || 0)).getTime();
+            const bTime = new Date(String(b?.updated_at || b?.created_at || b?.last_accessed_at || 0)).getTime();
+            return bTime - aTime;
+          })[0];
+        if (!latest?.name) return [] as any[];
+
+        const storagePath = `${prefix}${String(latest.name)}`;
+        const signedUrl = await createSignedStorageUrl(storagePath, token, bucket);
+        if (!signedUrl) return [] as any[];
+
+        return [{
+          id: `staff-signature-${bucket}-${targetProfileId}-${prefix}-${latest.name}`,
+          submission_id: null,
+          type: 'staff_signature',
+          file_name: String(latest.name),
+          storage_bucket: bucket,
+          storage_path: storagePath,
+          mime_type: null,
+          uploaded_at: String(latest?.updated_at || latest?.created_at || latest?.last_accessed_at || new Date().toISOString()),
+          uploaded_by: targetProfileId,
+          url: signedUrl,
+        }];
       }),
     );
 
@@ -2379,6 +2823,55 @@ function resolveSubmissionCategorySnapshot(me: AuthMe, data?: any) {
   return localProfile || 'regular';
 }
 
+function mapSubmissionSlotRow(row: any): SubmissionRecord {
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    firstName: row.first_name || '',
+    lastName: row.last_name || '',
+    middleInitial: row.middle_initial || '',
+    course: row.course || row.department || '',
+    department: row.department || row.course || '',
+    year: String(row.year_level || ''),
+    academicYear: row.academic_year || undefined,
+    status: row.status,
+    submittedAt: row.submitted_at,
+    updatedAt: row.updated_at,
+  } as SubmissionRecord;
+}
+
+async function getSubmissionSlotRows(studentId: string) {
+  const normalizedStudentId = String(studentId || '').trim();
+  if (!normalizedStudentId) return [] as SubmissionRecord[];
+
+  try {
+    const rows = await restRequest<any[]>(
+      'submissions',
+      `select=id,student_id,first_name,last_name,middle_initial,course,department,year_level,academic_year,status,submitted_at,updated_at&student_id=eq.${encodeURIComponent(normalizedStudentId)}&order=submitted_at.desc`,
+    );
+    return (rows || []).map(mapSubmissionSlotRow);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (!message.includes('academic_year')) throw error;
+  }
+
+  const rows = await restRequest<any[]>(
+    'submissions',
+    `select=id,student_id,first_name,last_name,middle_initial,course,department,year_level,status,submitted_at,updated_at&student_id=eq.${encodeURIComponent(normalizedStudentId)}&order=submitted_at.desc`,
+  );
+  return (rows || []).map(mapSubmissionSlotRow);
+}
+
+async function resolveActiveAcademicYear(value?: unknown) {
+  if (value) return normalizeAcademicYear(value);
+  try {
+    const settings = await getActiveAcademicYearSettings();
+    return normalizeAcademicYear(settings.academicYear);
+  } catch {
+    return getDefaultAcademicYear();
+  }
+}
+
 export async function updateStaffProfile(data: StaffProfileUpdateInput) {
   const payload = {
     name: String(data.name || '').trim(),
@@ -2489,6 +2982,67 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
   };
 }
 
+export async function getStaffSignature(): Promise<StaffSignatureAsset> {
+  try {
+    const payload = await apiRequest<{
+      success: boolean;
+      signatureUrl?: string | null;
+      signatureFileName?: string | null;
+    }>('/functions/v1/server/staff-signature');
+
+    return {
+      signatureUrl: normalizeStorageFileUrl(payload.signatureUrl || null) || null,
+      signatureFileName: payload.signatureFileName || null,
+    };
+  } catch (error) {
+    if (!shouldFallbackToRest(error)) {
+      throw error;
+    }
+  }
+
+  const token = getAccessToken();
+  const me = await getMe();
+  const profileId = String(me.profile.id || '').trim();
+  if (!profileId) {
+    return { signatureUrl: null, signatureFileName: null };
+  }
+
+  const rows = await restRequest<any[]>(
+    'files',
+    `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url,uploaded_by&uploaded_by=eq.${encodeURIComponent(profileId)}&submission_id=is.null&order=uploaded_at.desc&limit=50`,
+  ).catch(() => []);
+  const latest = latestFilesByType(normalizeStaffSignatureRows(await normalizeFileRows(rows, token))).staff_signature;
+
+  return {
+    signatureUrl: normalizeStorageFileUrl(latest?.url || null) || null,
+    signatureFileName: latest?.file_name || null,
+  };
+}
+
+export async function uploadStaffSignature(file: File) {
+  const token = getAccessToken();
+  if (!token || !supabaseUrl || !publicAnonKey) {
+    throw new Error('You must be signed in to upload files.');
+  }
+
+  const formData = new FormData();
+  formData.set('file', file);
+
+  const payload = await apiRequest<{ success: true; signatureUrl?: string | null; signatureFileName?: string | null }>(
+    '/functions/v1/server/staff-signature',
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+
+  return {
+    success: true as const,
+    signatureUrl: normalizeStorageFileUrl(payload.signatureUrl || null) || undefined,
+    signatureFileName: payload.signatureFileName || undefined,
+  };
+}
+
 export async function submitMedicalRecord(data: any) {
   const me = await getMe();
   const studentId = me.profile.student_id || data.studentId;
@@ -2497,23 +3051,32 @@ export async function submitMedicalRecord(data: any) {
   }
   const requestedYearLevel = normalizeYearLevel(data.yearLevel);
   if (!requestedYearLevel) {
-    throw new Error('Year level is required.');
+    throw new Error('Submission slot is required.');
   }
-  const allowedYearLevel = resolveAllowedSubmissionYearLevel(me);
-  if (requestedYearLevel !== allowedYearLevel) {
-    throw new Error(`You can only submit records for the allowed year level (${getYearLevelLabel(allowedYearLevel)}).`);
+  const activeAcademicYear = await resolveActiveAcademicYear(data.academicYear);
+  const existingRecords = await getSubmissionSlotRows(studentId);
+  const existingCurrentAcademicYearRecord = getLatestRecordForAcademicYear(existingRecords, activeAcademicYear);
+  const expectedYearLevel = getNextSubmissionSlot(existingRecords, activeAcademicYear);
+
+  if (!expectedYearLevel) {
+    throw new Error('All four medical record slots have already been used.');
   }
+
+  if (requestedYearLevel !== expectedYearLevel) {
+    throw new Error(`This submission must be filed under ${getSubmissionSlotLabel(expectedYearLevel)} for SY ${activeAcademicYear}.`);
+  }
+
+  const latestAcademicYearStatus = String(existingCurrentAcademicYearRecord?.status || '').toLowerCase();
+  if (latestAcademicYearStatus) {
+    throw new Error(
+      latestAcademicYearStatus === 'returned'
+        ? `Your SY ${activeAcademicYear} submission was returned. Please edit and resubmit that record.`
+        : `A submission for SY ${activeAcademicYear} already exists and is currently ${latestAcademicYearStatus}.`,
+    );
+  }
+
   const yearLevel = String(requestedYearLevel);
   const submissionCategory = resolveSubmissionCategorySnapshot(me, data);
-
-  const existingForYear = await restRequest<any[]>(
-    'submissions',
-    `select=id,status&student_id=eq.${encodeURIComponent(studentId)}&year_level=eq.${encodeURIComponent(yearLevel)}&order=submitted_at.desc&limit=1`,
-  );
-  const latestYearStatus = String(existingForYear?.[0]?.status || '').toLowerCase();
-  if (latestYearStatus && latestYearStatus !== 'returned') {
-    throw new Error(`A submission for Year ${yearLevel} already exists and is currently ${latestYearStatus}.`);
-  }
 
   const studentPayload = {
     student_id: studentId,
@@ -2547,6 +3110,7 @@ export async function submitMedicalRecord(data: any) {
   const submissionInsertPayload = {
     student_id: studentId,
     year_level: yearLevel,
+    academic_year: activeAcademicYear,
     status: 'pending',
     first_name: data.firstName || null,
     last_name: data.lastName || null,
@@ -2592,6 +3156,7 @@ export async function submitMedicalRecord(data: any) {
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     const hasMissingColumns =
+      message.includes('academic_year') ||
       message.includes('lab_test_location') ||
       message.includes('lab_test_clinic') ||
       message.includes('submission_category') ||
@@ -2609,6 +3174,7 @@ export async function submitMedicalRecord(data: any) {
         },
         body: JSON.stringify({
           ...submissionInsertPayload,
+          academic_year: undefined,
           submission_category: undefined,
           submission_target_year_level: undefined,
           lab_test_location: undefined,
@@ -2687,17 +3253,23 @@ export async function updateMedicalRecord(recordId: string, data: any) {
   }
   const requestedYearLevel = normalizeYearLevel(data.yearLevel);
   if (!requestedYearLevel) {
-    throw new Error('Year level is required.');
-  }
-  const allowedYearLevel = resolveAllowedSubmissionYearLevel(me);
-  if (requestedYearLevel !== allowedYearLevel) {
-    throw new Error(`You can only submit records for the allowed year level (${getYearLevelLabel(allowedYearLevel)}).`);
+    throw new Error('Submission slot is required.');
   }
 
-  const existingSubmission = await restRequest<any[]>(
-    'submissions',
-    `select=id,student_id,year_level&id=eq.${encodeURIComponent(recordId)}&limit=1`,
-  );
+  let existingSubmission: any[] = [];
+  try {
+    existingSubmission = await restRequest<any[]>(
+      'submissions',
+      `select=id,student_id,year_level,academic_year,submitted_at&id=eq.${encodeURIComponent(recordId)}&limit=1`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (!message.includes('academic_year')) throw error;
+    existingSubmission = await restRequest<any[]>(
+      'submissions',
+      `select=id,student_id,year_level,submitted_at&id=eq.${encodeURIComponent(recordId)}&limit=1`,
+    );
+  }
   const submissionRow = existingSubmission?.[0];
   if (!submissionRow) {
     throw new Error('Medical record not found.');
@@ -2707,12 +3279,18 @@ export async function updateMedicalRecord(recordId: string, data: any) {
   }
 
   const existingYearLevel = normalizeYearLevel(submissionRow.year_level);
-  if (existingYearLevel && existingYearLevel !== allowedYearLevel) {
-    throw new Error(`Only the allowed year level (${getYearLevelLabel(allowedYearLevel)}) can be updated.`);
-  }
   if (existingYearLevel && existingYearLevel !== requestedYearLevel) {
-    throw new Error('The year level for an existing submission cannot be changed.');
+    throw new Error('The medical record slot for an existing submission cannot be changed.');
   }
+  const activeAcademicYear = normalizeAcademicYear(
+    getRecordAcademicYear(
+      {
+        academicYear: submissionRow.academic_year || undefined,
+        submittedAt: submissionRow.submitted_at,
+      } as SubmissionRecord,
+      data.academicYear || (await resolveActiveAcademicYear(data.academicYear)),
+    ),
+  );
 
   const studentPayload = {
     student_id: studentId,
@@ -2746,6 +3324,7 @@ export async function updateMedicalRecord(recordId: string, data: any) {
   const submissionPatchPayload = {
     status: data.status || undefined,
     year_level: String(requestedYearLevel),
+    academic_year: activeAcademicYear,
     first_name: data.firstName || null,
     last_name: data.lastName || null,
     middle_initial: data.middleInitial || null,
@@ -2794,8 +3373,14 @@ export async function updateMedicalRecord(recordId: string, data: any) {
     const hasMissingLabSourceColumns = message.includes('lab_test_location') || message.includes('lab_test_clinic');
     const hasMissingSubmissionCategoryColumns =
       message.includes('submission_category') || message.includes('submission_target_year_level');
+    const hasMissingAcademicYearColumn = message.includes('academic_year');
 
-    if (!isResubmittedConstraintError && !hasMissingLabSourceColumns && !hasMissingSubmissionCategoryColumns) {
+    if (
+      !isResubmittedConstraintError &&
+      !hasMissingLabSourceColumns &&
+      !hasMissingSubmissionCategoryColumns &&
+      !hasMissingAcademicYearColumn
+    ) {
       throw error;
     }
 
@@ -2814,6 +3399,7 @@ export async function updateMedicalRecord(recordId: string, data: any) {
         body: JSON.stringify({
           ...submissionPatchPayload,
           status: isResubmittedConstraintError ? 'pending' : submissionPatchPayload.status,
+          academic_year: undefined,
           submission_category: undefined,
           submission_target_year_level: undefined,
           lab_test_location: undefined,
@@ -2895,6 +3481,7 @@ function mapStudentRecordSummary(row: any, emergencyContactsBySubmission: Record
     course: row.course || row.department || '',
     department: row.department || row.course || '',
     year: String(row.year_level || ''),
+    academicYear: row.academic_year || undefined,
     status: row.status,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
@@ -2935,7 +3522,7 @@ export async function getStudentRecordSummaries(studentId?: string) {
   try {
     const rows = await restRequest<any[]>(
       'submissions',
-      `select=id,student_id,first_name,last_name,middle_initial,course,department,year_level,status,reviewed_by,submitted_at,updated_at,staff_notes,age,sex,birthday,civil_status,contact_number,address,allergy_details,had_operation,operation_details,lab_test_location,lab_test_clinic,cbc_test_clinic,urinalysis_test_clinic,xray_test_clinic&student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
+      `select=id,student_id,first_name,last_name,middle_initial,course,department,year_level,academic_year,status,reviewed_by,submitted_at,updated_at,staff_notes,age,sex,birthday,civil_status,contact_number,address,allergy_details,had_operation,operation_details,lab_test_location,lab_test_clinic,cbc_test_clinic,urinalysis_test_clinic,xray_test_clinic&student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
     );
     const submissionIds = (rows || []).map((row) => row.id).filter(Boolean);
     const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
@@ -3331,7 +3918,7 @@ async function loadApprovedStudentsFromDatabase(
 
   const approvedRows = await restRequest<any[]>(
     'submissions',
-    'select=id,student_id,first_name,last_name,middle_initial,course,department,year_level,status,submitted_at,updated_at&status=eq.approved&order=updated_at.desc',
+    'select=id,student_id,first_name,last_name,middle_initial,course,department,year_level,academic_year,status,submitted_at,updated_at&status=eq.approved&order=updated_at.desc',
   );
 
   const activeStudentsById = await loadActiveStudentDirectory(
@@ -3483,6 +4070,19 @@ export async function getStaffCertificateRecords(studentId?: string) {
     return { records: [] as SubmissionRecord[] };
   }
 
+  try {
+    const response = await apiRequest<{ records: SubmissionRecord[] }>(
+      `/functions/v1/server/staff/certificate-records/${encodeURIComponent(targetStudentId)}`,
+    );
+    return {
+      records: Array.isArray(response?.records) ? response.records : [],
+    };
+  } catch (error) {
+    if (!shouldFallbackToRest(error)) {
+      throw error;
+    }
+  }
+
   const records = await getMappedCertificatePreviewSubmissions(targetStudentId);
   return { records };
 }
@@ -3545,6 +4145,7 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
   const cacheVersion = _studentProfileAssetsCacheVersion;
   const requestPromise = (async () => {
     let resolvedAssets: StudentProfileAssets | null = null;
+    let routeAssets: StudentProfileAssets | null = null;
 
     if (!studentProfileAssetsRouteUnavailable) {
       try {
@@ -3558,12 +4159,15 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
         }>(`/functions/v1/server/student-profile-assets${query}`);
 
         if (payload?.success) {
-          resolvedAssets = {
+          routeAssets = {
             photoUrl: normalizeStorageFileUrl(payload.photoUrl) || null,
             signatureUrl: normalizeStorageFileUrl(payload.signatureUrl) || null,
             photoFileName: payload.photoFileName || null,
             signatureFileName: payload.signatureFileName || null,
           };
+          if (routeAssets.photoUrl && routeAssets.signatureUrl) {
+            resolvedAssets = routeAssets;
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message.toLowerCase() : '';
@@ -3579,11 +4183,11 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
       if (resolvedProfileId) {
         assetRows = await restRequest<any[]>(
           'files',
-          `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url&uploaded_by=eq.${encodeURIComponent(resolvedProfileId)}&submission_id=is.null&type=in.(photo,signature)&order=uploaded_at.desc&limit=20`,
+          `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url&uploaded_by=eq.${encodeURIComponent(resolvedProfileId)}&submission_id=is.null&order=uploaded_at.desc&limit=50`,
         ).catch(() => []);
       }
 
-      const normalizedAssetRows = await normalizeFileRows(assetRows, token);
+      const normalizedAssetRows = normalizeProfileAssetRows(await normalizeFileRows(assetRows, token));
       const latestAssets = latestFilesByType(normalizedAssetRows);
       const needsStorageFallback = !latestAssets.photo || !latestAssets.signature;
       const storageFallbackRows =
@@ -3593,10 +4197,10 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
       const finalAssets = latestFilesByType([...(normalizedAssetRows || []), ...storageFallbackRows]);
 
       resolvedAssets = {
-        photoUrl: normalizeStorageFileUrl(finalAssets.photo?.url) || null,
-        signatureUrl: normalizeStorageFileUrl(finalAssets.signature?.url) || null,
-        photoFileName: finalAssets.photo?.file_name || null,
-        signatureFileName: finalAssets.signature?.file_name || null,
+        photoUrl: routeAssets?.photoUrl || normalizeStorageFileUrl(finalAssets.photo?.url) || null,
+        signatureUrl: routeAssets?.signatureUrl || normalizeStorageFileUrl(finalAssets.signature?.url) || null,
+        photoFileName: routeAssets?.photoFileName || finalAssets.photo?.file_name || null,
+        signatureFileName: routeAssets?.signatureFileName || finalAssets.signature?.file_name || null,
       };
     }
 
@@ -3756,6 +4360,64 @@ function assertMedicalRecordDateInRange(label: string, value?: unknown) {
   }
   if (normalized < min) {
     throw new Error(`${label} must be within the past ${MEDICAL_RECORD_DATE_RANGE_MONTHS} months.`);
+  }
+}
+
+function isMissingSignatoryNameColumnError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('signatory_name') || (
+    message.includes('schema cache') &&
+    message.includes('certificates')
+  );
+}
+
+async function upsertCertificateRecord(submissionId: string, clearanceInfo: any) {
+  const basePayload = {
+    submission_id: submissionId,
+    findings_normal: typeof clearanceInfo.findingsNormal === 'boolean' ? clearanceInfo.findingsNormal : null,
+    diagnosis: clearanceInfo.diagnosis || null,
+    remarks: clearanceInfo.remarks || null,
+    purpose: clearanceInfo.purpose || null,
+    control_no: clearanceInfo.controlNo || null,
+    issued_at: clearanceInfo.issuedDate || null,
+    license_no: clearanceInfo.licenseNo || null,
+  };
+  const signatoryName = String(clearanceInfo.signatoryName || '').trim();
+  const payload = signatoryName
+    ? { ...basePayload, signatory_name: signatoryName }
+    : basePayload;
+
+  try {
+    return await restRequest(
+      'certificates',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+  } catch (error) {
+    if (!signatoryName || !isMissingSignatoryNameColumnError(error)) {
+      throw error;
+    }
+
+    return restRequest(
+      'certificates',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(basePayload),
+      },
+    );
   }
 }
 
@@ -3992,27 +4654,7 @@ export async function saveSubmissionReview(id: string, review: any) {
         }),
       },
     ),
-    restRequest(
-      'certificates',
-      'on_conflict=submission_id',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({
-          submission_id: id,
-          findings_normal: typeof clearanceInfo.findingsNormal === 'boolean' ? clearanceInfo.findingsNormal : null,
-          diagnosis: clearanceInfo.diagnosis || null,
-          remarks: clearanceInfo.remarks || null,
-          purpose: clearanceInfo.purpose || null,
-          control_no: clearanceInfo.controlNo || null,
-          issued_at: clearanceInfo.issuedDate || null,
-          license_no: clearanceInfo.licenseNo || null,
-        }),
-      },
-    ),
+    upsertCertificateRecord(id, clearanceInfo),
   ]);
 
   // Trigger email notification if status is one of the target states
@@ -4492,6 +5134,17 @@ export async function getAdminSystemSettings() {
 export async function getReportingTermSettings() {
   try {
     const settings = await apiRequest<AdminSystemSettings>('/functions/v1/server/reporting-term');
+    const normalized = normalizeAdminSystemSettings(settings);
+    writeStoredAdminSystemSettings(normalized);
+    return normalized;
+  } catch {
+    return readStoredAdminSystemSettings();
+  }
+}
+
+export async function getActiveAcademicYearSettings() {
+  try {
+    const settings = await apiRequest<Partial<AdminSystemSettings>>('/functions/v1/server/academic-year');
     const normalized = normalizeAdminSystemSettings(settings);
     writeStoredAdminSystemSettings(normalized);
     return normalized;

@@ -15,10 +15,10 @@ import { useStaffApprovedStudentsQuery } from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = {
-  '1': '1st Year',
-  '2': '2nd Year',
-  '3': '3rd Year',
-  '4': '4th Year',
+  '1': 'Year I',
+  '2': 'Year II',
+  '3': 'Year III',
+  '4': 'Year IV',
 };
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [20];
@@ -118,7 +118,6 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
         <PortalPageIntro
           className="mb-8"
           title="Records Archive"
-          description="Approved medical clearances and records."
         />
       ) : null}
 
@@ -156,13 +155,13 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
             </div>
 
             <div className="space-y-1">
-              <p className="px-1 text-xs font-medium text-muted-foreground">Year Level</p>
+              <p className="px-1 text-xs font-medium text-muted-foreground">Record Slot</p>
               <Select value={yearFilter} onValueChange={setYearFilter}>
                 <SelectTrigger className="h-10 w-full">
-                  <SelectValue placeholder="All Year Levels" />
+                  <SelectValue placeholder="All Record Slots" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Year Levels</SelectItem>
+                  <SelectItem value="all">All Record Slots</SelectItem>
                   {Object.entries(YEAR_LABELS).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
@@ -296,7 +295,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
                             className="flex flex-col gap-3 rounded-md bg-muted p-3 sm:flex-row sm:items-center sm:justify-between"
                           >
                             <div>
-                              <p className="font-medium">Year {record.year} Medical Record</p>
+                              <p className="font-medium">{YEAR_LABELS[String(record.year || '')] || 'Record Slot'} Medical Record</p>
                               <p className="text-sm text-muted-foreground">
                                 Approved on {formatDate(record.updatedAt || record.submittedAt)}
                               </p>
