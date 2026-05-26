@@ -45,7 +45,7 @@ const SUBMISSION_RANGE_COLORS = ['#0f766e', '#14b8a6', '#f59e0b', '#f97316'];
 const REPORT_GROUP_LABELS = {
   department: 'Department',
   gender: 'Gender',
-  year: 'Year Level',
+  year: 'Record Slot',
   program: 'Program',
 } as const;
 const REPORT_CHART_COLORS = ['#0f766e', '#14b8a6', '#22c55e', '#f59e0b', '#f97316', '#ef4444', '#6366f1', '#ec4899'];
@@ -62,10 +62,10 @@ const GENDER_COLORS: Record<string, string> = {
   unspecified: '#94a3b8',
 };
 const YEAR_LABELS: Record<string, string> = {
-  '1': '1st Year',
-  '2': '2nd Year',
-  '3': '3rd Year',
-  '4': '4th Year',
+  '1': 'Year I',
+  '2': 'Year II',
+  '3': 'Year III',
+  '4': 'Year IV',
 };
 const DASHBOARD_QUEUE_PAGE_SIZE = 20;
 const GENDER_ORDER = ['male', 'female', 'other', 'unspecified'];
@@ -629,7 +629,6 @@ export default function StaffDashboard() {
           </span>
         )}
         title={`Welcome, ${displayName}`}
-        description="Review records by status below, then open the queue for full filtering."
         actions={
           !overviewLoading && overviewFetching ? (
             <span className="text-xs text-on-surface-variant">Refreshing queue...</span>
@@ -670,9 +669,6 @@ export default function StaffDashboard() {
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Submission Queue</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">
-                By default, this view starts with pending records so staff can take action quickly.
-              </p>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
               <button
@@ -796,7 +792,7 @@ export default function StaffDashboard() {
                   <SelectContent>
                     <SelectItem value="department">Department</SelectItem>
                     <SelectItem value="gender">Gender</SelectItem>
-                    <SelectItem value="year">Year Level</SelectItem>
+                    <SelectItem value="year">Record Slot</SelectItem>
                     <SelectItem value="program">Program</SelectItem>
                   </SelectContent>
                 </Select>

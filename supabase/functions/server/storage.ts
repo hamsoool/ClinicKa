@@ -21,7 +21,9 @@ export function inferStorageBucket(file: any) {
 
   const type = String(file?.type || "").toLowerCase();
   if (type === "photo") return "profile";
-  if (type === "signature") return "student_signature";
+  if (type === "profile" || type === "profile_photo" || type === "student_photo") return "profile";
+  if (type === "signature" || type === "student_signature") return "student_signature";
+  if (type === "staff_signature" || type === "staff-signature") return "staff_signature";
   if (type === "xray") return "lab_chest_xray";
   if (type === "cbc") return "lab_cbc";
   if (type === "urinalysis") return "lab_urinalysis";
@@ -40,6 +42,97 @@ export function normalizeStoragePath(
     return path.slice(normalizedBucket.length + 1);
   }
   return path;
+}
+
+export function normalizeProfileAssetType(file: any) {
+  const rawType = String(file?.type || "").trim().toLowerCase();
+  const bucket = String(file?.storage_bucket || "").trim().toLowerCase();
+  const haystack = [
+    rawType,
+    file?.file_name,
+    file?.storage_path,
+    file?.url,
+  ]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+
+  if (
+    rawType === "staff_signature" ||
+    rawType === "staff-signature" ||
+    bucket === "staff_signature" ||
+    haystack.includes("staff_signature") ||
+    haystack.includes("staff-signature") ||
+    haystack.includes("staff-signatures")
+  ) {
+    return "";
+  }
+
+  if (["photo", "profile", "profile_photo", "student_photo"].includes(rawType)) {
+    return "photo";
+  }
+  if (["signature", "student_signature", "student-signature"].includes(rawType)) {
+    return "signature";
+  }
+
+  if (bucket === "profile") return "photo";
+  if (bucket === "student_signature") return "signature";
+
+  if (
+    haystack.includes("student_signature") ||
+    /(^|[\/_\-\s])signature([._\-\s]|$)/.test(haystack) ||
+    /(^|[\/_\-\s])sign([._\-\s]|$)/.test(haystack)
+  ) {
+    return "signature";
+  }
+
+  if (
+    haystack.includes("profile") ||
+    haystack.includes("photo") ||
+    haystack.includes("1x1") ||
+    haystack.includes("picture")
+  ) {
+    return "photo";
+  }
+
+  return "";
+}
+
+export function normalizeProfileAssetRows(files: any[] | null | undefined) {
+  return (files || [])
+    .map((file) => {
+      const type = normalizeProfileAssetType(file);
+      return type ? { ...file, type } : null;
+    })
+    .filter(Boolean);
+}
+
+export function normalizeStaffSignatureRows(files: any[] | null | undefined) {
+  return (files || [])
+    .map((file) => {
+      const rawType = String(file?.type || "").trim().toLowerCase();
+      const bucket = String(file?.storage_bucket || "").trim().toLowerCase();
+      const haystack = [
+        rawType,
+        bucket,
+        file?.file_name,
+        file?.storage_path,
+        file?.url,
+      ]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean)
+        .join(" ");
+      const isStaffSignature =
+        rawType === "staff_signature" ||
+        rawType === "staff-signature" ||
+        bucket === "staff_signature" ||
+        haystack.includes("staff_signature") ||
+        haystack.includes("staff-signature") ||
+        haystack.includes("staff-signatures");
+
+      return isStaffSignature ? { ...file, type: "staff_signature" } : null;
+    })
+    .filter(Boolean);
 }
 
 async function createTemporaryFileUrl(file: any) {
@@ -97,6 +190,128 @@ export async function normalizeFileRows(files: any[] | null | undefined) {
       };
     }),
   );
+}
+
+const profileAssetStorageConfigs = [
+  { type: "photo", bucket: "profile" },
+  { type: "signature", bucket: "student_signature" },
+] as const;
+
+const staffSignatureStorageConfigs = [
+  { bucket: "staff_signature", prefixFor: (profileId: string) => `${profileId}/` },
+  { bucket: "staff_signature", prefixFor: (profileId: string) => `staff-signatures/${profileId}/` },
+  { bucket: "student_signature", prefixFor: (profileId: string) => `staff-signatures/${profileId}/` },
+] as const;
+
+function getStorageItemTime(item: any) {
+  const time = new Date(
+    String(item?.updated_at || item?.created_at || item?.last_accessed_at || 0),
+  ).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+export async function listProfileAssetsFromStorage(studentId: string) {
+  const targetStudentId = String(studentId || "").trim();
+  if (!targetStudentId) return [] as any[];
+
+  const prefixes = [`${targetStudentId}/`, `profiles/${targetStudentId}/`];
+  const rows = await Promise.all(
+    profileAssetStorageConfigs.map(async ({ type, bucket }) => {
+      const candidates: Array<{
+        name: string;
+        prefix: string;
+        updatedAt: number;
+      }> = [];
+
+      await Promise.all(
+        prefixes.map(async (prefix) => {
+          try {
+            const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+              limit: 100,
+              offset: 0,
+            });
+
+            if (error || !data?.length) return;
+
+            for (const item of data) {
+              const name = String(item?.name || "").trim();
+              if (!name || (!item?.id && !item?.metadata)) continue;
+              candidates.push({
+                name,
+                prefix,
+                updatedAt: getStorageItemTime(item),
+              });
+            }
+          } catch {
+            // Missing legacy asset folders should not fail the whole records response.
+          }
+        }),
+      );
+
+      const latest = candidates.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (!latest) return null;
+
+      const storagePath = `${latest.prefix}${latest.name}`;
+      const row = {
+        id: `profile-${bucket}-${targetStudentId}-${storagePath}`,
+        submission_id: null,
+        type,
+        file_name: latest.name,
+        storage_bucket: bucket,
+        storage_path: storagePath,
+        mime_type: null,
+        uploaded_at: new Date(latest.updatedAt || Date.now()).toISOString(),
+        uploaded_by: null,
+      };
+      const url = await createTemporaryFileUrl(row);
+      return url ? { ...row, url } : null;
+    }),
+  );
+
+  return rows.filter(Boolean);
+}
+
+export async function listStaffSignatureFromStorage(profileId: string) {
+  const targetProfileId = String(profileId || "").trim();
+  if (!targetProfileId) return [] as any[];
+
+  const rows = await Promise.all(
+    staffSignatureStorageConfigs.map(async ({ bucket, prefixFor }) => {
+      const prefix = prefixFor(targetProfileId);
+      try {
+        const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+          limit: 100,
+          offset: 0,
+        });
+
+        if (error || !data?.length) return null;
+
+        const latest = data
+          .filter((item) => item?.name && (item?.id || item?.metadata))
+          .sort((a, b) => getStorageItemTime(b) - getStorageItemTime(a))[0];
+        if (!latest?.name) return null;
+
+        const storagePath = `${prefix}${latest.name}`;
+        const row = {
+          id: `staff-signature-${bucket}-${targetProfileId}-${storagePath}`,
+          submission_id: null,
+          type: "staff_signature",
+          file_name: latest.name,
+          storage_bucket: bucket,
+          storage_path: storagePath,
+          mime_type: null,
+          uploaded_at: new Date(getStorageItemTime(latest) || Date.now()).toISOString(),
+          uploaded_by: targetProfileId,
+        };
+        const url = await createTemporaryFileUrl(row);
+        return url ? { ...row, url } : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return rows.filter(Boolean);
 }
 
 function isMissingStorageBucketError(error: any) {

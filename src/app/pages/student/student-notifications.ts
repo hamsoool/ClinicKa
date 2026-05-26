@@ -5,6 +5,7 @@ import {
   saveStudentNotificationState,
   type StudentNotificationStatePayload,
 } from '../../lib/api';
+import { getRecordAcademicYear, getSubmissionSlotLabel, formatAcademicYearLabel } from '../../lib/academic-year';
 import { trackPendingStudentNotificationSave } from '../../lib/student-notification-save-queue';
 import { useStudentRecordsQuery } from './student-records-query';
 
@@ -33,7 +34,6 @@ type StoredNotificationState = {
 
 const STORAGE_KEY_PREFIX = 'gc-student-notifications';
 const MAX_NOTIFICATION_ITEMS = 20;
-const YEAR_LABELS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 
 function getStorageKey(studentId?: string | null) {
   return `${STORAGE_KEY_PREFIX}:${String(studentId || '').trim()}`;
@@ -103,12 +103,10 @@ function getRecordTimestamp(record: SubmissionRecord) {
   return record.updatedAt || record.submittedAt || new Date().toISOString();
 }
 
-function getYearLabel(year?: string) {
-  const yearNumber = Number.parseInt(String(year || ''), 10);
-  if (!Number.isFinite(yearNumber) || yearNumber < 1 || yearNumber > YEAR_LABELS.length) {
-    return 'current year';
-  }
-  return YEAR_LABELS[yearNumber - 1];
+function getYearLabel(record: SubmissionRecord) {
+  const academicYear = getRecordAcademicYear(record);
+  if (academicYear) return formatAcademicYearLabel(academicYear);
+  return getSubmissionSlotLabel(record.year);
 }
 
 function createSnapshotValue(record: SubmissionRecord) {
@@ -119,7 +117,7 @@ function buildNotificationItem(record: SubmissionRecord, isRead: boolean): Stude
   const status = String(record.status || '').toLowerCase();
   if (status !== 'approved' && status !== 'returned') return null;
 
-  const yearLabel = getYearLabel(record.year);
+  const yearLabel = getYearLabel(record);
   const timestamp = getRecordTimestamp(record);
 
   if (status === 'approved') {

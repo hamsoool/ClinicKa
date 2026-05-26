@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
-import { Download, ExternalLink, Expand, FileText } from 'lucide-react';
+import { Download, ExternalLink, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Props = {
@@ -116,7 +116,6 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
   const previewTitle = `${title} preview`;
   const previewAlt = alt || title;
   const pdfPreviewUrl = previewType === 'pdf' ? buildPdfPreviewUrl(fileUrl) : fileUrl;
-  const pdfDialogPreviewUrl = previewType === 'pdf' ? buildPdfPreviewUrl(fileUrl, 'FitH') : fileUrl;
 
   const handleDownloadOriginal = () => {
     const basePath = fileUrl.split('?')[0];
@@ -189,14 +188,23 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
           </div>
         );
       case 'image':
-        return <img src={fileUrl} alt={previewAlt} className="max-h-[420px] w-full bg-black/5 object-contain" />;
+        return (
+          <DialogTrigger asChild>
+            <button
+              type="button"
+              className="block w-full cursor-zoom-in bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              aria-label={`Open ${title} full image`}
+            >
+              <img src={fileUrl} alt={previewAlt} className="max-h-[420px] w-full object-contain" />
+            </button>
+          </DialogTrigger>
+        );
       default:
         return (
           <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 bg-muted/40 p-6 text-center">
             <FileText className="h-10 w-10 text-primary" />
             <div>
               <p className="font-medium">{title} file uploaded</p>
-              <p className="text-sm text-muted-foreground">Preview is not available for this file type.</p>
             </div>
           </div>
         );
@@ -204,69 +212,41 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
   })();
 
   return (
-    <div className="mb-4 overflow-hidden rounded-lg border">
-      <div className="flex flex-col gap-3 border-b bg-muted/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{title} file</p>
-          <p className="text-xs text-muted-foreground">
-            {previewType === 'pdf' ? 'PDF preview' : previewType === 'image' ? 'Image preview' : 'File attachment'}
-          </p>
-        </div>
-        <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto">
-                <Expand className="mr-2 h-4 w-4" />
-                Preview
-              </Button>
-            </DialogTrigger>
-              <DialogContent className="max-h-[90vh] max-w-5xl overflow-hidden p-0">
-              <DialogHeader className="border-b px-6 py-4">
-                <DialogTitle>{title} File</DialogTitle>
-              </DialogHeader>
-              <div className="max-h-[calc(90vh-80px)] overflow-auto bg-muted/20 p-4">
-                {previewType === 'pdf' ? (
-                  <object
-                    data={pdfDialogPreviewUrl}
-                    type="application/pdf"
-                    aria-label={`${previewTitle} enlarged`}
-                    className="mx-auto h-[78vh] min-h-[760px] w-full max-w-[1080px] rounded-md border bg-white"
-                  >
-                    <iframe
-                      src={pdfDialogPreviewUrl}
-                      title={`${previewTitle} enlarged`}
-                      className="h-[78vh] min-h-[760px] w-full rounded-md bg-white"
-                    />
-                  </object>
-                ) : previewType === 'image' ? (
-                  <img src={fileUrl} alt={previewAlt} className="mx-auto max-h-[75vh] w-auto max-w-full object-contain" />
-                ) : (
-                  <div className="flex min-h-[280px] items-center justify-center">
-                    <p className="text-sm text-muted-foreground">This file type can be opened in a new tab.</p>
-                  </div>
-                )}
-              </div>
-            </DialogContent>
-          </Dialog>
-          <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleDownloadOriginal}>
-            <Download className="mr-2 h-4 w-4" />
-            Download {previewType === 'pdf' ? 'PDF' : 'Original'}
-          </Button>
-          {previewType === 'image' ? (
-            <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleDownloadImageAsPdf}>
+    <Dialog>
+      <div className="mb-4 overflow-hidden rounded-lg border">
+        <div className="flex flex-col gap-3 border-b bg-muted/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <p className="min-w-0 truncate text-sm font-semibold">{title} file</p>
+          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
+            <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleDownloadOriginal}>
               <Download className="mr-2 h-4 w-4" />
-              Download as PDF
+              Download {previewType === 'pdf' ? 'PDF' : 'Original'}
             </Button>
-          ) : null}
-          <Button asChild variant="ghost" size="sm" className="w-full sm:w-auto">
-            <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Open
-            </a>
-          </Button>
+            {previewType === 'image' ? (
+              <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleDownloadImageAsPdf}>
+                <Download className="mr-2 h-4 w-4" />
+                Download as PDF
+              </Button>
+            ) : null}
+            <Button asChild variant="ghost" size="sm" className="w-full sm:w-auto">
+              <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open
+              </a>
+            </Button>
+          </div>
         </div>
+        {previewContent}
       </div>
-      {previewContent}
-    </div>
+      {previewType === 'image' ? (
+        <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-6 py-4">
+            <DialogTitle>{title} File</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[calc(92vh-80px)] overflow-auto bg-muted/20 p-4">
+            <img src={fileUrl} alt={previewAlt} className="mx-auto max-h-[80vh] w-auto max-w-full object-contain" />
+          </div>
+        </DialogContent>
+      ) : null}
+    </Dialog>
   );
 });

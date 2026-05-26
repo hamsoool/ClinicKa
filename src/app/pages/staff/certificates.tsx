@@ -30,10 +30,10 @@ type StaffSubmission = SubmissionRecord & {
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = {
-  '1': '1st Year',
-  '2': '2nd Year',
-  '3': '3rd Year',
-  '4': '4th Year',
+  '1': 'Year I',
+  '2': 'Year II',
+  '3': 'Year III',
+  '4': 'Year IV',
 };
 type StaffRecordsCertificatesTab = 'archive' | 'certificates';
 
@@ -573,10 +573,10 @@ function StaffCertificatesWorkspace() {
 
                   <Select value={yearFilter} onValueChange={setYearFilter}>
                     <SelectTrigger>
-                      <SelectValue placeholder="All Years" />
+                      <SelectValue placeholder="All Record Slots" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Years</SelectItem>
+                      <SelectItem value="all">All Record Slots</SelectItem>
                       {Object.entries(YEAR_LABELS).map(([val, label]) => (
                         <SelectItem key={val} value={val}>
                           {label}
@@ -661,7 +661,7 @@ function StaffCertificatesWorkspace() {
                   <CardHeader>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
-                        <CardTitle className="leading-snug">Medical Record Form (Combined Year 1-4)</CardTitle>
+                        <CardTitle className="leading-snug">Medical Record Form (Combined Year I-IV)</CardTitle>
                         <p className="mt-1 text-sm text-muted-foreground">{combinedRecord.lastName}, {combinedRecord.firstName} | {combinedRecord.studentId}</p>
                         {selectedStudentRecordsFetching ? (
                           <span className="mt-2 block text-xs text-muted-foreground">Refreshing selected student...</span>
@@ -703,16 +703,16 @@ function StaffCertificatesWorkspace() {
                 <Card className="mb-4">
                   <CardContent className="pt-6">
                     <div className="flex max-w-xs flex-col gap-2">
-                      <p className="text-sm font-medium">Year Filter</p>
+                      <p className="text-sm font-medium">Record Slot Filter</p>
                       <Select value={clearanceYearFilter} onValueChange={setClearanceYearFilter}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select year" />
+                          <SelectValue placeholder="Select record slot" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">All Years</SelectItem>
+                          <SelectItem value="all">All Record Slots</SelectItem>
                           {availableYears.map((year) => (
                             <SelectItem key={year} value={year}>
-                              Year {year}
+                              {YEAR_LABELS[String(year || '')] || `Year ${year}`}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -790,7 +790,6 @@ export default function StaffRecordsAndCertificates() {
       <PortalPageIntro
         className="mb-8"
         title="Records & Certificates"
-        description="Review approved records and generate medical forms or clearance certificates from one workspace."
       />
 
       <Tabs className="min-w-0" value={activeWorkspaceTab} onValueChange={handleWorkspaceTabChange}>

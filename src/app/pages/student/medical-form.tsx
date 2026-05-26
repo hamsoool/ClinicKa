@@ -5,12 +5,23 @@ import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Progress } from '../../components/ui/progress';
+import { PortalPageSkeleton } from '../../components/project-skeletons';
 import StudentPageIntro from '../../components/student-page-intro';
 import { useAuth } from '../../lib/auth';
-import { getYearLevelLabel, resolveStudentYearLevel } from '../../lib/student-year';
-import { resolveStudentSubmissionProfile } from '../../lib/student-submission-profile';
+import {
+  formatAcademicYearLabel,
+  getDefaultAcademicYear,
+  getLatestRecordForAcademicYear,
+  getNextSubmissionSlot,
+  getRecordAcademicYear,
+  getSubmissionSlotLabel,
+  normalizeAcademicYear,
+  normalizeSubmissionSlot,
+} from '../../lib/academic-year';
+import { useActiveAcademicYearSettingsQuery } from '../../lib/academic-year-query';
 import { MedicalFormStepContent } from './medical-form/medical-form-step-content';
 import { useStudentMedicalForm } from './medical-form/use-student-medical-form';
+import { useStudentRecordsQuery } from './student-records-query';
 
 export default function StudentMedicalForm() {
   const navigate = useNavigate();
@@ -19,14 +30,27 @@ export default function StudentMedicalForm() {
   const { me } = useAuth();
   const editSubmissionId = searchParams.get('edit');
   const hasDataPrivacyConsent = searchParams.get('consent') === '1';
-  const submissionProfile = resolveStudentSubmissionProfile(me);
-  const allowedYearLevel =
-    (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') &&
-    submissionProfile.targetYearLevel
-      ? submissionProfile.targetYearLevel
-      : resolveStudentYearLevel(me);
-  const canAccessSelectedYear = Number.parseInt(String(year || ''), 10) === allowedYearLevel;
-  const currentYearLabel = getYearLevelLabel(allowedYearLevel);
+  const studentId = me?.student?.student_id || me?.profile.student_id || '';
+  const { data: records = [], isLoading: recordsLoading } = useStudentRecordsQuery(studentId, 'summary');
+  const { data: academicYearSettings, isLoading: academicYearLoading } = useActiveAcademicYearSettingsQuery();
+  const activeAcademicYear = normalizeAcademicYear(academicYearSettings?.academicYear || getDefaultAcademicYear());
+  const selectedSlot = normalizeSubmissionSlot(year);
+  const currentAcademicYearRecord = getLatestRecordForAcademicYear(records, activeAcademicYear);
+  const expectedSlot = getNextSubmissionSlot(records, activeAcademicYear);
+  const editRecord = editSubmissionId
+    ? records.find((record) => String(record.id || '') === editSubmissionId)
+    : null;
+  const formAcademicYear = editRecord ? getRecordAcademicYear(editRecord, activeAcademicYear) : activeAcademicYear;
+  const currentAcademicYearStatus = String(currentAcademicYearRecord?.status || '').toLowerCase();
+  const canOpenCurrentAcademicYearRecord = !currentAcademicYearRecord || currentAcademicYearStatus === 'returned';
+  const canAccessSelectedYear = Boolean(
+    selectedSlot &&
+      (editRecord
+        ? String(editRecord.status || '').toLowerCase() === 'returned' &&
+          String(editRecord.year || '') === String(selectedSlot)
+        : canOpenCurrentAcademicYearRecord &&
+          String(currentAcademicYearRecord?.year || expectedSlot || '') === String(selectedSlot)),
+  );
 
   const {
     step,
@@ -64,11 +88,16 @@ export default function StudentMedicalForm() {
   }, [navigate, submitted]);
 
   useEffect(() => {
+    if (recordsLoading || academicYearLoading) return;
     if (canAccessSelectedYear) return;
 
-    toast.error(`Only your current year level (${currentYearLabel}) can open the medical form.`);
+    toast.error(`This school year submission is filed under ${expectedSlot ? getSubmissionSlotLabel(expectedSlot) : 'the next available record slot'}.`);
     navigate('/student/year-selection', { replace: true });
-  }, [canAccessSelectedYear, currentYearLabel, navigate]);
+  }, [academicYearLoading, canAccessSelectedYear, expectedSlot, navigate, recordsLoading]);
+
+  if (recordsLoading || academicYearLoading) {
+    return <PortalPageSkeleton variant="dashboard" />;
+  }
 
   if (!canAccessSelectedYear) {
     return null;
@@ -83,8 +112,7 @@ export default function StudentMedicalForm() {
         </Button>
 
         <StudentPageIntro
-          title={`Year ${year} Medical Record Form`}
-          description="Complete each section carefully. Your progress is saved automatically while you work."
+          title={`${formatAcademicYearLabel(formAcademicYear)} Medical Record Form`}
         />
 
         <div className="space-y-2">

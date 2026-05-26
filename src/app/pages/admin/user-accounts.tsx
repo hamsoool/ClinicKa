@@ -407,7 +407,6 @@ export default function AdminUserAccounts() {
     <div className="mx-auto w-full max-w-[100rem] space-y-6">
       <PortalPageIntro
         title="User Accounts"
-        description="Archive student and clinic staff accounts to remove them from active access, then restore them from the archive when they need access again. Administrator accounts remain protected here."
         actions={(
           <Button className="w-full sm:w-fit md:self-auto" onClick={() => setOpenCreate(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
@@ -455,7 +454,6 @@ export default function AdminUserAccounts() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Account</DialogTitle>
-            <DialogDescription>Admin-created student and clinic staff accounts bypass email verification.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="grid gap-1.5">

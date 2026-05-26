@@ -162,10 +162,10 @@ export function isValidPhilippinePhoneNumber(value: string) {
 }
 
 export const YEAR_LEVELS = [
-  { value: '1', label: '1st Year' },
-  { value: '2', label: '2nd Year' },
-  { value: '3', label: '3rd Year' },
-  { value: '4', label: '4th Year' },
+  { value: '1', label: 'Year I' },
+  { value: '2', label: 'Year II' },
+  { value: '3', label: 'Year III' },
+  { value: '4', label: 'Year IV' },
 ] as const;
 
 export const LAB_TEST_SITE_OPTIONS = [

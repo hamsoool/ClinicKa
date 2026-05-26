@@ -77,6 +77,22 @@ const S = {
 };
 
 const COPY_TYPES = ["STUDENT'S COPY", "COORDINATOR'S COPY", "REGISTRAR'S COPY"] as const;
+const CLEARANCE_SIGNATORY_NAMES = ['GERALD S. BERNAL, MD', 'ARMANDO TAMAYO, MD'] as const;
+
+function normalizeSignatoryName(value?: string | null) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b(m\.?\s*d\.?|doctor|dr\.?)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchClearanceSignatoryName(value?: string | null) {
+  const normalized = normalizeSignatoryName(value);
+  return CLEARANCE_SIGNATORY_NAMES.find((name) => normalizeSignatoryName(name) === normalized) || '';
+}
 
 function GordonCollegeLogo({ size = 44 }: { size?: number }) {
   return (
@@ -115,7 +131,10 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
     .map((item) => item.trim().toLowerCase() === 'enrollment' ? 'enrolment' : item.trim().toLowerCase())
     .filter(Boolean);
 
-  const signatoryName = (record.staffMeasurements?.examinedBy || '').trim() || 'GERALD S. BERNAL, MD';
+  const signatoryName =
+    matchClearanceSignatoryName(cl.signatoryName) ||
+    matchClearanceSignatoryName(record.staffMeasurements?.examinedBy) ||
+    CLEARANCE_SIGNATORY_NAMES[0];
   const signatoryTitle = 'College Physician';
   const licenseNo = (cl.licenseNo || '008455').trim();
 

@@ -35,7 +35,7 @@ import {
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const REPORTING_TERM_REFRESH_INTERVAL_MS = 180_000;
-const YEAR_LABELS: Record<string, string> = { '1': '1st Year', '2': '2nd Year', '3': '3rd Year', '4': '4th Year' };
+const YEAR_LABELS: Record<string, string> = { '1': 'Year I', '2': 'Year II', '3': 'Year III', '4': 'Year IV' };
 const YEAR_LEVEL_ORDER = ['1', '2', '3', '4'];
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
@@ -193,7 +193,7 @@ function formatSubmissionBreakdownLabel(view: SubmissionBreakdownView) {
     case 'program':
       return 'Program';
     case 'year':
-      return 'Year Level';
+      return 'Record Slot';
     case 'gender':
       return 'Gender';
     default:
@@ -1115,7 +1115,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       const autoTableModule = await import('jspdf-autotable');
 
       const friendlyDepartment = departmentFilter === 'all' ? 'All Departments' : departmentFilter;
-      const friendlyYear = yearFilter === 'all' ? 'All Years' : (YEAR_LABELS[yearFilter] || `Year ${yearFilter}`);
+      const friendlyYear = yearFilter === 'all' ? 'All Record Slots' : (YEAR_LABELS[yearFilter] || `Year ${yearFilter}`);
       const friendlyStatus = statusFilter === 'all' ? 'All Statuses' : (STATUS_LABELS[statusFilter] || statusFilter);
       const friendlyCourse = courseFilter === 'all' ? 'All Courses' : courseFilter;
       const friendlyCondition = conditionFilter === 'all'
@@ -1253,7 +1253,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       {/* ── Page Header ───────────────────────────────────────────────── */}
       <PortalPageIntro
         title={`${mode === 'admin' ? 'Admin' : 'Staff'} Reports & Analytics`}
-        description="Filter submissions and export professional PDF summaries."
         className="mb-8"
       />
 
@@ -1261,7 +1260,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Filtered Submissions" value={summary.total} icon={Users} accent="text-primary" />
         <StatCard label="Approval Rate" value={`${summary.approvalRate}%`} icon={TrendingUp} accent="text-green-600" />
-        <StatCard label="1st Year Under Review" value={summary.firstYearUnderReview} icon={Clock} accent="text-amber-600" />
+        <StatCard label="Year I Under Review" value={summary.firstYearUnderReview} icon={Clock} accent="text-amber-600" />
         <StatCard label="Certificates Issued" value={summary.withCertificate} icon={Award} accent="text-blue-600" />
       </div>
 
@@ -1305,8 +1304,8 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                 <SelectItem value="all">All Departments</SelectItem>
                 {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
               </LabeledSelect>
-              <LabeledSelect label="Year Level" value={yearFilter} onValueChange={setYearFilter} placeholder="Year">
-                <SelectItem value="all">All Years</SelectItem>
+              <LabeledSelect label="Record Slot" value={yearFilter} onValueChange={setYearFilter} placeholder="Slot">
+                <SelectItem value="all">All Record Slots</SelectItem>
                 {Object.entries(YEAR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
               </LabeledSelect>
               <LabeledSelect label="Course" value={courseFilter} onValueChange={setCourseFilter} placeholder="Course">
@@ -1439,7 +1438,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                     <SelectContent>
                       <SelectItem value="department">Department</SelectItem>
                       <SelectItem value="program">Program</SelectItem>
-                      <SelectItem value="year">Year Level</SelectItem>
+                      <SelectItem value="year">Record Slot</SelectItem>
                       <SelectItem value="gender">Gender</SelectItem>
                     </SelectContent>
                   </Select>

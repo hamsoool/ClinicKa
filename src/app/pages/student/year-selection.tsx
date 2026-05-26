@@ -1,53 +1,100 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, ArrowRight, GraduationCap, Lock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarDays, CheckCircle2, FileText, Lock } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
-import { getYearLevelLabel, resolveStudentYearLevel } from '../../lib/student-year';
-import { resolveStudentSubmissionProfile, toCategoryLabel } from '../../lib/student-submission-profile';
+import {
+  formatAcademicYearLabel,
+  getDefaultAcademicYear,
+  getLatestRecordForAcademicYear,
+  getNextSubmissionSlot,
+  getRecordAcademicYear,
+  getSubmissionSlotLabel,
+  isCurrentAcademicYearBlocked,
+  normalizeAcademicYear,
+} from '../../lib/academic-year';
+import { useActiveAcademicYearSettingsQuery } from '../../lib/academic-year-query';
 import { useStudentRecordsQuery } from './student-records-query';
 
-const years = [
-  { level: 1, name: '1st Year', description: 'Freshman Requirements' },
-  { level: 2, name: '2nd Year', description: 'Sophomore Requirements' },
-  { level: 3, name: '3rd Year', description: 'Junior Requirements' },
-  { level: 4, name: '4th Year', description: 'Senior Requirements' },
-];
+const slotNumbers = [1, 2, 3, 4] as const;
 
 export default function StudentYearSelection() {
   const navigate = useNavigate();
   const { me } = useAuth();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
-  const studentYearLevel = resolveStudentYearLevel(me);
-  const submissionProfile = useMemo(() => resolveStudentSubmissionProfile(me), [me]);
-  const hasYearOverride =
-    (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') &&
-    Boolean(submissionProfile.targetYearLevel);
-  const allowedYearLevel = hasYearOverride ? Number(submissionProfile.targetYearLevel) : studentYearLevel;
-  const currentYearLabel = getYearLevelLabel(allowedYearLevel);
-  const { data = [], isLoading } = useStudentRecordsQuery(studentId, 'summary');
+  const { data = [], isLoading: recordsLoading } = useStudentRecordsQuery(studentId, 'summary');
+  const { data: academicYearSettings, isLoading: academicYearLoading } = useActiveAcademicYearSettingsQuery();
+  const activeAcademicYear = normalizeAcademicYear(academicYearSettings?.academicYear || getDefaultAcademicYear());
   const records = data;
-  const latestByYear = useMemo(() => {
-    const map = new Map<number, { status: string; updatedAt?: string; submittedAt?: string }>();
-    records.forEach((record) => {
-      const year = Number.parseInt(String(record?.year || ''), 10);
-      if (!Number.isInteger(year) || year < 1 || year > 4) return;
-      const current = map.get(year);
-      const currentTs = current ? new Date(current.updatedAt || current.submittedAt || 0).getTime() : -1;
-      const nextTs = new Date(record?.updatedAt || record?.submittedAt || 0).getTime();
-      if (!current || nextTs >= currentTs) {
-        map.set(year, {
-          status: String(record?.status || '').toLowerCase(),
-          updatedAt: record?.updatedAt,
-          submittedAt: record?.submittedAt,
-        });
-      }
-    });
-    return map;
+
+  const currentAcademicYearRecord = useMemo(
+    () => getLatestRecordForAcademicYear(records, activeAcademicYear),
+    [activeAcademicYear, records],
+  );
+  const nextSlot = useMemo(
+    () => getNextSubmissionSlot(records, activeAcademicYear),
+    [activeAcademicYear, records],
+  );
+  const selectedSlot = currentAcademicYearRecord?.year || (nextSlot ? String(nextSlot) : '');
+  const selectedSlotLabel = getSubmissionSlotLabel(selectedSlot);
+  const latestStatus = String(currentAcademicYearRecord?.status || '').toLowerCase();
+  const isApproved = latestStatus === 'approved';
+  const isReturned = latestStatus === 'returned';
+  const isBlocked = isCurrentAcademicYearBlocked(currentAcademicYearRecord);
+  const isPending = isBlocked && !isApproved;
+  const canStartSubmission = Boolean(!currentAcademicYearRecord && nextSlot);
+  const canOpen = Boolean(isApproved || isReturned || canStartSubmission);
+  const destination = isApproved
+    ? `/student/clearance?tab=medical-clearance&year=${selectedSlot || '1'}`
+    : isReturned
+      ? `/student/privacy-waiver/${selectedSlot || '1'}?edit=${encodeURIComponent(currentAcademicYearRecord?.id || '')}`
+      : selectedSlot
+        ? `/student/privacy-waiver/${selectedSlot}`
+        : '/student/clearance?tab=history';
+
+  const slotRecords = useMemo(() => {
+    const sorted = [...records].sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.submittedAt || 0).getTime() -
+        new Date(a.updatedAt || a.submittedAt || 0).getTime(),
+    );
+    return slotNumbers.map((slot) => ({
+      slot,
+      record: sorted.find((record) => String(record.year || '') === String(slot)) || null,
+    }));
   }, [records]);
-  if (isLoading && studentId) {
+
+  if ((recordsLoading && studentId) || academicYearLoading) {
     return <PortalPageSkeleton variant="year-selection" />;
   }
+
+  const statusLabel = currentAcademicYearRecord
+    ? isApproved
+      ? 'Approved'
+      : isReturned
+        ? 'Returned'
+        : 'In Review'
+    : nextSlot
+      ? 'Open'
+      : 'Complete';
+  const helperText = currentAcademicYearRecord
+    ? isApproved
+      ? 'This school year is already approved.'
+      : isReturned
+        ? 'Clinic staff returned this school year record for correction.'
+        : 'This school year record is already submitted.'
+    : nextSlot
+      ? 'Start this school year submission.'
+      : 'All four medical record slots have been used.';
+  const actionLabel = isApproved
+    ? 'Open clearance form'
+    : isReturned
+      ? 'Edit returned record'
+      : canStartSubmission
+        ? 'Continue to waiver'
+        : isPending
+          ? 'Unavailable right now'
+          : 'View records';
 
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
@@ -60,134 +107,79 @@ export default function StudentYearSelection() {
         Back to Dashboard
       </button>
 
-      <div className="mx-auto grid max-w-[78rem] gap-5 md:grid-cols-2 xl:gap-6">
-        {years.map((year) => {
-          const latestYearStatus = latestByYear.get(year.level)?.status || '';
-          const isApprovedLocked = latestYearStatus === 'approved';
-          const isPendingLocked = latestYearStatus === 'pending' || latestYearStatus === 'in_review' || latestYearStatus === 'resubmitted';
-          const isReturned = latestYearStatus === 'returned';
-          const isCurrent = year.level === allowedYearLevel;
-          const isNonCurrentLocked = !isCurrent && !isApprovedLocked;
-          const isLocked = isPendingLocked || isNonCurrentLocked;
-          const destination = isApprovedLocked
-            ? `/student/clearance?tab=medical-clearance&year=${year.level}`
-            : `/student/privacy-waiver/${year.level}`;
-          const cardStatusLabel = isApprovedLocked
-            ? 'Approved'
-            : isPendingLocked
-              ? 'Pending'
-              : isReturned && isCurrent
-                ? 'Returned'
-                : isNonCurrentLocked
-                  ? 'Locked'
-                : isCurrent
-                  ? 'Current Year'
-                  : 'Available';
-          const cardHelperText = isApprovedLocked
-            ? 'Already approved. Further submissions are locked.'
-            : isPendingLocked
-              ? 'Submission is under review. Please wait for clinic feedback.'
-              : isReturned && isCurrent
-                ? 'Returned by clinic staff. You may edit and resubmit.'
-                : isNonCurrentLocked
-                  ? `Only your ${hasYearOverride ? 'selected submission year' : 'current year level'} (${currentYearLabel}) can be submitted.`
-                  : year.description;
-          const statusClasses = isApprovedLocked
-            ? 'bg-primary-container/20 text-on-primary-container'
-            : isPendingLocked
-              ? 'bg-amber-100 text-amber-800'
-              : isReturned && isCurrent
-                ? 'bg-error-container/70 text-on-error-container'
-                : isCurrent
-                  ? 'bg-primary/10 text-primary'
-                  : 'bg-surface-variant text-on-surface-variant';
-          const cardClasses = isLocked
-            ? isCurrent
-              ? 'cursor-not-allowed border-primary bg-[#1fbd6b] text-on-surface'
+      <div className="mx-auto grid max-w-[78rem] gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
+        <button
+          type="button"
+          disabled={!canOpen || isPending}
+          onClick={() => canOpen && !isPending && navigate(destination)}
+          className={`group relative flex min-h-[280px] flex-col overflow-hidden rounded-2xl border p-5 text-left shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] transition-all sm:p-6 ${
+            canOpen && !isPending
+              ? 'border-primary bg-[#1fbd6b] text-[#08331d] hover:border-primary/90 hover:bg-[#19b463]'
               : 'cursor-not-allowed border-primary/10 bg-primary/5 text-on-surface-variant'
-            : isCurrent
-              ? 'border-primary bg-[#1fbd6b] text-on-surface hover:border-primary/90 hover:bg-[#19b463]'
-              : 'border-primary/15 bg-primary/5 text-on-surface hover:border-primary/25 hover:bg-primary/10';
-          const iconClasses = isLocked
-            ? isCurrent
-              ? 'bg-primary/10 text-[#064e2b]'
-              : 'bg-primary/10 text-primary/50'
-            : isCurrent
-              ? 'bg-primary/10 text-[#064e2b]'
-              : 'bg-primary/10 text-primary';
-          const titleClasses = isCurrent ? 'text-[#08331d]' : 'text-primary';
-          const subtitleClasses = isCurrent ? 'text-[#0d5a34]' : 'text-primary/80';
-          const bodyClasses = isCurrent ? 'text-[#0d5a34]' : 'text-primary/75';
-          const actionClasses = isLocked
-            ? isCurrent
-              ? 'text-[#0b6a3d]'
-              : 'text-primary/50'
-            : isCurrent
-              ? 'text-[#064e2b]'
-              : 'text-primary';
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="inline-flex w-fit items-center rounded-b-xl rounded-t-md bg-white/25 px-3 py-1 text-xs font-semibold text-[#08331d]">
+              {statusLabel}
+            </div>
+            <div className="inline-flex w-fit items-center rounded-b-xl rounded-t-md bg-[#0a7f49] px-3 py-1 text-xs font-semibold text-white">
+              {selectedSlotLabel}
+            </div>
+          </div>
 
-          return (
-            <button
-              key={year.level}
-              type="button"
-              disabled={isLocked}
-              onClick={() => !isLocked && navigate(destination)}
-              className={`group relative flex min-h-[250px] flex-col overflow-hidden rounded-2xl border p-5 text-center shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] transition-all sm:p-6 ${cardClasses}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className={`inline-flex w-fit items-center rounded-b-xl rounded-t-md px-3 py-1 text-xs font-semibold ${statusClasses}`}>
-                  {cardStatusLabel}
-                </div>
-                {isCurrent ? (
-                  <div className="inline-flex w-fit items-center rounded-b-xl rounded-t-md bg-[#0a7f49] px-3 py-1 text-xs font-semibold text-white">
-                    {hasYearOverride ? `${toCategoryLabel(submissionProfile.category)} Year` : 'Current Year'}
-                  </div>
-                ) : isLocked ? (
-                  <span className="text-outline">
-                    <Lock className="h-4 w-4" />
-                  </span>
-                ) : (
-                  <span className="text-primary opacity-70 transition-all group-hover:translate-x-0.5 group-hover:opacity-100">
-                    <ArrowRight className="h-4 w-4" />
-                  </span>
-                )}
-              </div>
+          <div className="mt-8 flex h-full flex-col justify-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-[#064e2b]">
+              <CalendarDays className="h-6 w-6" />
+            </span>
+            <div className="mt-5 space-y-2">
+              <h3 className="text-2xl font-semibold sm:text-3xl">{formatAcademicYearLabel(activeAcademicYear)}</h3>
+              <p className="text-sm font-medium text-[#0d5a34]">Medical Record Submission</p>
+            </div>
+            <p className="mt-4 max-w-[26rem] text-sm leading-6 text-[#0d5a34]">{helperText}</p>
+            <div className="mt-auto flex items-center gap-2 pt-6 text-sm font-semibold text-[#064e2b]">
+              {isPending ? <Lock className="h-4 w-4" /> : isApproved ? <CheckCircle2 className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+              {actionLabel}
+            </div>
+          </div>
+        </button>
 
-              <div className="mt-7 flex h-full flex-col items-center justify-center">
-                <span
-                  className={`mx-auto flex h-12 w-12 items-center justify-center rounded-xl ${iconClasses}`}
+        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <FileText className="h-5 w-5" />
+            </span>
+            <div>
+              <h3 className="text-base font-semibold text-on-surface">Record Slots</h3>
+              <p className="text-sm text-on-surface-variant">{formatAcademicYearLabel(activeAcademicYear)}</p>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {slotRecords.map(({ slot, record }) => {
+              const isCurrentAcademicYear = record && getRecordAcademicYear(record) === activeAcademicYear;
+              return (
+                <div
+                  key={slot}
+                  className={`rounded-xl border px-4 py-3 ${
+                    isCurrentAcademicYear
+                      ? 'border-primary/30 bg-primary-container/10'
+                      : 'border-outline-variant/20 bg-surface-container-low'
+                  }`}
                 >
-                  <GraduationCap className="h-6 w-6" />
-                </span>
-
-                <div className="mt-4 space-y-2">
-                  <h3 className={`text-xl font-semibold sm:text-2xl ${titleClasses}`}>{year.name}</h3>
-                  {!isApprovedLocked && !isPendingLocked && !(isReturned && isCurrent) ? (
-                    <p className={`text-sm font-medium ${subtitleClasses}`}>{year.description}</p>
-                  ) : null}
-                </div>
-
-                <p className={`mt-4 max-w-[18rem] text-sm leading-6 ${bodyClasses}`}>{cardHelperText}</p>
-
-                <div className="mt-auto pt-6">
-                  <p className={`text-sm font-semibold ${actionClasses}`}>
-                    {isPendingLocked
-                      ? 'Unavailable right now'
-                      : isNonCurrentLocked
-                        ? hasYearOverride
-                          ? 'Selected year only'
-                          : 'Current year only'
-                        : isApprovedLocked
-                          ? 'Open clearance form'
-                          : isReturned && isCurrent
-                            ? 'Open returned record'
-                            : 'Continue to waiver'}
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-on-surface">{getSubmissionSlotLabel(slot)}</p>
+                    <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant">
+                      {record ? String(record.status || 'Submitted') : slot === nextSlot ? 'Next' : '--'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    {record ? formatAcademicYearLabel(getRecordAcademicYear(record)) : slot === nextSlot ? formatAcademicYearLabel(activeAcademicYear) : '--'}
                   </p>
                 </div>
-              </div>
-            </button>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );

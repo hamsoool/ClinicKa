@@ -18,10 +18,10 @@ import { useStaffSubmissionSummariesQuery } from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS: Record<string, string> = {
-  '1': '1st Year',
-  '2': '2nd Year',
-  '3': '3rd Year',
-  '4': '4th Year',
+  '1': 'Year I',
+  '2': 'Year II',
+  '3': 'Year III',
+  '4': 'Year IV',
 };
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [20];
@@ -217,7 +217,6 @@ export default function StaffSubmissions() {
       <PortalPageIntro
         className="mb-8"
         title="Student Submissions"
-        description="Staff queue data is loaded in smaller server-filtered batches so the clinic dashboard stays responsive during heavy submission days."
       />
 
       <Card className="mb-6">
@@ -338,10 +337,10 @@ export default function StaffSubmissions() {
 
               <Select value={yearFilter} onValueChange={setYearFilter}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Year Levels" />
+                  <SelectValue placeholder="All Record Slots" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Year Levels</SelectItem>
+                  <SelectItem value="all">All Record Slots</SelectItem>
                   {Object.entries(YEAR_LABELS).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
@@ -408,7 +407,7 @@ export default function StaffSubmissions() {
                           {submission.firstName} {submission.lastName}
                         </h4>
                         <Badge variant="outline" className="bg-secondary/50 text-secondary-foreground">
-                          Year {submission.year || '--'}
+                          {YEAR_LABELS[String(submission.year || '')] || 'Record Slot --'}
                         </Badge>
                         <Badge
                           variant="outline"

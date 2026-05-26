@@ -1,15 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, BadgeCheck, ChevronRight, FileText, ShieldCheck } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Checkbox } from '../../components/ui/checkbox';
+import { PortalPageSkeleton } from '../../components/project-skeletons';
 import StudentPageIntro from '../../components/student-page-intro';
 import { Label } from '../../components/ui/label';
 import { useAuth } from '../../lib/auth';
-import { getYearLevelLabel, resolveStudentYearLevel } from '../../lib/student-year';
-import { resolveStudentSubmissionProfile } from '../../lib/student-submission-profile';
+import {
+  getDefaultAcademicYear,
+  getLatestRecordForAcademicYear,
+  getNextSubmissionSlot,
+  getSubmissionSlotLabel,
+  normalizeAcademicYear,
+  normalizeSubmissionSlot,
+} from '../../lib/academic-year';
+import { useActiveAcademicYearSettingsQuery } from '../../lib/academic-year-query';
+import { useStudentRecordsQuery } from './student-records-query';
 import {
   DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT,
   DATA_PRIVACY_CONSENT_BODY,
@@ -24,24 +33,37 @@ export default function StudentPrivacyWaiver() {
   const [dataPrivacyConsent, setDataPrivacyConsent] = useState(false);
   const canContinue = dataPrivacyConsent;
   const editSubmissionId = searchParams.get('edit');
-  const submissionProfile = resolveStudentSubmissionProfile(me);
-  const allowedYearLevel =
-    (submissionProfile.category === 'returning' || submissionProfile.category === 'repeater_irregular') &&
-    submissionProfile.targetYearLevel
-      ? submissionProfile.targetYearLevel
-      : resolveStudentYearLevel(me);
-  const canAccessSelectedYear = Number.parseInt(String(year || ''), 10) === allowedYearLevel;
-  const currentYearLabel = getYearLevelLabel(allowedYearLevel);
-  const yearLabel = useMemo(() => {
-    return getYearLevelLabel(year);
-  }, [year]);
-
+  const studentId = me?.student?.student_id || me?.profile.student_id || '';
+  const { data: records = [], isLoading: recordsLoading } = useStudentRecordsQuery(studentId, 'summary');
+  const { data: academicYearSettings, isLoading: academicYearLoading } = useActiveAcademicYearSettingsQuery();
+  const activeAcademicYear = normalizeAcademicYear(academicYearSettings?.academicYear || getDefaultAcademicYear());
+  const selectedSlot = normalizeSubmissionSlot(year);
+  const currentAcademicYearRecord = getLatestRecordForAcademicYear(records, activeAcademicYear);
+  const expectedSlot = getNextSubmissionSlot(records, activeAcademicYear);
+  const editRecord = editSubmissionId
+    ? records.find((record) => String(record.id || '') === editSubmissionId)
+    : null;
+  const currentAcademicYearStatus = String(currentAcademicYearRecord?.status || '').toLowerCase();
+  const canOpenCurrentAcademicYearRecord = !currentAcademicYearRecord || currentAcademicYearStatus === 'returned';
+  const canAccessSelectedYear = Boolean(
+    selectedSlot &&
+      (editRecord
+        ? String(editRecord.status || '').toLowerCase() === 'returned' &&
+          String(editRecord.year || '') === String(selectedSlot)
+        : canOpenCurrentAcademicYearRecord &&
+          String(currentAcademicYearRecord?.year || expectedSlot || '') === String(selectedSlot)),
+  );
   useEffect(() => {
+    if (recordsLoading || academicYearLoading) return;
     if (canAccessSelectedYear) return;
 
-    toast.error(`Only your allowed year level (${currentYearLabel}) can open the submission waiver.`);
+    toast.error(`This school year submission is filed under ${expectedSlot ? getSubmissionSlotLabel(expectedSlot) : 'the next available record slot'}.`);
     navigate('/student/year-selection', { replace: true });
-  }, [canAccessSelectedYear, currentYearLabel, navigate]);
+  }, [academicYearLoading, canAccessSelectedYear, expectedSlot, navigate, recordsLoading]);
+
+  if (recordsLoading || academicYearLoading) {
+    return <PortalPageSkeleton variant="dashboard" />;
+  }
 
   if (!canAccessSelectedYear) {
     return null;
@@ -60,7 +82,6 @@ export default function StudentPrivacyWaiver() {
 
       <StudentPageIntro
         title="Data Privacy Waiver"
-        description={`Review and accept the privacy consent for your ${yearLabel} medical record before continuing to the submission form.`}
       />
 
       <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
@@ -68,9 +89,6 @@ export default function StudentPrivacyWaiver() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-2">
               <CardTitle className="text-2xl font-bold tracking-tight text-on-surface">Consent and Privacy Notice</CardTitle>
-              <p className="max-w-2xl text-sm leading-6 text-on-surface-variant">
-                This explains why the clinic collects your information, how it is protected, and the rights you keep as a student.
-              </p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-primary-container/20 px-3 py-1.5 text-sm font-medium text-on-primary-container">
               <BadgeCheck className="h-4 w-4" />
@@ -140,7 +158,7 @@ export default function StudentPrivacyWaiver() {
                   <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
                     <p className="text-sm font-medium text-on-surface">2. Tick the acknowledgment box</p>
                     <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-                      This unlocks the medical form for your selected year level.
+                      This unlocks the medical form for the active school year.
                     </p>
                   </div>
                   <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
