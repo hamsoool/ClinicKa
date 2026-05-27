@@ -547,7 +547,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 <p className="break-words font-medium">
                   {formData.course} ({formData.department})
                 </p>
-                <p className="text-muted-foreground">Record Slot:</p>
+                <p className="text-muted-foreground">Year Level:</p>
                 <p className="font-medium">{YEAR_LEVELS.find((year) => year.value === formData.yearLevel)?.label}</p>
                 <p className="text-muted-foreground">Birthday:</p>
                 <p className="font-medium">{formData.birthday}</p>

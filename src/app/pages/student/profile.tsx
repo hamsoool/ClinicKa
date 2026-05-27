@@ -18,11 +18,6 @@ import {
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import {
-  resolveStudentSubmissionProfile,
-  type StudentSubmissionCategory,
-  writeStudentSubmissionProfile,
-} from '../../lib/student-submission-profile';
-import {
   formatPhilippinePhoneInput,
   isValidPhilippinePhoneNumber,
   normalizeProgramForDepartment,
@@ -37,14 +32,13 @@ type StudentProfileFormState = {
   middleInitial: string;
   department: string;
   course: string;
+  yearLevel: string;
   age: string;
   sex: string;
   birthday: string;
   civilStatus: string;
   contactNumber: string;
   address: string;
-  submissionCategory: StudentSubmissionCategory;
-  submissionTargetYearLevel: string;
 };
 
 const MAX_NAME_LENGTH = 30;
@@ -118,7 +112,6 @@ function isAtLeastAge(dateValue: string, minAge: number) {
 
 function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null): StudentProfileFormState {
   const department = resolveDepartmentValue(me?.student?.department || me?.profile.department || '');
-  const submissionProfile = resolveStudentSubmissionProfile(me as AuthMe | null);
   const birthday = me?.student?.birthday || '';
   const derivedAge = calculateAgeFromBirthdate(birthday);
   return {
@@ -128,14 +121,13 @@ function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null):
     middleInitial: String(me?.student?.middle_initial || '').replace(/[^A-Za-z]/g, '').slice(0, 1),
     department,
     course: normalizeProgramForDepartment(department, me?.student?.course || me?.profile.course || ''),
+    yearLevel: me?.student?.year_level ? String(me.student.year_level) : '',
     age: derivedAge !== null ? String(derivedAge) : (me?.student?.age ? String(me.student.age) : ''),
     sex: me?.student?.sex || 'female',
     birthday,
     civilStatus: me?.student?.civil_status || 'Single',
     contactNumber: formatPhilippinePhoneInput(me?.student?.contact_number || ''),
     address: sanitizeAddress(me?.student?.address || ''),
-    submissionCategory: submissionProfile.category,
-    submissionTargetYearLevel: submissionProfile.targetYearLevel ? String(submissionProfile.targetYearLevel) : '',
   };
 }
 
@@ -257,6 +249,7 @@ export default function StudentProfile() {
     Boolean(formData.middleInitial.trim()) &&
     Boolean(formData.department.trim()) &&
     Boolean(formData.course.trim()) &&
+    Boolean(formData.yearLevel.trim()) &&
     Boolean(formData.age.trim()) &&
     Boolean(formData.sex.trim()) &&
     Boolean(formData.birthday.trim()) &&
@@ -311,15 +304,6 @@ export default function StudentProfile() {
         ? {
             address: sanitizeAddress(String(value)),
           }
-        : field === 'submissionCategory'
-        ? {
-            submissionCategory: String(value) as StudentSubmissionCategory,
-            submissionTargetYearLevel: '',
-          }
-        : field === 'submissionTargetYearLevel'
-        ? {
-            submissionTargetYearLevel: String(value).replace(/\D/g, '').slice(0, 1),
-          }
         : {
             [field]: value,
           }),
@@ -368,10 +352,7 @@ export default function StudentProfile() {
 
     setSaving(true);
     try {
-      const result = await updateStudentProfile({
-        ...formData,
-        submissionTargetYearLevel: null,
-      });
+      const result = await updateStudentProfile(formData);
       const nextStateFromResult = buildProfileFormState({
         profile: result.profile,
         student: result.student,
@@ -408,12 +389,6 @@ export default function StudentProfile() {
 
       // Keep the just-saved values even if auth refresh returns a partial student payload.
       setFormData(nextStateFromResult);
-      if (resolvedStudentId) {
-        writeStudentSubmissionProfile(resolvedStudentId, {
-          category: formData.submissionCategory,
-          targetYearLevel: null,
-        });
-      }
       void refresh();
 
       if (typeof window !== 'undefined') {
@@ -441,7 +416,6 @@ export default function StudentProfile() {
           value={formData}
           onChange={(field, value) => updateField(field as keyof StudentProfileFormState, value as StudentProfileFormState[keyof StudentProfileFormState])}
           title="Student Information"
-          showSubmissionFields
           hasValidBirthday={hasValidBirthday}
           hasValidContactNumber={hasValidContactNumber}
         />

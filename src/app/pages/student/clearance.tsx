@@ -529,13 +529,13 @@ export default function StudentClearance() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col gap-2 sm:max-w-xs">
-                <p className="text-sm font-medium">Filter by Record Slot</p>
+                <p className="text-sm font-medium">Filter by Year Level</p>
                 <Select value={selectedYear} onValueChange={handleYearChange}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select record slot" />
+                    <SelectValue placeholder="Select year level" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Record Slots</SelectItem>
+                    <SelectItem value="all">All Year Levels</SelectItem>
                     {yearOptions.map((year) => (
                       <SelectItem key={year} value={year}>
                         {getSubmissionSlotLabel(year)}
@@ -553,7 +553,7 @@ export default function StudentClearance() {
                 <FileText className="mb-4 h-16 w-16 text-muted-foreground" />
                 <p className="mb-2 text-lg font-medium">No Record Found</p>
                 <p className="max-w-md text-muted-foreground">
-                  No medical record matched the selected slot. Try another slot or submit a form first.
+                  No medical record matched the selected year level. Try another option or submit a form first.
                 </p>
               </CardContent>
             </Card>

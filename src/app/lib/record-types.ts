@@ -37,6 +37,7 @@ export type PhysicalExamination = {
   others?: string;
   examinedBy?: string;
   examinedBySignatureUrl?: string;
+  updatedAt?: string;
 };
 
 export type LabResults = {
@@ -162,7 +163,6 @@ export type SubmissionSummaryRecord = {
   reviewedByStaffId?: string;
   reviewedByName?: string;
   reviewedByPosition?: string;
-  submissionCategory?: 'regular' | 'returning' | 'repeater_irregular';
 };
 
 export type ApprovedStudentRecordSummary = {

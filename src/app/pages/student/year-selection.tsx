@@ -85,7 +85,7 @@ export default function StudentYearSelection() {
         : 'This school year record is already submitted.'
     : nextSlot
       ? 'Start this school year submission.'
-      : 'All four medical record slots have been used.';
+      : 'All four year levels have already been used.';
   const actionLabel = isApproved
     ? 'Open clearance form'
     : isReturned
@@ -149,7 +149,7 @@ export default function StudentYearSelection() {
               <FileText className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-base font-semibold text-on-surface">Record Slots</h3>
+              <h3 className="text-base font-semibold text-on-surface">Year Levels</h3>
               <p className="text-sm text-on-surface-variant">{formatAcademicYearLabel(activeAcademicYear)}</p>
             </div>
           </div>
