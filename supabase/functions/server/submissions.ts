@@ -34,6 +34,7 @@ const STAFF_SUBMISSION_SUMMARIES_DEFAULT_PAGE_SIZE = 25;
 const STAFF_SUBMISSION_SUMMARIES_MAX_PAGE_SIZE = 100;
 const STAFF_APPROVED_STUDENTS_DEFAULT_PAGE_SIZE = 20;
 const STAFF_APPROVED_STUDENTS_MAX_PAGE_SIZE = 50;
+const SUBMISSION_ACCESS_COLUMNS = "id,student_id,status,reviewed_by";
 
 export const SUBMISSION_LIST_COLUMNS = [
   "id",
@@ -116,6 +117,13 @@ export function invalidateDashboardReadCaches() {
   staffSubmissionSummariesPromises.clear();
   staffApprovedStudentsCache.clear();
   staffApprovedStudentsPromises.clear();
+}
+
+export function invalidateStudentRecordsCache(studentId?: string | null) {
+  const cacheKey = String(studentId || "").trim();
+  if (!cacheKey) return;
+  studentRecordsReadCache.delete(cacheKey);
+  studentRecordsReadPromises.delete(cacheKey);
 }
 
 function mapMedicalHistory(row: any) {
@@ -1499,10 +1507,12 @@ export async function getCachedStudentRecords(studentId: string) {
 export async function requireSubmissionAccess(
   requester: Requester,
   submissionId: string,
+  options: { columns?: string } = {},
 ) {
+  const columns = String(options.columns || SUBMISSION_ACCESS_COLUMNS).trim() || SUBMISSION_ACCESS_COLUMNS;
   const { data: submission, error } = await supabase
     .from("submissions")
-    .select("*")
+    .select(columns)
     .eq("id", submissionId)
     .maybeSingle();
 

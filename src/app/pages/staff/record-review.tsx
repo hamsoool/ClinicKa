@@ -58,6 +58,7 @@ import type { MedicalHistory, SubmissionRecord } from '../../lib/record-types';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
 import {
   invalidateStaffWorkflowQueries,
+  staffSubmissionDetailQueryKey,
   useStaffSubmissionDetailQuery,
 } from './staff-workflow-query';
 import {
@@ -271,6 +272,7 @@ const HIGHLIGHTED_ASSESSMENT_FIELDS: Array<keyof AssessmentForm> = [
 ];
 
 type ReviewStep = (typeof REVIEW_STEPS)[number];
+type ReviewAction = 'save' | 'pending' | 'cleared';
 
 type LabUploadActionsProps = {
   title: string;
@@ -840,6 +842,7 @@ export default function StaffRecordReview() {
     status: 'idle',
   });
   const [updatedAssessmentFields, setUpdatedAssessmentFields] = useState<UpdatedAssessmentFields>({});
+  const [savingAction, setSavingAction] = useState<ReviewAction | null>(null);
   const assessmentFormRef = useRef<AssessmentForm>(createAssessmentForm());
   const inReviewTransitionRef = useRef<string | null>(null);
   const hydratedSubmissionIdRef = useRef<string | null>(null);
@@ -1297,9 +1300,19 @@ export default function StaffRecordReview() {
         };
       });
 
-      void invalidateStaffWorkflowQueries(queryClient, submissionId, submission.studentId).catch((error) => {
-        console.error('Failed to refresh staff workflow queries after lab upload:', error);
-      });
+      queryClient.setQueryData(
+        staffSubmissionDetailQueryKey(submissionId),
+        (cached: SubmissionDetails | null) => {
+          if (!cached) return cached;
+          return {
+            ...cached,
+            xrayFileUrl: fileType === 'xray' ? nextUrl || cached.xrayFileUrl : cached.xrayFileUrl,
+            cbcFileUrl: fileType === 'cbc' ? nextUrl || cached.cbcFileUrl : cached.cbcFileUrl,
+            urinalysisFileUrl: fileType === 'urinalysis' ? nextUrl || cached.urinalysisFileUrl : cached.urinalysisFileUrl,
+            updatedAt: now,
+          };
+        },
+      );
       toast.success(`${title} file ${isReplacement ? 'replaced' : 'uploaded'}.`);
       return true;
     } catch (error) {
@@ -1691,7 +1704,7 @@ export default function StaffRecordReview() {
     }
   }
 
-  async function persistReview(nextStatus?: ReviewStatus, customNotes?: string) {
+  async function persistReview(nextStatus?: ReviewStatus, customNotes?: string, action?: ReviewAction) {
     if (!submissionId || !submission) return;
     if (!/^\d{2}$/.test(recordForm.age)) {
       toast.error('Age must be exactly 2 digits.');
@@ -1733,6 +1746,7 @@ export default function StaffRecordReview() {
       }
     }
 
+    setSavingAction(action ?? null);
     setSaving(true);
     try {
       const statusToSave = targetStatus;
@@ -1898,6 +1912,7 @@ export default function StaffRecordReview() {
       toast.error('Failed to save review changes');
     } finally {
       setSaving(false);
+      setSavingAction(null);
     }
   }
 
@@ -3107,11 +3122,12 @@ export default function StaffRecordReview() {
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button
               variant="outline"
-              onClick={() => void persistReview(isArchiveEditMode ? 'approved' : undefined)}
+              onClick={() => void persistReview(isArchiveEditMode ? 'approved' : undefined, undefined, 'save')}
               disabled={saving}
+              loading={saving && savingAction === 'save'}
             >
               <Save className="mr-2 h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Review'}
+              {saving && savingAction === 'save' ? 'Saving...' : 'Save Review'}
             </Button>
             {!isArchiveEditMode ? (
             <Button variant="destructive" onClick={() => {
@@ -3123,12 +3139,13 @@ export default function StaffRecordReview() {
             ) : null}
             {canFinalizeClearance && !isArchiveEditMode ? (
               <Button
-                onClick={() => void persistReview('approved')}
+                onClick={() => void persistReview('approved', undefined, 'cleared')}
                 disabled={saving}
+                loading={saving && savingAction === 'cleared'}
                 className="bg-green-600 text-white hover:bg-green-700"
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                Cleared
+                {saving && savingAction === 'cleared' ? 'Clearing...' : 'Cleared'}
               </Button>
             ) : null}
           </div>
@@ -3161,14 +3178,15 @@ export default function StaffRecordReview() {
             <Button variant="outline" onClick={() => setShowReturnDialog(false)}>Cancel</Button>
             <Button
               variant="destructive"
-              onClick={() => {
+              onClick={async () => {
                 setStaffNotes(returnReason);
-                void persistReview('returned', returnReason);
+                await persistReview('returned', returnReason, 'pending');
                 setShowReturnDialog(false);
               }}
               disabled={!returnReason.trim() || saving}
+              loading={saving && savingAction === 'pending'}
             >
-              {saving ? 'Saving Pending...' : 'Confirm Pending'}
+              {saving && savingAction === 'pending' ? 'Saving Pending...' : 'Confirm Pending'}
             </Button>
           </DialogFooter>
         </DialogContent>
