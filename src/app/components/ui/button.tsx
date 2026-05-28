@@ -39,17 +39,39 @@ const Button = React.forwardRef<
   React.ComponentProps<"button"> &
     VariantProps<typeof buttonVariants> & {
       asChild?: boolean;
+      loading?: boolean;
     }
->(({ className, variant, size, asChild = false, ...props }, ref) => {
+>(({ className, variant, size, asChild = false, loading = false, children, ...props }, ref) => {
   const Comp = asChild ? Slot : "button";
+  const showLoadingBar = loading && !asChild;
+  const content = showLoadingBar ? (
+    <>
+      {children}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-2 bottom-1 h-1 overflow-hidden rounded-full bg-current/20"
+      >
+        <span className="gc-loading-indicator absolute inset-y-0 left-0 w-1/2 rounded-full bg-current/70" />
+      </span>
+    </>
+  ) : (
+    children
+  );
 
   return (
     <Comp
       data-slot="button"
+      data-loading={loading ? "true" : undefined}
+      aria-busy={loading || undefined}
       ref={ref}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(
+        buttonVariants({ variant, size, className }),
+        showLoadingBar && "relative overflow-hidden",
+      )}
       {...props}
-    />
+    >
+      {content}
+    </Comp>
   );
 });
 Button.displayName = "Button";

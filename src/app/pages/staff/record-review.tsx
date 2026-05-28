@@ -80,10 +80,12 @@ type SubmissionDetails = SubmissionRecord & {
 
 type ReviewStatus = SubmissionRecord['status'];
 type LabUploadType = 'xray' | 'cbc' | 'urinalysis';
+type LabUploadSource = 'file' | 'camera';
 type PendingLabReplacement = {
   file: File;
   fileType: LabUploadType;
   title: string;
+  source: LabUploadSource;
 };
 const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
 
@@ -273,6 +275,7 @@ type ReviewStep = (typeof REVIEW_STEPS)[number];
 type LabUploadActionsProps = {
   title: string;
   isUploading: boolean;
+  uploadSource?: LabUploadSource | null;
   onChooseFile: (file: File | null) => void;
   onOpenCamera: (file: File | null) => void;
 };
@@ -280,9 +283,13 @@ type LabUploadActionsProps = {
 function LabUploadActions({
   title,
   isUploading,
+  uploadSource,
   onChooseFile,
   onOpenCamera,
 }: LabUploadActionsProps) {
+  const isFileUploading = isUploading && uploadSource === 'file';
+  const isCameraUploading = isUploading && uploadSource === 'camera';
+
   return (
     <div className="rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-low px-4 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -298,18 +305,20 @@ function LabUploadActions({
             accept={LAB_RESULT_ACCEPT_ATTRIBUTE}
             ariaLabel={`Upload ${title} PDF or image`}
             className="w-full sm:w-auto"
-            disabled={isUploading}
+            disabled={isFileUploading}
+            loading={isFileUploading}
             onFileSelected={onChooseFile}
           >
             <FileUp className="mr-2 h-4 w-4" />
-            {isUploading ? 'Uploading...' : 'Upload PDF/Image'}
+            {isFileUploading ? 'Uploading...' : 'Upload PDF/Image'}
           </FilePickerButton>
           <FilePickerButton
             accept="image/*,.heic,.heif"
             ariaLabel={`Capture ${title} image`}
             capture="environment"
             className="w-full sm:w-auto"
-            disabled={isUploading}
+            disabled={isCameraUploading}
+            loading={isCameraUploading}
             onFileSelected={onOpenCamera}
           >
             <Camera className="mr-2 h-4 w-4" />
@@ -811,6 +820,11 @@ export default function StaffRecordReview() {
     cbc: false,
     urinalysis: false,
   });
+  const [uploadingLabSource, setUploadingLabSource] = useState<Record<LabUploadType, LabUploadSource | null>>({
+    xray: null,
+    cbc: null,
+    urinalysis: null,
+  });
   const [pendingLabReplacement, setPendingLabReplacement] = useState<PendingLabReplacement | null>(null);
   const [showAutoFillReplaceDialog, setShowAutoFillReplaceDialog] = useState(false);
   const [xrayOcrState, setXrayOcrState] = useState<XrayOcrState>({
@@ -1238,25 +1252,35 @@ export default function StaffRecordReview() {
     return submission?.urinalysisFileUrl || '';
   }
 
-  async function handleLabResultFileSelected(fileType: LabUploadType, file: File | null) {
+  async function handleLabResultFileSelected(fileType: LabUploadType, file: File | null, source: LabUploadSource) {
     if (!submissionId || !submission || !file) return;
 
     const title = getLabUploadTitle(fileType);
+    if (uploadingLabFile[fileType]) {
+      toast.info(`${title} upload is already in progress.`);
+      return;
+    }
     if (!validateLabResultFile(file, title)) return;
 
     if (getCurrentLabFileUrl(fileType)) {
-      setPendingLabReplacement({ file, fileType, title });
+      setPendingLabReplacement({ file, fileType, title, source });
       return;
     }
 
-    await uploadLabResultFile(fileType, file);
+    await uploadLabResultFile(fileType, file, false, source);
   }
 
-  async function uploadLabResultFile(fileType: LabUploadType, file: File, isReplacement = false) {
+  async function uploadLabResultFile(
+    fileType: LabUploadType,
+    file: File,
+    isReplacement = false,
+    source: LabUploadSource = 'file',
+  ) {
     if (!submissionId || !submission) return false;
 
     const title = getLabUploadTitle(fileType);
     setUploadingLabFile((prev) => ({ ...prev, [fileType]: true }));
+    setUploadingLabSource((prev) => ({ ...prev, [fileType]: source }));
     try {
       const result = await uploadFile(file, submissionId, fileType);
       const nextUrl = result.url || '';
@@ -1284,16 +1308,17 @@ export default function StaffRecordReview() {
       return false;
     } finally {
       setUploadingLabFile((prev) => ({ ...prev, [fileType]: false }));
+      setUploadingLabSource((prev) => ({ ...prev, [fileType]: null }));
     }
   }
 
   function confirmPendingLabReplacement() {
     if (!pendingLabReplacement) return;
 
-    const { file, fileType, title } = pendingLabReplacement;
+    const { file, fileType, title, source } = pendingLabReplacement;
     setPendingLabReplacement(null);
     toast.info(`${title} replacement started. You can keep reviewing while it uploads.`);
-    void uploadLabResultFile(fileType, file, true);
+    void uploadLabResultFile(fileType, file, true, source);
   }
 
   function normalizeCbcOcrFields(fields: CbcOcrExtraction['fields']) {
@@ -2297,8 +2322,9 @@ export default function StaffRecordReview() {
               <LabUploadActions
                 title="Chest X-Ray result"
                 isUploading={uploadingLabFile.xray}
-                onChooseFile={(file) => void handleLabResultFileSelected('xray', file)}
-                onOpenCamera={(file) => void handleLabResultFileSelected('xray', file)}
+                uploadSource={uploadingLabSource.xray}
+                onChooseFile={(file) => void handleLabResultFileSelected('xray', file, 'file')}
+                onOpenCamera={(file) => void handleLabResultFileSelected('xray', file, 'camera')}
               />
               {submission.xrayFileUrl ? (
                 <div
@@ -2405,8 +2431,9 @@ export default function StaffRecordReview() {
               <LabUploadActions
                 title="CBC result"
                 isUploading={uploadingLabFile.cbc}
-                onChooseFile={(file) => void handleLabResultFileSelected('cbc', file)}
-                onOpenCamera={(file) => void handleLabResultFileSelected('cbc', file)}
+                uploadSource={uploadingLabSource.cbc}
+                onChooseFile={(file) => void handleLabResultFileSelected('cbc', file, 'file')}
+                onOpenCamera={(file) => void handleLabResultFileSelected('cbc', file, 'camera')}
               />
               {submission.cbcFileUrl ? (
                 <div
@@ -2550,8 +2577,9 @@ export default function StaffRecordReview() {
               <LabUploadActions
                 title="Urinalysis result"
                 isUploading={uploadingLabFile.urinalysis}
-                onChooseFile={(file) => void handleLabResultFileSelected('urinalysis', file)}
-                onOpenCamera={(file) => void handleLabResultFileSelected('urinalysis', file)}
+                uploadSource={uploadingLabSource.urinalysis}
+                onChooseFile={(file) => void handleLabResultFileSelected('urinalysis', file, 'file')}
+                onOpenCamera={(file) => void handleLabResultFileSelected('urinalysis', file, 'camera')}
               />
               {submission.urinalysisFileUrl ? (
                 <div
