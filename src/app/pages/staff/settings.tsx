@@ -543,6 +543,7 @@ export default function StaffSettings() {
                 accept={STAFF_SIGNATURE_ACCEPT_ATTRIBUTE}
                 ariaLabel="Choose staff signature image"
                 disabled={uploadingSignature}
+                loading={uploadingSignature}
                 onFileSelected={handleSignatureChange}
                 className="w-full gap-2"
               >
@@ -588,6 +589,7 @@ export default function StaffSettings() {
                   void handleSignatureUpload();
                 }}
                 disabled={uploadingSignature || !signatureFile}
+                loading={uploadingSignature}
                 className="w-full"
               >
                 {uploadingSignature ? 'Uploading...' : 'Save Signature'}

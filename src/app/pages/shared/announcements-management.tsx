@@ -9,6 +9,7 @@ import {
   type AnnouncementUpsertInput,
 } from '../../lib/api';
 import PortalPageIntro from '../../components/portal-page-intro';
+import FilePickerButton from '../../components/file-picker-button';
 import { useAuth } from '../../lib/auth';
 
 type ManagementMode = 'staff' | 'admin';
@@ -172,8 +173,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
     },
   });
 
-  const onUploadImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const onUploadImage = async (file: File | null) => {
     if (!file || !authUserId) return;
     setUploading(true);
     setErrorMessage('');
@@ -184,7 +184,6 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
       setErrorMessage(error instanceof Error ? error.message : 'Image upload failed.');
     } finally {
       setUploading(false);
-      event.target.value = '';
     }
   };
 
@@ -312,16 +311,19 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
             </div>
 
             <div className="space-y-3 rounded-xl border border-dashed border-outline-variant/30 bg-surface-container/50 p-4">
-              <label className="block">
+              <div>
                 <span className="block text-sm font-semibold text-on-surface mb-2">📸 Image</span>
-                <input
-                  type="file"
+                <FilePickerButton
                   accept="image/*"
-                  onChange={onUploadImage}
+                  ariaLabel="Upload announcement image"
                   disabled={uploading}
-                  className="w-full cursor-pointer text-sm text-on-surface-variant file:mr-3 file:rounded-lg file:border file:border-outline-variant/40 file:bg-primary/10 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20 disabled:opacity-60"
-                />
-              </label>
+                  loading={uploading}
+                  className="w-full justify-center bg-white"
+                  onFileSelected={onUploadImage}
+                >
+                  {uploading ? 'Uploading image...' : 'Upload Image'}
+                </FilePickerButton>
+              </div>
               {form.imagePath && (
                 <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2">
                   <span className="text-sm text-green-700">✓ Image uploaded</span>

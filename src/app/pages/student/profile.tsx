@@ -237,6 +237,7 @@ export default function StudentProfile() {
 
   const hasFileChanges = Boolean(photoFile || signatureFile);
   const hasChanges = hasTextChanges || hasFileChanges;
+  const isUploadingAssets = saving && hasFileChanges;
   const hasValidContactNumber =
     !formData.contactNumber.trim() || isValidPhilippinePhoneNumber(formData.contactNumber);
   const hasValidBirthday =
@@ -435,6 +436,8 @@ export default function StudentProfile() {
               <FilePickerButton
                 accept={PROFILE_ASSET_ACCEPT_ATTRIBUTE}
                 ariaLabel="Choose 1x1 student photo"
+                disabled={saving}
+                loading={isUploadingAssets}
                 onFileSelected={(file) => handleAssetChange('photo', file)}
               >
                 Choose Photo
@@ -474,6 +477,8 @@ export default function StudentProfile() {
               <FilePickerButton
                 accept={PROFILE_ASSET_ACCEPT_ATTRIBUTE}
                 ariaLabel="Choose student signature image"
+                disabled={saving}
+                loading={isUploadingAssets}
                 onFileSelected={(file) => handleAssetChange('signature', file)}
               >
                 Choose Signature
@@ -507,7 +512,12 @@ export default function StudentProfile() {
             <p className="text-xs text-on-surface-variant sm:text-sm">
               {hasChanges ? 'You have unsaved profile changes.' : 'Your profile and student assets are up to date.'}
             </p>
-            <Button type="submit" disabled={saving || !hasChanges || !isValid} className="w-full sm:w-auto">
+            <Button
+              type="submit"
+              disabled={saving || !hasChanges || !isValid}
+              loading={isUploadingAssets}
+              className="w-full sm:w-auto"
+            >
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </CardFooter>

@@ -241,10 +241,29 @@
   }
 }
 
+@keyframes gc-loading-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
 @layer components {
   .legal-dialog-native-scroll {
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     scrollbar-gutter: stable;
+  }
+
+  .gc-loading-indicator {
+    animation: gc-loading-indeterminate 1.1s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-loading-indicator {
+    animation: none;
   }
 }

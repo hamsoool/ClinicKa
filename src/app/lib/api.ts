@@ -2727,22 +2727,95 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     throw new Error('Student ID is required.');
   }
 
-  const result = await apiRequest<{ success: true; profile: any; student: any }>(
-    '/functions/v1/server/student-profile',
+  try {
+    const result = await apiRequest<{ success: true; profile: any; student: any }>(
+      '/functions/v1/server/student-profile',
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    invalidateMeCache();
+    return {
+      success: true as const,
+      profile: result.profile || me.profile,
+      student: result.student || me.student,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const shouldFallback =
+      shouldFallbackToRest(error) ||
+      message.includes('failed to update student profile') ||
+      message.includes('internal server error');
+
+    if (!shouldFallback) {
+      throw error;
+    }
+  }
+
+  const profileRows = await restRequest<any[]>(
+    'profiles',
+    `id=eq.${encodeURIComponent(me.profile.id)}&select=*`,
     {
-      method: 'PUT',
+      method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
+        Prefer: 'return=representation',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        first_name: payload.firstName || null,
+        last_name: payload.lastName || null,
+        department: payload.department || null,
+        course: payload.course || null,
+        student_id: studentId,
+      }),
+    },
+  );
+
+  const parsedYearLevel = Number.parseInt(String(payload.yearLevel || '').trim(), 10);
+  const normalizedYearLevel = Number.isInteger(parsedYearLevel) && parsedYearLevel >= 1 && parsedYearLevel <= 4
+    ? parsedYearLevel
+    : null;
+  const parsedAge = Number.parseInt(String(payload.age || '').trim(), 10);
+  const normalizedAge = Number.isFinite(parsedAge) ? parsedAge : null;
+
+  const studentRows = await restRequest<any[]>(
+    'students',
+    'on_conflict=student_id&select=*',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=representation',
+      },
+      body: JSON.stringify({
+        student_id: studentId,
+        profile_id: me.profile.id,
+        first_name: payload.firstName || null,
+        last_name: payload.lastName || null,
+        middle_initial: payload.middleInitial || null,
+        department: payload.department || null,
+        course: payload.course || null,
+        year_level: normalizedYearLevel,
+        age: normalizedAge,
+        sex: payload.sex || null,
+        birthday: payload.birthday || null,
+        civil_status: payload.civilStatus || null,
+        contact_number: payload.contactNumber || null,
+        address: payload.address || null,
+      }),
     },
   );
 
   invalidateMeCache();
   return {
     success: true as const,
-    profile: result.profile || me.profile,
-    student: result.student || me.student,
+    profile: profileRows[0] || me.profile,
+    student: studentRows[0] || me.student,
   };
 }
 

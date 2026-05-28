@@ -558,7 +558,7 @@ export async function authenticate(c: any): Promise<Requester | null> {
     supabase
       .from("students")
       .select(
-        "student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address",
+        "student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address",
       )
       .or(`profile_id.eq.${user.id},student_id.eq.${profile.student_id || "__none__"}`)
       .maybeSingle(),
