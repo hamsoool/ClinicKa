@@ -57,7 +57,7 @@ export default function StudentPrivacyWaiver() {
     if (recordsLoading || academicYearLoading) return;
     if (canAccessSelectedYear) return;
 
-    toast.error(`This school year submission is filed under ${expectedSlot ? getSubmissionSlotLabel(expectedSlot) : 'the next available record slot'}.`);
+    toast.error(`This school year submission is filed under ${expectedSlot ? getSubmissionSlotLabel(expectedSlot) : 'the next available year level'}.`);
     navigate('/student/year-selection', { replace: true });
   }, [academicYearLoading, canAccessSelectedYear, expectedSlot, navigate, recordsLoading]);
 

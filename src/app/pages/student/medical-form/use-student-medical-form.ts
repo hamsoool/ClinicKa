@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
 import type { SubmissionRecord } from '../../../lib/record-types';
-import { resolveStudentSubmissionProfile } from '../../../lib/student-submission-profile';
 import { getMe, getStudentRecords, getSubmission, submitMedicalRecord, updateMedicalRecord, uploadFile } from '../../../lib/api';
 import {
   getDefaultAcademicYear,
@@ -183,7 +182,6 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, init
   const birthday = student?.birthday || '';
   const derivedAge = calculateAgeFromBirthdate(birthday);
   return {
-    studentCategory: 'regular',
     studentId: normalizeStudentId(student?.student_id || me?.profile.student_id || ''),
     firstName: sanitizeName(student?.first_name || me?.profile.first_name || ''),
     lastName: sanitizeName(student?.last_name || me?.profile.last_name || ''),
@@ -249,7 +247,6 @@ export function useStudentMedicalForm({
 }: UseStudentMedicalFormArgs) {
   const queryClient = useQueryClient();
   const student = me?.student;
-  const submissionProfile = resolveStudentSubmissionProfile(me);
   const { data: academicYearSettings } = useActiveAcademicYearSettingsQuery();
   const activeAcademicYear = normalizeAcademicYear(academicYearSettings?.academicYear || getDefaultAcademicYear());
   const [step, setStep] = useState(1);
@@ -415,15 +412,8 @@ export function useStudentMedicalForm({
         const response = await getStudentRecords(studentId, { includeProfileAssetsFallback: false });
         const records = (response?.records || []) as SubmissionRecord[];
         const hasAnyRecords = records.length > 0;
-        const currentAcademicYearRecords = records.filter(
-          (record) => getRecordAcademicYear(record, activeAcademicYear) === activeAcademicYear,
-        );
-        const inferredCategory: 'regular' | 'returning' | 'repeater_irregular' =
-          !hasAnyRecords ? 'regular' : currentAcademicYearRecords.length > 0 ? 'repeater_irregular' : 'returning';
-
         if (!active) return;
-
-        if (inferredCategory === 'regular') return;
+        if (!hasAnyRecords) return;
         const latest = [...records].sort(
           (a, b) =>
             new Date(b?.updatedAt || b?.submittedAt || 0).getTime() -
@@ -467,7 +457,6 @@ export function useStudentMedicalForm({
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
-      studentCategory: submissionProfile.category,
       studentId: normalizeStudentId(student?.student_id || me?.profile.student_id || prev.studentId),
       firstName: sanitizeName(student?.first_name || me?.profile.first_name || prev.firstName),
       lastName: sanitizeName(student?.last_name || me?.profile.last_name || prev.lastName),
@@ -509,13 +498,11 @@ export function useStudentMedicalForm({
     student?.middle_initial,
     student?.sex,
     student?.student_id,
-    submissionProfile.category,
     year,
     initialDataPrivacyConsent,
   ]);
 
   const updateField = useCallback(<K extends keyof MedicalFormData>(field: K, value: MedicalFormData[K]) => {
-    if (field === 'studentCategory') return setFormData((prev) => ({ ...prev, studentCategory: value as MedicalFormData['studentCategory'] }));
     if (field === 'studentId') return setFormData((prev) => ({ ...prev, studentId: sanitizeDigits(String(value), 9) }));
     if (field === 'firstName') return setFormData((prev) => ({ ...prev, firstName: sanitizeName(String(value)) }));
     if (field === 'lastName') return setFormData((prev) => ({ ...prev, lastName: sanitizeName(String(value)) }));
@@ -863,7 +850,7 @@ export function useStudentMedicalForm({
       const expectedSlot = getNextSubmissionSlot(existingRecords, activeAcademicYear);
       if (!activeSubmissionId) {
         if (!expectedSlot) {
-          throw new Error('All four medical record slots have already been used.');
+          throw new Error('All four year levels have already been used.');
         }
         if (Number.parseInt(String(formData.yearLevel || ''), 10) !== expectedSlot) {
           throw new Error(`This school year submission must use ${getSubmissionSlotLabel(expectedSlot)}.`);
@@ -895,7 +882,6 @@ export function useStudentMedicalForm({
         weight: formData.weight,
         height: formData.height,
         bmi: formData.bmi,
-        submissionCategory: formData.studentCategory,
         cbcTestClinic: formData.cbcTestSite === 'Others' ? formData.cbcTestSiteOther.trim() : formData.cbcTestSite,
         urinalysisTestClinic: formData.urinalysisTestSite === 'Others' ? formData.urinalysisTestSiteOther.trim() : formData.urinalysisTestSite,
         xrayTestClinic: formData.xrayTestSite === 'Others' ? formData.xrayTestSiteOther.trim() : formData.xrayTestSite,

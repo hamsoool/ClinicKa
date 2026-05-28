@@ -203,6 +203,7 @@ export default function StudentDashboard() {
       !hasValue(student?.middle_initial) ? 'middle initial' : '',
       !hasValue(student?.department || profile?.department) ? 'department' : '',
       !hasValue(student?.course || profile?.course) ? 'course' : '',
+      !hasValue(student?.year_level) ? 'year level' : '',
       !hasValue(student?.age) ? 'age' : '',
       !hasValue(student?.sex) ? 'sex' : '',
       !hasValue(student?.birthday) ? 'birthday' : '',
@@ -440,7 +441,7 @@ export default function StudentDashboard() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-outline-variant/30 bg-surface-container-low text-xs uppercase tracking-[0.16em] text-on-surface-variant">
-                <th className="px-4 py-3 font-semibold sm:px-6">Record Slot</th>
+                <th className="px-4 py-3 font-semibold sm:px-6">Year Level</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Status</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Academic Year</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Last Action Date</th>

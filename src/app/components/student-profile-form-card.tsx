@@ -9,8 +9,7 @@ import { Label } from './ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { cn } from './ui/utils';
-import { toCategoryLabel, type StudentSubmissionCategory } from '../lib/student-submission-profile';
-import { DEPARTMENT_OPTIONS, getProgramOptionsForSelect } from '../pages/student/medical-form/constants';
+import { DEPARTMENT_OPTIONS, getProgramOptionsForSelect, YEAR_LEVELS } from '../pages/student/medical-form/constants';
 
 export type StudentProfileFormValue = {
   studentId: string;
@@ -19,14 +18,13 @@ export type StudentProfileFormValue = {
   middleInitial: string;
   department: string;
   course: string;
+  yearLevel: string;
   age: string;
   sex: string;
   birthday: string;
   civilStatus: string;
   contactNumber: string;
   address: string;
-  submissionCategory?: StudentSubmissionCategory;
-  submissionTargetYearLevel?: string;
 };
 
 export type StudentProfileExtraField = {
@@ -41,10 +39,10 @@ type StudentProfileFormCardProps = {
   readOnly?: boolean;
   title?: string;
   description?: string;
-  showSubmissionFields?: boolean;
   extraFields?: StudentProfileExtraField[];
   hasValidBirthday?: boolean;
   hasValidContactNumber?: boolean;
+  yearLevelLabel?: string;
 };
 
 const MONTH_OPTIONS = [
@@ -117,16 +115,22 @@ function formatReadOnlySex(value: string) {
   return normalized;
 }
 
+function formatReadOnlyYearLevel(value: string) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+  return YEAR_LEVELS.find((option) => option.value === normalized)?.label || normalized;
+}
+
 export function StudentProfileFormCard({
   value,
   onChange,
   readOnly = false,
   title = 'Student Information',
   description,
-  showSubmissionFields = false,
   extraFields = [],
   hasValidBirthday = true,
   hasValidContactNumber = true,
+  yearLevelLabel = 'Year Level',
 }: StudentProfileFormCardProps) {
   const [birthdayPickerOpen, setBirthdayPickerOpen] = useState(false);
   const maxBirthdate = useMemo(() => getMaxBirthdateIso(16), []);
@@ -297,6 +301,31 @@ export function StudentProfileFormCard({
               )}
             </div>
           </div>
+        </div>
+        <div className="min-w-0">
+          <Label htmlFor="yearLevel">{yearLevelLabel}{readOnly ? '' : ' *'}</Label>
+          {readOnly ? (
+            <Input
+              id="yearLevel"
+              value={formatReadOnlyYearLevel(value.yearLevel)}
+              readOnly
+              disabled
+              className="cursor-not-allowed opacity-80"
+            />
+          ) : (
+            <Select value={value.yearLevel || undefined} onValueChange={(nextValue) => handleChange('yearLevel', nextValue)}>
+              <SelectTrigger id="yearLevel" className={requiredFieldClass(!value.yearLevel.trim())}>
+                <SelectValue placeholder="Required: select year level" />
+              </SelectTrigger>
+              <SelectContent>
+                {YEAR_LEVELS.map((yearLevel) => (
+                  <SelectItem key={yearLevel.value} value={yearLevel.value}>
+                    {yearLevel.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         {extraFields.map((field) => (
           <div key={field.id} className="min-w-0">
@@ -479,36 +508,6 @@ export function StudentProfileFormCard({
             className={`${disabledFieldClass} ${requiredFieldClass(!value.address.trim())}`.trim()}
           />
         </div>
-        {showSubmissionFields ? (
-          <>
-            <div className="min-w-0">
-              <Label htmlFor="submissionCategory">Submission Status</Label>
-              {readOnly ? (
-                <Input
-                  id="submissionCategory"
-                  value={value.submissionCategory ? toCategoryLabel(value.submissionCategory) : ''}
-                  readOnly
-                  disabled
-                  className="cursor-not-allowed opacity-80"
-                />
-              ) : (
-                <Select
-                  value={value.submissionCategory}
-                  onValueChange={(nextValue) => handleChange('submissionCategory', nextValue)}
-                >
-                  <SelectTrigger id="submissionCategory">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="regular">{toCategoryLabel('regular')}</SelectItem>
-                    <SelectItem value="returning">{toCategoryLabel('returning')}</SelectItem>
-                    <SelectItem value="repeater_irregular">{toCategoryLabel('repeater_irregular')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </>
-        ) : null}
       </CardContent>
     </Card>
   );

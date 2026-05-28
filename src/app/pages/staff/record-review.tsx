@@ -54,7 +54,6 @@ import {
   type UrinalysisOcrExtraction,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { getSubmissionSlotLabel } from '../../lib/academic-year';
 import type { MedicalHistory, SubmissionRecord } from '../../lib/record-types';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
 import {
@@ -2115,6 +2114,7 @@ export default function StaffRecordReview() {
               middleInitial: recordForm.middleInitial,
               department: recordForm.department,
               course: recordForm.course,
+              yearLevel: recordForm.year,
               age: recordForm.age,
               sex: recordForm.sex,
               birthday: recordForm.birthday,
@@ -2124,13 +2124,7 @@ export default function StaffRecordReview() {
             }}
             readOnly
             title="Student Profile"
-            extraFields={[
-              {
-                id: 'yearLevel',
-                label: 'Record Slot',
-                value: recordForm.year ? getSubmissionSlotLabel(recordForm.year) : '',
-              },
-            ]}
+            yearLevelLabel="Record Slot"
           />
 
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">

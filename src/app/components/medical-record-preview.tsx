@@ -247,12 +247,23 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
       return '';
     };
 
+    const getYearRecord = (year: number) => {
+      const yearRecord = yearlyRecords?.[year as 1 | 2 | 3 | 4];
+      if (yearRecord) return yearRecord;
+      return year - 1 === yrIndex ? record : undefined;
+    };
+
     const getYearExamValue = (year: number, row: string) => {
       const field = EXAM_FIELD_MAP[row];
       if (!field) return '';
-      const yearRecord = yearlyRecords?.[year as 1 | 2 | 3 | 4];
-      if (yearRecord) return getExamFieldValue(yearRecord, field);
-      return year - 1 === yrIndex ? getExamFieldValue(record, field) : '';
+      const sourceRecord = getYearRecord(year);
+      if (!sourceRecord) return '';
+      const primary = getExamFieldValue(sourceRecord, field);
+      if (String(primary || '').trim()) return primary;
+      if (sourceRecord !== record && year - 1 === yrIndex) {
+        return getExamFieldValue(record, field);
+      }
+      return '';
     };
 
     const getYearLab = (year: number) => {
@@ -269,6 +280,20 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
         signatureUrl: String(sourceExam?.examinedBySignatureUrl || '').trim(),
       };
     };
+
+    const formatExamDate = (sourceRecord?: SubmissionRecord) => {
+      if (!sourceRecord) return '';
+      const rawDate =
+        sourceRecord.staffMeasurements?.updatedAt ||
+        sourceRecord.updatedAt ||
+        sourceRecord.submittedAt;
+      if (!rawDate) return '';
+      const parsed = new Date(rawDate);
+      if (Number.isNaN(parsed.getTime())) return '';
+      return parsed.toLocaleDateString();
+    };
+
+    const getYearExamDate = (year: number) => formatExamDate(getYearRecord(year));
 
     const renderExaminer = (year: number) => {
       const examiner = getYearExaminer(year);
@@ -743,13 +768,14 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <thead>
             <tr>
               <th style={{ ...S.th, width: '22%' }}>Physical Examination</th>
-              {['Yr. I / Date:', 'Yr. II / Date:', 'Yr. III / Date:', 'Yr. IV / Date:'].map(
-                (h, i) => (
-                  <th key={i} style={{ ...S.th, width: '19.5%' }}>
-                    {h}
-                  </th>
-                )
-              )}
+              {[1, 2, 3, 4].map((year) => (
+                <th key={year} style={{ ...S.th, width: '19.5%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span>{`Yr. ${['I', 'II', 'III', 'IV'][year - 1]} / Date:`}</span>
+                    <span style={{ fontWeight: 'normal' }}>{getYearExamDate(year)}</span>
+                  </div>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>

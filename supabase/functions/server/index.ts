@@ -799,18 +799,13 @@ app.put("/student-profile", async (c) => {
     const middleInitial = String(data.middleInitial || '').trim() || null;
     const department = String(data.department || '').trim() || null;
     const course = String(data.course || '').trim() || null;
+    const yearLevel = normalizeSubmissionSlot(data.yearLevel);
     const age = data.age ? Number(data.age) : null;
     const sex = String(data.sex || '').trim() || null;
     const birthday = String(data.birthday || '').trim() || null;
     const civilStatus = String(data.civilStatus || '').trim() || null;
     const contactNumber = String(data.contactNumber || '').trim() || null;
     const address = String(data.address || '').trim() || null;
-    const submissionCategory = String(data.submissionCategory || '').trim() || null;
-    const rawSubmissionTargetYearLevel = data.submissionTargetYearLevel;
-    const submissionTargetYearLevel =
-      rawSubmissionTargetYearLevel === null || rawSubmissionTargetYearLevel === undefined || rawSubmissionTargetYearLevel === ""
-        ? null
-        : Number(rawSubmissionTargetYearLevel);
 
     const { data: updatedProfile, error: profileError } = await supabase
       .from('profiles')
@@ -837,59 +832,22 @@ app.put("/student-profile", async (c) => {
       middle_initial: middleInitial,
       department,
       course,
+      year_level: yearLevel,
       age: Number.isFinite(age) ? age : null,
       sex,
       birthday,
       civil_status: civilStatus,
       contact_number: contactNumber,
       address,
-      submission_category: submissionCategory,
-      submission_target_year_level: Number.isFinite(submissionTargetYearLevel) ? submissionTargetYearLevel : null,
     };
 
-    let updatedStudent = null;
-    let studentError = null;
-    const studentWrite = await supabase
+    const { data: updatedStudent, error: studentError } = await supabase
       .from('students')
       .upsert(studentPayload, {
         onConflict: 'student_id',
       })
       .select('*')
       .single();
-
-    updatedStudent = studentWrite.data;
-    studentError = studentWrite.error;
-
-    const missingStudentColumns =
-      String(studentError?.message || '').includes('submission_category') ||
-      String(studentError?.message || '').includes('submission_target_year_level');
-
-    if (studentError && missingStudentColumns) {
-      const fallbackWrite = await supabase
-        .from('students')
-        .upsert({
-          student_id: studentId,
-          profile_id: requester.profile.id,
-          first_name: firstName,
-          last_name: lastName,
-          middle_initial: middleInitial,
-          department,
-          course,
-          age: Number.isFinite(age) ? age : null,
-          sex,
-          birthday,
-          civil_status: civilStatus,
-          contact_number: contactNumber,
-          address,
-        }, {
-          onConflict: 'student_id',
-        })
-        .select('*')
-        .single();
-
-      updatedStudent = fallbackWrite.data;
-      studentError = fallbackWrite.error;
-    }
 
     if (studentError || !updatedStudent) {
       throw new Error(studentError?.message || 'Failed to update student record');
@@ -1159,7 +1117,7 @@ app.post("/student-profile-asset", async (c) => {
 
     const expectedSlot = getNextSubmissionSlot(existingRows || [], activeAcademicYear);
     if (!expectedSlot) {
-      return badRequest('All four medical record slots have already been used.');
+      return badRequest('All four year levels have already been used.');
     }
     if (requestedSlot !== expectedSlot) {
       return badRequest(`This school year submission must use Year ${expectedSlot}.`);

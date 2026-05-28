@@ -164,6 +164,7 @@ function mapStaffMeasurements(row: any, examinedBySignatureUrl?: string | null) 
     others: row.others,
     examinedBy: row.examined_by,
     examinedBySignatureUrl: examinedBySignatureUrl || undefined,
+    updatedAt: row.updated_at || null,
   };
 }
 
@@ -389,7 +390,7 @@ async function loadRelatedData(rows: any[]) {
       ? supabase
           .from("staff_measurements")
           .select(
-            "submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by",
+            "submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by,updated_at",
           )
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
