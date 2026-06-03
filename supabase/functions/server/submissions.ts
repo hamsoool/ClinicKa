@@ -190,6 +190,24 @@ function latestFilesByType(files: any[]) {
   }, {} as Record<string, any>);
 }
 
+function buildStaffSignatureAssetFromRow(staff: any) {
+  const signatureUrl = normalizeStorageFileUrl(staff?.signature_url || null);
+  if (!signatureUrl || !staff?.id || !staff?.profile_id) return null;
+
+  return {
+    id: `staff-user-signature-${staff.id}`,
+    submission_id: null,
+    type: "staff_signature",
+    file_name: null,
+    storage_bucket: null,
+    storage_path: null,
+    mime_type: null,
+    uploaded_at: null,
+    uploaded_by: staff.profile_id,
+    url: signatureUrl,
+  };
+}
+
 const CLEARANCE_SIGNATORY_NAMES = ["GERALD S. BERNAL, MD", "ARMANDO TAMAYO, MD"] as const;
 
 function normalizeSignatureName(value?: string | null) {
@@ -405,7 +423,7 @@ async function loadRelatedData(rows: any[]) {
     reviewerIds.length
       ? supabase
           .from("staff_users")
-          .select("id,profile_id,first_name,last_name,middle_initial,position,name")
+          .select("id,profile_id,first_name,last_name,middle_initial,position,name,signature_url")
           .in("id", reviewerIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
@@ -480,7 +498,7 @@ async function loadRelatedData(rows: any[]) {
   const extraReviewersRes = missingReviewerIds.length
     ? await supabase
         .from("staff_users")
-        .select("id,profile_id,first_name,last_name,middle_initial,position,name")
+        .select("id,profile_id,first_name,last_name,middle_initial,position,name,signature_url")
         .in("id", missingReviewerIds)
     : { data: [] as any[], error: null };
 
@@ -498,7 +516,7 @@ async function loadRelatedData(rows: any[]) {
   const examinerDirectoryRes = examinedByNames.length
     ? await supabase
         .from("staff_users")
-        .select("id,profile_id,first_name,last_name,middle_initial,position,name,is_active")
+        .select("id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url")
         .eq("is_active", true)
         .limit(200)
     : { data: [] as any[], error: null };
@@ -564,7 +582,7 @@ async function loadRelatedData(rows: any[]) {
   }, {} as Record<string, any>);
   const staffSignaturesByStaffId = staffRows.reduce((acc, staff) => {
     if (!staff?.id || !staff?.profile_id) return acc;
-    const signature = staffSignaturesByProfileId[staff.profile_id];
+    const signature = buildStaffSignatureAssetFromRow(staff) || staffSignaturesByProfileId[staff.profile_id];
     if (signature) acc[staff.id] = signature;
     return acc;
   }, {} as Record<string, any>);

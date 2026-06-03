@@ -298,32 +298,25 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
     const renderExaminer = (year: number) => {
       const examiner = getYearExaminer(year);
       const displayName = isClearanceSignatoryName(examiner.name) ? '' : examiner.name;
-      if (!examiner.signatureUrl) return displayName;
+      if (!examiner.signatureUrl && !displayName) return null;
 
       return (
-        <div
-          style={{
-            display: 'flex',
-            minHeight: '32px',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '1px',
-            textAlign: 'center',
-          }}
-        >
-          <img
-            src={examiner.signatureUrl}
-            alt="Examiner signature"
-            style={{
-              maxWidth: '112px',
-              maxHeight: '20px',
-              width: 'auto',
-              height: 'auto',
-              objectFit: 'contain',
-              display: 'block',
-            }}
-          />
+        <div className="flex min-h-[52px] flex-col items-start gap-1 text-left">
+          {examiner.signatureUrl ? (
+            <img
+              src={examiner.signatureUrl}
+              alt="Examiner signature"
+              className="h-10 w-auto object-contain"
+              style={{
+                maxWidth: '112px',
+                maxHeight: '40px',
+                width: 'auto',
+                height: 'auto',
+                objectFit: 'contain',
+                display: 'block',
+              }}
+            />
+          ) : null}
           {displayName ? (
             <span style={{ fontSize: '7.5px', lineHeight: '1.05' }}>{displayName}</span>
           ) : null}
@@ -790,9 +783,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               </tr>
             ))}
             <tr>
-              <td style={{ ...S.td, fontWeight: 'bold', height: '38px' }}>Examined by:</td>
+              <td style={{ ...S.td, fontWeight: 'bold', height: '64px' }}>Examined by:</td>
               {[0, 1, 2, 3].map((i) => (
-                <td key={i} style={{ ...S.td, height: '38px', padding: '2px 4px' }}>
+                <td key={i} style={{ ...S.td, height: '64px', padding: '2px 4px' }}>
                   {renderExaminer(i + 1)}
                 </td>
               ))}

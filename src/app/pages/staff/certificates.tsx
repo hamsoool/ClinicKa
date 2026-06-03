@@ -661,7 +661,7 @@ function StaffCertificatesWorkspace() {
                   <CardHeader>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
-                        <CardTitle className="leading-snug">Medical Record Form (Combined Year I-IV)</CardTitle>
+                        <CardTitle className="leading-snug">Medical Record Form</CardTitle>
                         <p className="mt-1 text-sm text-muted-foreground">{combinedRecord.lastName}, {combinedRecord.firstName} | {combinedRecord.studentId}</p>
                         {selectedStudentRecordsFetching ? (
                           <span className="mt-2 block text-xs text-muted-foreground">Refreshing selected student...</span>

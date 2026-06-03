@@ -86,7 +86,7 @@ const LAB_UPLOAD_TYPES = new Set(["xray", "cbc", "urinalysis"]);
 const OCR_SPACE_DEFAULT_MAX_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
-const STAFF_SIGNATURE_BUCKET = "staff_signature";
+const STAFF_SIGNATURE_BUCKET = "staff_signatures";
 const STAFF_SIGNATURE_MAX_BYTES = 5 * 1024 * 1024;
 const PROFILE_ASSET_MAX_BYTES = 5 * 1024 * 1024;
 const PROFILE_ASSET_ALLOWED_EXTENSIONS = new Set([
@@ -1095,6 +1095,25 @@ app.get("/staff-signature", async (c) => {
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
+    const { data: staffRow, error: staffError } = await supabase
+      .from("staff_users")
+      .select("signature_url")
+      .eq("profile_id", requester.profile.id)
+      .maybeSingle();
+
+    if (staffError) {
+      throw new Error(staffError.message);
+    }
+
+    const directSignatureUrl = normalizeStorageFileUrl(staffRow?.signature_url || null);
+    if (directSignatureUrl) {
+      return c.json({
+        success: true,
+        signatureUrl: directSignatureUrl,
+        signatureFileName: null,
+      });
+    }
+
     const latestSignature = await loadLatestStaffSignature(requester.profile.id);
     return c.json({
       success: true,
@@ -1154,13 +1173,28 @@ app.post("/staff-signature", async (c) => {
       throw new Error(uploadError.message);
     }
 
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(STAFF_SIGNATURE_BUCKET).getPublicUrl(storagePath);
+
+    const { error: signatureUpdateError } = await supabase
+      .from("staff_users")
+      .update({
+        signature_url: publicUrl || null,
+      })
+      .eq("profile_id", profileId);
+
+    if (signatureUpdateError) {
+      throw new Error(signatureUpdateError.message);
+    }
+
     let insertedFile: any = null;
     try {
       insertedFile = await insertStaffSignatureMetadata({
         submission_id: null,
         file_name: file.name,
         mime_type: file.type || "application/octet-stream",
-        url: null,
+        url: publicUrl || null,
         storage_bucket: STAFF_SIGNATURE_BUCKET,
         storage_path: storagePath,
         uploaded_by: profileId,
@@ -1184,20 +1218,12 @@ app.post("/staff-signature", async (c) => {
       console.log("Staff signature metadata cleanup warning:", metadataCleanupError);
     }
 
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from(STAFF_SIGNATURE_BUCKET)
-      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
-
-    if (signedUrlError) {
-      throw new Error(signedUrlError.message);
-    }
-
     invalidateDashboardReadCaches();
 
     return c.json({
       success: true,
-      signatureUrl: signedUrlData?.signedUrl || null,
-      signatureFileName: storagePath,
+      signatureUrl: publicUrl || null,
+      signatureFileName: file.name || storagePath,
     });
   } catch (error) {
     console.log("Error uploading staff signature:", error);

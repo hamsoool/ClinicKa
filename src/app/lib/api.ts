@@ -59,7 +59,7 @@ const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
   cbc: 'lab_cbc',
   urinalysis: 'lab_urinalysis',
 };
-const EXTRA_STORAGE_BUCKETS = ['staff_signature'];
+const EXTRA_STORAGE_BUCKETS = ['staff_signature', 'staff_signatures'];
 const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_TARGET_BYTES = 950 * 1024;
 const LAB_UPLOAD_CANVAS_MAX_DIMENSIONS = [2200, 1800, 1500, 1200];
@@ -97,7 +97,7 @@ function inferBucketFromType(fileType?: string | null) {
   const key = String(fileType || '').trim().toLowerCase();
   if (key === 'profile' || key === 'profile_photo' || key === 'student_photo') return 'profile';
   if (key === 'student_signature') return 'student_signature';
-  if (key === 'staff_signature' || key === 'staff-signature') return 'staff_signature';
+  if (key === 'staff_signature' || key === 'staff-signature' || key === 'staff_signatures') return 'staff_signatures';
   return STORAGE_BUCKET_BY_FILE_TYPE[key] || null;
 }
 
@@ -106,7 +106,13 @@ function inferBucketFromNameOrPath(fileName?: string | null, storagePath?: strin
   if (haystack.includes('xray_') || haystack.includes('chest_xray')) return 'lab_chest_xray';
   if (haystack.includes('cbc_')) return 'lab_cbc';
   if (haystack.includes('urinalysis_') || haystack.includes('ua_')) return 'lab_urinalysis';
-  if (haystack.includes('staff_signature') || haystack.includes('staff-signature')) return 'staff_signature';
+  if (
+    haystack.includes('staff_signature') ||
+    haystack.includes('staff-signature') ||
+    haystack.includes('staff_signatures')
+  ) {
+    return 'staff_signatures';
+  }
   if (haystack.includes('signature_')) return 'student_signature';
   if (haystack.includes('photo_') || haystack.includes('profile_')) return 'profile';
   return null;
@@ -1247,8 +1253,10 @@ function normalizeProfileAssetType(file: any) {
     rawType === 'staff_signature' ||
     rawType === 'staff-signature' ||
     bucket === 'staff_signature' ||
+    bucket === 'staff_signatures' ||
     haystack.includes('staff_signature') ||
     haystack.includes('staff-signature') ||
+    haystack.includes('staff_signatures') ||
     haystack.includes('staff-signatures')
   ) {
     return '';
@@ -1308,13 +1316,33 @@ function normalizeStaffSignatureRows(files: any[] | null | undefined) {
         rawType === 'staff_signature' ||
         rawType === 'staff-signature' ||
         bucket === 'staff_signature' ||
+        bucket === 'staff_signatures' ||
         haystack.includes('staff_signature') ||
         haystack.includes('staff-signature') ||
+        haystack.includes('staff_signatures') ||
         haystack.includes('staff-signatures');
 
       return isStaffSignature ? { ...file, type: 'staff_signature' } : null;
     })
     .filter(Boolean);
+}
+
+function buildStaffSignatureAssetFromRow(staff: any) {
+  const signatureUrl = normalizeStorageFileUrl(staff?.signature_url || null);
+  if (!signatureUrl || !staff?.id || !staff?.profile_id) return null;
+
+  return {
+    id: `staff-user-signature-${staff.id}`,
+    submission_id: null,
+    type: 'staff_signature',
+    file_name: null,
+    storage_bucket: null,
+    storage_path: null,
+    mime_type: null,
+    uploaded_at: null,
+    uploaded_by: staff.profile_id,
+    url: signatureUrl,
+  };
 }
 
 function byId(rows: any[] | null | undefined) {
@@ -1722,7 +1750,7 @@ async function loadRelatedData(rows: any[]) {
     reviewerIds.length
       ? restRequest<any[]>(
           'staff_users',
-          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
         )
       : Promise.resolve([]),
     submissionIds.length
@@ -1774,7 +1802,7 @@ async function loadRelatedData(rows: any[]) {
   const extraReviewers = missingReviewerIds.length
     ? await restRequest<any[]>(
         'staff_users',
-        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
       ).catch(() => [])
     : [];
   const examinedByNames = [
@@ -1787,7 +1815,7 @@ async function loadRelatedData(rows: any[]) {
   const examinerDirectory = examinedByNames.length
     ? await restRequest<any[]>(
         'staff_users',
-        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
+        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
       ).catch(() => [])
     : [];
   const staffRows = Object.values(
@@ -1832,7 +1860,7 @@ async function loadRelatedData(rows: any[]) {
   }, {} as Record<string, any>);
   const staffSignaturesByStaffId = staffRows.reduce((acc, staff) => {
     if (!staff?.id || !staff?.profile_id) return acc;
-    const signature = staffSignaturesByProfileId[staff.profile_id];
+    const signature = buildStaffSignatureAssetFromRow(staff) || staffSignaturesByProfileId[staff.profile_id];
     if (signature) acc[staff.id] = signature;
     return acc;
   }, {} as Record<string, any>);
@@ -1977,7 +2005,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     reviewerIds.length
       ? restRequest<any[]>(
           'staff_users',
-          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
         ).catch(() => [])
       : Promise.resolve([]),
   ]);
@@ -2010,7 +2038,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   const extraReviewers = missingReviewerIds.length
     ? await restRequest<any[]>(
         'staff_users',
-        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
       ).catch(() => [])
     : [];
   const examinedByNames = [
@@ -2023,7 +2051,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   const examinerDirectory = examinedByNames.length
     ? await restRequest<any[]>(
         'staff_users',
-        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
+        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
       ).catch(() => [])
     : [];
   const staffRows = Object.values(
@@ -2070,7 +2098,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   }, {} as Record<string, any>);
   const staffSignaturesByStaffId = staffRows.reduce((acc, staff) => {
     if (!staff?.id || !staff?.profile_id) return acc;
-    const signature = staffSignaturesByProfileId[staff.profile_id];
+    const signature = buildStaffSignatureAssetFromRow(staff) || staffSignaturesByProfileId[staff.profile_id];
     if (signature) acc[staff.id] = signature;
     return acc;
   }, {} as Record<string, any>);
@@ -2677,6 +2705,8 @@ async function listStaffSignatureFromStorage(profileId: string, token?: string |
   if (!targetProfileId || !supabaseUrl || !publicAnonKey) return [] as any[];
 
   const storageConfigs = [
+    { bucket: 'staff_signatures', prefix: `${targetProfileId}/` },
+    { bucket: 'staff_signatures', prefix: `staff-signatures/${targetProfileId}/` },
     { bucket: 'staff_signature', prefix: `${targetProfileId}/` },
     { bucket: 'staff_signature', prefix: `staff-signatures/${targetProfileId}/` },
     { bucket: 'student_signature', prefix: `staff-signatures/${targetProfileId}/` },
@@ -3093,6 +3123,18 @@ export async function getStaffSignature(): Promise<StaffSignatureAsset> {
   const profileId = String(me.profile.id || '').trim();
   if (!profileId) {
     return { signatureUrl: null, signatureFileName: null };
+  }
+
+  const staffRows = await restRequest<any[]>(
+    'staff_users',
+    `profile_id=eq.${encodeURIComponent(profileId)}&select=signature_url&limit=1`,
+  ).catch(() => []);
+  const directSignatureUrl = normalizeStorageFileUrl(staffRows[0]?.signature_url || null);
+  if (directSignatureUrl) {
+    return {
+      signatureUrl: directSignatureUrl,
+      signatureFileName: null,
+    };
   }
 
   const rows = await restRequest<any[]>(

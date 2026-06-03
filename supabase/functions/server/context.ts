@@ -107,6 +107,7 @@ export const storageBuckets = [
   "profile",
   "student_signature",
   "staff_signature",
+  "staff_signatures",
   "lab_chest_xray",
   "lab_cbc",
   "lab_urinalysis",

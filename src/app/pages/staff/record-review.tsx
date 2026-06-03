@@ -46,11 +46,14 @@ import {
   extractCbcFields,
   extractChestXrayFindings,
   extractUrinalysisFields,
+  getStaffSignature,
   saveSubmissionReview,
   updateSubmissionStatus,
   uploadFile,
+  uploadStaffSignature,
   type CbcOcrExtraction,
   type ChestXrayOcrExtraction,
+  type StaffSignatureAsset,
   type UrinalysisOcrExtraction,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -231,6 +234,8 @@ const LAB_RESULT_MAX_FILE_SIZE_LABEL = '5 MB';
 const LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL = '1 MB';
 const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.heic,.heif,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
 const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
+const STAFF_SIGNATURE_ACCEPT_ATTRIBUTE = 'image/*,.png,.jpg,.jpeg,.heic,.heif,.webp';
+const STAFF_SIGNATURE_ALLOWED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'heic', 'heif', 'webp']);
 const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'] as const;
 const BLOOD_PRESSURE_PATTERN = /^\d{2,3}\/\d{2,3}$/;
@@ -342,6 +347,31 @@ function getOcrStatusClass(status: XrayOcrState['status']) {
 function getOcrSourceLabel(source?: ChestXrayOcrExtraction['source'] | CbcOcrExtraction['source'] | UrinalysisOcrExtraction['source']) {
   if (source === 'ocr-space') return 'OCR.space';
   return 'OCR';
+}
+
+function buildEmptyStaffSignature(): StaffSignatureAsset {
+  return {
+    signatureUrl: null,
+    signatureFileName: null,
+  };
+}
+
+function getFileExtension(file?: File | null) {
+  const fileName = String(file?.name || '');
+  return fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() || '' : '';
+}
+
+function isAllowedSignatureImage(file?: File | null) {
+  if (!file) return false;
+  const mimeType = String(file.type || '').toLowerCase();
+  return mimeType.startsWith('image/') || STAFF_SIGNATURE_ALLOWED_EXTENSIONS.has(getFileExtension(file));
+}
+
+function withCacheBust(url: string | null | undefined) {
+  const value = String(url || '').trim();
+  if (!value) return null;
+  const separator = value.includes('?') ? '&' : '?';
+  return `${value}${separator}t=${Date.now()}`;
 }
 
 function createEmptyMedicalHistory(): MedicalHistory {
@@ -843,6 +873,11 @@ export default function StaffRecordReview() {
   });
   const [updatedAssessmentFields, setUpdatedAssessmentFields] = useState<UpdatedAssessmentFields>({});
   const [savingAction, setSavingAction] = useState<ReviewAction | null>(null);
+  const [loadingSignature, setLoadingSignature] = useState(true);
+  const [staffSignature, setStaffSignature] = useState<StaffSignatureAsset>(buildEmptyStaffSignature);
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string | null>(null);
+  const [uploadingSignature, setUploadingSignature] = useState(false);
   const assessmentFormRef = useRef<AssessmentForm>(createAssessmentForm());
   const inReviewTransitionRef = useRef<string | null>(null);
   const hydratedSubmissionIdRef = useRef<string | null>(null);
@@ -859,11 +894,57 @@ export default function StaffRecordReview() {
     .filter(Boolean)
     .join(' ')
     .trim();
+  const currentStaffSignatureUrl = signaturePreviewUrl || staffSignature.signatureUrl || null;
   const {
     data: submissionData,
     isLoading: loading,
     isError,
   } = useStaffSubmissionDetailQuery(submissionId);
+
+  useEffect(() => {
+    if (!me?.profile?.id) {
+      setStaffSignature(buildEmptyStaffSignature());
+      setLoadingSignature(false);
+      return;
+    }
+
+    let active = true;
+    setLoadingSignature(true);
+
+    const loadSignature = async () => {
+      try {
+        const signature = await getStaffSignature();
+        if (active) {
+          setStaffSignature(signature);
+        }
+      } catch {
+        if (active) {
+          setStaffSignature(buildEmptyStaffSignature());
+        }
+      } finally {
+        if (active) {
+          setLoadingSignature(false);
+        }
+      }
+    };
+
+    void loadSignature();
+
+    return () => {
+      active = false;
+    };
+  }, [me?.profile?.id]);
+
+  useEffect(() => {
+    if (!signatureFile) {
+      setSignaturePreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(signatureFile);
+    setSignaturePreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [signatureFile]);
 
   useEffect(() => {
     const loadedSubmission = (submissionData || null) as SubmissionDetails | null;
@@ -930,6 +1011,61 @@ export default function StaffRecordReview() {
     assessmentFormRef.current = nextAssessmentForm;
     setAssessmentForm(nextAssessmentForm);
   }, [defaultSignatoryName]);
+
+  const handleSignatureChange = (file: File | null) => {
+    if (!file) {
+      setSignatureFile(null);
+      return;
+    }
+
+    if (!isAllowedSignatureImage(file)) {
+      toast.error('Please upload an image file.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Staff signature must be 5 MB or smaller.');
+      return;
+    }
+
+    setSignatureFile(file);
+  };
+
+  const handleSignatureUpload = async () => {
+    if (!signatureFile) {
+      toast.info('Choose a signature image first.');
+      return;
+    }
+
+    setUploadingSignature(true);
+    try {
+      const uploaded = await uploadStaffSignature(signatureFile);
+      const refreshed = await getStaffSignature().catch(() => buildEmptyStaffSignature());
+      const nextSignatureUrl = withCacheBust(uploaded.signatureUrl || refreshed.signatureUrl);
+
+      setStaffSignature({
+        signatureUrl: nextSignatureUrl,
+        signatureFileName: signatureFile.name || refreshed.signatureFileName || uploaded.signatureFileName || null,
+      });
+      setSubmission((prev) => (
+        prev
+          ? {
+              ...prev,
+              staffMeasurements: {
+                ...(prev.staffMeasurements || {}),
+                examinedBySignatureUrl: nextSignatureUrl || undefined,
+              },
+            }
+          : prev
+      ));
+      setSignatureFile(null);
+      toast.success('Staff signature uploaded successfully.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to upload staff signature.');
+    } finally {
+      setUploadingSignature(false);
+    }
+  };
 
   useEffect(() => {
     if (!submissionId || !submission) return;
@@ -1862,7 +1998,7 @@ export default function StaffRecordReview() {
         medicalHistory: recordForm.medicalHistory,
         staffMeasurements: {
           ...staffMeasurementsPayload,
-          examinedBySignatureUrl: submission.staffMeasurements?.examinedBySignatureUrl,
+          examinedBySignatureUrl: currentStaffSignatureUrl || submission.staffMeasurements?.examinedBySignatureUrl,
         },
         labResults: {
           xrayDate: assessmentForm.xrayDate,
@@ -2875,16 +3011,69 @@ export default function StaffRecordReview() {
                   placeholder="Document additional observations, recommendations, or restrictions."
                 />
               </div>
-              <div className="md:col-span-2">
-                <Label htmlFor="examinedBy">Examined By</Label>
-                <Input
-                  id="examinedBy"
-                  value={assessmentForm.examinedBy}
-                  onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
-                  maxLength={MAX_EXAMINED_BY_LENGTH}
-                  className="mt-2"
-                  placeholder="Doctor name"
-                />
+              <div className="grid gap-6 md:col-span-2 md:grid-cols-2 md:items-start">
+                <div>
+                  <Label htmlFor="examinedBy">Examined By</Label>
+                  <Input
+                    id="examinedBy"
+                    value={assessmentForm.examinedBy}
+                    onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
+                    maxLength={MAX_EXAMINED_BY_LENGTH}
+                    className="mt-2"
+                    placeholder="Doctor name"
+                  />
+                </div>
+                <div className="rounded-xl border border-dashed border-outline-variant/60 bg-surface-container-low px-4 py-4">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-medium text-on-surface">Staff signature</p>
+                      <p className="text-xs text-on-surface-variant">
+                        Upload once here to save your signature for the Examined by section.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                      <div className="flex min-h-16 flex-1 items-center rounded-lg border bg-white px-3 py-2">
+                        {currentStaffSignatureUrl ? (
+                          <img
+                            src={currentStaffSignatureUrl}
+                            alt="Staff signature"
+                            className="h-12 w-auto object-contain"
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {loadingSignature ? 'Loading saved signature...' : 'No saved signature yet.'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <FilePickerButton
+                          accept={STAFF_SIGNATURE_ACCEPT_ATTRIBUTE}
+                          ariaLabel="Choose staff signature image"
+                          className="w-full sm:w-auto"
+                          disabled={uploadingSignature}
+                          onFileSelected={handleSignatureChange}
+                        >
+                          <FileUp className="mr-2 h-4 w-4" />
+                          Choose Signature
+                        </FilePickerButton>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleSignatureUpload()}
+                          disabled={uploadingSignature || !signatureFile}
+                          loading={uploadingSignature}
+                        >
+                          {uploadingSignature ? 'Uploading...' : 'Upload Signature'}
+                        </Button>
+                      </div>
+                    </div>
+                    {signatureFile ? (
+                      <p className="text-xs text-on-surface-variant">{signatureFile.name}</p>
+                    ) : staffSignature.signatureFileName ? (
+                      <p className="text-xs text-on-surface-variant">{staffSignature.signatureFileName}</p>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
