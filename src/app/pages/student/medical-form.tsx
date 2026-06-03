@@ -74,6 +74,8 @@ export default function StudentMedicalForm() {
     labResultAutoOptimizeThresholdLabel,
     updateField,
     updateEmergencyContact,
+    isEmergencyAddressSameAsStudent,
+    updateEmergencyAddressSync,
     updateMedicalCondition,
     updateLabFile,
     requiresCbcFile,
@@ -131,6 +133,8 @@ export default function StudentMedicalForm() {
                 formData={formData}
                 onFieldChange={updateField}
                 onEmergencyContactChange={updateEmergencyContact}
+                isEmergencyAddressSameAsStudent={isEmergencyAddressSameAsStudent}
+                onEmergencyAddressSyncChange={updateEmergencyAddressSync}
                 onMedicalConditionChange={updateMedicalCondition}
                 hasRequiredProfileFields={hasRequiredProfileFields}
                 hasProfilePhoto={hasProfilePhoto}

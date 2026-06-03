@@ -11,6 +11,7 @@ import {
   loadAdminUserAccounts,
   loadAuthAccessPage,
   loadCheckEmailPage,
+  loadCreatePasswordPage,
   loadRoleSelection,
   loadStaffCertificates,
   loadStaffAnnouncements,
@@ -36,6 +37,7 @@ import {
 const RoleSelection = lazy(loadRoleSelection);
 const AuthAccessPage = lazy(loadAuthAccessPage);
 const CheckEmailPage = lazy(loadCheckEmailPage);
+const CreatePasswordPage = lazy(loadCreatePasswordPage);
 const StudentDashboard = lazy(loadStudentDashboard);
 const StudentYearSelection = lazy(loadStudentYearSelection);
 const StudentPrivacyWaiver = lazy(loadStudentPrivacyWaiver);
@@ -127,6 +129,10 @@ export const router = createBrowserRouter([
         {withSuspense(CheckEmailPage, 'auth')}
       </RedirectIfAuthenticated>
     ),
+  },
+  {
+    path: "/create-password",
+    element: withSuspense(CreatePasswordPage, 'auth'),
   },
   {
     path: "/student",

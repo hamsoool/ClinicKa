@@ -60,6 +60,33 @@ function verifyChestXrayParser(parsers) {
     findings: 'The lungs are clear.\nHeart is not enlarged.\nNo active pulmonary disease.',
     result: 'normal',
   });
+
+  const findingsPreferredResult = parsers.extractChestXrayFields(`
+    CHEST X-RAY
+    Findings:
+    Mild bilateral perihilar interstitial opacity. No pleural effusion.
+    Impression:
+    Consider mild bronchitic change.
+  `);
+
+  assert.deepEqual(findingsPreferredResult, {
+    findings: 'Mild bilateral perihilar interstitial opacity.\nNo pleural effusion.',
+    result: 'abnormal',
+  });
+
+  const observationsHeaderResult = parsers.extractChestXrayFields(`
+    CITY HOSPITAL
+    CHEST XRAY
+    Observations:
+    Cardiomediastinal silhouette is within normal limits. No focal lung opacity.
+    Conclusion:
+    No acute cardiopulmonary abnormality.
+  `);
+
+  assert.deepEqual(observationsHeaderResult, {
+    findings: 'Cardiomediastinal silhouette is within normal limits.\nNo focal lung opacity.',
+    result: 'normal',
+  });
 }
 
 function verifyCbcParser(parsers) {
@@ -149,6 +176,43 @@ function verifyUrinalysisParser(parsers) {
     Sugar Negative
   `);
   assert.equal(specimenFallbackFields.date, '2026-05-24');
+
+  const issuanceDateFields = parsers.extractUrinalysisFields(`
+    PATIENT: TEST STUDENT DOB: 03/13/2005 DATE OF ISSUANCE: 05/24/2026
+    URINALYSIS
+    Protein Negative
+    Sugar Negative
+  `);
+  assert.equal(issuanceDateFields.date, '2026-05-24');
+
+  const examDateFields = parsers.extractUrinalysisFields(`
+    PATIENT NAME: TEST STUDENT
+    BIRTHDATE: 03/13/2005
+    Exam Date: 24-May-2026
+    Glucose Negative
+    Protein Negative
+  `);
+  assert.equal(examDateFields.date, '2026-05-24');
+
+  const studyDateFields = parsers.extractUrinalysisFields(`
+    PATIENT NAME: TEST STUDENT
+    DOB: 03/13/2005
+    Study Date
+    May 24, 2026
+    Protein Negative
+    Glucose Negative
+  `);
+  assert.equal(studyDateFields.date, '2026-05-24');
+
+  const performedDateFields = parsers.extractUrinalysisFields(`
+    PATIENT NAME: TEST STUDENT
+    24-05-2026
+    Date Performed
+    DOB: 03/13/2005
+    Protein Negative
+    Glucose Negative
+  `);
+  assert.equal(performedDateFields.date, '2026-05-24');
 }
 
 const parsers = loadParserModule();

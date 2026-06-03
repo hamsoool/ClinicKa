@@ -363,16 +363,12 @@ export default function StudentProfile() {
 
       let uploadedPhotoUrl: string | null = null;
       let uploadedSignatureUrl: string | null = null;
-
-      if (photoFile) {
-        const uploaded = await uploadStudentProfileAsset(photoFile, resolvedStudentId, 'photo');
-        uploadedPhotoUrl = withCacheBust(uploaded.url || null);
-      }
-
-      if (signatureFile) {
-        const uploaded = await uploadStudentProfileAsset(signatureFile, resolvedStudentId, 'signature');
-        uploadedSignatureUrl = withCacheBust(uploaded.url || null);
-      }
+      const [uploadedPhoto, uploadedSignature] = await Promise.all([
+        photoFile ? uploadStudentProfileAsset(photoFile, resolvedStudentId, 'photo') : Promise.resolve(null),
+        signatureFile ? uploadStudentProfileAsset(signatureFile, resolvedStudentId, 'signature') : Promise.resolve(null),
+      ]);
+      uploadedPhotoUrl = withCacheBust(uploadedPhoto?.url || null);
+      uploadedSignatureUrl = withCacheBust(uploadedSignature?.url || null);
 
       const assets = await getStudentProfileAssets(resolvedStudentId, resolvedProfileId);
       setProfileAssets({

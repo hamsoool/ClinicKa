@@ -54,18 +54,26 @@ function sectionStartRegex(labelPattern: string) {
   return new RegExp(`(?:^|\\n)\\s*(?:${labelPattern})\\s*[:\\-]?\\s*`, "i");
 }
 
+const XRAY_FINDINGS_LABEL_PATTERN =
+  "(?:(?:radiographic|radiologic(?:al)?|chest\\s*x[-\\s]?ray|x[-\\s]?ray)\\s*)?(?:findings?|observations?|report|result|reading|remarks?)";
+const XRAY_IMPRESSION_LABEL_PATTERN =
+  "(?:final\\s+)?(?:radiologic(?:al)?\\s+)?(?:impression|impressions|impress[il]on|impresslon|impresson)";
+const XRAY_CONCLUSION_LABEL_PATTERN =
+  "(?:conclusion|conclusions|diagnosis|interpretation|opinion|assessment)";
+const XRAY_SECONDARY_LABEL_PATTERN = `(?:${XRAY_IMPRESSION_LABEL_PATTERN}|${XRAY_CONCLUSION_LABEL_PATTERN})`;
+
 const SECTION_LABELS = [
   {
+    key: "findings",
+    pattern: XRAY_FINDINGS_LABEL_PATTERN,
+  },
+  {
     key: "impression",
-    pattern: "(?:final\\s+)?(?:radiologic(?:al)?\\s+)?(?:impression|impressions|impress[il]on|impresslon|impresson)",
+    pattern: XRAY_IMPRESSION_LABEL_PATTERN,
   },
   {
     key: "conclusion",
-    pattern: "(?:conclusion|conclusions|diagnosis|interpretation|opinion|assessment)",
-  },
-  {
-    key: "findings",
-    pattern: "(?:(?:radiographic|radiologic(?:al)?|x[-\\s]?ray|chest\\s*x[-\\s]?ray)\\s*)?(?:findings?|report|result|reading|remarks?)",
+    pattern: XRAY_CONCLUSION_LABEL_PATTERN,
   },
 ] as const;
 
@@ -76,7 +84,7 @@ const XRAY_NON_CLINICAL_TAIL_PATTERN =
   "(?:note\\s*:|this\\s+report\\s+is\\s+based|should\\s+be\\s+correlated|please\\s+correlate\\s+clinically|correlate\\s+clinically|electronically\\s+signed|validated\\s+by|verified\\s+by|released\\s+by|prepared\\s+by|encoded\\s+by|rad\\.?\\s*tech\\.?|radiologic\\s+technologist|radiographer|radiologist|medical\\s+technologist|pathologist|rrt\\b|rmt\\b|\\bmt\\b|\\bmd\\b|\\bfpcr\\b|\\bfpcp\\b|\\bfpcs\\b|\\bfacr\\b|\\bdpbr\\b|\\bprc\\b|\\bptr\\b|lic\\.?\\s*no|license\\s*no|page\\s*\\d+\\s*of\\s*\\d+|page\\s*\\d+)";
 
 const STOP_LABEL_PATTERN =
-  `(?:impression|impressions|conclusion|conclusions|diagnosis|interpretation|findings?|result|remarks?|recommendations?|${OCR_METADATA_LABEL_PATTERN}|${XRAY_NON_CLINICAL_TAIL_PATTERN}|name|patient|student|age|sex|gender|birthday|date|physician|license|prepared|encoded|released|validated|verified|request(?:ed|ing)?|exam(?:ination)?|case|film|page)`;
+  `(?:${XRAY_IMPRESSION_LABEL_PATTERN}|${XRAY_CONCLUSION_LABEL_PATTERN}|findings?|observations?|result|remarks?|recommendations?|${OCR_METADATA_LABEL_PATTERN}|${XRAY_NON_CLINICAL_TAIL_PATTERN}|name|patient|student|age|sex|gender|birthday|date|physician|license|prepared|encoded|released|validated|verified|request(?:ed|ing)?|exam(?:ination)?|case|film|page)`;
 
 function resolveStopIndex(text: string, match: RegExpExecArray | null) {
   if (!match) return -1;
@@ -126,6 +134,18 @@ function isXrayNonClinicalStopLine(line: string) {
   return new RegExp(`\\b${XRAY_NON_CLINICAL_TAIL_PATTERN}`, "i").test(line);
 }
 
+function isXraySecondaryHeaderLine(line: string) {
+  return new RegExp(`^\\s*(?:${XRAY_SECONDARY_LABEL_PATTERN})\\b\\s*[:\\-]?`, "i").test(line);
+}
+
+function isXrayFindingsHeaderLine(line: string) {
+  return new RegExp(`^\\s*(?:${XRAY_FINDINGS_LABEL_PATTERN})\\b\\s*[:\\-]?`, "i").test(line);
+}
+
+function stripXraySectionHeader(line: string, labelPattern: string) {
+  return String(line || "").replace(new RegExp(`^\\s*(?:${labelPattern})\\b\\s*[:\\-]?\\s*`, "i"), "");
+}
+
 function formatClinicalText(value: string) {
   return String(value || "")
     .replace(/\s+([,.;:)])/g, "$1")
@@ -152,7 +172,7 @@ function cleanupClinicalText(value: string) {
   const cleaned = stripXrayNonClinicalTail(lines
     .join(" ")
     .replace(new RegExp(`\\b${OCR_METADATA_LABEL_PATTERN}\\b\\s*[:\\-]?.*$`, "i"), " ")
-    .replace(/\b(?:impression|impressions|conclusion|diagnosis|interpretation|opinion|assessment|findings?|report|result|reading|remarks?)\s*[:\-]\s*/gi, " ")
+    .replace(/\b(?:impression|impressions|conclusion|diagnosis|interpretation|opinion|assessment|findings?|observations?|report|result|reading|remarks?)\s*[:\-]\s*/gi, " ")
     .trim());
 
   return formatClinicalText(cleaned);
@@ -181,6 +201,49 @@ function getFallbackFindings(lines: string[]) {
     .sort((a, b) => a.index - b.index);
 
   return cleanupClinicalText(candidates.map((item) => item.line).join("\n"));
+}
+
+function extractXrayFindingsByProximity(lines: string[]) {
+  const collectedCandidates: Array<{ findings: string; score: number; index: number }> = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = cleanOcrLine(lines[index]);
+    if (!rawLine || !isXrayFindingsHeaderLine(rawLine)) continue;
+
+    const collectedLines: string[] = [];
+    const inlineText = cleanupClinicalText(stripXraySectionHeader(rawLine, XRAY_FINDINGS_LABEL_PATTERN));
+    if (inlineText) collectedLines.push(inlineText);
+
+    for (const nearbyRawLine of lines.slice(index + 1, index + 7)) {
+      const nearbyLine = cleanOcrLine(nearbyRawLine);
+      if (!nearbyLine) continue;
+      if (isXraySecondaryHeaderLine(nearbyLine) || isXrayNonClinicalStopLine(nearbyLine)) break;
+      if (isXrayFindingsHeaderLine(nearbyLine) && collectedLines.length) break;
+
+      const cleanedNearbyLine = cleanupClinicalText(stripXraySectionHeader(nearbyLine, XRAY_FINDINGS_LABEL_PATTERN));
+      const clinicalScore = scoreClinicalLine(cleanedNearbyLine || nearbyLine);
+      if (cleanedNearbyLine && clinicalScore >= 1) {
+        collectedLines.push(cleanedNearbyLine);
+        continue;
+      }
+
+      if (collectedLines.length && isAdministrativeLine(nearbyLine)) {
+        break;
+      }
+    }
+
+    const findings = cleanupClinicalText(collectedLines.join("\n"));
+    if (findings) {
+      collectedCandidates.push({
+        findings,
+        index,
+        score: scoreClinicalLine(findings) + collectedLines.length,
+      });
+    }
+  }
+
+  collectedCandidates.sort((a, b) => b.score - a.score || a.index - b.index);
+  return collectedCandidates[0]?.findings || "";
 }
 
 function hasUnnegatedPattern(text: string, pattern: RegExp) {
@@ -232,17 +295,9 @@ export function extractChestXrayFields(rawText: string) {
     .filter(Boolean);
   const cleanedText = cleanedLines.join("\n");
 
-  for (const section of SECTION_LABELS) {
-    const sectionText = cleanupClinicalText(extractSectionText(cleanedText, section.pattern));
-    if (sectionText) {
-      return {
-        findings: sectionText,
-        result: inferXrayResult(sectionText) || inferXrayResult(cleanedText),
-      };
-    }
-  }
-
-  const fallbackFindings = getFallbackFindings(cleanedLines);
+  const strictFindings = cleanupClinicalText(extractSectionText(cleanedText, XRAY_FINDINGS_LABEL_PATTERN));
+  const proximityFindings = strictFindings ? "" : extractXrayFindingsByProximity(cleanedLines);
+  const fallbackFindings = proximityFindings || strictFindings || getFallbackFindings(cleanedLines);
   return {
     findings: fallbackFindings,
     result: inferXrayResult(fallbackFindings) || inferXrayResult(cleanedText),
@@ -740,43 +795,140 @@ function hasBirthDateLabel(value: string) {
   );
 }
 
+const DATE_LABEL_PATTERNS = [
+  {
+    kind: "birth",
+    score: 0,
+    pattern: /\b(?:date\s*of\s*birth|birth\s*date|birthdate|birthday|d\.?\s*o\.?\s*b\.?|dob)\b/gi,
+  },
+  {
+    kind: "issuance",
+    score: 100,
+    pattern: /\b(?:date\s*of\s*issuance|issuance\s*(?:date|time)|(?:released?|issued?|issuance|reported?|report(?:ed)?|result(?:s)?|validated|verified|approved|completed|finali[sz]ed|certified|posted)\s*(?:date|time)|(?:date|time)\s*(?:released?|issued?|issuance|reported?|report(?:ed)?|result(?:s)?|validated|verified|approved|completed|finali[sz]ed|certified|posted))\b/gi,
+  },
+  {
+    kind: "exam",
+    score: 90,
+    pattern: /\b(?:(?:exam(?:ination)?|study|x[-\s]?ray|performed|test(?:ed)?|service|procedure|run|analy[sz]ed|analysis)\s*(?:date|time)|(?:date|time)\s*(?:of\s*)?(?:exam(?:ination)?|study|x[-\s]?ray|performed|test(?:ed)?|service|procedure|run|analy[sz]ed|analysis))\b/gi,
+  },
+  {
+    kind: "printed",
+    score: 70,
+    pattern: /\b(?:(?:printed|print|generated|encoded|transcribed)\s*(?:date|time)?|(?:date|time)\s*(?:printed|print|generated|encoded|transcribed))\b/gi,
+  },
+  {
+    kind: "collection",
+    score: 60,
+    pattern: /\b(?:(?:received|collected|collection|specimen|sample|drawn|extracted|obtained|taken)\s*(?:date|time)?|(?:date|time)\s*(?:received|collected|collection|specimen|sample|drawn|extracted|obtained|taken))\b/gi,
+  },
+  {
+    kind: "request",
+    score: 40,
+    pattern: /\b(?:(?:requested|request|ordered|order|registered|transaction|visit|encounter)\s*(?:date|time)?|(?:date|time)\s*(?:requested|request|ordered|order|registered|transaction|visit|encounter))\b/gi,
+  },
+] as const;
+
+function findNearestDateLabel(value: string, endIndex = String(value || "").length) {
+  const text = String(value || "").slice(0, endIndex);
+  let bestMatch: { index: number; end: number; score: number; kind: string } | null = null;
+
+  for (const label of DATE_LABEL_PATTERNS) {
+    const pattern = new RegExp(label.pattern.source, label.pattern.flags);
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(text))) {
+      const end = match.index + match[0].length;
+      if (
+        !bestMatch ||
+        end > bestMatch.end ||
+        (end === bestMatch.end && label.score > bestMatch.score)
+      ) {
+        bestMatch = {
+          index: match.index,
+          end,
+          kind: label.kind,
+          score: label.score,
+        };
+      }
+    }
+  }
+
+  return bestMatch;
+}
+
+function getDateCandidateLabelScore(value: string, candidateIndex: number) {
+  const text = String(value || "");
+  const searchStart = Math.max(0, candidateIndex - 80);
+  const prefix = text.slice(searchStart, candidateIndex);
+  const nearestLabel = findNearestDateLabel(prefix);
+
+  if (nearestLabel) {
+    if (nearestLabel.kind === "birth") return -1;
+    return nearestLabel.score;
+  }
+
+  if (hasBirthDateLabel(prefix)) {
+    return -1;
+  }
+
+  return /\b(?:date|time)\b/i.test(prefix) ? 20 : 0;
+}
+
 function getLabResultDateLabelScore(line: string) {
   const normalized = String(line || "").toLowerCase().replace(/\s+/g, " ").trim();
   if (!normalized) return 0;
 
-  const hasDateOrTime = /\b(?:date|time)\b/i.test(normalized);
-  const hasDateValue = Boolean(parseCbcDateValue(normalized));
-  const hasBirthKeyword = hasBirthDateLabel(normalized);
-  const hasIssuanceKeyword = /\b(?:released?|issued?|issuance|reported?|report(?:ed)?|result(?:s)?|validated|verified|approved|completed|finali[sz]ed|certified|posted)\b/i.test(normalized);
-  const hasPerformedKeyword = /\b(?:performed|exam(?:ination)?|test(?:ed)?|service|procedure|run|analy[sz]ed|analysis)\b/i.test(normalized);
-  const hasPrintedKeyword = /\b(?:printed|print|generated|encoded|transcribed)\b/i.test(normalized);
-  const hasCollectionKeyword = /\b(?:received|collected|collection|specimen|sample|drawn|extracted|obtained|taken)\b/i.test(normalized);
-  const hasRequestKeyword = /\b(?:requested|request|ordered|order|registered|transaction|visit|encounter)\b/i.test(normalized);
-  const hasDateMeaningKeyword = hasIssuanceKeyword || hasPerformedKeyword || hasPrintedKeyword || hasCollectionKeyword || hasRequestKeyword;
-  if (!hasDateOrTime && !(hasDateMeaningKeyword && hasDateValue)) return 0;
+  const nearestLabel = findNearestDateLabel(normalized);
+  if (nearestLabel) return nearestLabel.kind === "birth" ? 0 : nearestLabel.score;
 
-  if (hasIssuanceKeyword) {
-    return 100;
+  return /\b(?:date|time)\b/i.test(normalized) && parseCbcDateValue(normalized) ? 20 : 0;
+}
+
+function getNearbyDateContextScore(lines: string[], index: number, candidateIndex: number) {
+  let bestScore = getDateCandidateLabelScore(lines[index], candidateIndex);
+  let foundBirthContext = bestScore < 0;
+
+  for (let offset = 1; offset <= 3; offset += 1) {
+    for (const nearbyIndex of [index - offset, index + offset]) {
+      if (nearbyIndex < 0 || nearbyIndex >= lines.length) continue;
+      const nearbyLine = lines[nearbyIndex];
+      const nearbyScore = getLabResultDateLabelScore(nearbyLine);
+      if (nearbyScore > 0) {
+        bestScore = Math.max(bestScore, nearbyScore - offset * 2);
+      } else if (hasBirthDateLabel(nearbyLine)) {
+        foundBirthContext = true;
+      }
+    }
   }
-  if (hasPerformedKeyword) {
-    return 80;
+
+  if (bestScore <= 0 && foundBirthContext) {
+    return -1;
   }
-  if (hasPrintedKeyword) {
-    return 70;
+
+  return bestScore;
+}
+
+function extractDateByKeywordProximity(lines: string[]) {
+  const candidates: Array<{ date: string; score: number; index: number }> = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const dateCandidates = extractDateCandidates(line);
+    if (!dateCandidates.length) continue;
+
+    for (const dateCandidate of dateCandidates) {
+      const score = getNearbyDateContextScore(lines, index, dateCandidate.index);
+      if (score > 0) {
+        candidates.push({
+          date: dateCandidate.date,
+          score,
+          index,
+        });
+      }
+    }
   }
-  if (hasCollectionKeyword) {
-    return 60;
-  }
-  if (hasRequestKeyword) {
-    return 40;
-  }
-  if (hasBirthKeyword) {
-    return 0;
-  }
-  if (/\bdate\b/i.test(normalized)) {
-    return 20;
-  }
-  return 0;
+
+  return candidates;
 }
 
 function extractCbcDate(lines: string[]) {
@@ -789,12 +941,10 @@ function extractCbcDate(lines: string[]) {
 
     const sameLineCandidates = extractDateCandidates(line)
       .map((dateCandidate) => {
-        const candidateContext = line.slice(0, dateCandidate.index);
-        const candidateScore = getLabResultDateLabelScore(candidateContext);
-        const isRejectedBirthDate = hasBirthDateLabel(candidateContext) && !candidateScore;
+        const candidateScore = getDateCandidateLabelScore(line, dateCandidate.index);
         return {
           date: dateCandidate.date,
-          score: isRejectedBirthDate ? 0 : candidateScore || score,
+          score: candidateScore < 0 ? 0 : candidateScore || score,
           index,
         };
       })
@@ -814,6 +964,10 @@ function extractCbcDate(lines: string[]) {
         break;
       }
     }
+  }
+
+  if (!candidates.length) {
+    candidates.push(...extractDateByKeywordProximity(lines));
   }
 
   candidates.sort((a, b) => b.score - a.score || a.index - b.index);

@@ -122,7 +122,6 @@ export default function StaffSubmissions() {
   const {
     data,
     isLoading: loading,
-    isFetching,
     isError,
   } = useStaffSubmissionSummariesQuery({
     searchQuery: deferredSearchQuery,
@@ -268,9 +267,6 @@ export default function StaffSubmissions() {
               All Records
             </Button>
             <div className="ml-auto flex items-center gap-2">
-              {!loading && isFetching ? (
-                <span className="text-xs text-muted-foreground">Refreshing queue...</span>
-              ) : null}
               <Button
                 variant="ghost"
                 size="sm"
