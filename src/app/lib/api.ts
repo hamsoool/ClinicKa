@@ -1,5 +1,9 @@
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import {
+  createClient,
+  type Session as SupabaseSession,
+  type SupabaseClient,
+} from '@supabase/supabase-js';
 import type {
   ApprovedStudentSummary,
   StaffDashboardOverview,
@@ -256,7 +260,7 @@ export type AuthSession = {
   };
 };
 
-type SupabaseAuthUser = {
+export type SupabaseAuthUser = {
   id: string;
   email?: string;
   app_metadata?: {
@@ -1038,6 +1042,64 @@ export async function getUserByToken(token: string | null) {
     throw new Error('Missing access token.');
   }
   return authRequest<SupabaseAuthUser>('/auth/v1/user', { token });
+}
+
+function toAuthSession(session: SupabaseSession | null): AuthSession | null {
+  if (!session?.access_token) return null;
+
+  return normalizeSessionTimestamps({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    expires_in: session.expires_in,
+    expires_at: session.expires_at,
+    token_type: session.token_type,
+    user: session.user
+      ? {
+          id: session.user.id,
+          email: session.user.email || undefined,
+        }
+      : undefined,
+  });
+}
+
+export async function syncSupabaseAuthSession(session: AuthSession | null) {
+  if (!session?.access_token || !session.refresh_token) {
+    return null;
+  }
+
+  const supabase = getAuthClient();
+  const { data, error } = await supabase.auth.setSession({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return toAuthSession(data.session);
+}
+
+export async function updateCurrentSessionPassword(
+  newPassword: string,
+  userInputs?: PasswordPolicyUserInputs,
+) {
+  const password = String(newPassword || '');
+  const result = getPasswordStrengthResult(password, userInputs);
+  if (!result.isStrongEnough) {
+    throw new Error(getPasswordPolicyMessage(result));
+  }
+
+  const supabase = getAuthClient();
+  const { data, error } = await supabase.auth.updateUser({
+    password,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.user;
 }
 
 export async function updateUserPassword(
@@ -2315,7 +2377,13 @@ export async function sendPasswordResetEmail(email: string) {
 }
 
 export async function signOut() {
+  const supabase = supabaseUrl && publicAnonKey ? getAuthClient() : null;
   if (!supabaseUrl || !publicAnonKey) {
+    try {
+      await supabase?.auth.signOut();
+    } catch {
+      // Best effort clear for the in-memory client session.
+    }
     clearStoredSession();
     return;
   }
@@ -2333,6 +2401,11 @@ export async function signOut() {
       });
     }
   } finally {
+    try {
+      await supabase?.auth.signOut();
+    } catch {
+      // Best effort clear for the in-memory client session.
+    }
     clearStoredSession();
   }
 }

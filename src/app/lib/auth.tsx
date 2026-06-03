@@ -1,6 +1,25 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { authenticateWithPassword, clearStoredSession, createDefaultAdminSystemSettings, getMe, getSessionPolicy, getStoredSession, getUserByToken, hasServerPasswordSetupCompleted, markServerPasswordSetupCompleted, rejectUnauthorizedGoogleAccount, setStoredSession, signInWithPassword, signOut, signUpWithPassword, updateUserPassword } from './api';
+import {
+  authenticateWithPassword,
+  clearStoredSession,
+  createDefaultAdminSystemSettings,
+  getMe,
+  getSessionPolicy,
+  getStoredSession,
+  getUserByToken,
+  hasServerPasswordSetupCompleted,
+  markServerPasswordSetupCompleted,
+  rejectUnauthorizedGoogleAccount,
+  setStoredSession,
+  signInWithPassword,
+  signOut,
+  signUpWithPassword,
+  syncSupabaseAuthSession,
+  type SupabaseAuthUser,
+  updateCurrentSessionPassword,
+  updateUserPassword,
+} from './api';
 import { flushPendingStudentNotificationSaves } from './student-notification-save-queue';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
@@ -102,8 +121,60 @@ function clearPendingPasswordSetup(email?: string | null) {
   window.localStorage.setItem(PENDING_PASSWORD_SETUP_MARKER_KEY, JSON.stringify([...markers]));
 }
 
+function isGoogleAuthUser(user?: SupabaseAuthUser | null) {
+  const providers = [
+    user?.app_metadata?.provider,
+    ...(Array.isArray(user?.identities) ? user.identities.map((identity) => identity?.provider) : []),
+  ];
+  return providers.some(
+    (provider) => String(provider || '').trim().toLowerCase() === 'google',
+  );
+}
+
+function hasPasswordIdentity(user?: SupabaseAuthUser | null) {
+  return (user?.identities || []).some(
+    (identity) => String(identity?.provider || '').trim().toLowerCase() === 'email',
+  );
+}
+
+function getAppMetadataHasPassword(user?: SupabaseAuthUser | null) {
+  const metadata = user?.app_metadata as Record<string, unknown> | null | undefined;
+  const value = metadata?.has_password;
+  return typeof value === 'boolean' ? value : null;
+}
+
+async function shouldRequireGooglePasswordSetup(
+  authUser: SupabaseAuthUser,
+  accessToken: string,
+  profilePasswordSetupCompleted?: boolean | null,
+) {
+  if (!isGoogleAuthUser(authUser)) {
+    return false;
+  }
+
+  const appMetadataHasPassword = getAppMetadataHasPassword(authUser);
+  if (appMetadataHasPassword === true) {
+    return false;
+  }
+  if (appMetadataHasPassword === false) {
+    return true;
+  }
+
+  if (hasPasswordIdentity(authUser)) {
+    return false;
+  }
+
+  if (profilePasswordSetupCompleted) {
+    return false;
+  }
+
+  const hasServerPassword = await hasServerPasswordSetupCompleted(accessToken);
+  return !hasServerPassword;
+}
+
 type AuthContextValue = {
   loading: boolean;
+  authRedirectInProgress: boolean;
   session: AuthSession | null;
   me: AuthMe | null;
   role: UserRole | null;
@@ -179,8 +250,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasPendingPasswordSetupMarker(initialSession?.user?.email),
   );
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [authRedirectInProgress, setAuthRedirectInProgress] = useState(() =>
+    typeof window !== 'undefined' && window.location.hash.includes('access_token='),
+  );
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState<number | null>(null);
   const inactivityLogoutInFlightRef = useRef(false);
+  const hydratedSupabaseSessionKeyRef = useRef<string | null>(null);
 
   function resetAuthState() {
     clearStoredSession();
@@ -189,6 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRole(null);
     setRequiresPasswordSetup(false);
     setIsPasswordRecovery(false);
+    setAuthRedirectInProgress(false);
     setSessionTimeoutMinutes(null);
   }
 
@@ -331,6 +407,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [role, session?.access_token, sessionTimeoutMinutes]);
 
   useEffect(() => {
+    if (!session?.access_token || !session.refresh_token) {
+      hydratedSupabaseSessionKeyRef.current = null;
+      return;
+    }
+
+    const sessionKey = `${session.access_token}:${session.refresh_token}`;
+    if (hydratedSupabaseSessionKeyRef.current === sessionKey) {
+      return;
+    }
+    hydratedSupabaseSessionKeyRef.current = sessionKey;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const syncedSession = await syncSupabaseAuthSession(session);
+        if (!syncedSession || cancelled) return;
+
+        const didSessionChange =
+          syncedSession.access_token !== session.access_token
+          || syncedSession.refresh_token !== session.refresh_token
+          || syncedSession.expires_at !== session.expires_at
+          || syncedSession.expires_in !== session.expires_in;
+
+        if (didSessionChange) {
+          setStoredSession(syncedSession);
+          setSession((current) => {
+            if (!current) return current;
+            if (
+              current.access_token !== session.access_token
+              || current.refresh_token !== session.refresh_token
+            ) {
+              return current;
+            }
+            return syncedSession;
+          });
+        }
+      } catch {
+        hydratedSupabaseSessionKeyRef.current = null;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!window.location.hash.includes('access_token=')) return;
 
@@ -343,12 +466,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const redirectAccessToken = accessToken;
 
     async function processAuthRedirect() {
+      setAuthRedirectInProgress(true);
+
       if (authType === 'signup') {
         const url = new URL(window.location.href);
         url.hash = '';
         url.searchParams.set('mode', 'signin');
         url.searchParams.set('verified', '1');
         window.history.replaceState({}, document.title, url.pathname + url.search);
+        setAuthRedirectInProgress(false);
         return;
       }
 
@@ -373,6 +499,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           url.searchParams.set('mode', 'signin');
           url.searchParams.set('google_error', 'invalid_domain');
           window.history.replaceState({}, document.title, url.pathname + url.search);
+          setAuthRedirectInProgress(false);
           return;
         }
 
@@ -389,8 +516,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         if (authType === 'recovery') {
-          setStoredSession(nextSession);
-          setSession(nextSession);
+          const syncedSession = await syncSupabaseAuthSession(nextSession) || nextSession;
+          setStoredSession(syncedSession);
+          setSession(syncedSession);
           setMe(null);
           setRole(null);
           setRequiresPasswordSetup(false);
@@ -400,29 +528,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           url.searchParams.set('mode', 'signin');
           url.searchParams.set('recovery', '1');
           window.history.replaceState({}, document.title, url.pathname + url.search);
+          setAuthRedirectInProgress(false);
           return;
         }
 
-        const hasPasswordIdentity = (authUser.identities || []).some(
-          (identity) => identity.provider === 'email',
-        );
-        const hasServerPassword = await hasServerPasswordSetupCompleted(redirectAccessToken);
-        const hasExistingPassword =
-          hasPasswordIdentity || hasServerPassword || hasPasswordSetupMarker(email);
-
-        setStoredSession(nextSession);
-        setSession(nextSession);
-        if (hasExistingPassword) {
-          clearPendingPasswordSetup(email);
-        } else {
-          markPendingPasswordSetup(email);
-        }
-        setRequiresPasswordSetup(!hasExistingPassword);
-        setIsPasswordRecovery(false);
+        const syncedSession = await syncSupabaseAuthSession(nextSession) || nextSession;
         try {
-          const resolvedMe = await getMe(redirectAccessToken);
+          const resolvedMe = await getMe(syncedSession.access_token);
+          const requiresGooglePasswordSetup = await shouldRequireGooglePasswordSetup(
+            authUser,
+            syncedSession.access_token,
+            resolvedMe.profile.password_setup_completed,
+          );
+
+          setStoredSession(syncedSession);
+          setSession(syncedSession);
           setMe(resolvedMe);
-          setRole(hasExistingPassword ? resolvedMe.profile.role : null);
+          setRole(requiresGooglePasswordSetup ? null : resolvedMe.profile.role);
+          setRequiresPasswordSetup(requiresGooglePasswordSetup);
+          setIsPasswordRecovery(false);
+
+          if (requiresGooglePasswordSetup) {
+            markPendingPasswordSetup(email);
+          } else {
+            clearPendingPasswordSetup(email);
+          }
         } catch (error) {
           if (isArchivedAccountError(error)) {
             resetAuthState();
@@ -443,11 +573,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         const url = new URL(window.location.href);
         url.hash = '';
-        if (!hasExistingPassword) {
+        if (hasPendingPasswordSetupMarker(email)) {
           url.searchParams.set('mode', 'signin');
           url.searchParams.set('password_setup', '1');
         }
         window.history.replaceState({}, document.title, url.pathname + url.search);
+        setAuthRedirectInProgress(false);
       } catch {
         clearStoredSession();
         setSession(null);
@@ -460,6 +591,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         url.searchParams.set('mode', 'signin');
         url.searchParams.set('google_error', 'invalid_token');
         window.history.replaceState({}, document.title, url.pathname + url.search);
+        setAuthRedirectInProgress(false);
       }
     }
 
@@ -468,6 +600,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => ({
     loading,
+    authRedirectInProgress,
     session,
     me,
     role,
@@ -576,7 +709,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!session?.access_token) {
         throw new Error('No active session found. Please sign in with Google again.');
       }
-      await updateUserPassword(newPassword, session.access_token, {
+      await updateCurrentSessionPassword(newPassword, {
         email: session.user?.email || me?.profile?.email,
         firstName: me?.profile?.first_name,
         lastName: me?.profile?.last_name,
@@ -622,7 +755,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await applyPasswordChange(session, me, setSession, setMe, setRole, setRequiresPasswordSetup, currentPassword, newPassword);
       setIsPasswordRecovery(false);
     },
-  }), [isPasswordRecovery, loading, me, requiresPasswordSetup, role, session]);
+  }), [authRedirectInProgress, isPasswordRecovery, loading, me, requiresPasswordSetup, role, session]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -658,8 +791,12 @@ export function RequireAuth({
   children: React.ReactNode;
   allowedRoles?: UserRole[];
 }) {
-  const { role, requiresPasswordSetup, isPasswordRecovery } = useAuth();
+  const { role, requiresPasswordSetup, isPasswordRecovery, authRedirectInProgress } = useAuth();
   const location = useLocation();
+
+  if (authRedirectInProgress) {
+    return null;
+  }
 
   if (requiresPasswordSetup && !isPasswordRecovery) {
     return <Navigate to="/create-password" replace />;
@@ -677,7 +814,11 @@ export function RequireAuth({
 }
 
 export function RedirectIfAuthenticated({ children }: { children: React.ReactNode }) {
-  const { role, requiresPasswordSetup, isPasswordRecovery } = useAuth();
+  const { role, requiresPasswordSetup, isPasswordRecovery, authRedirectInProgress } = useAuth();
+
+  if (authRedirectInProgress) {
+    return <>{children}</>;
+  }
 
   if (requiresPasswordSetup && !isPasswordRecovery) {
     return <Navigate to="/create-password" replace />;
