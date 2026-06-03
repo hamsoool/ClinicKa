@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   FileWarning,
+  RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
 import {
@@ -331,6 +332,7 @@ export default function StaffDashboard() {
     isLoading: overviewLoading,
     isFetching: overviewFetching,
     isError: isOverviewError,
+    refetch: refetchOverview,
   } = useStaffDashboardOverviewQuery();
   const {
     data: reportSubmissions = [],
@@ -629,11 +631,6 @@ export default function StaffDashboard() {
           </span>
         )}
         title={`Welcome, ${displayName}`}
-        actions={
-          !overviewLoading && overviewFetching ? (
-            <span className="text-xs text-on-surface-variant">Refreshing queue...</span>
-          ) : undefined
-        }
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
@@ -684,9 +681,18 @@ export default function StaffDashboard() {
               >
                 Open Queue
               </button>
-              {!overviewLoading && overviewFetching ? (
-                <span className="text-xs text-on-surface-variant">Refreshing queue...</span>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  void refetchOverview();
+                }}
+                disabled={overviewFetching}
+                aria-label="Refresh queue"
+                title="Refresh queue"
+                className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                <RefreshCw className={`h-4 w-4 ${overviewFetching ? 'animate-spin' : ''}`} />
+              </button>
             </div>
           </div>
           <Tabs

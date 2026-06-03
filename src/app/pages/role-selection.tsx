@@ -110,7 +110,7 @@ export default function RoleSelection() {
 
   useEffect(() => {
     if (requiresPasswordSetup) {
-      navigate('/auth?mode=signin', { replace: true });
+      navigate('/create-password', { replace: true });
     }
   }, [requiresPasswordSetup, navigate]);
 

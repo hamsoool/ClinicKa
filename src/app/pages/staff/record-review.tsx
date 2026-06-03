@@ -883,9 +883,6 @@ export default function StaffRecordReview() {
     setRecordForm(createRecordForm(loadedSubmission));
     const nextAssessmentForm = createAssessmentForm(loadedSubmission);
     const nextClearanceForm = createClearanceForm(loadedSubmission);
-    if (isClearanceSignatoryName(nextAssessmentForm.examinedBy)) {
-      nextAssessmentForm.examinedBy = defaultSignatoryName || '';
-    }
     if (!nextAssessmentForm.examinedBy && defaultSignatoryName) {
       nextAssessmentForm.examinedBy = defaultSignatoryName;
     }
@@ -1768,10 +1765,6 @@ export default function StaffRecordReview() {
         if (trimmedIncoming) return incoming;
         return (submission.staffMeasurements as any)?.[field] || '';
       };
-      const examinedByForMedicalRecord = isClearanceSignatoryName(assessmentForm.examinedBy)
-        ? defaultSignatoryName || ''
-        : assessmentForm.examinedBy;
-
       const staffMeasurementsPayload = {
         bloodPressure: assessmentForm.bloodPressure,
         cardiacRate: assessmentForm.cardiacRate,
@@ -1788,7 +1781,7 @@ export default function StaffRecordReview() {
         abdomen: preserveDoctorField('abdomen', assessmentForm.abdomen),
         extremities: preserveDoctorField('extremities', assessmentForm.extremities),
         others: preserveDoctorField('others', assessmentForm.others),
-        examinedBy: preserveDoctorField('examinedBy', examinedByForMedicalRecord),
+        examinedBy: preserveDoctorField('examinedBy', assessmentForm.examinedBy),
         staff_notes: notesToSave,
       };
       const clearanceInfoPayload = {

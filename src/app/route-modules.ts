@@ -5,6 +5,7 @@ type RouteLoader = () => Promise<unknown>;
 export const loadRoleSelection = () => import('./pages/role-selection');
 export const loadAuthAccessPage = () => import('./pages/auth-access');
 export const loadCheckEmailPage = () => import('./pages/check-email');
+export const loadCreatePasswordPage = () => import('./pages/create-password');
 
 export const loadStudentDashboard = () => import('./pages/student/dashboard');
 export const loadStudentYearSelection = () => import('./pages/student/year-selection');

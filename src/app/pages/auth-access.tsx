@@ -1,17 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
-import {
-  ArrowRight,
-  CheckCircle2,
-  Eye,
-  EyeOff,
-  Lock,
-  Mail,
-  ShieldCheck,
-  Sparkles,
-  Stethoscope,
-} from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Lock, Mail, Stethoscope } from 'lucide-react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import {
   Dialog,
   DialogContent,
@@ -19,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../components/ui/dialog';
-import PasswordStrengthMeter from '../components/password-strength-meter';
 import {
   getPasswordResetCooldownRemaining,
   PASSWORD_RESET_COOLDOWN_SECONDS,
@@ -27,32 +15,16 @@ import {
   signInWithGoogle,
   type UserRole,
 } from '../lib/api';
-import {
-  inferRoleFromEmail,
-  prefetchLikelyPortalRoutes,
-  prefetchPortalExperience,
-} from '../lib/login-prefetch';
-import {
-  getPasswordPolicyMessage,
-  getPasswordStrengthResult,
-  getRegistrationPasswordMessage,
-  MIN_PASSWORD_LENGTH,
-  MIN_REGISTRATION_PASSWORD_LENGTH,
-  isRegistrationPasswordLongEnough,
-} from '../lib/password-policy';
+import { inferRoleFromEmail, prefetchLikelyPortalRoutes, prefetchPortalExperience } from '../lib/login-prefetch';
+import { getPasswordPolicyMessage, getPasswordStrengthResult } from '../lib/password-policy';
 import { useAuth } from '../lib/auth';
 import { LegalDialog } from './auth/legal-dialog';
+import { PasswordSetupScreen } from './auth/password-setup-screen';
 import { CONTACT_EMAIL, POLICY_UPDATED_AT, privacySections, termsSections } from './auth/legal-content';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 const AUTH_LOGO_SRC = '/logo.png';
 const DASHBOARD_PREVIEW_SRC = '/previews/student-dashboard-preview.png';
-
-function deriveStudentIdFromEmail(email?: string | null) {
-  const localPart = (email || '').trim().toLowerCase().split('@')[0] || '';
-  const match = localPart.match(/^(\d{9})/);
-  return match?.[1] || null;
-}
 
 function getHomePath(role: UserRole) {
   if (role === 'super_admin') return '/super-admin';
@@ -67,24 +39,18 @@ export default function AuthAccessPage() {
   const {
     me,
     signIn,
-    signUp,
     loading,
     requiresPasswordSetup,
     isPasswordRecovery,
-    completePasswordSetup,
     completePasswordRecovery,
   } = useAuth();
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const startsInSignInMode = query.get('mode') === 'signin';
   const verifiedFromEmail = query.get('verified') === '1';
   const resetCompleted = query.get('reset') === '1';
   const googleError = query.get('google_error');
   const authReason = query.get('reason');
 
-  const [mode, setMode] = useState<'signin' | 'signup'>(startsInSignInMode ? 'signin' : 'signup');
   const [showSignInPassword, setShowSignInPassword] = useState(false);
-  const [showSignUpPassword, setShowSignUpPassword] = useState(false);
-  const [showSignUpConfirmPassword, setShowSignUpConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(
     verifiedFromEmail
@@ -94,22 +60,12 @@ export default function AuthAccessPage() {
         : null,
   );
   const [logoVisible, setLogoVisible] = useState(true);
-  const [panelDirection, setPanelDirection] = useState<'left' | 'right'>('right');
-
   const [signInForm, setSignInForm] = useState({
     email: '',
     password: '',
     remember: false,
   });
-  const [signUpForm, setSignUpForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [signUpAgreementAccepted, setSignUpAgreementAccepted] = useState(false);
-  const [passwordSetupForm, setPasswordSetupForm] = useState({
+  const [passwordRecoveryForm, setPasswordRecoveryForm] = useState({
     password: '',
     confirmPassword: '',
   });
@@ -117,16 +73,8 @@ export default function AuthAccessPage() {
   const [forgotPasswordDialogOpen, setForgotPasswordDialogOpen] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [resetCooldown, setResetCooldown] = useState(0);
-  const signUpPasswordInputs = useMemo(
-    () => ({
-      email: signUpForm.email,
-      firstName: signUpForm.firstName,
-      lastName: signUpForm.lastName,
-      studentId: deriveStudentIdFromEmail(signUpForm.email),
-    }),
-    [signUpForm.email, signUpForm.firstName, signUpForm.lastName],
-  );
-  const passwordSetupInputs = useMemo(
+
+  const passwordRecoveryInputs = useMemo(
     () => ({
       email: me?.profile?.email,
       firstName: me?.profile?.first_name,
@@ -135,39 +83,29 @@ export default function AuthAccessPage() {
     }),
     [me],
   );
-  const passwordSetupResult = useMemo(
-    () => getPasswordStrengthResult(passwordSetupForm.password, passwordSetupInputs),
-    [passwordSetupForm.password, passwordSetupInputs],
+  const passwordRecoveryResult = useMemo(
+    () => getPasswordStrengthResult(passwordRecoveryForm.password, passwordRecoveryInputs),
+    [passwordRecoveryForm.password, passwordRecoveryInputs],
   );
-
   const fromPath = useMemo(() => {
     const state = location.state as { from?: string } | null;
     return state?.from;
   }, [location.state]);
 
   useEffect(() => {
-    if (startsInSignInMode) {
-      setMode('signin');
-    }
-  }, [startsInSignInMode]);
-
-  useEffect(() => {
     if (verifiedFromEmail) {
-      setMode('signin');
       setSuccessMessage('Email verified. You can now sign in with your account.');
     }
   }, [verifiedFromEmail]);
 
   useEffect(() => {
     if (resetCompleted) {
-      setMode('signin');
       setSuccessMessage('Password reset successful. You can now sign in with your new password.');
     }
   }, [resetCompleted]);
 
   useEffect(() => {
     if (authReason !== 'idle_timeout') return;
-    setMode('signin');
     setError('Your session expired due to inactivity. Please sign in again.');
   }, [authReason]);
 
@@ -187,9 +125,8 @@ export default function AuthAccessPage() {
   }, [resetCooldown]);
 
   useEffect(() => {
-    if (mode !== 'signin') return;
     prefetchLikelyPortalRoutes(signInForm.email);
-  }, [mode, signInForm.email]);
+  }, [signInForm.email]);
 
   async function handleSignIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -200,9 +137,9 @@ export default function AuthAccessPage() {
     prefetchLikelyPortalRoutes(signInForm.email);
 
     try {
-      const me = await signIn(signInForm.email, signInForm.password);
-      const role = me.profile.role ?? fallbackRole;
-      prefetchPortalExperience(role, me);
+      const resolvedMe = await signIn(signInForm.email, signInForm.password);
+      const role = resolvedMe.profile.role ?? fallbackRole;
+      prefetchPortalExperience(role, resolvedMe);
       navigate(fromPath || getHomePath(role), { replace: true });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Invalid login credentials.');
@@ -212,13 +149,7 @@ export default function AuthAccessPage() {
   function handleGoogleAuth() {
     setError(null);
     setSuccessMessage(null);
-    if (mode === 'signup' && !signUpAgreementAccepted) {
-      setError('Please accept the Terms & Conditions and Privacy Policy before continuing.');
-      return;
-    }
-    if (mode === 'signin') {
-      prefetchLikelyPortalRoutes(signInForm.email);
-    }
+    prefetchLikelyPortalRoutes(signInForm.email);
     signInWithGoogle();
   }
 
@@ -259,117 +190,34 @@ export default function AuthAccessPage() {
     }
   }
 
-  function formatCooldown(seconds: number) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  }
-
-  async function handleSignUp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
-
-    if (!signUpForm.firstName.trim()) {
-      setError('Please enter your first name.');
-      return;
-    }
-    if (!signUpForm.lastName.trim()) {
-      setError('Please enter your last name.');
-      return;
-    }
-    if (!signUpForm.email.trim()) {
-      setError('Please enter your email.');
-      return;
-    }
-    if (!signUpForm.email.trim().toLowerCase().endsWith(`@${GC_DOMAIN}`)) {
-      setError(`Please register using your @${GC_DOMAIN} email address.`);
-      return;
-    }
-    if (!deriveStudentIdFromEmail(signUpForm.email)) {
-      setError(`Use your 9-digit school ID email in the format yourschoolid@${GC_DOMAIN}.`);
-      return;
-    }
-    if (!isRegistrationPasswordLongEnough(signUpForm.password)) {
-      setError(getRegistrationPasswordMessage());
-      return;
-    }
-    if (signUpForm.password !== signUpForm.confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-    if (!signUpAgreementAccepted) {
-      setError('Please accept the Terms & Conditions and Privacy Policy before creating an account.');
-      return;
-    }
-
-    try {
-      prefetchLikelyPortalRoutes(signUpForm.email);
-      const result = await signUp(
-        signUpForm.firstName.trim(),
-        signUpForm.lastName.trim(),
-        signUpForm.email,
-        signUpForm.password,
-      );
-      if (result.emailConfirmationRequired) {
-        navigate(`/check-email?email=${encodeURIComponent(signUpForm.email)}`, { replace: true });
-        return;
-      }
-
-      if (result.me) {
-        prefetchPortalExperience(result.me.profile.role, result.me);
-        navigate(getHomePath(result.me.profile.role), { replace: true });
-      }
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Unable to create account.');
-    }
-  }
-
-  async function handlePasswordSetup(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
-
-    if (!passwordSetupResult.isStrongEnough) {
-      setError(getPasswordPolicyMessage(passwordSetupResult));
-      return;
-    }
-    if (passwordSetupForm.password !== passwordSetupForm.confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
-    try {
-      await completePasswordSetup(passwordSetupForm.password);
-      setSuccessMessage('Password set successfully. You can now sign in manually.');
-      navigate('/auth?mode=signin', { replace: true });
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Unable to set password.');
-    }
-  }
-
   async function handlePasswordRecovery(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
-    if (!passwordSetupResult.isStrongEnough) {
-      setError(getPasswordPolicyMessage(passwordSetupResult));
+    if (!passwordRecoveryResult.isStrongEnough) {
+      setError(getPasswordPolicyMessage(passwordRecoveryResult));
       return;
     }
-    if (passwordSetupForm.password !== passwordSetupForm.confirmPassword) {
+    if (passwordRecoveryForm.password !== passwordRecoveryForm.confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
 
     try {
-      await completePasswordRecovery(passwordSetupForm.password);
+      await completePasswordRecovery(passwordRecoveryForm.password);
       navigate('/auth?mode=signin&reset=1', { replace: true });
     } catch (nextError) {
       setError(
         nextError instanceof Error ? nextError.message : 'Unable to reset password. Please try again.',
       );
     }
+  }
+
+  function formatCooldown(seconds: number) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
 
   const googleErrorMessage =
@@ -379,165 +227,33 @@ export default function AuthAccessPage() {
         ? 'Google sign-in failed. Please try again.'
         : googleError === 'archived_account'
           ? 'This account is not available. Contact the administrator for assistance.'
-        : googleError === 'account_load_failed'
-          ? 'Google sign-in succeeded, but your account could not be loaded from the database. Please try again.'
-        : null;
+          : googleError === 'account_load_failed'
+            ? 'Google sign-in succeeded, but your account could not be loaded from the database. Please try again.'
+            : null;
 
-  const inputClassName =
-    'h-12 w-full rounded-2xl border border-[#c8d6d1] bg-white/92 px-4 text-sm text-[#0b1c30] outline-none transition focus:border-[#065f46] focus:ring-4 focus:ring-[#065f46]/10';
   const iconInputClassName =
     'h-12 w-full rounded-2xl border border-[#c8d6d1] bg-white/92 pl-11 pr-4 text-sm text-[#0b1c30] outline-none transition focus:border-[#065f46] focus:ring-4 focus:ring-[#065f46]/10';
-  const authPanelBodyClassName =
-    `animate-in fade-in-0 duration-300 motion-reduce:animate-none ${
-      panelDirection === 'right' ? 'slide-in-from-right-6' : 'slide-in-from-left-6'
-    }`;
-  const authTextTransitionClassName =
-    `animate-in fade-in-0 duration-300 motion-reduce:animate-none ${
-      panelDirection === 'right' ? 'slide-in-from-right-3' : 'slide-in-from-left-3'
-    }`;
-  const authModeLayoutClassName = `${authPanelBodyClassName} flex min-h-0 flex-col justify-between gap-5 pt-5 sm:min-h-[38rem] sm:pt-6`;
-  const hasAcceptedPolicies = signUpAgreementAccepted;
 
-  function switchMode(nextMode: 'signin' | 'signup') {
-    if (nextMode === mode) return;
-
-    setPanelDirection(nextMode === 'signup' ? 'right' : 'left');
-    setMode(nextMode);
-    setError(null);
-    setSuccessMessage(null);
+  if (requiresPasswordSetup) {
+    return <Navigate to="/create-password" replace />;
   }
 
-  if (requiresPasswordSetup || isPasswordRecovery) {
+  if (isPasswordRecovery) {
     return (
-      <div
-        className="min-h-screen bg-[linear-gradient(180deg,#f8f9ff_0%,#edf5ff_48%,#e3f2ec_100%)] px-5 py-6 sm:px-6 sm:py-10"
-        style={{ fontFamily: '"Plus Jakarta Sans", "Segoe UI", sans-serif' }}
-      >
-        <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl items-center justify-center sm:min-h-[calc(100vh-5rem)]">
-          <div className="grid w-full gap-6 sm:gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-            <div className="hidden space-y-5 lg:block">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#c8ddd2] bg-white/72 px-4 py-2 text-sm font-semibold text-[#065f46] shadow-[0_18px_45px_rgba(11,28,48,0.06)] backdrop-blur">
-                <Sparkles className="h-4 w-4" />
-                {isPasswordRecovery ? 'Confirm your new password' : 'Complete your account setup'}
-              </div>
-              <h1 className="max-w-xl text-4xl font-bold tracking-[-0.04em] text-[#0b1c30] xl:text-5xl">
-                {isPasswordRecovery
-                  ? 'Reset your ClinicKa! password.'
-                  : 'Finish securing your ClinicKa! access.'}
-              </h1>
-              <p className="max-w-xl text-lg leading-8 text-[#425468]">
-                {isPasswordRecovery
-                  ? 'Choose a new password to regain access to your Gordon College clinic account.'
-                  : 'You signed in with Google successfully. Set a password so your Gordon College account can also use manual sign-in whenever needed.'}
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-[28px] border border-white/70 bg-white/72 p-5 shadow-[0_24px_60px_rgba(11,28,48,0.08)] backdrop-blur">
-                  <Lock className="h-6 w-6 text-[#065f46]" />
-                  <p className="mt-4 text-base font-semibold text-[#0b1c30]">
-                    {isPasswordRecovery ? 'Fresh credentials' : 'Backup access'}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[#425468]">
-                    {isPasswordRecovery
-                      ? 'Replace the old password with a new one that only you know.'
-                      : 'Keep both Google sign-in and email/password available for the same account.'}
-                  </p>
-                </div>
-                <div className="rounded-[28px] border border-white/70 bg-white/72 p-5 shadow-[0_24px_60px_rgba(11,28,48,0.08)] backdrop-blur">
-                  <ShieldCheck className="h-6 w-6 text-[#065f46]" />
-                  <p className="mt-4 text-base font-semibold text-[#0b1c30]">
-                    {isPasswordRecovery ? 'Protected records' : 'Protected records'}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[#425468]">
-                    Password-protected access helps keep clinic data and student records safer.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[1.6rem] border border-white/70 bg-white/78 p-5 shadow-[0_28px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:rounded-[2rem] sm:p-8">
-              <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e2f5ea] text-[#065f46]">
-                <Lock className="h-6 w-6" />
-              </div>
-              <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#0b1c30] sm:text-3xl">
-                {isPasswordRecovery ? 'Create a new password' : 'Set your password'}
-              </h2>
-              <p className="mt-2 text-sm leading-7 text-[#425468]">
-                {isPasswordRecovery
-                  ? `Choose a new password with at least ${MIN_PASSWORD_LENGTH} characters for your account.`
-                  : `Choose a password with at least ${MIN_PASSWORD_LENGTH} characters to complete your account setup.`}
-              </p>
-
-              <form
-                className="mt-8 space-y-5"
-                onSubmit={isPasswordRecovery ? handlePasswordRecovery : handlePasswordSetup}
-              >
-                <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                    New password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={passwordSetupForm.password}
-                    onChange={(event) =>
-                      setPasswordSetupForm((prev) => ({ ...prev, password: event.target.value }))
-                    }
-                    placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-                    className={inputClassName}
-                  />
-                  <PasswordStrengthMeter
-                    password={passwordSetupForm.password}
-                    userInputs={passwordSetupInputs}
-                    className="mt-3"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                    Confirm password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={passwordSetupForm.confirmPassword}
-                    onChange={(event) =>
-                      setPasswordSetupForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
-                    }
-                    placeholder="Re-enter password"
-                    className={inputClassName}
-                  />
-                </div>
-
-                {error ? (
-                  <p className="rounded-2xl border border-[#ffd8d1] bg-[#fff2ef] px-4 py-3 text-sm font-medium text-[#93000a]">
-                    {error}
-                  </p>
-                ) : null}
-                {successMessage ? (
-                  <p className="rounded-2xl border border-[#bee6d3] bg-[#edf9f2] px-4 py-3 text-sm font-medium text-[#065f46]">
-                    {successMessage}
-                  </p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#004532] text-sm font-semibold text-white transition hover:bg-[#065f46] disabled:opacity-70"
-                >
-                  {loading
-                    ? isPasswordRecovery
-                      ? 'Resetting password...'
-                      : 'Saving password...'
-                    : isPasswordRecovery
-                      ? 'Reset password'
-                      : 'Save password'}
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PasswordSetupScreen
+        mode="recovery"
+        loading={loading}
+        error={error}
+        successMessage={successMessage}
+        password={passwordRecoveryForm.password}
+        confirmPassword={passwordRecoveryForm.confirmPassword}
+        onPasswordChange={(value) => setPasswordRecoveryForm((prev) => ({ ...prev, password: value }))}
+        onConfirmPasswordChange={(value) =>
+          setPasswordRecoveryForm((prev) => ({ ...prev, confirmPassword: value }))
+        }
+        onSubmit={handlePasswordRecovery}
+        userInputs={passwordRecoveryInputs}
+      />
     );
   }
 
@@ -592,7 +308,7 @@ export default function AuthAccessPage() {
                 Access your clinic workflow with clarity.
               </h1>
               <p className="max-w-xl text-base leading-7 text-[#4a5b68] sm:text-lg sm:leading-8">
-                Sign in with your Gordon College account to submit records, complete forms, and keep track of your medical clearance progress in one secure place.
+                Sign in with your Gordon College email and password. First-time account creation starts with your Gordon College Google sign-in.
               </p>
             </div>
 
@@ -620,458 +336,230 @@ export default function AuthAccessPage() {
             </div>
           </div>
 
-          <div className="rounded-[1.6rem] border border-white/80 bg-white/84 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:min-h-[48.5rem] sm:rounded-[2rem] sm:p-8">
-            <div className="flex flex-col gap-4 border-b border-[#dfebea] pb-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="sm:min-h-[7.5rem]">
-                <div key={mode} className={authTextTransitionClassName}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Secure account access</p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#0b1c30] sm:text-3xl">
-                    {mode === 'signin' ? 'Welcome back' : 'Create your account'}
-                  </h2>
-                  <p className="mt-2 text-sm leading-7 text-[#4a5b68]">
-                    {mode === 'signin'
-                      ? 'Sign in to your Gordon College clinic account.'
-                      : 'Use your Gordon College email to register and start your clinic workflow.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="relative grid w-full shrink-0 grid-cols-2 rounded-full border border-[#d7e4e0] bg-[#f5f8ff] p-1 sm:w-auto">
-                <div
-                  className="absolute bottom-1 left-1 top-1 rounded-full bg-[#004532] shadow-[0_10px_30px_rgba(0,69,50,0.24)] transition-transform duration-300 ease-out"
-                  style={{
-                    width: 'calc(50% - 4px)',
-                    transform: mode === 'signin' ? 'translateX(0)' : 'translateX(100%)',
-                  }}
-                  aria-hidden="true"
-                />
-                <button
-                  type="button"
-                  onClick={() => switchMode('signin')}
-                  className={`relative z-10 flex-1 whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold transition-colors duration-300 sm:px-4 sm:text-sm ${mode === 'signin' ? 'text-white' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
-                >
-                  Sign in
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchMode('signup')}
-                  className={`relative z-10 flex-1 whitespace-nowrap rounded-full px-3 py-2 text-xs font-semibold transition-colors duration-300 sm:px-4 sm:text-sm ${mode === 'signup' ? 'text-white' : 'text-[#4a5b68] hover:text-[#0b1c30]'}`}
-                >
-                  Sign up
-                </button>
-              </div>
+          <div className="self-start rounded-[1.6rem] border border-white/80 bg-white/84 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:rounded-[2rem] sm:p-8">
+            <div className="border-b border-[#dfebea] pb-6">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Secure account access</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#0b1c30] sm:text-3xl">
+                Welcome back
+              </h2>
+              <p className="mt-2 text-sm leading-7 text-[#4a5b68]">
+                Sign in to your Gordon College clinic account.
+              </p>
             </div>
 
-            {mode === 'signin' ? (
-              <div key="signin" className={authModeLayoutClassName}>
-                <form className="space-y-4" onSubmit={handleSignIn}>
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                      Gordon College email
-                    </label>
-                    <div className="relative">
-                      <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#70808b]" />
-                      <input
-                        type="email"
-                        required
-                        value={signInForm.email}
-                        onChange={(event) =>
-                          setSignInForm((prev) => ({ ...prev, email: event.target.value }))
-                        }
-                        placeholder={`name@${GC_DOMAIN}`}
-                        className={iconInputClassName}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#70808b]" />
-                      <input
-                        type={showSignInPassword ? 'text' : 'password'}
-                        required
-                        value={signInForm.password}
-                        onChange={(event) =>
-                          setSignInForm((prev) => ({ ...prev, password: event.target.value }))
-                        }
-                        placeholder="••••••••"
-                        className={`${iconInputClassName} pr-12`}
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#70808b]"
-                        onClick={() => setShowSignInPassword((prev) => !prev)}
-                        aria-label={showSignInPassword ? 'Hide password' : 'Show password'}
-                      >
-                        {showSignInPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-[#4a5b68]">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={signInForm.remember}
-                        onChange={(event) =>
-                          setSignInForm((prev) => ({ ...prev, remember: event.target.checked }))
-                        }
-                        className="h-4 w-4 rounded border-[#b8c7c3] text-[#065f46] focus:ring-[#065f46]"
-                      />
-                      Remember me
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        openForgotPasswordDialog();
-                      }}
-                      disabled={loading || sendingResetEmail}
-                      className="font-semibold text-[#065f46] hover:text-[#004532] disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-
-                  {error ? (
-                    <p className="rounded-2xl border border-[#ffd8d1] bg-[#fff2ef] px-4 py-3 text-sm font-medium text-[#93000a]">
-                      {error}
-                    </p>
-                  ) : null}
-                  {googleErrorMessage ? (
-                    <p className="rounded-2xl border border-[#ffd8d1] bg-[#fff2ef] px-4 py-3 text-sm font-medium text-[#93000a]">
-                      {googleErrorMessage}
-                    </p>
-                  ) : null}
-                  {successMessage ? (
-                    <p className="rounded-2xl border border-[#bee6d3] bg-[#edf9f2] px-4 py-3 text-sm font-medium text-[#065f46]">
-                      {successMessage}
-                    </p>
-                  ) : null}
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#004532] text-sm font-semibold text-white transition hover:bg-[#065f46] disabled:opacity-70"
-                  >
-                    {loading ? 'Signing in...' : 'Sign in'}
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                  <p className="text-xs leading-5 text-[#60717e]">
-                    By clicking the login button, you recognize the authority of Gordon College Clinic to process your
-                    personal and sensitive information, pursuant to the Gordon College General Privacy Notice and
-                    applicable laws.
-                  </p>
-                </form>
-
-                <Dialog open={forgotPasswordDialogOpen} onOpenChange={setForgotPasswordDialogOpen}>
-                  <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Reset password</DialogTitle>
-                      <DialogDescription>
-                        Enter your email and we will send you a password reset link.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <form
-                      className="space-y-4"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void handleForgotPassword();
-                      }}
-                    >
-                      <input
-                        type="email"
-                        required
-                        value={forgotPasswordEmail}
-                        onChange={(event) => {
-                          const nextEmail = event.target.value;
-                          setForgotPasswordEmail(nextEmail);
-                          setResetCooldown(getPasswordResetCooldownRemaining(nextEmail));
-                        }}
-                        placeholder={`name@${GC_DOMAIN}`}
-                        className={inputClassName}
-                      />
-                      <p className="text-xs leading-6 text-[#4a5b68]">
-                        {resetCooldown > 0
-                          ? `You can request another reset link in ${formatCooldown(resetCooldown)}.`
-                          : `You can request one reset email every ${Math.floor(PASSWORD_RESET_COOLDOWN_SECONDS / 60)} minutes.`}
-                      </p>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setForgotPasswordDialogOpen(false)}
-                          disabled={sendingResetEmail}
-                          className="rounded-full border border-[#c8d6d1] px-4 py-2 text-sm font-semibold text-[#4a5b68] transition hover:bg-[#f7fbff] disabled:opacity-70"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={sendingResetEmail || resetCooldown > 0}
-                          className="rounded-full bg-[#004532] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#065f46] disabled:opacity-70"
-                        >
-                          {sendingResetEmail
-                            ? 'Sending...'
-                            : resetCooldown > 0
-                              ? `Try again in ${formatCooldown(resetCooldown)}`
-                              : 'Send reset link'}
-                        </button>
-                      </div>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-
-                <div className="space-y-5">
-                  <div className="relative py-1">
-                    <div className="h-px bg-[#dbe5e4]" />
-                    <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-white px-3 text-xs text-[#60717e]">
-                      Or continue with
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleGoogleAuth}
-                    className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-[#c9d9dd] bg-white text-sm font-semibold text-[#0b1c30] transition hover:bg-[#f7fbff]"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                    </svg>
-                    Sign in with Google
-                  </button>
-
-                  <p className="text-center text-sm text-[#4a5b68]">
-                    Need a new account?{' '}
-                    <button
-                      type="button"
-                      className="font-semibold text-[#065f46]"
-                      onClick={() => switchMode('signup')}
-                    >
-                      Create one here
-                    </button>
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div key="signup" className={authModeLayoutClassName}>
-                <form className="space-y-4" onSubmit={handleSignUp}>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                        First name
-                      </label>
-                      <input
-                        required
-                        value={signUpForm.firstName}
-                        onChange={(event) =>
-                          setSignUpForm((prev) => ({ ...prev, firstName: event.target.value }))
-                        }
-                        placeholder="First name"
-                        className={inputClassName}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                        Last name
-                      </label>
-                      <input
-                        required
-                        value={signUpForm.lastName}
-                        onChange={(event) =>
-                          setSignUpForm((prev) => ({ ...prev, lastName: event.target.value }))
-                        }
-                        placeholder="Last name"
-                        className={inputClassName}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                      Gordon College email
-                    </label>
+            <div className="flex min-h-0 flex-col gap-8 pt-5 sm:pt-6">
+              <form className="space-y-4" onSubmit={handleSignIn}>
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
+                    Gordon College email
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#70808b]" />
                     <input
                       type="email"
                       required
-                      value={signUpForm.email}
+                      value={signInForm.email}
                       onChange={(event) =>
-                        setSignUpForm((prev) => ({ ...prev, email: event.target.value }))
+                        setSignInForm((prev) => ({ ...prev, email: event.target.value }))
                       }
-                      placeholder={`yourschoolid@${GC_DOMAIN}`}
-                      className={inputClassName}
+                      placeholder={`name@${GC_DOMAIN}`}
+                      className={iconInputClassName}
                     />
                   </div>
+                </div>
 
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#70808b]" />
-                      <input
-                        type={showSignUpPassword ? 'text' : 'password'}
-                        required
-                        value={signUpForm.password}
-                        onChange={(event) =>
-                          setSignUpForm((prev) => ({ ...prev, password: event.target.value }))
-                        }
-                        placeholder={`At least ${MIN_REGISTRATION_PASSWORD_LENGTH} characters`}
-                        className={`${iconInputClassName} pr-12`}
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#70808b]"
-                        onClick={() => setShowSignUpPassword((prev) => !prev)}
-                        aria-label={showSignUpPassword ? 'Hide password' : 'Show password'}
-                      >
-                        {showSignUpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <PasswordStrengthMeter
-                      password={signUpForm.password}
-                      userInputs={signUpPasswordInputs}
-                      mode="registration"
-                      className="mt-2"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
-                      Confirm password
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#70808b]" />
-                      <input
-                        type={showSignUpConfirmPassword ? 'text' : 'password'}
-                        required
-                        value={signUpForm.confirmPassword}
-                        onChange={(event) =>
-                          setSignUpForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
-                        }
-                        placeholder="Re-enter password"
-                        className={`${iconInputClassName} pr-12`}
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#70808b]"
-                        onClick={() => setShowSignUpConfirmPassword((prev) => !prev)}
-                        aria-label={showSignUpConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-                      >
-                        {showSignUpConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-[#d7e4df] bg-[#f4faf7] p-3.5">
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#70808b]" />
                     <input
-                      id="signupPolicyAgreement"
-                      type="checkbox"
-                      checked={signUpAgreementAccepted}
-                      onChange={(event) => setSignUpAgreementAccepted(event.target.checked)}
-                      aria-labelledby="signupPolicyAgreementLabel"
-                      className="mt-1 h-5 w-5 flex-shrink-0 cursor-pointer rounded border border-[#9fb2aa] bg-white accent-[#0a7a43]"
+                      type={showSignInPassword ? 'text' : 'password'}
+                      required
+                      value={signInForm.password}
+                      onChange={(event) =>
+                        setSignInForm((prev) => ({ ...prev, password: event.target.value }))
+                      }
+                      placeholder="••••••••"
+                      className={`${iconInputClassName} pr-12`}
                     />
-                    <div id="signupPolicyAgreementLabel" className="text-sm leading-6 text-[#4a5b68]">
-                      I agree to the{' '}
-                      <LegalDialog
-                        label="terms & conditions"
-                        eyebrow="Portal Terms"
-                        title="Terms & Conditions"
-                        description="These terms govern access to the Gordon College Clinic Management System and the submission of records through the portal."
-                        meta={[
-                          'Applies to student and clinic portal use',
-                          `Last updated ${POLICY_UPDATED_AT}`,
-                          'Covers account use, submissions, and access',
-                        ]}
-                        sections={termsSections}
-                        footer="By creating an account, you acknowledge that records submitted through the portal may be reviewed and managed by authorized Gordon College personnel as part of official clinic operations."
-                      />{' '}
-                      and{' '}
-                      <LegalDialog
-                        label="privacy policy"
-                        eyebrow="Data Privacy Notice"
-                        title="Privacy Policy"
-                        description="How Gordon College collects, uses, stores, and protects personal data in the Clinic Management System."
-                        meta={[
-                          'Data controller: Gordon College',
-                          `Last updated ${POLICY_UPDATED_AT}`,
-                          `Contact: ${CONTACT_EMAIL}`,
-                        ]}
-                        sections={privacySections}
-                        footer="This policy presentation is aligned with the Gordon College General Privacy Notice and is intended to help users understand how personal data is handled inside the clinic portal."
-                      />
-                      .
-                    </div>
-                  </div>
-
-                  {error ? (
-                    <p className="rounded-2xl border border-[#ffd8d1] bg-[#fff2ef] px-4 py-3 text-sm font-medium text-[#93000a]">
-                      {error}
-                    </p>
-                  ) : null}
-                  {googleErrorMessage ? (
-                    <p className="rounded-2xl border border-[#ffd8d1] bg-[#fff2ef] px-4 py-3 text-sm font-medium text-[#93000a]">
-                      {googleErrorMessage}
-                    </p>
-                  ) : null}
-                  {successMessage ? (
-                    <p className="rounded-2xl border border-[#bee6d3] bg-[#edf9f2] px-4 py-3 text-sm font-medium text-[#065f46]">
-                      {successMessage}
-                    </p>
-                  ) : null}
-
-                  <button
-                    type="submit"
-                    disabled={loading || !hasAcceptedPolicies}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#004532] text-sm font-semibold text-white transition hover:bg-[#065f46] disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {loading ? 'Creating account...' : 'Create account'}
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                </form>
-
-                <div className="space-y-5">
-                  <div className="relative py-1">
-                    <div className="h-px bg-[#dbe5e4]" />
-                    <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-white px-3 text-xs text-[#60717e]">
-                      Or continue with
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleGoogleAuth}
-                    disabled={!hasAcceptedPolicies}
-                    className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-[#c9d9dd] bg-white text-sm font-semibold text-[#0b1c30] transition hover:bg-[#f7fbff] disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                    </svg>
-                    Continue with Google
-                  </button>
-
-                  <p className="text-center text-sm text-[#4a5b68]">
-                    Already registered?{' '}
                     <button
                       type="button"
-                      className="font-semibold text-[#065f46]"
-                      onClick={() => switchMode('signin')}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-[#70808b]"
+                      onClick={() => setShowSignInPassword((prev) => !prev)}
+                      aria-label={showSignInPassword ? 'Hide password' : 'Show password'}
                     >
-                      Sign in instead
+                      {showSignInPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
-                  </p>
+                  </div>
                 </div>
+
+                <div className="flex items-center justify-between text-xs text-[#4a5b68]">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={signInForm.remember}
+                      onChange={(event) =>
+                        setSignInForm((prev) => ({ ...prev, remember: event.target.checked }))
+                      }
+                      className="h-4 w-4 rounded border-[#b8c7c3] text-[#065f46] focus:ring-[#065f46]"
+                    />
+                    Remember me
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openForgotPasswordDialog();
+                    }}
+                    disabled={loading || sendingResetEmail}
+                    className="font-semibold text-[#065f46] hover:text-[#004532] disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+
+                {error ? (
+                  <p className="rounded-2xl border border-[#ffd8d1] bg-[#fff2ef] px-4 py-3 text-sm font-medium text-[#93000a]">
+                    {error}
+                  </p>
+                ) : null}
+                {googleErrorMessage ? (
+                  <p className="rounded-2xl border border-[#ffd8d1] bg-[#fff2ef] px-4 py-3 text-sm font-medium text-[#93000a]">
+                    {googleErrorMessage}
+                  </p>
+                ) : null}
+                {successMessage ? (
+                  <p className="rounded-2xl border border-[#bee6d3] bg-[#edf9f2] px-4 py-3 text-sm font-medium text-[#065f46]">
+                    {successMessage}
+                  </p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#004532] text-sm font-semibold text-white transition hover:bg-[#065f46] disabled:opacity-70"
+                >
+                  {loading ? 'Signing in...' : 'Sign in'}
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+                <p className="text-xs leading-6 text-[#60717e]">
+                  By signing in, you agree to our{' '}
+                  <LegalDialog
+                    label="Terms & Conditions"
+                    eyebrow="Portal Terms"
+                    title="Terms & Conditions"
+                    description="These terms govern access to the Gordon College Clinic Management System and the submission of records through the portal."
+                    meta={[
+                      'Applies to student and clinic portal use',
+                      `Last updated ${POLICY_UPDATED_AT}`,
+                      'Covers account use, submissions, and access',
+                    ]}
+                    sections={termsSections}
+                    footer="By using the portal, you acknowledge that records submitted through the system may be reviewed and managed by authorized Gordon College personnel as part of official clinic operations."
+                  />{' '}
+                  and{' '}
+                  <LegalDialog
+                    label="Privacy Policy"
+                    eyebrow="Data Privacy Notice"
+                    title="Privacy Policy"
+                    description="How Gordon College collects, uses, stores, and protects personal data in the Clinic Management System."
+                    meta={[
+                      'Data controller: Gordon College',
+                      `Last updated ${POLICY_UPDATED_AT}`,
+                      `Contact: ${CONTACT_EMAIL}`,
+                    ]}
+                    sections={privacySections}
+                    footer="This policy presentation is aligned with the Gordon College General Privacy Notice and is intended to help users understand how personal data is handled inside the clinic portal."
+                  />
+                  .
+                </p>
+              </form>
+
+              <Dialog open={forgotPasswordDialogOpen} onOpenChange={setForgotPasswordDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Reset password</DialogTitle>
+                    <DialogDescription>
+                      Enter your email and we will send you a password reset link.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleForgotPassword();
+                    }}
+                  >
+                    <input
+                      type="email"
+                      required
+                      value={forgotPasswordEmail}
+                      onChange={(event) => {
+                        const nextEmail = event.target.value;
+                        setForgotPasswordEmail(nextEmail);
+                        setResetCooldown(getPasswordResetCooldownRemaining(nextEmail));
+                      }}
+                      placeholder={`name@${GC_DOMAIN}`}
+                      className="h-12 w-full rounded-2xl border border-[#c8d6d1] bg-white/92 px-4 text-sm text-[#0b1c30] outline-none transition focus:border-[#065f46] focus:ring-4 focus:ring-[#065f46]/10"
+                    />
+                    <p className="text-xs leading-6 text-[#4a5b68]">
+                      {resetCooldown > 0
+                        ? `You can request another reset link in ${formatCooldown(resetCooldown)}.`
+                        : `You can request one reset email every ${Math.floor(PASSWORD_RESET_COOLDOWN_SECONDS / 60)} minutes.`}
+                    </p>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setForgotPasswordDialogOpen(false)}
+                        disabled={sendingResetEmail}
+                        className="rounded-full border border-[#c8d6d1] px-4 py-2 text-sm font-semibold text-[#4a5b68] transition hover:bg-[#f7fbff] disabled:opacity-70"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={sendingResetEmail || resetCooldown > 0}
+                        className="rounded-full bg-[#004532] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#065f46] disabled:opacity-70"
+                      >
+                        {sendingResetEmail
+                          ? 'Sending...'
+                          : resetCooldown > 0
+                            ? `Try again in ${formatCooldown(resetCooldown)}`
+                            : 'Send reset link'}
+                      </button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              <div className="space-y-4">
+                <div className="relative py-1">
+                  <div className="h-px bg-[#dbe5e4]" />
+                  <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-white px-3 text-xs text-[#60717e]">
+                    Or continue with
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleAuth}
+                  className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-[#c9d9dd] bg-white text-sm font-semibold text-[#0b1c30] transition hover:bg-[#f7fbff]"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                  </svg>
+                  Sign in with Google
+                </button>
+
+                <p className="text-center text-sm text-[#4a5b68]">
+                  New to ClinicKa!? Use your Gordon College Domain to sign up and create your account.
+                </p>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>

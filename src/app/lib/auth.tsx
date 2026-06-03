@@ -6,6 +6,7 @@ import type { AuthMe, AuthSession, UserRole } from './api';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 const PASSWORD_SETUP_MARKER_KEY = 'gc_password_setup_accounts';
+const PENDING_PASSWORD_SETUP_MARKER_KEY = 'gc_pending_password_setup_accounts';
 const ACCOUNT_LOAD_ERROR_MESSAGE =
   'We could not load your account from the database. Please try signing in again.';
 const ARCHIVED_ACCOUNT_MESSAGE =
@@ -47,10 +48,31 @@ function getPasswordSetupMarkers() {
   }
 }
 
+function getPendingPasswordSetupMarkers() {
+  if (typeof window === 'undefined') return new Set<string>();
+
+  const raw = window.localStorage.getItem(PENDING_PASSWORD_SETUP_MARKER_KEY);
+  if (!raw) return new Set<string>();
+
+  try {
+    const parsed = JSON.parse(raw) as string[];
+    return new Set((parsed || []).map((entry) => normalizeEmail(entry)).filter(Boolean));
+  } catch {
+    window.localStorage.removeItem(PENDING_PASSWORD_SETUP_MARKER_KEY);
+    return new Set<string>();
+  }
+}
+
 function hasPasswordSetupMarker(email?: string | null) {
   const normalized = normalizeEmail(email);
   if (!normalized) return false;
   return getPasswordSetupMarkers().has(normalized);
+}
+
+function hasPendingPasswordSetupMarker(email?: string | null) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+  return getPendingPasswordSetupMarkers().has(normalized);
 }
 
 function markPasswordSetupComplete(email?: string | null) {
@@ -60,6 +82,24 @@ function markPasswordSetupComplete(email?: string | null) {
   const markers = getPasswordSetupMarkers();
   markers.add(normalized);
   window.localStorage.setItem(PASSWORD_SETUP_MARKER_KEY, JSON.stringify([...markers]));
+}
+
+function markPendingPasswordSetup(email?: string | null) {
+  const normalized = normalizeEmail(email);
+  if (!normalized || typeof window === 'undefined') return;
+
+  const markers = getPendingPasswordSetupMarkers();
+  markers.add(normalized);
+  window.localStorage.setItem(PENDING_PASSWORD_SETUP_MARKER_KEY, JSON.stringify([...markers]));
+}
+
+function clearPendingPasswordSetup(email?: string | null) {
+  const normalized = normalizeEmail(email);
+  if (!normalized || typeof window === 'undefined') return;
+
+  const markers = getPendingPasswordSetupMarkers();
+  if (!markers.delete(normalized)) return;
+  window.localStorage.setItem(PENDING_PASSWORD_SETUP_MARKER_KEY, JSON.stringify([...markers]));
 }
 
 type AuthContextValue = {
@@ -119,6 +159,7 @@ async function applyPasswordChange(
   });
   await markServerPasswordSetupCompleted(verifiedSession.access_token);
   markPasswordSetupComplete(email);
+  clearPendingPasswordSetup(email);
   const resolvedMe = await getMe(verifiedSession.access_token);
   setMe(resolvedMe);
   setRole(resolvedMe.profile.role);
@@ -126,13 +167,17 @@ async function applyPasswordChange(
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const initialSession =
+    typeof window === 'undefined' ? null : getStoredSession();
   const [session, setSession] = useState<AuthSession | null>(() =>
-    typeof window === 'undefined' ? null : getStoredSession(),
+    initialSession,
   );
   const [loading, setLoading] = useState(false);
   const [role, setRole] = useState<UserRole | null>(null);
   const [me, setMe] = useState<AuthMe | null>(null);
-  const [requiresPasswordSetup, setRequiresPasswordSetup] = useState(false);
+  const [requiresPasswordSetup, setRequiresPasswordSetup] = useState(() =>
+    hasPendingPasswordSetupMarker(initialSession?.user?.email),
+  );
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState<number | null>(null);
   const inactivityLogoutInFlightRef = useRef(false);
@@ -367,6 +412,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setStoredSession(nextSession);
         setSession(nextSession);
+        if (hasExistingPassword) {
+          clearPendingPasswordSetup(email);
+        } else {
+          markPendingPasswordSetup(email);
+        }
         setRequiresPasswordSetup(!hasExistingPassword);
         setIsPasswordRecovery(false);
         try {
@@ -426,6 +476,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       try {
         const nextSession = await signInWithPassword(email, password);
+        clearPendingPasswordSetup(nextSession.user?.email || email);
         setSession(nextSession);
         setIsPasswordRecovery(false);
         try {
@@ -532,7 +583,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         studentId: me?.profile?.student_id,
       });
       await markServerPasswordSetupCompleted(session.access_token);
-      markPasswordSetupComplete(session.user?.email || me?.profile?.email || null);
+      const accountEmail = session.user?.email || me?.profile?.email || null;
+      markPasswordSetupComplete(accountEmail);
+      clearPendingPasswordSetup(accountEmail);
       const resolvedMe = await getMe(session.access_token);
       setMe(resolvedMe);
       setRole(resolvedMe.profile.role);
@@ -550,7 +603,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         studentId: me?.profile?.student_id,
       });
       await markServerPasswordSetupCompleted(session.access_token);
-      markPasswordSetupComplete(session.user?.email || me?.profile?.email || null);
+      const accountEmail = session.user?.email || me?.profile?.email || null;
+      markPasswordSetupComplete(accountEmail);
+      clearPendingPasswordSetup(accountEmail);
       try {
         await signOut();
       } finally {
@@ -603,8 +658,12 @@ export function RequireAuth({
   children: React.ReactNode;
   allowedRoles?: UserRole[];
 }) {
-  const { role } = useAuth();
+  const { role, requiresPasswordSetup, isPasswordRecovery } = useAuth();
   const location = useLocation();
+
+  if (requiresPasswordSetup && !isPasswordRecovery) {
+    return <Navigate to="/create-password" replace />;
+  }
 
   if (!role) {
     return <Navigate to="/" replace state={{ from: location.pathname }} />;
@@ -619,6 +678,10 @@ export function RequireAuth({
 
 export function RedirectIfAuthenticated({ children }: { children: React.ReactNode }) {
   const { role, requiresPasswordSetup, isPasswordRecovery } = useAuth();
+
+  if (requiresPasswordSetup && !isPasswordRecovery) {
+    return <Navigate to="/create-password" replace />;
+  }
 
   if (role && !requiresPasswordSetup && !isPasswordRecovery) {
     return <Navigate to={getHomePath(role)} replace />;

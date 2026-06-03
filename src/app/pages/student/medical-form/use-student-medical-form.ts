@@ -114,6 +114,12 @@ function sanitizeEmergencyRelationship(value: string) {
   return sanitizeName(value);
 }
 
+function addressesMatch(studentAddress: string, emergencyAddress: string) {
+  const normalizedStudentAddress = sanitizeAddress(studentAddress).trim();
+  const normalizedEmergencyAddress = sanitizeAddress(emergencyAddress).trim();
+  return Boolean(normalizedStudentAddress && normalizedStudentAddress === normalizedEmergencyAddress);
+}
+
 function sanitizeOtherMedicalHistory(value: string) {
   return String(value).replace(/[^A-Za-z\s]/g, '').slice(0, MAX_OTHER_MEDICAL_HISTORY_LENGTH);
 }
@@ -254,6 +260,7 @@ export function useStudentMedicalForm({
   const [submitted, setSubmitted] = useState(false);
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [originalSubmissionStatus, setOriginalSubmissionStatus] = useState<string | null>(null);
+  const [isEmergencyAddressSameAsStudent, setIsEmergencyAddressSameAsStudent] = useState(false);
   const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, initialDataPrivacyConsent));
   const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_AGE), []);
   const profileAssetStudentId = me?.student?.student_id || me?.profile.student_id || '';
@@ -317,6 +324,7 @@ export function useStudentMedicalForm({
     setUploading(false);
     setActiveSubmissionId(null);
     setOriginalSubmissionStatus(null);
+    setIsEmergencyAddressSameAsStudent(false);
     setFormData(buildInitialFormData(year, me, initialDataPrivacyConsent));
   }, [year, me, editSubmissionId, initialDataPrivacyConsent]);
 
@@ -332,6 +340,9 @@ export function useStudentMedicalForm({
 
         setActiveSubmissionId(submission.id || null);
         setOriginalSubmissionStatus(submission.status || null);
+        setIsEmergencyAddressSameAsStudent(
+          addressesMatch(submission.address || '', submission.emergencyContact?.address || ''),
+        );
         setFormData((prev) => ({
           ...prev,
           studentId: normalizeStudentId(prev.studentId || submission.studentId),
@@ -421,6 +432,9 @@ export function useStudentMedicalForm({
         )[0];
         if (!latest || !active) return;
 
+        setIsEmergencyAddressSameAsStudent(
+          addressesMatch(latest.address || '', latest.emergencyContact?.address || ''),
+        );
         setFormData((prev) => ({
           ...prev,
           medicalHistory: {
@@ -502,6 +516,25 @@ export function useStudentMedicalForm({
     initialDataPrivacyConsent,
   ]);
 
+  useEffect(() => {
+    if (!isEmergencyAddressSameAsStudent) return;
+
+    setFormData((prev) => {
+      const nextAddress = sanitizeAddress(prev.address || '');
+      if (prev.emergencyContact.address === nextAddress) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        emergencyContact: {
+          ...prev.emergencyContact,
+          address: nextAddress,
+        },
+      };
+    });
+  }, [formData.address, isEmergencyAddressSameAsStudent]);
+
   const updateField = useCallback(<K extends keyof MedicalFormData>(field: K, value: MedicalFormData[K]) => {
     if (field === 'studentId') return setFormData((prev) => ({ ...prev, studentId: sanitizeDigits(String(value), 9) }));
     if (field === 'firstName') return setFormData((prev) => ({ ...prev, firstName: sanitizeName(String(value)) }));
@@ -574,6 +607,20 @@ export function useStudentMedicalForm({
     },
     [],
   );
+
+  const updateEmergencyAddressSync = useCallback((checked: boolean) => {
+    setIsEmergencyAddressSameAsStudent(checked);
+
+    if (!checked) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      emergencyContact: {
+        ...prev.emergencyContact,
+        address: sanitizeAddress(prev.address || ''),
+      },
+    }));
+  }, []);
 
   const updateMedicalCondition = useCallback((condition: MedicalConditionKey, checked: boolean) => {
     setFormData((prev) => ({
@@ -1011,6 +1058,8 @@ export function useStudentMedicalForm({
     previewRecord,
     updateField,
     updateEmergencyContact,
+    isEmergencyAddressSameAsStudent,
+    updateEmergencyAddressSync,
     updateMedicalCondition,
     updateLabFile,
     updateMeasurement,

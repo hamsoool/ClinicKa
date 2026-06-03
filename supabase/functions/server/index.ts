@@ -88,6 +88,15 @@ const LAB_UPLOAD_DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
 const STAFF_SIGNATURE_BUCKET = "staff_signature";
 const STAFF_SIGNATURE_MAX_BYTES = 5 * 1024 * 1024;
+const PROFILE_ASSET_MAX_BYTES = 5 * 1024 * 1024;
+const PROFILE_ASSET_ALLOWED_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "heic",
+  "heif",
+  "webp",
+]);
 const TINIFY_COMPRESSIBLE_MIME_TYPES = new Set([
   "image/avif",
   "image/jpeg",
@@ -147,6 +156,15 @@ class TinifyRequestError extends Error {
   status: number;
 
   constructor(message: string, status = 502) {
+    super(message);
+    this.status = status;
+  }
+}
+
+class UploadValidationError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
     super(message);
     this.status = status;
   }
@@ -292,6 +310,14 @@ async function compressImageWithTinify(bytes: ArrayBuffer, mimeType: string) {
   };
 }
 
+function getLargeNonCompressibleOcrUploadMessage(maxOcrBytes: number) {
+  return `Large OCR uploads above ${formatFileSize(maxOcrBytes)} must be JPEG, PNG, WebP, or AVIF so they can be compressed for OCR. Upload a smaller PDF/HEIC/HEIF file or replace it with a JPG/PNG image.`;
+}
+
+function getTinifyStillTooLargeMessage(maxOcrBytes: number) {
+  return `TinyPNG could not reduce this lab result enough for OCR. Upload a smaller JPG, PNG, WebP, or AVIF image under ${formatFileSize(maxOcrBytes)}.`;
+}
+
 async function prepareLabUploadFile(file: File, supportedMimeType: string) {
   const originalBytes = await file.arrayBuffer();
   const tinifyMimeType = resolveTinifyMimeType(supportedMimeType || file.type, file.name);
@@ -425,6 +451,96 @@ function isSupportedSignatureImage(file: File | null) {
   if (mimeType.startsWith("image/")) return true;
   const extension = String(file.name || "").split(".").pop()?.toLowerCase() || "";
   return ["png", "jpg", "jpeg", "heic", "heif", "webp"].includes(extension);
+}
+
+function sanitizeStorageFileName(fileName?: string | null, fallback = "file.bin") {
+  const cleaned = String(fileName || fallback).trim().replace(/[^a-zA-Z0-9._-]/g, "_");
+  return cleaned || fallback;
+}
+
+function buildLabStoragePath(recordId: string, fileType: string, fileName?: string | null) {
+  return `${recordId}/${fileType}_${Date.now()}_${sanitizeStorageFileName(fileName, `${fileType}.bin`)}`;
+}
+
+function buildProfileAssetStoragePath(studentId: string, fileType: string, fileName?: string | null) {
+  return `${studentId}/${fileType}_${Date.now()}_${sanitizeStorageFileName(fileName, `${fileType}.bin`)}`;
+}
+
+function isExpectedLabStoragePath(recordId: string, fileType: string, storagePath: string) {
+  const normalizedPath = String(storagePath || "").replace(/^\/+/, "");
+  const expectedPrefix = `${recordId}/${fileType}_`;
+  return normalizedPath.startsWith(expectedPrefix);
+}
+
+function isExpectedProfileAssetStoragePath(studentId: string, fileType: string, storagePath: string) {
+  const normalizedPath = String(storagePath || "").replace(/^\/+/, "");
+  return (
+    normalizedPath.startsWith(`${studentId}/${fileType}_`) ||
+    normalizedPath.startsWith(`profiles/${studentId}/${fileType}_`)
+  );
+}
+
+function isSupportedProfileAssetMimeType(mimeType?: string | null, fileName?: string | null) {
+  const normalizedMimeType = String(mimeType || "").split(";")[0].trim().toLowerCase();
+  if (normalizedMimeType.startsWith("image/")) return normalizedMimeType;
+
+  const extension = String(fileName || "").split(".").pop()?.toLowerCase() || "";
+  return PROFILE_ASSET_ALLOWED_EXTENSIONS.has(extension)
+    ? normalizedMimeType || `image/${extension === "jpg" ? "jpeg" : extension}`
+    : "";
+}
+
+async function listStorageObjectPaths(bucket: string, prefix: string) {
+  const normalizedPrefix = String(prefix || "").replace(/^\/+/, "");
+  if (!normalizedPrefix) return [] as string[];
+
+  const { data, error } = await supabase.storage.from(bucket).list(normalizedPrefix, {
+    limit: 100,
+    offset: 0,
+  });
+
+  if (error || !data?.length) {
+    return [] as string[];
+  }
+
+  return data
+    .filter((item) => item?.name && (item?.id || item?.metadata))
+    .map((item) => `${normalizedPrefix}${item.name}`);
+}
+
+async function cleanupProfileAssetStorageVersions(
+  bucket: string,
+  studentId: string,
+  keepStoragePath: string,
+) {
+  const normalizedKeepPath = String(keepStoragePath || "").replace(/^\/+/, "");
+  const candidates = new Set<string>();
+  const prefixes = [`${studentId}/`, `profiles/${studentId}/`];
+
+  for (const prefix of prefixes) {
+    const paths = await listStorageObjectPaths(bucket, prefix);
+    for (const path of paths) {
+      if (path && path !== normalizedKeepPath) {
+        candidates.add(path);
+      }
+    }
+  }
+
+  if (!candidates.size) return;
+
+  const { error } = await supabase.storage.from(bucket).remove([...candidates]);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function removeStorageObject(bucket: string, storagePath: string) {
+  const normalizedPath = String(storagePath || "").replace(/^\/+/, "");
+  if (!bucket || !normalizedPath) return;
+  const { error } = await supabase.storage.from(bucket).remove([normalizedPath]);
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 async function loadLatestStaffSignature(profileId: string) {
@@ -596,6 +712,21 @@ async function fetchFileFromStorage(file: any) {
   if (error || !data) return null;
 
   return data;
+}
+
+async function downloadStorageObjectBytes(bucket: string, storagePath: string) {
+  const normalizedBucket = String(bucket || "").trim();
+  const normalizedPath = String(storagePath || "").replace(/^\/+/, "");
+  if (!normalizedBucket || !normalizedPath) {
+    throw new Error("Uploaded file storage location is missing.");
+  }
+
+  const { data, error } = await supabase.storage.from(normalizedBucket).download(normalizedPath);
+  if (error || !data) {
+    throw new Error(error?.message || "Failed to download the uploaded lab file from storage.");
+  }
+
+  return await data.arrayBuffer();
 }
 
 async function fetchFileFromUrl(file: any) {
@@ -1074,6 +1205,200 @@ app.post("/staff-signature", async (c) => {
   }
 });
 
+app.post("/student-profile-asset/prepare", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== "student") return forbidden();
+
+  try {
+    const payload = await c.req.json();
+    const fileType = String(payload?.fileType || "").trim().toLowerCase();
+    const requestedStudentId = String(payload?.studentId || "").trim();
+    const fileName = String(payload?.fileName || "").trim();
+    const fileSize = Number(payload?.size || 0);
+    const resolvedMimeType = isSupportedProfileAssetMimeType(payload?.mimeType, fileName);
+    const studentId =
+      requester.profile.student_id ||
+      requester.student?.student_id ||
+      requestedStudentId;
+
+    if (!fileType || !fileName) {
+      return badRequest("fileType and fileName are required");
+    }
+    if (fileType !== "photo" && fileType !== "signature") {
+      return badRequest("Unsupported profile asset type");
+    }
+    if (!studentId) {
+      return badRequest("Student ID is required");
+    }
+    if (!Number.isFinite(fileSize) || fileSize <= 0) {
+      return badRequest("Profile asset size is required");
+    }
+    if (fileSize > PROFILE_ASSET_MAX_BYTES) {
+      return badRequest("Profile photo and signature must be 5 MB or smaller.");
+    }
+    if (!resolvedMimeType) {
+      return badRequest("Profile photo and signature must be an image file.");
+    }
+
+    const targetBucket = fileType === "photo" ? "profile" : "student_signature";
+    const storagePath = buildProfileAssetStoragePath(studentId, fileType, fileName);
+
+    await ensureStorageBucket(targetBucket);
+
+    const { data, error } = await supabase.storage
+      .from(targetBucket)
+      .createSignedUploadUrl(storagePath, { upsert: true });
+
+    if (error || !data?.token) {
+      throw new Error(error?.message || "Failed to prepare student profile asset upload");
+    }
+
+    return c.json({
+      success: true,
+      bucket: targetBucket,
+      path: storagePath,
+      token: data.token,
+      signedUrl: data.signedUrl,
+      mimeType: resolvedMimeType,
+    });
+  } catch (error) {
+    console.log("Error preparing student profile asset upload:", error);
+    return internalServerError(c, "Failed to prepare student profile asset upload", error);
+  }
+});
+
+app.post("/student-profile-asset/complete", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== "student") return forbidden();
+
+  let insertedFile: any = null;
+  let rollbackBucket = "";
+  let rollbackStoragePath = "";
+
+  try {
+    const payload = await c.req.json();
+    const fileType = String(payload?.fileType || "").trim().toLowerCase();
+    const requestedStudentId = String(payload?.studentId || "").trim();
+    const fileName = String(payload?.fileName || "").trim();
+    const storagePath = String(payload?.storagePath || "").replace(/^\/+/, "");
+    const storageBucket = String(payload?.storageBucket || "").trim();
+    const resolvedMimeType = isSupportedProfileAssetMimeType(payload?.mimeType, fileName);
+    const studentId =
+      requester.profile.student_id ||
+      requester.student?.student_id ||
+      requestedStudentId;
+
+    if (!fileType || !fileName || !storagePath) {
+      return badRequest("fileType, fileName, and storagePath are required");
+    }
+    if (fileType !== "photo" && fileType !== "signature") {
+      return badRequest("Unsupported profile asset type");
+    }
+    if (!studentId) {
+      return badRequest("Student ID is required");
+    }
+    if (!resolvedMimeType) {
+      return badRequest("Profile photo and signature must be an image file.");
+    }
+
+    const targetBucket = fileType === "photo" ? "profile" : "student_signature";
+    if (storageBucket && storageBucket !== targetBucket) {
+      return badRequest("Profile asset upload bucket does not match the selected asset type.");
+    }
+    if (!isExpectedProfileAssetStoragePath(studentId, fileType, storagePath)) {
+      return badRequest("Profile asset upload path is invalid.");
+    }
+    rollbackBucket = targetBucket;
+    rollbackStoragePath = storagePath;
+
+    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+      .from(targetBucket)
+      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+
+    if (signedUrlError) {
+      throw new Error(signedUrlError.message);
+    }
+
+    const { data: inserted, error: fileInsertError } = await supabase
+      .from("files")
+      .insert({
+        submission_id: null,
+        type: fileType,
+        file_name: fileName,
+        mime_type: resolvedMimeType || "application/octet-stream",
+        url: null,
+        storage_bucket: targetBucket,
+        storage_path: storagePath,
+        uploaded_by: requester.profile.id,
+      })
+      .select("*")
+      .single();
+
+    if (fileInsertError || !inserted) {
+      throw new Error(fileInsertError?.message || "Failed to save file metadata");
+    }
+    insertedFile = inserted;
+
+    const { data: staleMetadataRows, error: staleMetadataError } = await supabase
+      .from("files")
+      .select("id,storage_bucket,storage_path")
+      .eq("uploaded_by", requester.profile.id)
+      .is("submission_id", null)
+      .eq("type", fileType)
+      .neq("id", insertedFile.id);
+
+    if (staleMetadataError) {
+      throw new Error(staleMetadataError.message);
+    }
+
+    const staleMetadataIds = (staleMetadataRows || []).map((item) => item?.id).filter(Boolean);
+    if (staleMetadataIds.length) {
+      const { error: staleDeleteError } = await supabase.from("files").delete().in("id", staleMetadataIds);
+      if (staleDeleteError) {
+        throw new Error(staleDeleteError.message);
+      }
+    }
+
+    runBackgroundTask("Profile asset cleanup", async () => {
+      if (staleMetadataRows?.length) {
+        await deleteStoredFiles(staleMetadataRows);
+      }
+      await cleanupProfileAssetStorageVersions(targetBucket, studentId, storagePath);
+    });
+
+    invalidateStudentRecordsCache(studentId);
+
+    return c.json({
+      success: true,
+      url: signedUrlData?.signedUrl || null,
+      fileName: storagePath,
+    });
+  } catch (error) {
+    if (insertedFile?.id) {
+      try {
+        await supabase.from("files").delete().eq("id", insertedFile.id);
+      } catch (rollbackError) {
+        console.log("Profile asset rollback metadata warning:", rollbackError);
+      }
+    }
+
+    if (rollbackBucket && rollbackStoragePath) {
+      try {
+        await removeStorageObject(rollbackBucket, rollbackStoragePath);
+      } catch (cleanupError) {
+        console.log("Profile asset rollback storage warning:", cleanupError);
+      }
+    }
+
+    console.log("Error completing student profile asset upload:", error);
+    return internalServerError(c, "Failed to complete student profile asset upload", error);
+  }
+});
+
 app.post("/student-profile-asset", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
@@ -1101,42 +1426,16 @@ app.post("/student-profile-asset", async (c) => {
     if (!studentId) {
       return badRequest('Student ID is required');
     }
-    const requestedSlot = normalizeSubmissionSlot(data.yearLevel);
-    if (!requestedSlot) {
-      return badRequest('Submission slot is required');
-    }
-
-    const settings = await getSafeAdminSystemSettings();
-    const activeAcademicYear = normalizeAcademicYear(data.academicYear, settings.academicYear);
-    const { data: existingRows, error: existingRowsError } = await supabase
-      .from('submissions')
-      .select('id,status,year_level,academic_year,submitted_at,updated_at')
-      .eq('student_id', studentId)
-      .order('submitted_at', { ascending: false });
-
-    if (existingRowsError) throw new Error(existingRowsError.message);
-
-    const expectedSlot = getNextSubmissionSlot(existingRows || [], activeAcademicYear);
-    if (!expectedSlot) {
-      return badRequest('All four year levels have already been used.');
-    }
-    if (requestedSlot !== expectedSlot) {
-      return badRequest(`This school year submission must use Year ${expectedSlot}.`);
-    }
-    const existingCurrentAcademicYear = (existingRows || []).find(
-      (row) => getSubmissionRowAcademicYear(row, activeAcademicYear) === activeAcademicYear,
-    );
-    if (existingCurrentAcademicYear) {
-      return badRequest(`A submission for SY ${activeAcademicYear} already exists.`);
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > PROFILE_ASSET_MAX_BYTES) {
       return badRequest('Profile photo and signature must be 5 MB or smaller.');
+    }
+    const resolvedMimeType = isSupportedProfileAssetMimeType(file.type, file.name);
+    if (!resolvedMimeType) {
+      return badRequest('Profile photo and signature must be an image file.');
     }
 
     const targetBucket = fileType === 'photo' ? 'profile' : 'student_signature';
-    const safeFileName = String(file.name || `${fileType}.bin`).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const storagePath = `${studentId}/${fileType}_${Date.now()}_${safeFileName}`;
+    const storagePath = buildProfileAssetStoragePath(studentId, fileType, file.name);
     const fileBuffer = await file.arrayBuffer();
 
     await ensureStorageBucket(targetBucket);
@@ -1150,7 +1449,7 @@ app.post("/student-profile-asset", async (c) => {
     const { error: uploadError } = await supabase.storage
       .from(targetBucket)
       .upload(storagePath, fileBuffer, {
-        contentType: file.type || 'application/octet-stream',
+        contentType: resolvedMimeType || 'application/octet-stream',
         upsert: true,
       });
 
@@ -1164,7 +1463,7 @@ app.post("/student-profile-asset", async (c) => {
         submission_id: null,
         type: fileType,
         file_name: file.name,
-        mime_type: file.type || 'application/octet-stream',
+        mime_type: resolvedMimeType || 'application/octet-stream',
         url: null,
         storage_bucket: targetBucket,
         storage_path: storagePath,
@@ -2000,6 +2299,281 @@ app.post("/submission/:id/urinalysis-ocr", async (c) => {
     }
 
     return internalServerError(c, "Failed to read Urinalysis result with OCR.space", error);
+  }
+});
+
+app.post("/upload-file/prepare", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+
+  try {
+    const payload = await c.req.json();
+    const recordId = String(payload?.recordId || "").trim();
+    const fileType = String(payload?.fileType || "").trim().toLowerCase();
+    const fileName = String(payload?.fileName || "").trim();
+    const fileSize = Number(payload?.size || 0);
+    const originalFileSize = Number(payload?.originalFileSize ?? fileSize);
+
+    if (!recordId || !fileType || !fileName) {
+      return badRequest("recordId, fileType, and fileName are required");
+    }
+    if (!LAB_UPLOAD_TYPES.has(fileType)) {
+      return badRequest("Unsupported laboratory file type");
+    }
+    if (!Number.isFinite(fileSize) || fileSize <= 0) {
+      return badRequest("Laboratory result file size is required.");
+    }
+    if (!Number.isFinite(originalFileSize) || originalFileSize <= 0) {
+      return badRequest("originalFileSize is required.");
+    }
+
+    const maxLabUploadBytes = getLabUploadMaxBytes();
+    if (fileSize > maxLabUploadBytes) {
+      return badRequest(`Laboratory result files must be ${formatFileSize(maxLabUploadBytes)} or smaller.`);
+    }
+
+    const supportedMimeType = resolveLabUploadMimeType(payload?.mimeType, fileName);
+    if (!supportedMimeType) {
+      return badRequest("Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.");
+    }
+    if (originalFileSize > getOcrSpaceMaxBytes() && !resolveTinifyMimeType(supportedMimeType, fileName)) {
+      return badRequest(getLargeNonCompressibleOcrUploadMessage(getOcrSpaceMaxBytes()));
+    }
+
+    const access = await requireSubmissionAccess(requester, recordId, {
+      columns: "id,student_id",
+    });
+    if (access.response) return access.response;
+
+    const targetBucket =
+      fileType === "xray"
+        ? "lab_chest_xray"
+        : fileType === "cbc"
+          ? "lab_cbc"
+          : "lab_urinalysis";
+    const storagePath = buildLabStoragePath(recordId, fileType, fileName);
+
+    await ensureStorageBucket(targetBucket);
+
+    const { data, error } = await supabase.storage
+      .from(targetBucket)
+      .createSignedUploadUrl(storagePath, { upsert: true });
+
+    if (error || !data?.token) {
+      throw new Error(error?.message || "Failed to prepare file upload");
+    }
+
+    return c.json({
+      success: true,
+      bucket: targetBucket,
+      path: storagePath,
+      token: data.token,
+      signedUrl: data.signedUrl,
+      mimeType: supportedMimeType,
+    });
+  } catch (error) {
+    console.log("Error preparing file upload:", error);
+    return internalServerError(c, "Failed to prepare file upload", error);
+  }
+});
+
+app.post("/upload-file/complete", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+
+  let insertedFile: any = null;
+  let rollbackBucket = "";
+  let rollbackStoragePath = "";
+  let submissionStudentId = "";
+
+  try {
+    const payload = await c.req.json();
+    const recordId = String(payload?.recordId || "").trim();
+    const fileType = String(payload?.fileType || "").trim().toLowerCase();
+    const fileName = String(payload?.fileName || "").trim();
+    const uploadedFileName = String(payload?.uploadedFileName || fileName).trim() || fileName;
+    const storagePath = String(payload?.storagePath || "").replace(/^\/+/, "");
+    const storageBucket = String(payload?.storageBucket || "").trim();
+    const originalFileSize = Number(payload?.originalFileSize ?? payload?.originalSize ?? 0);
+    const uploadedFileSize = Number(payload?.uploadedFileSize ?? payload?.uploadedSize ?? 0);
+    const uploadedMimeType = String(payload?.uploadedMimeType || payload?.mimeType || "").trim();
+    const supportedMimeType = resolveLabUploadMimeType(uploadedMimeType, uploadedFileName);
+
+    if (!recordId || !fileType || !fileName || !storagePath) {
+      return badRequest("recordId, fileType, fileName, and storagePath are required");
+    }
+    if (!LAB_UPLOAD_TYPES.has(fileType)) {
+      return badRequest("Unsupported laboratory file type");
+    }
+    if (!Number.isFinite(originalFileSize) || originalFileSize <= 0) {
+      return badRequest("originalFileSize is required");
+    }
+    if (!Number.isFinite(uploadedFileSize) || uploadedFileSize <= 0) {
+      return badRequest("uploadedFileSize is required");
+    }
+    if (!supportedMimeType) {
+      return badRequest("Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.");
+    }
+
+    const access = await requireSubmissionAccess(requester, recordId, {
+      columns: "id,student_id",
+    });
+    if (access.response) return access.response;
+    submissionStudentId = String(access.submission?.student_id || "").trim();
+
+    const targetBucket =
+      fileType === "xray"
+        ? "lab_chest_xray"
+        : fileType === "cbc"
+          ? "lab_cbc"
+          : "lab_urinalysis";
+
+    if (storageBucket && storageBucket !== targetBucket) {
+      return badRequest("Laboratory upload bucket does not match the selected file type.");
+    }
+    if (!isExpectedLabStoragePath(recordId, fileType, storagePath)) {
+      return badRequest("Laboratory upload path is invalid.");
+    }
+
+    rollbackBucket = targetBucket;
+    rollbackStoragePath = storagePath;
+
+    const maxOcrBytes = getOcrSpaceMaxBytes();
+    const requiresGuaranteedCompression = originalFileSize > maxOcrBytes;
+    const tinifyMimeType = resolveTinifyMimeType(supportedMimeType, uploadedFileName);
+    let finalizedBytes = uploadedFileSize;
+    let finalizedMimeType = supportedMimeType || "application/octet-stream";
+    let optimized = false;
+
+    if (requiresGuaranteedCompression) {
+      if (!tinifyMimeType) {
+        throw new UploadValidationError(getLargeNonCompressibleOcrUploadMessage(maxOcrBytes));
+      }
+
+      const uploadedBytes = await downloadStorageObjectBytes(targetBucket, storagePath);
+      const optimizedResult = await compressImageWithTinify(uploadedBytes, tinifyMimeType);
+      finalizedBytes = optimizedResult.bytes.byteLength;
+      finalizedMimeType = optimizedResult.mimeType || finalizedMimeType;
+      optimized = finalizedBytes !== uploadedBytes.byteLength || finalizedMimeType !== supportedMimeType;
+
+      if (finalizedBytes > maxOcrBytes) {
+        throw new UploadValidationError(getTinifyStillTooLargeMessage(maxOcrBytes));
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from(targetBucket)
+        .upload(storagePath, optimizedResult.bytes, {
+          contentType: finalizedMimeType,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+    }
+
+    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+      .from(targetBucket)
+      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+
+    if (signedUrlError) {
+      throw new Error(signedUrlError.message);
+    }
+
+    const { data: inserted, error: fileInsertError } = await supabase
+      .from("files")
+      .insert({
+        submission_id: recordId,
+        type: fileType,
+        file_name: fileName,
+        mime_type: finalizedMimeType || "application/octet-stream",
+        url: null,
+        storage_bucket: targetBucket,
+        storage_path: storagePath,
+        uploaded_by: requester.profile.id,
+      })
+      .select("*")
+      .single();
+
+    if (fileInsertError || !inserted) {
+      throw new Error(fileInsertError?.message || "Failed to save file metadata");
+    }
+    insertedFile = inserted;
+
+    const labTable =
+      fileType === "xray"
+        ? "lab_chest_xray"
+        : fileType === "cbc"
+          ? "lab_cbc"
+          : "lab_urinalysis";
+    const { error: labUpsertError } = await supabase
+      .from(labTable)
+      .upsert({ submission_id: recordId, file_id: insertedFile.id });
+
+    if (labUpsertError) {
+      throw new Error(labUpsertError.message);
+    }
+
+    if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
+
+    runBackgroundTask("Laboratory file cleanup", async () => {
+      const { data: existingFiles, error: existingFilesError } = await supabase
+        .from("files")
+        .select("id,storage_bucket,storage_path")
+        .eq("submission_id", recordId)
+        .eq("type", fileType);
+
+      if (existingFilesError) {
+        throw new Error(existingFilesError.message);
+      }
+
+      const staleFiles = (existingFiles || []).filter((item) => item?.id && item.id !== insertedFile.id);
+      if (!staleFiles.length) return;
+
+      await cleanupStaleLabFiles(staleFiles);
+      if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
+    });
+
+    return c.json({
+      success: true,
+      url: signedUrlData?.signedUrl || null,
+      fileName: storagePath,
+      directUpload: true,
+      optimized,
+      originalSize: originalFileSize,
+      storedSize: finalizedBytes,
+      optimizationPending: false,
+    });
+  } catch (error) {
+    if (insertedFile?.id) {
+      try {
+        await supabase.from("files").delete().eq("id", insertedFile.id);
+      } catch (rollbackError) {
+        console.log("Laboratory upload rollback metadata warning:", rollbackError);
+      }
+    }
+    if (rollbackBucket && rollbackStoragePath) {
+      try {
+        await removeStorageObject(rollbackBucket, rollbackStoragePath);
+      } catch (cleanupError) {
+        console.log("Laboratory upload rollback storage warning:", cleanupError);
+      }
+    }
+
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: error.message }, error.status || 400);
+    }
+    if (error instanceof TinifyConfigurationError) {
+      return c.json({ error: error.message }, 503);
+    }
+    if (error instanceof TinifyRequestError) {
+      return c.json({ error: error.message }, error.status || 502);
+    }
+
+    console.log("Error completing file upload:", error);
+    return internalServerError(c, "Failed to complete file upload", error);
   }
 });
 

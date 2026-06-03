@@ -23,6 +23,8 @@ type Props = {
   formData: MedicalFormData;
   onFieldChange: <K extends keyof MedicalFormData>(field: K, value: MedicalFormData[K]) => void;
   onEmergencyContactChange: (field: 'name' | 'relationship' | 'phone' | 'address', value: string) => void;
+  isEmergencyAddressSameAsStudent: boolean;
+  onEmergencyAddressSyncChange: (checked: boolean) => void;
   onMedicalConditionChange: (condition: MedicalConditionKey, checked: boolean) => void;
   hasRequiredProfileFields: boolean;
   hasProfilePhoto: boolean;
@@ -47,6 +49,8 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   formData,
   onFieldChange,
   onEmergencyContactChange,
+  isEmergencyAddressSameAsStudent,
+  onEmergencyAddressSyncChange,
   onMedicalConditionChange,
   hasRequiredProfileFields,
   hasProfilePhoto,
@@ -378,12 +382,23 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 />
                 <p className="mt-1 text-xs text-muted-foreground">Use a valid Philippine mobile number starting with (+63).</p>
               </div>
-              <div>
+              <div className="md:col-span-2 xl:col-span-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <Checkbox
+                    id="ecAddressSameAsStudent"
+                    checked={isEmergencyAddressSameAsStudent}
+                    onCheckedChange={(checked) => onEmergencyAddressSyncChange(checked === true)}
+                  />
+                  <Label htmlFor="ecAddressSameAsStudent" className="font-normal">
+                    Same as student address
+                  </Label>
+                </div>
                 <Label htmlFor="ecAddress">Address *</Label>
                 <Input
                   id="ecAddress"
                   value={formData.emergencyContact.address}
                   onChange={(event) => onEmergencyContactChange('address', event.target.value)}
+                  disabled={isEmergencyAddressSameAsStudent}
                   className={requiredFieldClass(!formData.emergencyContact.address?.trim())}
                 />
               </div>
