@@ -76,6 +76,7 @@ import {
   getCachedSubmissionsList,
   getMappedSubmissions,
   invalidateDashboardReadCaches,
+  invalidateStudentRecordsCache,
   requireSubmissionAccess,
   SUBMISSION_LIST_COLUMNS,
 } from "./submissions.ts";
@@ -2029,8 +2030,11 @@ app.post("/upload-file", async (c) => {
       return badRequest('Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.');
     }
 
-    const access = await requireSubmissionAccess(requester, recordId);
+    const access = await requireSubmissionAccess(requester, recordId, {
+      columns: "id,student_id",
+    });
     if (access.response) return access.response;
+    const submissionStudentId = String(access.submission?.student_id || "").trim();
 
     const targetBucket =
       fileType === 'xray'
@@ -2038,21 +2042,12 @@ app.post("/upload-file", async (c) => {
         : fileType === 'cbc'
           ? 'lab_cbc'
           : 'lab_urinalysis';
-    await ensureStorageBucket(targetBucket);
-
     const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${recordId}/${fileType}_${Date.now()}_${safeFileName}`;
-    const previousFilesPromise = supabase
-      .from('files')
-      .select('id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by')
-      .eq('submission_id', recordId)
-      .eq('type', fileType);
-    const preparedFile = await prepareLabUploadFile(file, supportedMimeType);
-    const { data: previousFiles, error: previousFilesError } = await previousFilesPromise;
-
-    if (previousFilesError) {
-      throw new Error(previousFilesError.message);
-    }
+    const [preparedFile] = await Promise.all([
+      prepareLabUploadFile(file, supportedMimeType),
+      ensureStorageBucket(targetBucket),
+    ]);
 
     const { error: uploadError } = await supabase.storage
       .from(targetBucket)
@@ -2065,26 +2060,28 @@ app.post("/upload-file", async (c) => {
       throw new Error(uploadError.message);
     }
 
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from(targetBucket)
-      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+    const [signedUrlResult, insertResult] = await Promise.all([
+      supabase.storage.from(targetBucket).createSignedUrl(storagePath, signedStorageUrlExpiresSeconds),
+      supabase
+        .from('files')
+        .insert({
+          submission_id: recordId,
+          type: fileType,
+          file_name: file.name,
+          mime_type: preparedFile.mimeType || 'application/octet-stream',
+          url: null,
+          storage_bucket: targetBucket,
+          storage_path: storagePath,
+          uploaded_by: requester.profile.id,
+        })
+        .select('*')
+        .single(),
+    ]);
 
+    const { data: signedUrlData, error: signedUrlError } = signedUrlResult;
     if (signedUrlError) throw new Error(signedUrlError.message);
 
-    const { data: insertedFile, error: fileInsertError } = await supabase
-      .from('files')
-      .insert({
-        submission_id: recordId,
-        type: fileType,
-        file_name: file.name,
-        mime_type: preparedFile.mimeType || 'application/octet-stream',
-        url: null,
-        storage_bucket: targetBucket,
-        storage_path: storagePath,
-        uploaded_by: requester.profile.id,
-      })
-      .select('*')
-      .single();
+    const { data: insertedFile, error: fileInsertError } = insertResult;
 
     if (fileInsertError || !insertedFile) {
       throw new Error(fileInsertError?.message || 'Failed to save file metadata');
@@ -2103,7 +2100,6 @@ app.post("/upload-file", async (c) => {
       throw new Error(labUpsertError.message);
     }
 
-    const staleFiles = (previousFiles || []).filter((item) => item?.id && item.id !== insertedFile.id);
     if (preparedFile.optimizationPending) {
       runBackgroundTask("Laboratory file optimization", async () => {
         await optimizeStoredLabUpload({
@@ -2114,18 +2110,28 @@ app.post("/upload-file", async (c) => {
           tinifyMimeType: preparedFile.tinifyMimeType,
           fallbackMimeType: preparedFile.mimeType,
         });
-        invalidateDashboardReadCaches();
+        if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
       });
     }
+    if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
 
-    if (staleFiles.length) {
-      runBackgroundTask("Laboratory file cleanup", async () => {
-        await cleanupStaleLabFiles(staleFiles);
-        invalidateDashboardReadCaches();
-      });
-    }
+    runBackgroundTask("Laboratory file cleanup", async () => {
+      const { data: existingFiles, error: existingFilesError } = await supabase
+        .from('files')
+        .select('id,storage_bucket,storage_path')
+        .eq('submission_id', recordId)
+        .eq('type', fileType);
 
-    invalidateDashboardReadCaches();
+      if (existingFilesError) {
+        throw new Error(existingFilesError.message);
+      }
+
+      const staleFiles = (existingFiles || []).filter((item) => item?.id && item.id !== insertedFile.id);
+      if (!staleFiles.length) return;
+
+      await cleanupStaleLabFiles(staleFiles);
+      if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
+    });
     return c.json({
       success: true,
       url: signedUrlData?.signedUrl,
