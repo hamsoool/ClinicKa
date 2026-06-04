@@ -221,6 +221,16 @@ function isMissingStaffSignatureUrlColumnError(error: any) {
   return message.includes("signature_url") && message.includes("staff_users");
 }
 
+function isMissingFilesTableError(error: any) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return (
+    message.includes("public.files") ||
+    (message.includes("relation") && message.includes("files") && message.includes("does not exist")) ||
+    (message.includes("could not find the table") && message.includes("files")) ||
+    (message.includes("schema cache") && message.includes("files"))
+  );
+}
+
 async function fetchStaffUsersByIds(staffIds: string[]) {
   if (!staffIds.length) {
     return { data: [] as any[], error: null };
@@ -516,7 +526,11 @@ async function loadRelatedData(rows: any[]) {
       return acc;
     }, {} as Record<string, any>);
 
-  const normalizedFiles = await normalizeFileRows(filesRes.data);
+  if (filesRes.error && !isMissingFilesTableError(filesRes.error)) {
+    console.log("Student records submission files warning:", filesRes.error);
+  }
+
+  const normalizedFiles = await normalizeFileRows(filesRes.error ? [] : filesRes.data);
   const filesBySubmission = normalizedFiles.reduce((acc, file) => {
     acc[file.submission_id] = acc[file.submission_id] || [];
     acc[file.submission_id].push(file);
@@ -588,11 +602,13 @@ async function loadRelatedData(rows: any[]) {
     : { data: [] as any[], error: null };
 
   if (staffSignatureFilesRes.error) {
-    throw new Error(staffSignatureFilesRes.error.message);
+    if (!isMissingFilesTableError(staffSignatureFilesRes.error)) {
+      console.log("Student records staff signature files warning:", staffSignatureFilesRes.error);
+    }
   }
 
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
-    await normalizeFileRows(staffSignatureFilesRes.data || []),
+    await normalizeFileRows(staffSignatureFilesRes.error ? [] : (staffSignatureFilesRes.data || [])),
   );
   const staffSignatureProfileIds = [
     ...new Set(normalizedStaffSignatureFiles.map((file) => file?.uploaded_by).filter(Boolean)),
@@ -643,11 +659,13 @@ async function loadRelatedData(rows: any[]) {
     : { data: [] as any[], error: null };
 
   if (profileAssetFilesRes.error) {
-    throw new Error(profileAssetFilesRes.error.message);
+    if (!isMissingFilesTableError(profileAssetFilesRes.error)) {
+      console.log("Student records profile asset files warning:", profileAssetFilesRes.error);
+    }
   }
 
   const normalizedProfileAssetFiles = normalizeProfileAssetRows(
-    await normalizeFileRows(profileAssetFilesRes.data || []),
+    await normalizeFileRows(profileAssetFilesRes.error ? [] : (profileAssetFilesRes.data || [])),
   );
   const profileAssetsByUploadedBy = normalizedProfileAssetFiles.reduce((acc, file) => {
     if (!file?.uploaded_by) return acc;
