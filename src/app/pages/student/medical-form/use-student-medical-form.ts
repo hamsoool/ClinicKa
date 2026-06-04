@@ -18,6 +18,7 @@ import {
   DEFAULT_MEDICAL_HISTORY,
   formatPhilippinePhoneInput,
   isValidPhilippinePhoneNumber,
+  LAB_TEST_SITE_OPTIONS,
   normalizeProgramForDepartment,
   resolveDepartmentValue,
 } from './constants';
@@ -53,6 +54,7 @@ const LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL = '1 MB';
 const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
 const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.heic,.heif,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
 const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
+const LAB_TEST_SITE_OPTION_SET = new Set(LAB_TEST_SITE_OPTIONS.map((option) => option.toLowerCase()));
 
 function resolveAcademicYearLevelValue(me?: AuthMe | null) {
   const studentYearLevel = normalizeYearLevel(me?.student?.year_level);
@@ -186,6 +188,73 @@ function resolveSelectedLabSource(primaryValue: string, otherValue: string) {
 
 function isClinicManagedLabSource(primaryValue: string, otherValue: string) {
   return resolveSelectedLabSource(primaryValue, otherValue).toLowerCase() === CLINIC_INTERNAL_LAB_SOURCE.toLowerCase();
+}
+
+function isKnownLabTestSite(value: string) {
+  return LAB_TEST_SITE_OPTION_SET.has(String(value || '').trim().toLowerCase());
+}
+
+function resolveLabTestSiteFields(value: string) {
+  const sanitizedValue = sanitizeSafeText(String(value || ''), MAX_CLINIC_NAME_LENGTH).trim();
+  if (!sanitizedValue) {
+    return {
+      primary: '',
+      other: '',
+    };
+  }
+
+  if (isKnownLabTestSite(sanitizedValue)) {
+    return {
+      primary: sanitizedValue,
+      other: '',
+    };
+  }
+
+  return {
+    primary: 'Others',
+    other: sanitizeTestSiteOther(sanitizedValue),
+  };
+}
+
+function deriveLegacyLabSourceMetadata(nextState: Pick<
+  MedicalFormData,
+  'cbcTestSite' | 'cbcTestSiteOther' | 'urinalysisTestSite' | 'urinalysisTestSiteOther' | 'xrayTestSite' | 'xrayTestSiteOther'
+>) {
+  const resolvedSources = [
+    resolveSelectedLabSource(nextState.cbcTestSite, nextState.cbcTestSiteOther),
+    resolveSelectedLabSource(nextState.urinalysisTestSite, nextState.urinalysisTestSiteOther),
+    resolveSelectedLabSource(nextState.xrayTestSite, nextState.xrayTestSiteOther),
+  ].filter(Boolean);
+
+  if (!resolvedSources.length) {
+    return {
+      labTestLocation: '' as const,
+      otherClinicName: '',
+    };
+  }
+
+  const externalSource = resolvedSources.find(
+    (source) => source.trim().toLowerCase() !== CLINIC_INTERNAL_LAB_SOURCE.toLowerCase(),
+  );
+
+  if (!externalSource) {
+    return {
+      labTestLocation: 'jlgh' as const,
+      otherClinicName: '',
+    };
+  }
+
+  return {
+    labTestLocation: 'other' as const,
+    otherClinicName: sanitizeSafeText(externalSource, MAX_CLINIC_NAME_LENGTH).trim(),
+  };
+}
+
+function syncLegacyLabSourceFields(nextState: MedicalFormData): MedicalFormData {
+  return {
+    ...nextState,
+    ...deriveLegacyLabSourceMetadata(nextState),
+  };
 }
 
 function buildInitialFormData(year: string | undefined, me?: AuthMe | null, initialDataPrivacyConsent = false): MedicalFormData {
@@ -349,7 +418,8 @@ export function useStudentMedicalForm({
           addressesMatch(submission.address || '', submission.emergencyContact?.address || ''),
         );
         setFormData((prev) => ({
-          ...prev,
+          ...syncLegacyLabSourceFields({
+            ...prev,
           studentId: normalizeStudentId(prev.studentId || submission.studentId),
           firstName: sanitizeName(prev.firstName || submission.firstName || ''),
           lastName: sanitizeName(prev.lastName || submission.lastName || ''),
@@ -392,12 +462,12 @@ export function useStudentMedicalForm({
           weight: submission.weight || prev.weight,
           height: submission.height || prev.height,
           bmi: submission.bmi || prev.bmi,
-          cbcTestSite: sanitizeSafeText((submission as any).cbcTestClinic || '', MAX_CLINIC_NAME_LENGTH),
-          urinalysisTestSite: sanitizeSafeText((submission as any).urinalysisTestClinic || '', MAX_CLINIC_NAME_LENGTH),
-          xrayTestSite: sanitizeSafeText((submission as any).xrayTestClinic || '', MAX_CLINIC_NAME_LENGTH),
-          cbcTestSiteOther: '',
-          urinalysisTestSiteOther: '',
-          xrayTestSiteOther: '',
+          cbcTestSite: resolveLabTestSiteFields((submission as any).cbcTestClinic || '').primary,
+          urinalysisTestSite: resolveLabTestSiteFields((submission as any).urinalysisTestClinic || '').primary,
+          xrayTestSite: resolveLabTestSiteFields((submission as any).xrayTestClinic || '').primary,
+          cbcTestSiteOther: resolveLabTestSiteFields((submission as any).cbcTestClinic || '').other,
+          urinalysisTestSiteOther: resolveLabTestSiteFields((submission as any).urinalysisTestClinic || '').other,
+          xrayTestSiteOther: resolveLabTestSiteFields((submission as any).xrayTestClinic || '').other,
           cbcFile: null,
           urinalysisFile: null,
           xrayFile: null,
@@ -405,6 +475,7 @@ export function useStudentMedicalForm({
           existingUrinalysisFileUrl: submission.urinalysisFileUrl || '',
           existingXrayFileUrl: submission.xrayFileUrl || '',
           submissionConfirmed: false,
+          }),
         }));
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to load returned record for editing');
@@ -441,7 +512,8 @@ export function useStudentMedicalForm({
           addressesMatch(latest.address || '', latest.emergencyContact?.address || ''),
         );
         setFormData((prev) => ({
-          ...prev,
+          ...syncLegacyLabSourceFields({
+            ...prev,
           medicalHistory: {
             ...prev.medicalHistory,
             ...(latest.medicalHistory || {}),
@@ -458,9 +530,13 @@ export function useStudentMedicalForm({
             phone: formatPhilippinePhoneInput(latest.emergencyContact?.phone || prev.emergencyContact.phone || ''),
             address: sanitizeAddress(latest.emergencyContact?.address || prev.emergencyContact.address || ''),
           },
-          cbcTestSite: sanitizeSafeText((latest as any).cbcTestClinic || prev.cbcTestSite || '', MAX_CLINIC_NAME_LENGTH),
-          urinalysisTestSite: sanitizeSafeText((latest as any).urinalysisTestClinic || prev.urinalysisTestSite || '', MAX_CLINIC_NAME_LENGTH),
-          xrayTestSite: sanitizeSafeText((latest as any).xrayTestClinic || prev.xrayTestSite || '', MAX_CLINIC_NAME_LENGTH),
+          cbcTestSite: resolveLabTestSiteFields((latest as any).cbcTestClinic || prev.cbcTestSite || '').primary,
+          urinalysisTestSite: resolveLabTestSiteFields((latest as any).urinalysisTestClinic || prev.urinalysisTestSite || '').primary,
+          xrayTestSite: resolveLabTestSiteFields((latest as any).xrayTestClinic || prev.xrayTestSite || '').primary,
+          cbcTestSiteOther: resolveLabTestSiteFields((latest as any).cbcTestClinic || prev.cbcTestSiteOther || '').other,
+          urinalysisTestSiteOther: resolveLabTestSiteFields((latest as any).urinalysisTestClinic || prev.urinalysisTestSiteOther || '').other,
+          xrayTestSiteOther: resolveLabTestSiteFields((latest as any).xrayTestClinic || prev.xrayTestSiteOther || '').other,
+          }),
         }));
       } catch {
         if (!active) return;
@@ -580,9 +656,24 @@ export function useStudentMedicalForm({
     if (field === 'otherMedicalHistory') {
       return setFormData((prev) => ({ ...prev, otherMedicalHistory: sanitizeOtherMedicalHistory(String(value)) }));
     }
-    if (field === 'cbcTestSiteOther') return setFormData((prev) => ({ ...prev, cbcTestSiteOther: sanitizeTestSiteOther(String(value)) }));
-    if (field === 'urinalysisTestSiteOther') return setFormData((prev) => ({ ...prev, urinalysisTestSiteOther: sanitizeTestSiteOther(String(value)) }));
-    if (field === 'xrayTestSiteOther') return setFormData((prev) => ({ ...prev, xrayTestSiteOther: sanitizeTestSiteOther(String(value)) }));
+    if (field === 'cbcTestSite') {
+      return setFormData((prev) => syncLegacyLabSourceFields({ ...prev, cbcTestSite: String(value) }));
+    }
+    if (field === 'urinalysisTestSite') {
+      return setFormData((prev) => syncLegacyLabSourceFields({ ...prev, urinalysisTestSite: String(value) }));
+    }
+    if (field === 'xrayTestSite') {
+      return setFormData((prev) => syncLegacyLabSourceFields({ ...prev, xrayTestSite: String(value) }));
+    }
+    if (field === 'cbcTestSiteOther') {
+      return setFormData((prev) => syncLegacyLabSourceFields({ ...prev, cbcTestSiteOther: sanitizeTestSiteOther(String(value)) }));
+    }
+    if (field === 'urinalysisTestSiteOther') {
+      return setFormData((prev) => syncLegacyLabSourceFields({ ...prev, urinalysisTestSiteOther: sanitizeTestSiteOther(String(value)) }));
+    }
+    if (field === 'xrayTestSiteOther') {
+      return setFormData((prev) => syncLegacyLabSourceFields({ ...prev, xrayTestSiteOther: sanitizeTestSiteOther(String(value)) }));
+    }
     if (field === 'operationDetails') {
       const safe = sanitizeSafeText(String(value), 120);
       if (SQL_INJECTION_REGEX.test(safe)) return;
@@ -867,6 +958,7 @@ export function useStudentMedicalForm({
       cbcFileUrl: formData.existingCbcFileUrl || undefined,
       urinalysisFileUrl: formData.existingUrinalysisFileUrl || undefined,
       xrayFileUrl: formData.existingXrayFileUrl || undefined,
+      ...deriveLegacyLabSourceMetadata(formData),
     }),
     [activeAcademicYear, formData, profileAssetUrls.photoUrl, profileAssetUrls.signatureUrl],
   );
@@ -911,6 +1003,7 @@ export function useStudentMedicalForm({
       }
 
       const payload = {
+        ...deriveLegacyLabSourceMetadata(formData),
         studentId: formData.studentId,
         firstName: formData.firstName,
         lastName: formData.lastName,

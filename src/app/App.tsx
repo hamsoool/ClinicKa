@@ -8,7 +8,7 @@ import { appQueryClient } from './query-client';
 export default function App() {
   return (
     <QueryClientProvider client={appQueryClient}>
-      <AuthProvider>
+      <AuthProvider router={router}>
         <RouterProvider router={router} />
         <Toaster />
       </AuthProvider>

@@ -3,14 +3,17 @@ import { useIsMutating } from '@tanstack/react-query';
 import { Navigate, useLocation } from 'react-router';
 import {
   authenticateWithPassword,
+  clearSupabaseAuthSession,
   clearStoredSession,
   createDefaultAdminSystemSettings,
   getMe,
   getSessionPolicy,
+  getSupabaseAuthSession,
   getStoredSession,
   getUserByToken,
   hasServerPasswordSetupCompleted,
   markServerPasswordSetupCompleted,
+  onSupabaseAuthStateChange,
   rejectUnauthorizedGoogleAccount,
   setStoredSession,
   signInWithPassword,
@@ -23,6 +26,7 @@ import {
 } from './api';
 import { flushPendingStudentNotificationSaves } from './student-notification-save-queue';
 import { STAFF_REVIEW_MUTATION_KEY } from './staff-clearance';
+import { loadCreatePasswordPage } from '../route-modules';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -174,6 +178,56 @@ async function shouldRequireGooglePasswordSetup(
   return !hasServerPassword;
 }
 
+type PendingAuthRedirect = {
+  email?: string | null;
+  type?: string | null;
+};
+
+function getPendingAuthRedirectFromLocation(): PendingAuthRedirect | null {
+  if (typeof window === 'undefined') return null;
+  if (!window.location.hash.includes('access_token=')) return null;
+
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (!params.get('access_token')) return null;
+
+  return {
+    email: params.get('email'),
+    type: params.get('type'),
+  };
+}
+
+function clearSupabaseAuthHashFromUrl() {
+  if (typeof window === 'undefined' || !window.location.hash) return;
+
+  const url = new URL(window.location.href);
+  url.hash = '';
+  window.history.replaceState(window.history.state, document.title, url.pathname + url.search);
+}
+
+function buildPath(pathname: string, searchParams?: Record<string, string | undefined>) {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(searchParams || {})) {
+    if (value) {
+      params.set(key, value);
+    }
+  }
+
+  const search = params.toString();
+  return search ? `${pathname}?${search}` : pathname;
+}
+
+function hasSupabaseAuthUserMetadata(user?: SupabaseAuthUser | null) {
+  return Boolean(
+    user?.id
+      && (
+        user.app_metadata
+        || user.user_metadata
+        || (Array.isArray(user.identities) && user.identities.length > 0)
+      ),
+  );
+}
+
 type AuthContextValue = {
   loading: boolean;
   authRedirectInProgress: boolean;
@@ -247,10 +301,21 @@ async function applyPasswordChange(
   setRequiresPasswordSetup(false);
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+type AppRouterLike = {
+  navigate: (to: string, options?: { replace?: boolean }) => unknown;
+};
+
+export function AuthProvider({
+  children,
+  router,
+}: {
+  children: React.ReactNode;
+  router: AppRouterLike;
+}) {
   const pendingStaffClearanceCount = useIsMutating({
     mutationKey: STAFF_REVIEW_MUTATION_KEY,
   });
+  const initialPendingAuthRedirect = getPendingAuthRedirectFromLocation();
   const initialSession =
     typeof window === 'undefined' ? null : getStoredSession();
   const [session, setSession] = useState<AuthSession | null>(() =>
@@ -263,21 +328,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasPendingPasswordSetupMarker(initialSession?.user?.email),
   );
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
-  const [authRedirectInProgress, setAuthRedirectInProgress] = useState(() =>
-    typeof window !== 'undefined' && window.location.hash.includes('access_token='),
-  );
+  const [authRedirectInProgress, setAuthRedirectInProgress] = useState(() => Boolean(initialPendingAuthRedirect));
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState<number | null>(null);
   const inactivityLogoutInFlightRef = useRef(false);
   const hydratedSupabaseSessionKeyRef = useRef<string | null>(null);
+  const pendingAuthRedirectRef = useRef<PendingAuthRedirect | null>(initialPendingAuthRedirect);
+  const handledAuthRedirectSessionKeyRef = useRef<string | null>(null);
 
-  function resetAuthState() {
+  function resetAuthState(options?: { preserveAuthRedirectInProgress?: boolean }) {
     clearStoredSession();
     setSession(null);
     setMe(null);
     setRole(null);
     setRequiresPasswordSetup(false);
     setIsPasswordRecovery(false);
-    setAuthRedirectInProgress(false);
+    if (!options?.preserveAuthRedirectInProgress) {
+      setAuthRedirectInProgress(false);
+    }
     setSessionTimeoutMinutes(null);
   }
 
@@ -287,6 +354,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     return new Error(ACCOUNT_LOAD_ERROR_MESSAGE);
   }
+
+  useEffect(() => {
+    if (!authRedirectInProgress) return;
+    void loadCreatePasswordPage();
+  }, [authRedirectInProgress]);
 
   useEffect(() => {
     if (!session?.access_token) {
@@ -467,149 +539,172 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!window.location.hash.includes('access_token=')) return;
+    if (!pendingAuthRedirectRef.current) return;
 
-    const hash = window.location.hash.replace(/^#/, '');
-    const params = new URLSearchParams(hash);
-    const accessToken = params.get('access_token');
-    const authType = params.get('type');
+    let cancelled = false;
 
-    if (!accessToken) return;
-    const redirectAccessToken = accessToken;
+    async function navigateAfterRedirect(path: string) {
+      await Promise.resolve(router.navigate(path, { replace: true }));
+      if (cancelled) return;
+      pendingAuthRedirectRef.current = null;
+      handledAuthRedirectSessionKeyRef.current = null;
+      setAuthRedirectInProgress(false);
+    }
 
-    async function processAuthRedirect() {
-      setAuthRedirectInProgress(true);
+    async function failAuthRedirect(path: string) {
+      clearSupabaseAuthHashFromUrl();
+      try {
+        await clearSupabaseAuthSession();
+      } catch {
+        // Best effort cleanup for the in-memory Supabase session.
+      }
+      if (cancelled) return;
+      resetAuthState({ preserveAuthRedirectInProgress: true });
+      await navigateAfterRedirect(path);
+    }
 
-      if (authType === 'signup') {
-        const url = new URL(window.location.href);
-        url.hash = '';
-        url.searchParams.set('mode', 'signin');
-        url.searchParams.set('verified', '1');
-        window.history.replaceState({}, document.title, url.pathname + url.search);
-        setAuthRedirectInProgress(false);
+    async function processAuthRedirect(nextSession: AuthSession, nextUser?: SupabaseAuthUser | null) {
+      const pendingRedirect = pendingAuthRedirectRef.current;
+      if (!pendingRedirect?.type && !nextSession.access_token) return;
+
+      clearSupabaseAuthHashFromUrl();
+
+      if (pendingRedirect?.type === 'signup') {
+        try {
+          await clearSupabaseAuthSession();
+        } catch {
+          // The verification success path can continue even if local sign-out fails.
+        }
+        if (cancelled) return;
+        resetAuthState({ preserveAuthRedirectInProgress: true });
+        await navigateAfterRedirect(buildPath('/auth', { mode: 'signin', verified: '1' }));
         return;
       }
 
-      try {
-        const authUser = await getUserByToken(redirectAccessToken);
-        const email = authUser.email || params.get('email') || undefined;
+      let resolvedAuthUser = nextUser;
+      if (!resolvedAuthUser?.email || !hasSupabaseAuthUserMetadata(resolvedAuthUser)) {
+        resolvedAuthUser = await getUserByToken(nextSession.access_token);
+      }
 
-        if (!isGCDomain(email)) {
-          try {
-            await rejectUnauthorizedGoogleAccount(redirectAccessToken);
-          } catch {
-            // Best effort cleanup; the client still blocks access below.
-          }
-          clearStoredSession();
-          setSession(null);
-          setMe(null);
-          setRole(null);
-          setRequiresPasswordSetup(false);
-          setIsPasswordRecovery(false);
-          const url = new URL(window.location.href);
-          url.hash = '';
-          url.searchParams.set('mode', 'signin');
-          url.searchParams.set('google_error', 'invalid_domain');
-          window.history.replaceState({}, document.title, url.pathname + url.search);
-          setAuthRedirectInProgress(false);
-          return;
-        }
+      const email =
+        resolvedAuthUser?.email || nextSession.user?.email || pendingRedirect?.email || undefined;
 
-        const nextSession: AuthSession = {
-          access_token: redirectAccessToken,
-          refresh_token: params.get('refresh_token') || undefined,
-          token_type: params.get('token_type') || undefined,
-          expires_in: params.get('expires_in') ? Number(params.get('expires_in')) : undefined,
-          expires_at: params.get('expires_at') ? Number(params.get('expires_at')) : undefined,
-          user: {
-            id: authUser.id || params.get('user_id') || 'verified-user',
-            email: email || undefined,
-          },
-        };
-
-        if (authType === 'recovery') {
-          const syncedSession = await syncSupabaseAuthSession(nextSession) || nextSession;
-          setStoredSession(syncedSession);
-          setSession(syncedSession);
-          setMe(null);
-          setRole(null);
-          setRequiresPasswordSetup(false);
-          setIsPasswordRecovery(true);
-          const url = new URL(window.location.href);
-          url.hash = '';
-          url.searchParams.set('mode', 'signin');
-          url.searchParams.set('recovery', '1');
-          window.history.replaceState({}, document.title, url.pathname + url.search);
-          setAuthRedirectInProgress(false);
-          return;
-        }
-
-        const syncedSession = await syncSupabaseAuthSession(nextSession) || nextSession;
+      if (!isGCDomain(email)) {
         try {
-          const resolvedMe = await getMe(syncedSession.access_token);
-          const requiresGooglePasswordSetup = await shouldRequireGooglePasswordSetup(
-            authUser,
-            syncedSession.access_token,
-            resolvedMe.profile.password_setup_completed,
-          );
-
-          setStoredSession(syncedSession);
-          setSession(syncedSession);
-          setMe(resolvedMe);
-          setRole(requiresGooglePasswordSetup ? null : resolvedMe.profile.role);
-          setRequiresPasswordSetup(requiresGooglePasswordSetup);
-          setIsPasswordRecovery(false);
-
-          if (requiresGooglePasswordSetup) {
-            markPendingPasswordSetup(email);
-          } else {
-            clearPendingPasswordSetup(email);
-          }
-        } catch (error) {
-          if (isArchivedAccountError(error)) {
-            resetAuthState();
-            const url = new URL(window.location.href);
-            url.hash = '';
-            url.searchParams.set('mode', 'signin');
-            url.searchParams.set('google_error', 'archived_account');
-            window.history.replaceState({}, document.title, url.pathname + url.search);
-            return;
-          }
-          resetAuthState();
-          const url = new URL(window.location.href);
-          url.hash = '';
-          url.searchParams.set('mode', 'signin');
-          url.searchParams.set('google_error', 'account_load_failed');
-          window.history.replaceState({}, document.title, url.pathname + url.search);
-          return;
+          await rejectUnauthorizedGoogleAccount(nextSession.access_token);
+        } catch {
+          // Best effort cleanup; the client still blocks access below.
         }
-        const url = new URL(window.location.href);
-        url.hash = '';
-        if (hasPendingPasswordSetupMarker(email)) {
-          url.searchParams.set('mode', 'signin');
-          url.searchParams.set('password_setup', '1');
-        }
-        window.history.replaceState({}, document.title, url.pathname + url.search);
-        setAuthRedirectInProgress(false);
-      } catch {
-        clearStoredSession();
-        setSession(null);
+        await failAuthRedirect(buildPath('/auth', { mode: 'signin', google_error: 'invalid_domain' }));
+        return;
+      }
+
+      if (pendingRedirect?.type === 'recovery') {
+        setStoredSession(nextSession);
+        setSession(nextSession);
         setMe(null);
         setRole(null);
         setRequiresPasswordSetup(false);
+        setIsPasswordRecovery(true);
+        await navigateAfterRedirect(buildPath('/auth', { mode: 'signin', recovery: '1' }));
+        return;
+      }
+
+      setStoredSession(nextSession);
+      setSession(nextSession);
+      setIsPasswordRecovery(false);
+
+      try {
+        const resolvedMe = await getMe(nextSession.access_token);
+        const requiresGooglePasswordSetup = await shouldRequireGooglePasswordSetup(
+          resolvedAuthUser as SupabaseAuthUser,
+          nextSession.access_token,
+          resolvedMe.profile.password_setup_completed,
+        );
+
+        if (cancelled) return;
+
+        setMe(resolvedMe);
+        setRole(requiresGooglePasswordSetup ? null : resolvedMe.profile.role);
+        setRequiresPasswordSetup(requiresGooglePasswordSetup);
         setIsPasswordRecovery(false);
-        const url = new URL(window.location.href);
-        url.hash = '';
-        url.searchParams.set('mode', 'signin');
-        url.searchParams.set('google_error', 'invalid_token');
-        window.history.replaceState({}, document.title, url.pathname + url.search);
-        setAuthRedirectInProgress(false);
+
+        if (requiresGooglePasswordSetup) {
+          markPendingPasswordSetup(email);
+          await navigateAfterRedirect('/create-password');
+          return;
+        }
+
+        clearPendingPasswordSetup(email);
+        await navigateAfterRedirect(getHomePath(resolvedMe.profile.role));
+      } catch (error) {
+        if (isArchivedAccountError(error)) {
+          await failAuthRedirect(buildPath('/auth', { mode: 'signin', google_error: 'archived_account' }));
+          return;
+        }
+        await failAuthRedirect(buildPath('/auth', { mode: 'signin', google_error: 'account_load_failed' }));
       }
     }
 
-    void processAuthRedirect();
-  }, []);
+    async function processSessionCandidate(nextSession: AuthSession | null, nextUser?: SupabaseAuthUser | null) {
+      if (!pendingAuthRedirectRef.current) return;
+      if (!nextSession?.access_token) return;
+
+      const sessionKey = `${nextSession.access_token}:${nextSession.refresh_token || ''}`;
+      if (handledAuthRedirectSessionKeyRef.current === sessionKey) {
+        return;
+      }
+      handledAuthRedirectSessionKeyRef.current = sessionKey;
+      await processAuthRedirect(nextSession, nextUser);
+    }
+
+    const {
+      data: { subscription },
+    } = onSupabaseAuthStateChange((event, nextSession, nextUser) => {
+      if (!pendingAuthRedirectRef.current) return;
+      if (event !== 'INITIAL_SESSION' && event !== 'SIGNED_IN' && event !== 'PASSWORD_RECOVERY') {
+        return;
+      }
+      void processSessionCandidate(nextSession, nextUser);
+    });
+
+    async function settlePendingRedirect() {
+      const pendingRedirect = pendingAuthRedirectRef.current;
+      if (!pendingRedirect) return;
+
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try {
+          const { session: nextSession, user: nextUser } = await getSupabaseAuthSession();
+          if (nextSession?.access_token) {
+            await processSessionCandidate(nextSession, nextUser);
+            return;
+          }
+        } catch {
+          break;
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 0 : 50));
+      }
+
+      if (!pendingAuthRedirectRef.current) return;
+
+      if (pendingRedirect.type === 'signup') {
+        clearSupabaseAuthHashFromUrl();
+        resetAuthState({ preserveAuthRedirectInProgress: true });
+        await navigateAfterRedirect(buildPath('/auth', { mode: 'signin', verified: '1' }));
+        return;
+      }
+
+      await failAuthRedirect(buildPath('/auth', { mode: 'signin', google_error: 'invalid_token' }));
+    }
+
+    void settlePendingRedirect();
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   const value = useMemo<AuthContextValue>(() => ({
     loading,
@@ -777,7 +872,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     pendingStaffClearanceCount,
   }), [authRedirectInProgress, isPasswordRecovery, loading, me, pendingStaffClearanceCount, requiresPasswordSetup, role, session]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {authRedirectInProgress ? (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#f8fbff]/95 backdrop-blur-sm">
+          <div
+            className="rounded-3xl border border-[#d9e5df] bg-white/94 px-6 py-5 text-center shadow-[0_24px_60px_rgba(11,28,48,0.12)]"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[#d7e6de] border-t-[#065f46]" />
+            <p className="mt-4 text-sm font-semibold text-[#0b1c30]">Signing you in securely...</p>
+            <p className="mt-1 text-xs text-[#60717e]">Finalizing your ClinicKa session.</p>
+          </div>
+        </div>
+      ) : null}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

@@ -1,5 +1,6 @@
 
 import {
+  type AuthChangeEvent,
   createClient,
   type Session as SupabaseSession,
   type SupabaseClient,
@@ -79,7 +80,7 @@ function getAuthClient() {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
-        detectSessionInUrl: false,
+        detectSessionInUrl: true,
       },
     });
   }
@@ -1183,6 +1184,45 @@ function toAuthSession(session: SupabaseSession | null): AuthSession | null {
         }
       : undefined,
   });
+}
+
+export type SupabaseAuthStateChangeEvent = AuthChangeEvent;
+
+export function onSupabaseAuthStateChange(
+  callback: (
+    event: SupabaseAuthStateChangeEvent,
+    session: AuthSession | null,
+    user: SupabaseAuthUser | null,
+  ) => void,
+) {
+  return getAuthClient().auth.onAuthStateChange((event, session) => {
+    callback(
+      event,
+      toAuthSession(session),
+      session?.user ? (session.user as unknown as SupabaseAuthUser) : null,
+    );
+  });
+}
+
+export async function getSupabaseAuthSession() {
+  const { data, error } = await getAuthClient().auth.getSession();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    session: toAuthSession(data.session),
+    user: data.session?.user ? (data.session.user as unknown as SupabaseAuthUser) : null,
+  };
+}
+
+export async function clearSupabaseAuthSession() {
+  const { error } = await getAuthClient().auth.signOut();
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function syncSupabaseAuthSession(session: AuthSession | null) {
@@ -3300,6 +3340,60 @@ export async function uploadStaffSignature(file: File) {
   };
 }
 
+const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
+
+function deriveSubmissionLabSourceMetadata(data: any) {
+  const explicitLocation = String(data?.labTestLocation || '').trim().toLowerCase();
+  const explicitClinic = String(data?.otherClinicName || '').trim();
+  const normalizedLocation =
+    explicitLocation === 'jlgh' || explicitLocation === 'other'
+      ? (explicitLocation as 'jlgh' | 'other')
+      : '';
+
+  if (normalizedLocation === 'jlgh') {
+    return {
+      labTestLocation: 'jlgh' as const,
+      otherClinicName: '',
+    };
+  }
+
+  if (normalizedLocation === 'other' && explicitClinic) {
+    return {
+      labTestLocation: 'other' as const,
+      otherClinicName: explicitClinic,
+    };
+  }
+
+  const resolvedSources = [
+    String(data?.cbcTestClinic || '').trim(),
+    String(data?.urinalysisTestClinic || '').trim(),
+    String(data?.xrayTestClinic || '').trim(),
+  ].filter(Boolean);
+
+  if (!resolvedSources.length) {
+    return {
+      labTestLocation: normalizedLocation || '',
+      otherClinicName: explicitClinic,
+    };
+  }
+
+  const externalSource = resolvedSources.find(
+    (source) => source.toLowerCase() !== CLINIC_INTERNAL_LAB_SOURCE.toLowerCase(),
+  );
+
+  if (!externalSource) {
+    return {
+      labTestLocation: 'jlgh' as const,
+      otherClinicName: '',
+    };
+  }
+
+  return {
+    labTestLocation: 'other' as const,
+    otherClinicName: explicitClinic || externalSource,
+  };
+}
+
 export async function submitMedicalRecord(data: any) {
   const me = await getMe();
   const studentId = me.profile.student_id || data.studentId;
@@ -3368,6 +3462,8 @@ export async function submitMedicalRecord(data: any) {
     },
   );
 
+  const resolvedLabSource = deriveSubmissionLabSourceMetadata(data);
+
   const submissionInsertPayload = {
     student_id: studentId,
     year_level: String(requestedRecordCycle),
@@ -3394,8 +3490,8 @@ export async function submitMedicalRecord(data: any) {
     cbc_test_clinic: data.cbcTestClinic || null,
     urinalysis_test_clinic: data.urinalysisTestClinic || null,
     xray_test_clinic: data.xrayTestClinic || null,
-    lab_test_location: data.labTestLocation || null,
-    lab_test_clinic: data.labTestLocation === 'other' ? data.otherClinicName || null : null,
+    lab_test_location: resolvedLabSource.labTestLocation || null,
+    lab_test_clinic: resolvedLabSource.labTestLocation === 'other' ? resolvedLabSource.otherClinicName || null : null,
   };
 
   let insertedSubmission: any[] = [];
@@ -3581,6 +3677,8 @@ export async function updateMedicalRecord(recordId: string, data: any) {
     },
   );
 
+  const resolvedLabSource = deriveSubmissionLabSourceMetadata(data);
+
   const submissionPatchPayload = {
     status: data.status || undefined,
     year_level: String(requestedRecordCycle),
@@ -3606,8 +3704,8 @@ export async function updateMedicalRecord(recordId: string, data: any) {
     cbc_test_clinic: data.cbcTestClinic || null,
     urinalysis_test_clinic: data.urinalysisTestClinic || null,
     xray_test_clinic: data.xrayTestClinic || null,
-    lab_test_location: data.labTestLocation || undefined,
-    lab_test_clinic: data.labTestLocation === 'other' ? data.otherClinicName || null : null,
+    lab_test_location: resolvedLabSource.labTestLocation || undefined,
+    lab_test_clinic: resolvedLabSource.labTestLocation === 'other' ? resolvedLabSource.otherClinicName || null : null,
     updated_at: new Date().toISOString(),
   };
 
