@@ -149,6 +149,23 @@ function getAppMetadataHasPassword(user?: SupabaseAuthUser | null) {
   return typeof value === 'boolean' ? value : null;
 }
 
+function canOptimisticallyRouteToPasswordSetup(user?: SupabaseAuthUser | null) {
+  if (!isGoogleAuthUser(user)) {
+    return false;
+  }
+
+  const appMetadataHasPassword = getAppMetadataHasPassword(user);
+  if (appMetadataHasPassword === true) {
+    return false;
+  }
+
+  if (hasPasswordIdentity(user)) {
+    return false;
+  }
+
+  return true;
+}
+
 async function shouldRequireGooglePasswordSetup(
   authUser: SupabaseAuthUser,
   accessToken: string,
@@ -563,6 +580,50 @@ export function AuthProvider({
       await navigateAfterRedirect(path);
     }
 
+    async function settleGooglePasswordSetupState(
+      nextSession: AuthSession,
+      authUser: SupabaseAuthUser,
+      email?: string,
+      options?: { navigatedOptimistically?: boolean },
+    ) {
+      try {
+        const resolvedMe = await getMe(nextSession.access_token);
+        const requiresGooglePasswordSetup = await shouldRequireGooglePasswordSetup(
+          authUser,
+          nextSession.access_token,
+          resolvedMe.profile.password_setup_completed,
+        );
+
+        if (cancelled) return;
+
+        setMe(resolvedMe);
+        setRole(requiresGooglePasswordSetup ? null : resolvedMe.profile.role);
+        setRequiresPasswordSetup(requiresGooglePasswordSetup);
+        setIsPasswordRecovery(false);
+
+        if (requiresGooglePasswordSetup) {
+          markPendingPasswordSetup(email);
+          if (!options?.navigatedOptimistically) {
+            await navigateAfterRedirect('/create-password');
+          }
+          return;
+        }
+
+        clearPendingPasswordSetup(email);
+        if (options?.navigatedOptimistically) {
+          await navigateAfterRedirect(getHomePath(resolvedMe.profile.role));
+          return;
+        }
+        await navigateAfterRedirect(getHomePath(resolvedMe.profile.role));
+      } catch (error) {
+        if (isArchivedAccountError(error)) {
+          await failAuthRedirect(buildPath('/auth', { mode: 'signin', google_error: 'archived_account' }));
+          return;
+        }
+        await failAuthRedirect(buildPath('/auth', { mode: 'signin', google_error: 'account_load_failed' }));
+      }
+    }
+
     async function processAuthRedirect(nextSession: AuthSession, nextUser?: SupabaseAuthUser | null) {
       const pendingRedirect = pendingAuthRedirectRef.current;
       if (!pendingRedirect?.type && !nextSession.access_token) return;
@@ -614,36 +675,20 @@ export function AuthProvider({
       setSession(nextSession);
       setIsPasswordRecovery(false);
 
-      try {
-        const resolvedMe = await getMe(nextSession.access_token);
-        const requiresGooglePasswordSetup = await shouldRequireGooglePasswordSetup(
-          resolvedAuthUser as SupabaseAuthUser,
-          nextSession.access_token,
-          resolvedMe.profile.password_setup_completed,
-        );
-
-        if (cancelled) return;
-
-        setMe(resolvedMe);
-        setRole(requiresGooglePasswordSetup ? null : resolvedMe.profile.role);
-        setRequiresPasswordSetup(requiresGooglePasswordSetup);
+      if (canOptimisticallyRouteToPasswordSetup(resolvedAuthUser)) {
+        setMe(null);
+        setRole(null);
+        setRequiresPasswordSetup(true);
         setIsPasswordRecovery(false);
-
-        if (requiresGooglePasswordSetup) {
-          markPendingPasswordSetup(email);
-          await navigateAfterRedirect('/create-password');
-          return;
-        }
-
-        clearPendingPasswordSetup(email);
-        await navigateAfterRedirect(getHomePath(resolvedMe.profile.role));
-      } catch (error) {
-        if (isArchivedAccountError(error)) {
-          await failAuthRedirect(buildPath('/auth', { mode: 'signin', google_error: 'archived_account' }));
-          return;
-        }
-        await failAuthRedirect(buildPath('/auth', { mode: 'signin', google_error: 'account_load_failed' }));
+        markPendingPasswordSetup(email);
+        await navigateAfterRedirect('/create-password');
+        void settleGooglePasswordSetupState(nextSession, resolvedAuthUser as SupabaseAuthUser, email, {
+          navigatedOptimistically: true,
+        });
+        return;
       }
+
+      await settleGooglePasswordSetupState(nextSession, resolvedAuthUser as SupabaseAuthUser, email);
     }
 
     async function processSessionCandidate(nextSession: AuthSession | null, nextUser?: SupabaseAuthUser | null) {
