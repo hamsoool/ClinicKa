@@ -490,6 +490,16 @@ function isSupportedProfileAssetMimeType(mimeType?: string | null, fileName?: st
     : "";
 }
 
+function isMissingFilesTableError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+  return (
+    message.includes("public.files") ||
+    (message.includes("relation") && message.includes("files") && message.includes("does not exist")) ||
+    (message.includes("could not find the table") && message.includes("files")) ||
+    (message.includes("schema cache") && message.includes("files"))
+  );
+}
+
 async function listStorageObjectPaths(bucket: string, prefix: string) {
   const normalizedPrefix = String(prefix || "").replace(/^\/+/, "");
   if (!normalizedPrefix) return [] as string[];
@@ -1436,44 +1446,55 @@ app.post("/student-profile-asset/complete", async (c) => {
       throw new Error(signedUrlError.message);
     }
 
-    const { data: inserted, error: fileInsertError } = await supabase
-      .from("files")
-      .insert({
-        submission_id: null,
-        type: fileType,
-        file_name: fileName,
-        mime_type: resolvedMimeType || "application/octet-stream",
-        url: null,
-        storage_bucket: targetBucket,
-        storage_path: storagePath,
-        uploaded_by: requester.profile.id,
-      })
-      .select("*")
-      .single();
+    let staleMetadataRows: any[] = [];
+    try {
+      const { data: inserted, error: fileInsertError } = await supabase
+        .from("files")
+        .insert({
+          submission_id: null,
+          type: fileType,
+          file_name: fileName,
+          mime_type: resolvedMimeType || "application/octet-stream",
+          url: null,
+          storage_bucket: targetBucket,
+          storage_path: storagePath,
+          uploaded_by: requester.profile.id,
+        })
+        .select("*")
+        .single();
 
-    if (fileInsertError || !inserted) {
-      throw new Error(fileInsertError?.message || "Failed to save file metadata");
-    }
-    insertedFile = inserted;
-
-    const { data: staleMetadataRows, error: staleMetadataError } = await supabase
-      .from("files")
-      .select("id,storage_bucket,storage_path")
-      .eq("uploaded_by", requester.profile.id)
-      .is("submission_id", null)
-      .eq("type", fileType)
-      .neq("id", insertedFile.id);
-
-    if (staleMetadataError) {
-      throw new Error(staleMetadataError.message);
-    }
-
-    const staleMetadataIds = (staleMetadataRows || []).map((item) => item?.id).filter(Boolean);
-    if (staleMetadataIds.length) {
-      const { error: staleDeleteError } = await supabase.from("files").delete().in("id", staleMetadataIds);
-      if (staleDeleteError) {
-        throw new Error(staleDeleteError.message);
+      if (fileInsertError || !inserted) {
+        throw new Error(fileInsertError?.message || "Failed to save file metadata");
       }
+      insertedFile = inserted;
+
+      const { data: staleRows, error: staleMetadataError } = await supabase
+        .from("files")
+        .select("id,storage_bucket,storage_path")
+        .eq("uploaded_by", requester.profile.id)
+        .is("submission_id", null)
+        .eq("type", fileType)
+        .neq("id", insertedFile.id);
+
+      if (staleMetadataError) {
+        throw new Error(staleMetadataError.message);
+      }
+
+      staleMetadataRows = staleRows || [];
+      const staleMetadataIds = staleMetadataRows.map((item) => item?.id).filter(Boolean);
+      if (staleMetadataIds.length) {
+        const { error: staleDeleteError } = await supabase.from("files").delete().in("id", staleMetadataIds);
+        if (staleDeleteError) {
+          throw new Error(staleDeleteError.message);
+        }
+      }
+    } catch (metadataError) {
+      if (!isMissingFilesTableError(metadataError)) {
+        throw metadataError;
+      }
+      console.log("Student profile asset metadata fallback:", metadataError);
+      insertedFile = null;
+      staleMetadataRows = [];
     }
 
     runBackgroundTask("Profile asset cleanup", async () => {
@@ -1650,18 +1671,21 @@ app.get("/student-profile-assets", async (c) => {
       });
     }
 
-    const { data: assetRows, error: assetError } = targetProfileId
-      ? await supabase
-          .from("files")
-          .select("id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url")
-          .eq("uploaded_by", targetProfileId)
-          .is("submission_id", null)
-          .order("uploaded_at", { ascending: false })
-          .limit(50)
-      : { data: [] as any[], error: null };
+    let assetRows: any[] = [];
+    if (targetProfileId) {
+      const { data, error: assetError } = await supabase
+        .from("files")
+        .select("id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url")
+        .eq("uploaded_by", targetProfileId)
+        .is("submission_id", null)
+        .order("uploaded_at", { ascending: false })
+        .limit(50);
 
-    if (assetError) {
-      throw new Error(assetError.message);
+      if (assetError && !isMissingFilesTableError(assetError)) {
+        throw new Error(assetError.message);
+      }
+
+      assetRows = assetError ? [] : (data || []);
     }
 
     const normalizedRows = normalizeProfileAssetRows(await normalizeFileRows(assetRows || []));
