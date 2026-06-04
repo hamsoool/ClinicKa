@@ -8,9 +8,7 @@
 node_modules/
 dist/
 supabase/.temp/
-supabase/migrations/*
-!supabase/migrations/
-!supabase/migrations/202606040004_add_staff_users_signature_url.sql
+supabase/migrations/
 *.log
 
 # React Router
