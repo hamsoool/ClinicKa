@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useIsMutating } from '@tanstack/react-query';
 import { Navigate, useLocation } from 'react-router';
 import {
@@ -26,6 +26,7 @@ import {
 } from './api';
 import { flushPendingStudentNotificationSaves } from './student-notification-save-queue';
 import { STAFF_REVIEW_MUTATION_KEY } from './staff-clearance';
+import { getActiveUploadCount, subscribeToUploadActivity } from './upload-activity';
 import { loadCreatePasswordPage } from '../route-modules';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
@@ -264,12 +265,19 @@ type AuthContextValue = {
   completePasswordRecovery: (newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   pendingStaffClearanceCount: number;
+  pendingUploadCount: number;
 };
 
 export class LogoutBlockedError extends Error {
-  constructor(message = 'A medical clearance is still processing in the background.') {
+  reason: 'staff_clearance' | 'upload_in_progress';
+
+  constructor(
+    reason: 'staff_clearance' | 'upload_in_progress',
+    message = 'A background task is still in progress.',
+  ) {
     super(message);
     this.name = 'LogoutBlockedError';
+    this.reason = reason;
   }
 }
 
@@ -332,6 +340,11 @@ export function AuthProvider({
   const pendingStaffClearanceCount = useIsMutating({
     mutationKey: STAFF_REVIEW_MUTATION_KEY,
   });
+  const pendingUploadCount = useSyncExternalStore(
+    subscribeToUploadActivity,
+    getActiveUploadCount,
+    () => 0,
+  );
   const initialPendingAuthRedirect = getPendingAuthRedirectFromLocation();
   const initialSession =
     typeof window === 'undefined' ? null : getStoredSession();
@@ -822,7 +835,16 @@ export function AuthProvider({
     logout: async () => {
       if (pendingStaffClearanceCount > 0 && me?.profile.role === 'staff') {
         throw new LogoutBlockedError(
+          'staff_clearance',
           'Please wait for the background clearance process to finish before logging out.',
+        );
+      }
+      if (pendingUploadCount > 0) {
+        throw new LogoutBlockedError(
+          'upload_in_progress',
+          pendingUploadCount > 1
+            ? `${pendingUploadCount} uploads are still in progress. Please wait until they finish before logging out.`
+            : 'A file upload is still in progress. Please wait until it finishes before logging out.',
         );
       }
 
@@ -915,7 +937,8 @@ export function AuthProvider({
       setIsPasswordRecovery(false);
     },
     pendingStaffClearanceCount,
-  }), [authRedirectInProgress, isPasswordRecovery, loading, me, pendingStaffClearanceCount, requiresPasswordSetup, role, session]);
+    pendingUploadCount,
+  }), [authRedirectInProgress, isPasswordRecovery, loading, me, pendingStaffClearanceCount, pendingUploadCount, requiresPasswordSetup, role, session]);
 
   return (
     <AuthContext.Provider value={value}>

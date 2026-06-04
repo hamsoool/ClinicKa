@@ -110,13 +110,14 @@ export default function PortalShell({
 }: PortalShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, pendingStaffClearanceCount } = useAuth();
+  const { logout, pendingStaffClearanceCount, pendingUploadCount } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profilePic, setProfilePic] = useState<string | null>(initialProfileImageUrl || null);
   const [brandImageFailed, setBrandImageFailed] = useState(false);
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [logoutBlockedOpen, setLogoutBlockedOpen] = useState(false);
+  const [logoutBlockedReason, setLogoutBlockedReason] = useState<'staff_clearance' | 'upload_in_progress'>('staff_clearance');
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -202,6 +203,7 @@ export default function PortalShell({
     } catch (error) {
       if (error instanceof LogoutBlockedError) {
         setConfirmSignOutOpen(false);
+        setLogoutBlockedReason(error.reason);
         setLogoutBlockedOpen(true);
         return;
       }
@@ -526,11 +528,19 @@ export default function PortalShell({
       <AlertDialog open={logoutBlockedOpen} onOpenChange={setLogoutBlockedOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Background clearance still in progress</AlertDialogTitle>
+            <AlertDialogTitle>
+              {logoutBlockedReason === 'upload_in_progress'
+                ? 'Upload still in progress'
+                : 'Background clearance still in progress'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingStaffClearanceCount > 1
-                ? `${pendingStaffClearanceCount} medical clearances are still being processed in the background. Please wait until they finish before logging out.`
-                : 'A medical clearance is still being processed in the background. Please wait until it finishes before logging out.'}
+              {logoutBlockedReason === 'upload_in_progress'
+                ? pendingUploadCount > 1
+                  ? `${pendingUploadCount} uploads are still in progress. Please wait until they finish before logging out.`
+                  : 'A file upload is still in progress. Please wait until it finishes before logging out.'
+                : pendingStaffClearanceCount > 1
+                  ? `${pendingStaffClearanceCount} medical clearances are still being processed in the background. Please wait until they finish before logging out.`
+                  : 'A medical clearance is still being processed in the background. Please wait until it finishes before logging out.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

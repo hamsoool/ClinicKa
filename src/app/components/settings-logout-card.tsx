@@ -23,9 +23,10 @@ export default function SettingsLogoutCard({
   className,
 }: SettingsLogoutCardProps) {
   const navigate = useNavigate();
-  const { logout, pendingStaffClearanceCount } = useAuth();
+  const { logout, pendingStaffClearanceCount, pendingUploadCount } = useAuth();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [blockedOpen, setBlockedOpen] = useState(false);
+  const [blockedReason, setBlockedReason] = useState<'staff_clearance' | 'upload_in_progress'>('staff_clearance');
 
   const handleSignOut = async () => {
     try {
@@ -34,6 +35,7 @@ export default function SettingsLogoutCard({
     } catch (error) {
       if (error instanceof LogoutBlockedError) {
         setConfirmOpen(false);
+        setBlockedReason(error.reason);
         setBlockedOpen(true);
         return;
       }
@@ -80,11 +82,19 @@ export default function SettingsLogoutCard({
       <AlertDialog open={blockedOpen} onOpenChange={setBlockedOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Background clearance still in progress</AlertDialogTitle>
+            <AlertDialogTitle>
+              {blockedReason === 'upload_in_progress'
+                ? 'Upload still in progress'
+                : 'Background clearance still in progress'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingStaffClearanceCount > 1
-                ? `${pendingStaffClearanceCount} medical clearances are still being processed in the background. Please wait until they finish before logging out.`
-                : 'A medical clearance is still being processed in the background. Please wait until it finishes before logging out.'}
+              {blockedReason === 'upload_in_progress'
+                ? pendingUploadCount > 1
+                  ? `${pendingUploadCount} uploads are still in progress. Please wait until they finish before logging out.`
+                  : 'A file upload is still in progress. Please wait until it finishes before logging out.'
+                : pendingStaffClearanceCount > 1
+                  ? `${pendingStaffClearanceCount} medical clearances are still being processed in the background. Please wait until they finish before logging out.`
+                  : 'A medical clearance is still being processed in the background. Please wait until it finishes before logging out.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

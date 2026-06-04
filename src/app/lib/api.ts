@@ -46,6 +46,7 @@ import {
   normalizeAcademicYear,
   normalizeSubmissionSlot,
 } from './academic-year';
+import { beginTrackedUpload } from './upload-activity';
 
 export { createDefaultAdminSystemSettings } from './admin-system-settings';
 export type { AdminSystemSettings } from './admin-system-settings';
@@ -5394,14 +5395,67 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
     throw new Error('You must be signed in to upload files.');
   }
 
-  const transportFile = await optimizeLabImageInBrowser(file);
-  const originalFileSize = file.size;
-  const normalizedRecordId = String(recordId || '').trim();
-  const normalizedFileType = String(fileType || '').trim().toLowerCase();
-  let prepare: SignedStorageUploadTicket;
+  const finishTrackedUpload = beginTrackedUpload();
+
   try {
-    prepare = await apiRequest<SignedStorageUploadTicket>(
-      '/functions/v1/server/upload-file/prepare',
+    const transportFile = await optimizeLabImageInBrowser(file);
+    const originalFileSize = file.size;
+    const normalizedRecordId = String(recordId || '').trim();
+    const normalizedFileType = String(fileType || '').trim().toLowerCase();
+    let prepare: SignedStorageUploadTicket;
+    try {
+      prepare = await apiRequest<SignedStorageUploadTicket>(
+        '/functions/v1/server/upload-file/prepare',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            recordId: normalizedRecordId,
+            fileType: normalizedFileType,
+            fileName: transportFile.name,
+            mimeType: transportFile.type || file.type || 'application/octet-stream',
+            size: transportFile.size,
+            originalFileSize,
+          }),
+        },
+      );
+    } catch (error) {
+      if (!isMissingDirectUploadRoute(error)) {
+        throw error;
+      }
+
+      const legacyFormData = new FormData();
+      legacyFormData.set('file', transportFile);
+      legacyFormData.set('recordId', normalizedRecordId);
+      legacyFormData.set('fileType', normalizedFileType);
+
+      const legacyPayload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
+        '/functions/v1/server/upload-file',
+        {
+          method: 'POST',
+          body: legacyFormData,
+        },
+      );
+
+      return {
+        success: true as const,
+        url: normalizeStorageFileUrl(legacyPayload.url || null) || undefined,
+        fileName: legacyPayload.fileName || undefined,
+      };
+    }
+
+    await uploadToSignedStorageUrl(
+      prepare.bucket,
+      prepare.path,
+      prepare.token,
+      transportFile,
+      prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
+    );
+
+    const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
+      '/functions/v1/server/upload-file/complete',
       {
         method: 'POST',
         headers: {
@@ -5411,72 +5465,25 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
           recordId: normalizedRecordId,
           fileType: normalizedFileType,
           fileName: transportFile.name,
-          mimeType: transportFile.type || file.type || 'application/octet-stream',
-          size: transportFile.size,
+          mimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
           originalFileSize,
+          uploadedFileSize: transportFile.size,
+          uploadedFileName: transportFile.name,
+          uploadedMimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
+          storageBucket: prepare.bucket,
+          storagePath: prepare.path,
         }),
-      },
-    );
-  } catch (error) {
-    if (!isMissingDirectUploadRoute(error)) {
-      throw error;
-    }
-
-    const legacyFormData = new FormData();
-    legacyFormData.set('file', transportFile);
-    legacyFormData.set('recordId', normalizedRecordId);
-    legacyFormData.set('fileType', normalizedFileType);
-
-    const legacyPayload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
-      '/functions/v1/server/upload-file',
-      {
-        method: 'POST',
-        body: legacyFormData,
       },
     );
 
     return {
       success: true as const,
-      url: normalizeStorageFileUrl(legacyPayload.url || null) || undefined,
-      fileName: legacyPayload.fileName || undefined,
+      url: normalizeStorageFileUrl(payload.url || null) || undefined,
+      fileName: payload.fileName || undefined,
     };
+  } finally {
+    finishTrackedUpload();
   }
-
-  await uploadToSignedStorageUrl(
-    prepare.bucket,
-    prepare.path,
-    prepare.token,
-    transportFile,
-    prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
-  );
-
-  const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
-    '/functions/v1/server/upload-file/complete',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        recordId: normalizedRecordId,
-        fileType: normalizedFileType,
-        fileName: transportFile.name,
-        mimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
-        originalFileSize,
-        uploadedFileSize: transportFile.size,
-        uploadedFileName: transportFile.name,
-        uploadedMimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
-        storageBucket: prepare.bucket,
-        storagePath: prepare.path,
-      }),
-    },
-  );
-
-  return {
-    success: true as const,
-    url: normalizeStorageFileUrl(payload.url || null) || undefined,
-    fileName: payload.fileName || undefined,
-  };
 }
 
 export async function uploadStudentProfileAsset(file: File, studentId: string, fileType: 'photo' | 'signature') {
@@ -5490,10 +5497,63 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
     throw new Error('You must be signed in to upload files.');
   }
 
-  let prepare: SignedStorageUploadTicket;
+  const finishTrackedUpload = beginTrackedUpload();
+
   try {
-    prepare = await apiRequest<SignedStorageUploadTicket>(
-      '/functions/v1/server/student-profile-asset/prepare',
+    let prepare: SignedStorageUploadTicket;
+    try {
+      prepare = await apiRequest<SignedStorageUploadTicket>(
+        '/functions/v1/server/student-profile-asset/prepare',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileType,
+            studentId: targetStudentId,
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            size: file.size,
+          }),
+        },
+      );
+    } catch (error) {
+      if (!isMissingDirectUploadRoute(error)) {
+        throw error;
+      }
+
+      const legacyFormData = new FormData();
+      legacyFormData.set('file', file);
+      legacyFormData.set('fileType', fileType);
+      legacyFormData.set('studentId', targetStudentId);
+
+      const legacyPayload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
+        '/functions/v1/server/student-profile-asset',
+        {
+          method: 'POST',
+          body: legacyFormData,
+        },
+      );
+      invalidateStudentProfileAssetsCache();
+
+      return {
+        success: true as const,
+        url: normalizeStorageFileUrl(legacyPayload.url || null) || undefined,
+        fileName: legacyPayload.fileName || undefined,
+      };
+    }
+
+    await uploadToSignedStorageUrl(
+      prepare.bucket,
+      prepare.path,
+      prepare.token,
+      file,
+      prepare.mimeType || file.type || 'application/octet-stream',
+    );
+
+    const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
+      '/functions/v1/server/student-profile-asset/complete',
       {
         method: 'POST',
         headers: {
@@ -5503,69 +5563,22 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
           fileType,
           studentId: targetStudentId,
           fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          size: file.size,
+          mimeType: prepare.mimeType || file.type || 'application/octet-stream',
+          storageBucket: prepare.bucket,
+          storagePath: prepare.path,
         }),
-      },
-    );
-  } catch (error) {
-    if (!isMissingDirectUploadRoute(error)) {
-      throw error;
-    }
-
-    const legacyFormData = new FormData();
-    legacyFormData.set('file', file);
-    legacyFormData.set('fileType', fileType);
-    legacyFormData.set('studentId', targetStudentId);
-
-    const legacyPayload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
-      '/functions/v1/server/student-profile-asset',
-      {
-        method: 'POST',
-        body: legacyFormData,
       },
     );
     invalidateStudentProfileAssetsCache();
 
     return {
       success: true as const,
-      url: normalizeStorageFileUrl(legacyPayload.url || null) || undefined,
-      fileName: legacyPayload.fileName || undefined,
+      url: normalizeStorageFileUrl(payload.url || null) || undefined,
+      fileName: payload.fileName || undefined,
     };
+  } finally {
+    finishTrackedUpload();
   }
-
-  await uploadToSignedStorageUrl(
-    prepare.bucket,
-    prepare.path,
-    prepare.token,
-    file,
-    prepare.mimeType || file.type || 'application/octet-stream',
-  );
-
-  const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
-    '/functions/v1/server/student-profile-asset/complete',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        fileType,
-        studentId: targetStudentId,
-        fileName: file.name,
-        mimeType: prepare.mimeType || file.type || 'application/octet-stream',
-        storageBucket: prepare.bucket,
-        storagePath: prepare.path,
-      }),
-    },
-  );
-  invalidateStudentProfileAssetsCache();
-
-  return {
-    success: true as const,
-    url: normalizeStorageFileUrl(payload.url || null) || undefined,
-    fileName: payload.fileName || undefined,
-  };
 }
 
 export async function getAnalytics() {
