@@ -18,6 +18,7 @@ const ADMIN_SYSTEM_SETTINGS_SEMESTERS = new Set<AdminSystemSettings['semester']>
 ]);
 const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = new Set([15, 30, 45, 60, 120]);
 const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = new Set([0, 12, 24, 36]);
+const ADMIN_SYSTEM_SETTINGS_ACADEMIC_YEAR_PATTERN = /^(?:sy\s*)?(\d{4})\s*-\s*(\d{4})$/i;
 
 export function isMissingKvStoreError(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
@@ -62,10 +63,11 @@ export function normalizeAdminSystemSettings(
   const parsedTimeout = Number(value?.sessionTimeoutMinutes);
   const parsedAutoArchive = Number(value?.autoArchiveAfterMonths);
 
+  const academicYearMatch = academicYearValue.match(ADMIN_SYSTEM_SETTINGS_ACADEMIC_YEAR_PATTERN);
   const academicYear =
-    /^\d{4}-\d{4}$/.test(academicYearValue) &&
-    Number(academicYearValue.slice(5, 9)) - Number(academicYearValue.slice(0, 4)) === 1
-      ? academicYearValue
+    academicYearMatch &&
+    Number(academicYearMatch[2]) - Number(academicYearMatch[1]) === 1
+      ? `${academicYearMatch[1]}-${academicYearMatch[2]}`
       : defaults.academicYear;
   const semester = ADMIN_SYSTEM_SETTINGS_SEMESTERS.has(value?.semester as AdminSystemSettings['semester'])
     ? (value?.semester as AdminSystemSettings['semester'])

@@ -340,7 +340,7 @@ export default function StudentProfile() {
 
     if (!isValid) {
       if (!hasValidContactNumber) {
-        toast.error('Use a Philippine mobile number in the format (+63) 9123456789.');
+        toast.error('Use exactly 11 digits starting with 09 for your Philippine mobile number.');
         return;
       }
       if (!hasValidBirthday) {

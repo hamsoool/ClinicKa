@@ -262,6 +262,13 @@
   }
 }
 
+@layer utilities {
+  .pdf-print-exact {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gc-loading-indicator {
     animation: none;

@@ -10,15 +10,13 @@ import StudentPageIntro from '../../components/student-page-intro';
 import { useAuth } from '../../lib/auth';
 import {
   formatAcademicYearLabel,
-  getDefaultAcademicYear,
   getLatestRecordForAcademicYear,
   getNextSubmissionSlot,
   getRecordAcademicYear,
   getSubmissionSlotLabel,
-  normalizeAcademicYear,
   normalizeSubmissionSlot,
 } from '../../lib/academic-year';
-import { useActiveAcademicYearSettingsQuery } from '../../lib/academic-year-query';
+import { useAcademicYear } from '../../lib/academic-year-query';
 import { MedicalFormStepContent } from './medical-form/medical-form-step-content';
 import { useStudentMedicalForm } from './medical-form/use-student-medical-form';
 import { useStudentRecordsQuery } from './student-records-query';
@@ -32,8 +30,7 @@ export default function StudentMedicalForm() {
   const hasDataPrivacyConsent = searchParams.get('consent') === '1';
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const { data: records = [], isLoading: recordsLoading } = useStudentRecordsQuery(studentId, 'summary');
-  const { data: academicYearSettings, isLoading: academicYearLoading } = useActiveAcademicYearSettingsQuery();
-  const activeAcademicYear = normalizeAcademicYear(academicYearSettings?.academicYear || getDefaultAcademicYear());
+  const { academicYear: activeAcademicYear, isLoading: academicYearLoading } = useAcademicYear();
   const selectedSlot = normalizeSubmissionSlot(year);
   const currentAcademicYearRecord = getLatestRecordForAcademicYear(records, activeAcademicYear);
   const expectedSlot = getNextSubmissionSlot(records, activeAcademicYear);
@@ -93,7 +90,7 @@ export default function StudentMedicalForm() {
     if (recordsLoading || academicYearLoading) return;
     if (canAccessSelectedYear) return;
 
-    toast.error(`This school year submission is filed under ${expectedSlot ? getSubmissionSlotLabel(expectedSlot) : 'the next available year level'}.`);
+    toast.error(`This school year submission is filed under ${expectedSlot ? getSubmissionSlotLabel(expectedSlot) : 'the next available record slot'}.`);
     navigate('/student/year-selection', { replace: true });
   }, [academicYearLoading, canAccessSelectedYear, expectedSlot, navigate, recordsLoading]);
 

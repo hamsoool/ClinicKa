@@ -1,7 +1,29 @@
 import type { SubmissionRecord } from './record-types';
 
-const ACADEMIC_YEAR_PATTERN = /^(\d{4})\s*-\s*(\d{4})$/;
-const SUBMISSION_SLOT_LABELS = ['Year I', 'Year II', 'Year III', 'Year IV'] as const;
+const ACADEMIC_YEAR_PATTERN = /^(?:sy\s*)?(\d{4})\s*-\s*(\d{4})$/i;
+export const MAX_SUBMISSION_CYCLE = 8;
+
+function toRomanNumeral(value: number) {
+  const numerals: Array<[number, string]> = [
+    [10, 'X'],
+    [9, 'IX'],
+    [5, 'V'],
+    [4, 'IV'],
+    [1, 'I'],
+  ];
+
+  let remainder = value;
+  let result = '';
+
+  for (const [amount, numeral] of numerals) {
+    while (remainder >= amount) {
+      result += numeral;
+      remainder -= amount;
+    }
+  }
+
+  return result;
+}
 
 export function getDefaultAcademicYear(referenceDate = new Date()) {
   const startYear = referenceDate.getMonth() >= 6 ? referenceDate.getFullYear() : referenceDate.getFullYear() - 1;
@@ -48,19 +70,19 @@ export function getRecordAcademicYear(record?: Pick<SubmissionRecord, 'academicY
 }
 
 export function formatAcademicYearLabel(value?: string | null) {
-  const academicYear = String(value || '').trim();
-  return academicYear ? `SY ${academicYear.replace(/\s*-\s*/, '-')}` : 'School Year';
+  const academicYear = normalizeAcademicYear(value, '');
+  return academicYear ? `SY ${academicYear}` : 'School Year';
 }
 
 export function normalizeSubmissionSlot(value: unknown) {
   const slot = Number.parseInt(String(value || '').trim(), 10);
-  if (!Number.isInteger(slot) || slot < 1 || slot > 4) return null;
+  if (!Number.isInteger(slot) || slot < 1 || slot > MAX_SUBMISSION_CYCLE) return null;
   return slot;
 }
 
 export function getSubmissionSlotLabel(value: unknown) {
   const slot = normalizeSubmissionSlot(value);
-  return slot ? SUBMISSION_SLOT_LABELS[slot - 1] : 'Year Slot';
+  return slot ? `Year ${toRomanNumeral(slot)}` : 'Record Cycle';
 }
 
 export function getLatestRecordForAcademicYear(records: SubmissionRecord[], academicYear: string) {
@@ -80,13 +102,9 @@ export function getNextSubmissionSlot(records: SubmissionRecord[], academicYear:
   const currentSlot = normalizeSubmissionSlot(currentAcademicYearRecord?.year);
   if (currentSlot) return currentSlot;
 
-  const maxSubmittedSlot = records.reduce((max, record) => {
-    const slot = normalizeSubmissionSlot(record?.year);
-    return slot ? Math.max(max, slot) : max;
-  }, 0);
-
-  if (maxSubmittedSlot >= 4) return null;
-  return (maxSubmittedSlot + 1) as 1 | 2 | 3 | 4;
+  const nextSlot = records.length + 1;
+  if (nextSlot > MAX_SUBMISSION_CYCLE) return null;
+  return nextSlot;
 }
 
 export function isCurrentAcademicYearBlocked(record?: SubmissionRecord | null) {

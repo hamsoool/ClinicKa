@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   ArrowLeft,
@@ -57,6 +57,7 @@ import {
   type UrinalysisOcrExtraction,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { STAFF_REVIEW_MUTATION_KEY } from '../../lib/staff-clearance';
 import type { MedicalHistory, SubmissionRecord } from '../../lib/record-types';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
 import {
@@ -120,6 +121,13 @@ type UrinalysisOcrState = {
 
 type OcrRunOutcome = 'filled' | 'filled_with_warning' | 'warning' | 'error' | 'skipped';
 type UpdatedAssessmentFields = Partial<Record<keyof AssessmentForm, boolean>>;
+type PreparedReviewSubmission = {
+  statusToSave: ReviewStatus;
+  notesToSave: string;
+  reviewPayload: any;
+  updatedSubmission: SubmissionDetails;
+  studentId: string;
+};
 
 type RecordForm = {
   studentId: string;
@@ -838,7 +846,6 @@ export default function StaffRecordReview() {
     isDoctorWorkspace || me?.profile.role === 'staff';
   const canFinalizeClearance = hasFullClinicReviewAccess;
   const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
-  const [saving, setSaving] = useState(false);
   const [recordForm, setRecordForm] = useState<RecordForm>(() => createRecordForm());
   const [assessmentForm, setAssessmentForm] = useState<AssessmentForm>(() => createAssessmentForm());
   const [clearanceForm, setClearanceForm] = useState<ClearanceForm>(() => createClearanceForm());
@@ -900,6 +907,235 @@ export default function StaffRecordReview() {
     isLoading: loading,
     isError,
   } = useStaffSubmissionDetailQuery(submissionId);
+
+  const prepareReviewSubmission = (nextStatus?: ReviewStatus, customNotes?: string): PreparedReviewSubmission | null => {
+    if (!submissionId || !submission) return null;
+    if (!/^\d{2}$/.test(recordForm.age)) {
+      toast.error('Age must be exactly 2 digits.');
+      return null;
+    }
+    if (recordForm.contactNumber && !isValidPhilippinePhoneNumber(recordForm.contactNumber)) {
+      toast.error('Contact number must be exactly 11 digits starting with 09.');
+      return null;
+    }
+    if (recordForm.emergencyContact.phone && !isValidPhilippinePhoneNumber(recordForm.emergencyContact.phone)) {
+      toast.error('Emergency contact phone must be exactly 11 digits starting with 09.');
+      return null;
+    }
+
+    const statusToSave = nextStatus || reviewStatus;
+    if (canFinalizeClearance && statusToSave === 'approved' && clearanceForm.purpose.length === 0) {
+      toast.error('Select at least one clearance purpose.');
+      return null;
+    }
+    if (canFinalizeClearance && statusToSave === 'approved' && !clearanceForm.licenseNo.trim()) {
+      toast.error('License number is required before clearing this record.');
+      return null;
+    }
+
+    const medicalRecordDateChecks: Array<[string, string]> = [
+      ['Chest X-Ray date', assessmentForm.xrayDate],
+      ['CBC date', assessmentForm.cbcDate],
+      ['Urinalysis date', assessmentForm.urinalysisDate],
+    ];
+
+    if (canFinalizeClearance) {
+      medicalRecordDateChecks.push(['Issued date', clearanceForm.issuedDate]);
+    }
+
+    for (const [label, value] of medicalRecordDateChecks) {
+      const validationMessage = getMedicalRecordDateValidationMessage(label, value);
+      if (validationMessage) {
+        toast.error(validationMessage);
+        return null;
+      }
+    }
+
+    const notesToSave = customNotes !== undefined ? customNotes : staffNotes;
+    const preserveDoctorField = (
+      field:
+        | 'skin'
+        | 'heent'
+        | 'chestLungs'
+        | 'heart'
+        | 'abdomen'
+        | 'extremities'
+        | 'others'
+        | 'examinedBy',
+      incoming: string,
+    ) => {
+      if (hasFullClinicReviewAccess) return incoming;
+      const trimmedIncoming = String(incoming || '').trim();
+      if (trimmedIncoming) return incoming;
+      return (submission.staffMeasurements as any)?.[field] || '';
+    };
+
+    const staffMeasurementsPayload = {
+      bloodPressure: assessmentForm.bloodPressure,
+      cardiacRate: assessmentForm.cardiacRate,
+      respiratoryRate: assessmentForm.respiratoryRate,
+      temperature: assessmentForm.temperature,
+      weight: assessmentForm.weight,
+      height: assessmentForm.height,
+      bmi: assessmentForm.bmi,
+      visualAcuity: assessmentForm.visualAcuity,
+      skin: preserveDoctorField('skin', assessmentForm.skin),
+      heent: preserveDoctorField('heent', assessmentForm.heent),
+      chestLungs: preserveDoctorField('chestLungs', assessmentForm.chestLungs),
+      heart: preserveDoctorField('heart', assessmentForm.heart),
+      abdomen: preserveDoctorField('abdomen', assessmentForm.abdomen),
+      extremities: preserveDoctorField('extremities', assessmentForm.extremities),
+      others: preserveDoctorField('others', assessmentForm.others),
+      examinedBy: preserveDoctorField('examinedBy', assessmentForm.examinedBy),
+      staff_notes: notesToSave,
+    };
+    const clearanceInfoPayload = {
+      ...clearanceForm,
+      signatoryName: normalizeClearanceSignatoryName(clearanceForm.signatoryName),
+      purpose: serializeClearancePurposes(clearanceForm.purpose),
+    };
+
+    return {
+      statusToSave,
+      notesToSave,
+      studentId: recordForm.studentId || submission.studentId,
+      reviewPayload: {
+        personalInfo: {
+          studentId: recordForm.studentId,
+          firstName: recordForm.firstName,
+          lastName: recordForm.lastName,
+          middleInitial: recordForm.middleInitial,
+          department: recordForm.department,
+          course: recordForm.course,
+          year: recordForm.year,
+          age: recordForm.age,
+          sex: recordForm.sex,
+          birthday: recordForm.birthday,
+          civilStatus: recordForm.civilStatus,
+          contactNumber: recordForm.contactNumber,
+          address: recordForm.address,
+        },
+        emergencyContact: recordForm.emergencyContact,
+        medicalHistory: recordForm.medicalHistory,
+        allergyDetails: recordForm.allergyDetails,
+        hadOperation: recordForm.hadOperation,
+        operationDetails: recordForm.operationDetails,
+        studentMeasurements: {
+          weight: recordForm.weight,
+          height: recordForm.height,
+          bmi: recordForm.bmi,
+        },
+        staffMeasurements: staffMeasurementsPayload,
+        labResults: {
+          xrayDate: assessmentForm.xrayDate,
+          xrayResult: assessmentForm.xrayResult,
+          xrayFindings: assessmentForm.xrayFindings,
+          cbcDate: assessmentForm.cbcDate,
+          hemoglobin: assessmentForm.hemoglobin,
+          hematocrit: assessmentForm.hematocrit,
+          wbc: assessmentForm.wbc,
+          plateletCount: assessmentForm.plateletCount,
+          bloodType: assessmentForm.bloodType,
+          glucose: assessmentForm.glucose,
+          protein: assessmentForm.protein,
+          urinalysisDate: assessmentForm.urinalysisDate,
+          urinalysisGlucose: assessmentForm.urinalysisGlucose,
+          urinalysisProtein: assessmentForm.urinalysisProtein,
+        },
+        clearanceInfo: clearanceInfoPayload,
+        staffNotes: notesToSave,
+        status: statusToSave,
+      },
+      updatedSubmission: {
+        ...submission,
+        firstName: recordForm.firstName,
+        lastName: recordForm.lastName,
+        middleInitial: recordForm.middleInitial,
+        department: recordForm.department,
+        course: recordForm.course,
+        year: recordForm.year,
+        age: recordForm.age,
+        sex: recordForm.sex,
+        birthday: recordForm.birthday,
+        civilStatus: recordForm.civilStatus,
+        contactNumber: recordForm.contactNumber,
+        address: recordForm.address,
+        allergyDetails: recordForm.allergyDetails,
+        hadOperation: recordForm.hadOperation,
+        operationDetails: recordForm.operationDetails,
+        weight: recordForm.weight,
+        height: recordForm.height,
+        bmi: recordForm.bmi,
+        emergencyContact: recordForm.emergencyContact,
+        medicalHistory: recordForm.medicalHistory,
+        staffMeasurements: {
+          ...staffMeasurementsPayload,
+          examinedBySignatureUrl: currentStaffSignatureUrl || submission.staffMeasurements?.examinedBySignatureUrl,
+        },
+        labResults: {
+          xrayDate: assessmentForm.xrayDate,
+          xrayResult: assessmentForm.xrayResult,
+          xrayFindings: assessmentForm.xrayFindings,
+          cbcDate: assessmentForm.cbcDate,
+          hemoglobin: assessmentForm.hemoglobin,
+          hematocrit: assessmentForm.hematocrit,
+          wbc: assessmentForm.wbc,
+          plateletCount: assessmentForm.plateletCount,
+          bloodType: assessmentForm.bloodType,
+          glucose: assessmentForm.glucose,
+          protein: assessmentForm.protein,
+          urinalysisDate: assessmentForm.urinalysisDate,
+          urinalysisGlucose: assessmentForm.urinalysisGlucose,
+          urinalysisProtein: assessmentForm.urinalysisProtein,
+        },
+        clearanceInfo: clearanceInfoPayload,
+        staffNotes: notesToSave,
+        status: statusToSave,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  };
+
+  const backgroundReviewMutation = useMutation({
+    mutationKey: [...STAFF_REVIEW_MUTATION_KEY, submissionId || 'unknown'],
+    mutationFn: async ({ prepared }: { prepared: PreparedReviewSubmission; action: ReviewAction }) => {
+      if (!submissionId) {
+        throw new Error('Submission ID is required to update this record.');
+      }
+
+      await saveSubmissionReview(submissionId, prepared.reviewPayload);
+      return prepared;
+    },
+    onSuccess: async (prepared, variables) => {
+      setSubmission(prepared.updatedSubmission);
+      setReviewStatus(prepared.statusToSave);
+      await invalidateStaffWorkflowQueries(queryClient, submissionId, prepared.studentId);
+      if (variables.action === 'cleared') {
+        toast.success('Medical clearance approved and issued.');
+        return;
+      }
+      if (variables.action === 'pending') {
+        toast.success(
+          `Record returned for correction with note: "${prepared.notesToSave.substring(0, 30)}${prepared.notesToSave.length > 30 ? '...' : ''}"`,
+        );
+        return;
+      }
+      toast.success('Review saved as draft.');
+    },
+    onError: (error, variables) => {
+      console.error('Error saving review in background:', error);
+      toast.error(
+        variables.action === 'cleared'
+          ? 'Failed to clear this medical record.'
+          : variables.action === 'pending'
+            ? 'Failed to mark this record as pending.'
+            : 'Failed to save review changes.',
+      );
+    },
+    onSettled: () => {
+      setSavingAction(null);
+    },
+  });
 
   useEffect(() => {
     if (!me?.profile?.id) {
@@ -1837,212 +2073,19 @@ export default function StaffRecordReview() {
     }
   }
 
-  async function persistReview(nextStatus?: ReviewStatus, customNotes?: string, action?: ReviewAction) {
-    if (!submissionId || !submission) return;
-    if (!/^\d{2}$/.test(recordForm.age)) {
-      toast.error('Age must be exactly 2 digits.');
-      return;
-    }
-    if (recordForm.contactNumber && !isValidPhilippinePhoneNumber(recordForm.contactNumber)) {
-      toast.error('Contact number must follow (+63) 9XXXXXXXXX.');
-      return;
-    }
-    if (recordForm.emergencyContact.phone && !isValidPhilippinePhoneNumber(recordForm.emergencyContact.phone)) {
-      toast.error('Emergency contact phone must follow (+63) 9XXXXXXXXX.');
-      return;
-    }
-    const targetStatus = nextStatus || reviewStatus;
-    if (canFinalizeClearance && targetStatus === 'approved' && clearanceForm.purpose.length === 0) {
-      toast.error('Select at least one clearance purpose.');
-      return;
-    }
-    if (canFinalizeClearance && targetStatus === 'approved' && !clearanceForm.licenseNo.trim()) {
-      toast.error('License number is required before clearing this record.');
-      return;
-    }
+  function queueBackgroundReview(action: ReviewAction, nextStatus?: ReviewStatus, customNotes?: string) {
+    const prepared = prepareReviewSubmission(nextStatus, customNotes);
+    if (!prepared) return;
 
-    const medicalRecordDateChecks: Array<[string, string]> = [
-      ['Chest X-Ray date', assessmentForm.xrayDate],
-      ['CBC date', assessmentForm.cbcDate],
-      ['Urinalysis date', assessmentForm.urinalysisDate],
-    ];
-
-    if (canFinalizeClearance) {
-      medicalRecordDateChecks.push(['Issued date', clearanceForm.issuedDate]);
-    }
-
-    for (const [label, value] of medicalRecordDateChecks) {
-      const validationMessage = getMedicalRecordDateValidationMessage(label, value);
-      if (validationMessage) {
-        toast.error(validationMessage);
-        return;
-      }
-    }
-
-    setSavingAction(action ?? null);
-    setSaving(true);
-    try {
-      const statusToSave = targetStatus;
-      const notesToSave = customNotes !== undefined ? customNotes : staffNotes;
-      const preserveDoctorField = (
-        field:
-          | 'skin'
-          | 'heent'
-          | 'chestLungs'
-          | 'heart'
-          | 'abdomen'
-          | 'extremities'
-          | 'others'
-          | 'examinedBy',
-        incoming: string,
-      ) => {
-        if (hasFullClinicReviewAccess) return incoming;
-        const trimmedIncoming = String(incoming || '').trim();
-        if (trimmedIncoming) return incoming;
-        return (submission.staffMeasurements as any)?.[field] || '';
-      };
-      const staffMeasurementsPayload = {
-        bloodPressure: assessmentForm.bloodPressure,
-        cardiacRate: assessmentForm.cardiacRate,
-        respiratoryRate: assessmentForm.respiratoryRate,
-        temperature: assessmentForm.temperature,
-        weight: assessmentForm.weight,
-        height: assessmentForm.height,
-        bmi: assessmentForm.bmi,
-        visualAcuity: assessmentForm.visualAcuity,
-        skin: preserveDoctorField('skin', assessmentForm.skin),
-        heent: preserveDoctorField('heent', assessmentForm.heent),
-        chestLungs: preserveDoctorField('chestLungs', assessmentForm.chestLungs),
-        heart: preserveDoctorField('heart', assessmentForm.heart),
-        abdomen: preserveDoctorField('abdomen', assessmentForm.abdomen),
-        extremities: preserveDoctorField('extremities', assessmentForm.extremities),
-        others: preserveDoctorField('others', assessmentForm.others),
-        examinedBy: preserveDoctorField('examinedBy', assessmentForm.examinedBy),
-        staff_notes: notesToSave,
-      };
-      const clearanceInfoPayload = {
-        ...clearanceForm,
-        signatoryName: normalizeClearanceSignatoryName(clearanceForm.signatoryName),
-        purpose: serializeClearancePurposes(clearanceForm.purpose),
-      };
-
-      await saveSubmissionReview(submissionId, {
-        personalInfo: {
-          studentId: recordForm.studentId,
-          firstName: recordForm.firstName,
-          lastName: recordForm.lastName,
-          middleInitial: recordForm.middleInitial,
-          department: recordForm.department,
-          course: recordForm.course,
-          year: recordForm.year,
-          age: recordForm.age,
-          sex: recordForm.sex,
-          birthday: recordForm.birthday,
-          civilStatus: recordForm.civilStatus,
-          contactNumber: recordForm.contactNumber,
-          address: recordForm.address,
-        },
-        emergencyContact: recordForm.emergencyContact,
-        medicalHistory: recordForm.medicalHistory,
-        allergyDetails: recordForm.allergyDetails,
-        hadOperation: recordForm.hadOperation,
-        operationDetails: recordForm.operationDetails,
-        studentMeasurements: {
-          weight: recordForm.weight,
-          height: recordForm.height,
-          bmi: recordForm.bmi,
-        },
-        staffMeasurements: staffMeasurementsPayload,
-        labResults: {
-          xrayDate: assessmentForm.xrayDate,
-          xrayResult: assessmentForm.xrayResult,
-          xrayFindings: assessmentForm.xrayFindings,
-          cbcDate: assessmentForm.cbcDate,
-          hemoglobin: assessmentForm.hemoglobin,
-          hematocrit: assessmentForm.hematocrit,
-          wbc: assessmentForm.wbc,
-          plateletCount: assessmentForm.plateletCount,
-          bloodType: assessmentForm.bloodType,
-          glucose: assessmentForm.glucose,
-          protein: assessmentForm.protein,
-          urinalysisDate: assessmentForm.urinalysisDate,
-          urinalysisGlucose: assessmentForm.urinalysisGlucose,
-          urinalysisProtein: assessmentForm.urinalysisProtein,
-        },
-        clearanceInfo: clearanceInfoPayload,
-        staffNotes: notesToSave,
-        status: statusToSave,
-      });
-
-      const updatedSubmission: SubmissionDetails = {
-        ...submission,
-        firstName: recordForm.firstName,
-        lastName: recordForm.lastName,
-        middleInitial: recordForm.middleInitial,
-        department: recordForm.department,
-        course: recordForm.course,
-        year: recordForm.year,
-        age: recordForm.age,
-        sex: recordForm.sex,
-        birthday: recordForm.birthday,
-        civilStatus: recordForm.civilStatus,
-        contactNumber: recordForm.contactNumber,
-        address: recordForm.address,
-        allergyDetails: recordForm.allergyDetails,
-        hadOperation: recordForm.hadOperation,
-        operationDetails: recordForm.operationDetails,
-        weight: recordForm.weight,
-        height: recordForm.height,
-        bmi: recordForm.bmi,
-        emergencyContact: recordForm.emergencyContact,
-        medicalHistory: recordForm.medicalHistory,
-        staffMeasurements: {
-          ...staffMeasurementsPayload,
-          examinedBySignatureUrl: currentStaffSignatureUrl || submission.staffMeasurements?.examinedBySignatureUrl,
-        },
-        labResults: {
-          xrayDate: assessmentForm.xrayDate,
-          xrayResult: assessmentForm.xrayResult,
-          xrayFindings: assessmentForm.xrayFindings,
-          cbcDate: assessmentForm.cbcDate,
-          hemoglobin: assessmentForm.hemoglobin,
-          hematocrit: assessmentForm.hematocrit,
-          wbc: assessmentForm.wbc,
-          plateletCount: assessmentForm.plateletCount,
-          bloodType: assessmentForm.bloodType,
-          glucose: assessmentForm.glucose,
-          protein: assessmentForm.protein,
-          urinalysisDate: assessmentForm.urinalysisDate,
-          urinalysisGlucose: assessmentForm.urinalysisGlucose,
-          urinalysisProtein: assessmentForm.urinalysisProtein,
-        },
-        clearanceInfo: clearanceInfoPayload,
-        staffNotes: notesToSave,
-        status: statusToSave,
-        updatedAt: new Date().toISOString(),
-      };
-
-      setSubmission(updatedSubmission);
-      setReviewStatus(statusToSave);
-      await invalidateStaffWorkflowQueries(
-        queryClient,
-        submissionId,
-        recordForm.studentId || submission.studentId,
-      );
-      toast.success(
-        nextStatus === 'approved'
-          ? 'Medical clearance approved and issued.'
-          : nextStatus === 'returned'
-            ? `Record returned for correction with note: "${notesToSave.substring(0, 30)}${notesToSave.length > 30 ? '...' : ''}"`
-            : 'Review saved as draft.',
-      );
-    } catch (error) {
-      console.error('Error saving review:', error);
-      toast.error('Failed to save review changes');
-    } finally {
-      setSaving(false);
-      setSavingAction(null);
-    }
+    setSavingAction(action);
+    backgroundReviewMutation.mutate({ prepared, action });
+    toast.success(
+      action === 'cleared'
+        ? 'Medical clearance is processing in the background. You can continue working while it finishes.'
+        : action === 'pending'
+          ? 'Pending update is processing in the background. You can continue working while it finishes.'
+          : 'Review save is processing in the background. You can continue working while it finishes.',
+    );
   }
 
   if (loading) {
@@ -2405,7 +2448,8 @@ export default function StaffRecordReview() {
                       value={recordForm.emergencyContact.phone}
                       onChange={(event) => updateEmergencyContact('phone', event.target.value)}
                       inputMode="numeric"
-                      placeholder="(+63) 9123456789"
+                      maxLength={11}
+                      placeholder="09XXXXXXXXX"
                       className="mt-2"
                     />
                   </div>
@@ -3304,30 +3348,30 @@ export default function StaffRecordReview() {
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button
               variant="outline"
-              onClick={() => void persistReview(isArchiveEditMode ? 'approved' : undefined, undefined, 'save')}
-              disabled={saving}
-              loading={saving && savingAction === 'save'}
+              onClick={() => queueBackgroundReview('save', isArchiveEditMode ? 'approved' : undefined)}
+              disabled={backgroundReviewMutation.isPending}
+              loading={backgroundReviewMutation.isPending && savingAction === 'save'}
             >
               <Save className="mr-2 h-4 w-4" />
-              {saving && savingAction === 'save' ? 'Saving...' : 'Save Review'}
+              {backgroundReviewMutation.isPending && savingAction === 'save' ? 'Saving in background...' : 'Save Review'}
             </Button>
             {!isArchiveEditMode ? (
             <Button variant="destructive" onClick={() => {
               setReturnReason(staffNotes);
               setShowReturnDialog(true);
-            }} disabled={saving}>
+            }} disabled={backgroundReviewMutation.isPending}>
               Pending
             </Button>
             ) : null}
             {canFinalizeClearance && !isArchiveEditMode ? (
               <Button
-                onClick={() => void persistReview('approved', undefined, 'cleared')}
-                disabled={saving}
-                loading={saving && savingAction === 'cleared'}
+                onClick={() => queueBackgroundReview('cleared', 'approved')}
+                disabled={backgroundReviewMutation.isPending}
+                loading={backgroundReviewMutation.isPending && savingAction === 'cleared'}
                 className="bg-green-600 text-white hover:bg-green-700"
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                {saving && savingAction === 'cleared' ? 'Clearing...' : 'Cleared'}
+                {backgroundReviewMutation.isPending && savingAction === 'cleared' ? 'Clearing in background...' : 'Cleared'}
               </Button>
             ) : null}
           </div>
@@ -3360,15 +3404,15 @@ export default function StaffRecordReview() {
             <Button variant="outline" onClick={() => setShowReturnDialog(false)}>Cancel</Button>
             <Button
               variant="destructive"
-              onClick={async () => {
+              onClick={() => {
                 setStaffNotes(returnReason);
-                await persistReview('returned', returnReason, 'pending');
+                queueBackgroundReview('pending', 'returned', returnReason);
                 setShowReturnDialog(false);
               }}
-              disabled={!returnReason.trim() || saving}
-              loading={saving && savingAction === 'pending'}
+              disabled={!returnReason.trim() || backgroundReviewMutation.isPending}
+              loading={backgroundReviewMutation.isPending && savingAction === 'pending'}
             >
-              {saving && savingAction === 'pending' ? 'Saving Pending...' : 'Confirm Pending'}
+              {backgroundReviewMutation.isPending && savingAction === 'pending' ? 'Pending in background...' : 'Confirm Pending'}
             </Button>
           </DialogFooter>
         </DialogContent>

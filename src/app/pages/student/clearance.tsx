@@ -14,6 +14,7 @@ import MedicalRecordPreview from '../../components/medical-record-preview';
 import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel } from '../../lib/academic-year';
+import { useAcademicYear } from '../../lib/academic-year-query';
 import { useStudentRecordsQuery } from './student-records-query';
 
 type StudentClearanceTab = 'history' | 'form' | 'medical-clearance';
@@ -52,8 +53,8 @@ export default function StudentClearance() {
   const clearanceRef = useRef<HTMLDivElement>(null);
   const activeTab = normalizeClearanceTab(searchParams.get('tab'));
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
-  const [selectedYear, setSelectedYear] = useState<string>(searchParams.get('year') || 'all');
   const { me } = useAuth();
+  const { academicYear: activeAcademicYear } = useAcademicYear();
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
 
   // Inject styles once on mount
@@ -75,19 +76,20 @@ export default function StudentClearance() {
       ),
     [records],
   );
+  const requestedYear = searchParams.get('year') || 'all';
+  const selectedYear =
+    !loading && requestedYear !== 'all' && !yearOptions.includes(requestedYear)
+      ? 'all'
+      : requestedYear;
 
   useEffect(() => {
-    if (selectedYear !== 'all' && !yearOptions.includes(selectedYear)) {
-      setSelectedYear('all');
-    }
-  }, [selectedYear, yearOptions]);
+    if (loading) return;
+    if (requestedYear === 'all' || yearOptions.includes(requestedYear)) return;
 
-  useEffect(() => {
-    const requestedYear = searchParams.get('year') || 'all';
-    if (requestedYear !== selectedYear) {
-      setSelectedYear(requestedYear);
-    }
-  }, [searchParams, selectedYear]);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('year');
+    setSearchParams(nextParams, { replace: true });
+  }, [loading, requestedYear, searchParams, setSearchParams, yearOptions]);
 
   const filteredRecords = useMemo(
     () => (selectedYear === 'all' ? records : records.filter((entry) => String(entry.year || '') === selectedYear)),
@@ -102,57 +104,12 @@ export default function StudentClearance() {
     (a, b) => new Date(b.updatedAt || b.submittedAt).getTime() - new Date(a.updatedAt || a.submittedAt).getTime(),
   );
   const profileRecord = sortedRecords[0] || null;
-  const examCompletenessScore = (entry: SubmissionRecord) => {
-    const exam = entry.staffMeasurements || {};
-    const values = [
-      exam.bloodPressure,
-      exam.cardiacRate,
-      exam.respiratoryRate,
-      exam.temperature,
-      exam.weight,
-      exam.height,
-      exam.bmi,
-      exam.visualAcuity,
-      exam.skin,
-      exam.heent,
-      exam.chestLungs,
-      exam.heart,
-      exam.abdomen,
-      exam.extremities,
-      exam.others,
-      exam.examinedBy,
-      entry.bloodPressure,
-      entry.weight,
-      entry.height,
-      entry.bmi,
-    ];
-
-    return values.filter((value) => String(value || '').trim().length > 0).length;
-  };
-
-  const latestRecordPerYear = records.reduce<Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>>((acc, item) => {
-    const yearNum = Number.parseInt(String(item.year || ''), 10) as 1 | 2 | 3 | 4;
-    if (![1, 2, 3, 4].includes(yearNum)) return acc;
-    const current = acc[yearNum];
-    if (!current) {
-      acc[yearNum] = item;
-      return acc;
-    }
-    const currentScore = examCompletenessScore(current);
-    const nextScore = examCompletenessScore(item);
-    if (nextScore > currentScore) {
-      acc[yearNum] = item;
-      return acc;
-    }
-    if (currentScore > nextScore) {
-      return acc;
-    }
-    const currentTs = new Date(current.updatedAt || current.submittedAt).getTime();
-    const nextTs = new Date(item.updatedAt || item.submittedAt).getTime();
-    if (nextTs >= currentTs) acc[yearNum] = item;
-    return acc;
-  }, {});
-
+  const recordAcademicYearLabel = profileRecord
+    ? formatAcademicYearLabel(getRecordAcademicYear(profileRecord, activeAcademicYear))
+    : formatAcademicYearLabel(activeAcademicYear);
+  const clearanceAcademicYearLabel = record
+    ? formatAcademicYearLabel(getRecordAcademicYear(record, activeAcademicYear))
+    : formatAcademicYearLabel(activeAcademicYear);
   useEffect(() => {
     if (isError) {
       toast.error('Failed to load clearance details');
@@ -174,6 +131,7 @@ export default function StudentClearance() {
       exportRoot.style.background = '#fff';
       exportRoot.style.padding = '0';
       exportRoot.style.margin = '0';
+      exportRoot.style.paddingBottom = '10px';
 
       const clone = clearanceRef.current.cloneNode(true) as HTMLDivElement;
       clone.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
@@ -185,14 +143,14 @@ export default function StudentClearance() {
       exportRoot.appendChild(clone);
       document.body.appendChild(exportRoot);
 
-      const canvas = await html2canvas(clone, {
+      const canvas = await html2canvas(exportRoot, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
         width: CLEARANCE_PREVIEW_BASE_WIDTH,
-        height: clone.scrollHeight,
+        height: exportRoot.scrollHeight,
         windowWidth: CLEARANCE_PREVIEW_BASE_WIDTH,
-        windowHeight: clone.scrollHeight,
+        windowHeight: exportRoot.scrollHeight,
       });
       document.body.removeChild(exportRoot);
 
@@ -265,7 +223,27 @@ export default function StudentClearance() {
         import('jspdf'),
       ]);
 
-      const canvas = await html2canvas(recordPreviewRef.current, {
+      const exportRoot = document.createElement('div');
+      exportRoot.style.position = 'fixed';
+      exportRoot.style.left = '-10000px';
+      exportRoot.style.top = '0';
+      exportRoot.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
+      exportRoot.style.background = '#fff';
+      exportRoot.style.padding = '0';
+      exportRoot.style.margin = '0';
+      exportRoot.style.overflow = 'hidden';
+
+      const clone = recordPreviewRef.current.cloneNode(true) as HTMLDivElement;
+      clone.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
+      clone.style.maxWidth = `${RECORD_PREVIEW_BASE_WIDTH}px`;
+      clone.style.margin = '0';
+      clone.style.padding = '0';
+      clone.style.transform = 'none';
+
+      exportRoot.appendChild(clone);
+      document.body.appendChild(exportRoot);
+
+      const canvas = await html2canvas(clone, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
@@ -274,6 +252,7 @@ export default function StudentClearance() {
         windowWidth: RECORD_PREVIEW_BASE_WIDTH,
         windowHeight: RECORD_PREVIEW_BASE_HEIGHT,
       });
+      document.body.removeChild(exportRoot);
 
       const pdf = new jsPDF({
         orientation: 'portrait',
@@ -309,7 +288,6 @@ export default function StudentClearance() {
   };
 
   const handleYearChange = (value: string) => {
-    setSelectedYear(value);
     const nextParams = new URLSearchParams(searchParams);
     if (value === 'all') {
       nextParams.delete('year');
@@ -503,13 +481,18 @@ export default function StudentClearance() {
                   <div className="overflow-hidden rounded-lg border bg-muted/30">
                     <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
                       <div className="overflow-x-auto overscroll-x-contain">
-                        <div className="flex min-w-full justify-start lg:justify-center">
+                        <div className="flex min-w-full justify-start print:w-full lg:justify-center">
                           <div
                             ref={recordPreviewFrameRef}
-                            className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5"
+                            className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5 print:w-[816px]"
                             style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                           >
-                            <MedicalRecordPreview ref={recordPreviewRef} record={profileRecord} yearlyRecords={latestRecordPerYear} />
+                            <MedicalRecordPreview
+                              ref={recordPreviewRef}
+                              record={profileRecord}
+                              records={sortedRecords}
+                              academicYearLabel={recordAcademicYearLabel}
+                            />
                           </div>
                         </div>
                       </div>
@@ -529,13 +512,13 @@ export default function StudentClearance() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col gap-2 sm:max-w-xs">
-                <p className="text-sm font-medium">Filter by Year Level</p>
+                <p className="text-sm font-medium">Filter by Record Slot</p>
                 <Select value={selectedYear} onValueChange={handleYearChange}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select year level" />
+                    <SelectValue placeholder="Select record slot" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Year Levels</SelectItem>
+                    <SelectItem value="all">All Record Slots</SelectItem>
                     {yearOptions.map((year) => (
                       <SelectItem key={year} value={year}>
                         {getSubmissionSlotLabel(year)}
@@ -553,7 +536,7 @@ export default function StudentClearance() {
                 <FileText className="mb-4 h-16 w-16 text-muted-foreground" />
                 <p className="mb-2 text-lg font-medium">No Record Found</p>
                 <p className="max-w-md text-muted-foreground">
-                  No medical record matched the selected year level. Try another option or submit a form first.
+                  No medical record matched the selected record slot. Try another option or submit a form first.
                 </p>
               </CardContent>
             </Card>
@@ -661,12 +644,14 @@ export default function StudentClearance() {
                       Swipe sideways on mobile to view the full medical clearance.
                     </p>
                     <div className="overflow-hidden rounded-lg border bg-white">
-                      <div className="px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
-                        <div className="overflow-x-auto overscroll-x-contain">
-                          <div className="w-max lg:w-full">
-                            <div className="lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
-                              <MedicalClearancePreview ref={clearanceRef} record={record} />
-                            </div>
+                      <div className="overflow-auto overscroll-contain px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh]">
+                        <div className="w-max print:w-full lg:w-full">
+                          <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
+                            <MedicalClearancePreview
+                              ref={clearanceRef}
+                              record={record}
+                              academicYearLabel={clearanceAcademicYearLabel}
+                            />
                           </div>
                         </div>
                       </div>

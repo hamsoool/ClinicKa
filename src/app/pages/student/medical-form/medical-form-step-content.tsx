@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../../components/ui/textarea';
 import {
   EMERGENCY_CONTACT_RELATIONSHIPS,
+  isValidPhilippinePhoneNumber,
   LAB_TEST_SITE_OPTIONS,
   MEDICAL_CONDITIONS,
   YEAR_LEVELS,
@@ -76,7 +77,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     !formData.emergencyContact.name?.trim(),
     !formData.emergencyContact.relationship?.trim(),
     !formData.emergencyContact.phone?.trim(),
-    formData.emergencyContact.phone ? !/^\(\+63\)\s9\d{9}$/.test(formData.emergencyContact.phone.trim()) : false,
+    formData.emergencyContact.phone ? !isValidPhilippinePhoneNumber(formData.emergencyContact.phone) : false,
     !formData.emergencyContact.address?.trim(),
   ].filter(Boolean).length;
 
@@ -288,39 +289,62 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
       );
     case 3:
       return (
-        <div className="space-y-4">
-          <h3 className="mb-4 text-xl font-semibold">Operations & Emergency Contact</h3>
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <h3 className="text-xl font-semibold">Operations & Emergency Contact</h3>
+            <p className="text-sm text-muted-foreground">
+              Share your operation history and the person the clinic should contact if an emergency happens.
+            </p>
+          </div>
           {stepThreeMissingRequired > 0 ? (
             <div className="break-words rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               Required fields are missing or invalid. Please complete all fields marked with{' '}
               <span className="font-semibold">*</span>.
             </div>
           ) : null}
-          <div>
-            <Label>Have you had any operation in the past? *</Label>
-            <RadioGroup
-              value={formData.hadOperation}
-              onValueChange={(value) => onFieldChange('hadOperation', value as 'yes' | 'no')}
-              className={requiredFieldClass(!formData.hadOperation)}
-            >
-              <div className="mt-2 flex gap-4">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="yes" id="op-yes" />
-                  <Label htmlFor="op-yes" className="font-normal">
+          <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-5">
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-semibold text-on-surface">Operation History</h4>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Let the clinic know if you have undergone any operation before.
+                </p>
+              </div>
+              <div>
+                <Label>Have you had any operation in the past? *</Label>
+                <RadioGroup
+                  value={formData.hadOperation}
+                  onValueChange={(value) => onFieldChange('hadOperation', value as 'yes' | 'no')}
+                  className={`mt-3 grid gap-3 sm:grid-cols-2 ${requiredFieldClass(!formData.hadOperation)}`}
+                >
+                  <Label
+                    htmlFor="op-yes"
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+                      formData.hadOperation === 'yes'
+                        ? 'border-primary bg-primary/5 text-primary'
+                        : 'border-outline-variant/40 bg-white/80 text-on-surface hover:border-primary/40'
+                    }`}
+                  >
+                    <RadioGroupItem value="yes" id="op-yes" />
                     Yes
                   </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="no" id="op-no" />
-                  <Label htmlFor="op-no" className="font-normal">
+                  <Label
+                    htmlFor="op-no"
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+                      formData.hadOperation === 'no'
+                        ? 'border-primary bg-primary/5 text-primary'
+                        : 'border-outline-variant/40 bg-white/80 text-on-surface hover:border-primary/40'
+                    }`}
+                  >
+                    <RadioGroupItem value="no" id="op-no" />
                     No
                   </Label>
-                </div>
+                </RadioGroup>
               </div>
-            </RadioGroup>
+            </div>
           </div>
           {formData.hadOperation === 'yes' && (
-            <div>
+            <div className="rounded-xl border border-outline-variant/40 bg-white/80 p-5">
               <Label htmlFor="operationDetails">Nature of operation and date/year</Label>
               <Textarea
                 id="operationDetails"
@@ -328,13 +352,22 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 onChange={(event) => onFieldChange('operationDetails', event.target.value)}
                 placeholder="Please describe the operation..."
                 maxLength={120}
+                rows={3}
+                className="mt-2 min-h-[96px] resize-none"
               />
             </div>
           )}
-          <div className="mt-6 border-t pt-4">
-            <h4 className="mb-4 font-semibold">Emergency Contact Person</h4>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-5">
+            <div className="border-b border-outline-variant/30 pb-4">
               <div>
+                <h4 className="font-semibold text-on-surface">Emergency Contact Person</h4>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Add someone the clinic can contact quickly if urgent care is needed.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
                 <Label htmlFor="ecName">Name *</Label>
                 <Input
                   id="ecName"
@@ -343,7 +376,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   className={requiredFieldClass(!formData.emergencyContact.name?.trim())}
                 />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="ecRelationship">Relationship *</Label>
                 <Select
                   value={formData.emergencyContact.relationship}
@@ -364,43 +397,49 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="ecPhone">Cellphone Number *</Label>
                 <Input
                   id="ecPhone"
                   value={formData.emergencyContact.phone}
                   onChange={(event) => onEmergencyContactChange('phone', event.target.value)}
-                  placeholder="(+63) 9123456789"
+                  placeholder="09XXXXXXXXX"
                   inputMode="numeric"
-                  maxLength={16}
+                  maxLength={11}
                   className={requiredFieldClass(
                     !formData.emergencyContact.phone?.trim() ||
-                      !/^\(\+63\)\s9\d{9}$/.test(formData.emergencyContact.phone.trim()),
+                      !isValidPhilippinePhoneNumber(formData.emergencyContact.phone),
                   )}
                 />
-                <p className="mt-1 text-xs text-muted-foreground">Use a valid Philippine mobile number starting with (+63).</p>
+                <p className="text-xs text-muted-foreground">Use exactly 11 digits starting with 09.</p>
               </div>
-              <div className="md:col-span-2 xl:col-span-4">
-                <div className="mb-2 flex items-center gap-2">
-                  <Checkbox
-                    id="ecAddressSameAsStudent"
-                    checked={isEmergencyAddressSameAsStudent}
-                    onCheckedChange={(checked) => onEmergencyAddressSyncChange(checked === true)}
-                  />
-                  <Label htmlFor="ecAddressSameAsStudent" className="font-normal">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="ecAddress">Address *</Label>
+                  <Label
+                    htmlFor="ecAddressSameAsStudent"
+                    className="inline-flex cursor-pointer items-center gap-2 text-xs font-normal text-on-surface"
+                  >
+                    <Checkbox
+                      id="ecAddressSameAsStudent"
+                      checked={isEmergencyAddressSameAsStudent}
+                      onCheckedChange={(checked) => onEmergencyAddressSyncChange(checked === true)}
+                      className="size-4"
+                    />
                     Same as student address
                   </Label>
                 </div>
-                <Label htmlFor="ecAddress">Address *</Label>
                 <Input
                   id="ecAddress"
                   value={formData.emergencyContact.address}
                   onChange={(event) => onEmergencyContactChange('address', event.target.value)}
                   disabled={isEmergencyAddressSameAsStudent}
-                  className={requiredFieldClass(!formData.emergencyContact.address?.trim())}
+                  placeholder="House number, street, barangay, city"
+                  className={`bg-white/90 ${requiredFieldClass(!formData.emergencyContact.address?.trim())}`}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {isEmergencyAddressSameAsStudent ? 'Synced from your profile address' : 'Keep this brief but complete'}
+                </p>
               </div>
             </div>
           </div>

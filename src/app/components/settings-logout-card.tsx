@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LogOut } from 'lucide-react';
-import { useAuth } from '../lib/auth';
+import { toast } from 'sonner';
+import { LogoutBlockedError, useAuth } from '../lib/auth';
 import { Button } from './ui/button';
 import {
   AlertDialog,
@@ -22,12 +23,23 @@ export default function SettingsLogoutCard({
   className,
 }: SettingsLogoutCardProps) {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, pendingStaffClearanceCount } = useAuth();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [blockedOpen, setBlockedOpen] = useState(false);
 
   const handleSignOut = async () => {
-    await logout();
-    navigate('/');
+    try {
+      await logout();
+      navigate('/');
+    } catch (error) {
+      if (error instanceof LogoutBlockedError) {
+        setConfirmOpen(false);
+        setBlockedOpen(true);
+        return;
+      }
+
+      toast.error(error instanceof Error ? error.message : 'Unable to log out right now.');
+    }
   };
 
   return (
@@ -60,6 +72,27 @@ export default function SettingsLogoutCard({
               className="bg-primary text-white hover:bg-primary/90"
             >
               Logout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={blockedOpen} onOpenChange={setBlockedOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Background clearance still in progress</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingStaffClearanceCount > 1
+                ? `${pendingStaffClearanceCount} medical clearances are still being processed in the background. Please wait until they finish before logging out.`
+                : 'A medical clearance is still being processed in the background. Please wait until it finishes before logging out.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction
+              onClick={() => setBlockedOpen(false)}
+              className="bg-primary text-white hover:bg-primary/90"
+            >
+              I Understand
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

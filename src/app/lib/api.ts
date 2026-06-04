@@ -33,7 +33,7 @@ import {
   PUBLIC_SUPABASE_CONFIG_ERROR,
   supabaseUrl,
 } from './supabase-config';
-import { getYearLevelLabel, normalizeYearLevel, resolveStudentYearLevel } from './student-year';
+import { normalizeYearLevel } from './student-year';
 import {
   getAcademicYearRange,
   getDefaultAcademicYear,
@@ -41,7 +41,9 @@ import {
   getNextSubmissionSlot,
   getRecordAcademicYear,
   getSubmissionSlotLabel,
+  MAX_SUBMISSION_CYCLE,
   normalizeAcademicYear,
+  normalizeSubmissionSlot,
 } from './academic-year';
 
 export { createDefaultAdminSystemSettings } from './admin-system-settings';
@@ -64,6 +66,7 @@ const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_TARGET_BYTES = 950 * 1024;
 const LAB_UPLOAD_CANVAS_MAX_DIMENSIONS = [2200, 1800, 1500, 1200];
 const LAB_UPLOAD_CANVAS_QUALITIES = [0.86, 0.76, 0.66, 0.56];
+const CURRENT_ACADEMIC_YEAR_SETTING_KEY = 'current_academic_year';
 let studentProfileAssetsRouteUnavailable = false;
 const disabledStorageListBuckets = new Set<string>();
 let authClient: SupabaseClient | null = null;
@@ -352,6 +355,23 @@ export type StudentNotificationStatePayload = {
   snapshot?: Record<string, string>;
 };
 
+export type StudentNotificationRecord = {
+  id: string;
+  notificationKey: string;
+  submissionId: string;
+  status: 'approved' | 'returned';
+  title: string;
+  message: string;
+  note?: string;
+  actionLabel: string;
+  actionPath: string;
+  timestamp: string;
+  yearLabel: string;
+  read: boolean;
+};
+
+export type StudentNotificationSyncInput = Omit<StudentNotificationRecord, 'id'>;
+
 export type StudentAnnouncement = {
   id: string;
   title: string;
@@ -415,6 +435,12 @@ export type StaffProfileUpdateInput = {
   applyAcrossRoles?: boolean;
 };
 
+export type AcademicYearSetting = {
+  key: typeof CURRENT_ACADEMIC_YEAR_SETTING_KEY;
+  value: string;
+  academicYear: string;
+};
+
 export type AdminUserAccount = {
   userId: string;
   id: string;
@@ -474,6 +500,38 @@ type RequestOptions = {
 
 function normalizeEmail(email?: string | null) {
   return (email || '').trim().toLowerCase();
+}
+
+function formatAcademicYearSettingValue(value: string) {
+  return `SY ${normalizeAcademicYear(value)}`;
+}
+
+function isMissingSystemSettingsError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || '').toLowerCase();
+  return (
+    message.includes('system_settings') ||
+    message.includes('schema cache') ||
+    message.includes('could not find the table') ||
+    (message.includes('relation') && message.includes('does not exist'))
+  );
+}
+
+function buildAcademicYearSetting(value?: string | null): AcademicYearSetting {
+  const academicYear = normalizeAcademicYear(
+    value || readStoredAdminSystemSettings().academicYear || getDefaultAcademicYear(),
+  );
+  writeStoredAdminSystemSettings(
+    normalizeAdminSystemSettings({
+      ...readStoredAdminSystemSettings(),
+      academicYear,
+    }),
+  );
+
+  return {
+    key: CURRENT_ACADEMIC_YEAR_SETTING_KEY,
+    value: formatAcademicYearSettingValue(academicYear),
+    academicYear,
+  };
 }
 
 function normalizeNamePart(value?: string | null) {
@@ -882,6 +940,19 @@ async function getValidAccessToken() {
   return refreshed?.access_token || current.access_token;
 }
 
+class ApiRequestError extends Error {
+  status: number;
+
+  body: string;
+
+  constructor(message: string, status: number, body = '') {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function apiRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error(PUBLIC_SUPABASE_CONFIG_ERROR);
@@ -922,7 +993,7 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}, _retrie
       }
     }
 
-    throw new Error(message);
+    throw new ApiRequestError(message, response.status, rawBody);
   }
 
   if (!rawBody) {
@@ -1012,11 +1083,38 @@ async function authRequest<T>(path: string, options: RequestOptions = {}, _retri
 
 function shouldFallbackToRest(error: unknown) {
   if (!(error instanceof Error)) return false;
+  if (error instanceof ApiRequestError && error.status >= 500) return true;
+
   const message = error.message.toLowerCase();
   const isMissingRoute = message.includes('404') || message.includes('not found');
   const isSchemaCacheError = message.includes('schema cache') && message.includes('students');
   const isYearLevelMissing = message.includes('year_level') && message.includes('students');
-  return isMissingRoute || isSchemaCacheError || isYearLevelMissing;
+  const isInternalServerError = message.includes('internal server error');
+  const isServerFetchFailure =
+    message.includes('failed to fetch records') ||
+    message.includes('failed to fetch certificate records') ||
+    message.includes('failed to fetch submissions') ||
+    message.includes('failed to fetch submission');
+  return isMissingRoute || isSchemaCacheError || isYearLevelMissing || isInternalServerError || isServerFetchFailure;
+}
+
+function isMissingStaffSignatureUrlColumnError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('signature_url') && message.includes('staff_users');
+}
+
+async function restRequestStaffUsers(queryWithSignature: string, queryLegacy?: string) {
+  try {
+    return await restRequest<any[]>('staff_users', queryWithSignature);
+  } catch (error) {
+    if (!isMissingStaffSignatureUrlColumnError(error)) {
+      throw error;
+    }
+
+    const fallbackQuery = queryLegacy || queryWithSignature.replace(/,signature_url/g, '').replace(/signature_url,?/g, '');
+    return restRequest<any[]>('staff_users', fallbackQuery);
+  }
 }
 
 export function signInWithGoogle() {
@@ -1748,9 +1846,9 @@ async function loadRelatedData(rows: any[]) {
       ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})`)
       : Promise.resolve([]),
     reviewerIds.length
-      ? restRequest<any[]>(
-          'staff_users',
+      ? restRequestStaffUsers(
           `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
+          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
         )
       : Promise.resolve([]),
     submissionIds.length
@@ -1800,9 +1898,9 @@ async function loadRelatedData(rows: any[]) {
   ].filter((id) => !knownReviewerIds.has(id));
   const missingReviewerIdList = missingReviewerIds.map((id) => encodeURIComponent(id)).join(',');
   const extraReviewers = missingReviewerIds.length
-    ? await restRequest<any[]>(
-        'staff_users',
+    ? await restRequestStaffUsers(
         `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
+        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
       ).catch(() => [])
     : [];
   const examinedByNames = [
@@ -1813,9 +1911,9 @@ async function loadRelatedData(rows: any[]) {
     ),
   ];
   const examinerDirectory = examinedByNames.length
-    ? await restRequest<any[]>(
-        'staff_users',
+    ? await restRequestStaffUsers(
         'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
+        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
       ).catch(() => [])
     : [];
   const staffRows = Object.values(
@@ -2003,9 +2101,9 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
         ).catch(() => [])
       : Promise.resolve([]),
     reviewerIds.length
-      ? restRequest<any[]>(
-          'staff_users',
+      ? restRequestStaffUsers(
           `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
+          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
         ).catch(() => [])
       : Promise.resolve([]),
   ]);
@@ -2036,9 +2134,9 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     .map((id) => encodeURIComponent(id))
     .join(',');
   const extraReviewers = missingReviewerIds.length
-    ? await restRequest<any[]>(
-        'staff_users',
+    ? await restRequestStaffUsers(
         `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
+        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
       ).catch(() => [])
     : [];
   const examinedByNames = [
@@ -2049,9 +2147,9 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     ),
   ];
   const examinerDirectory = examinedByNames.length
-    ? await restRequest<any[]>(
-        'staff_users',
+    ? await restRequestStaffUsers(
         'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
+        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
       ).catch(() => [])
     : [];
   const staffRows = Object.values(
@@ -2879,10 +2977,7 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
     },
   );
 
-  const parsedYearLevel = Number.parseInt(String(payload.yearLevel || '').trim(), 10);
-  const normalizedYearLevel = Number.isInteger(parsedYearLevel) && parsedYearLevel >= 1 && parsedYearLevel <= 4
-    ? parsedYearLevel
-    : null;
+  const normalizedYearLevel = normalizeYearLevel(payload.yearLevel);
   const parsedAge = Number.parseInt(String(payload.age || '').trim(), 10);
   const normalizedAge = Number.isFinite(parsedAge) ? parsedAge : null;
 
@@ -3125,9 +3220,9 @@ export async function getStaffSignature(): Promise<StaffSignatureAsset> {
     return { signatureUrl: null, signatureFileName: null };
   }
 
-  const staffRows = await restRequest<any[]>(
-    'staff_users',
+  const staffRows = await restRequestStaffUsers(
     `profile_id=eq.${encodeURIComponent(profileId)}&select=signature_url&limit=1`,
+    `profile_id=eq.${encodeURIComponent(profileId)}&select=id&limit=1`,
   ).catch(() => []);
   const directSignatureUrl = normalizeStorageFileUrl(staffRows[0]?.signature_url || null);
   if (directSignatureUrl) {
@@ -3179,21 +3274,27 @@ export async function submitMedicalRecord(data: any) {
   if (!studentId) {
     throw new Error('Student ID is required.');
   }
-  const requestedYearLevel = normalizeYearLevel(data.yearLevel);
-  if (!requestedYearLevel) {
-    throw new Error('Submission slot is required.');
+  const requestedAcademicYearLevel = normalizeYearLevel(data.yearLevel);
+  if (!requestedAcademicYearLevel) {
+    throw new Error('Academic year level is required.');
+  }
+  const requestedRecordCycle = normalizeSubmissionSlot(data.recordCycle ?? data.year);
+  if (!requestedRecordCycle) {
+    throw new Error('Record cycle is required.');
   }
   const activeAcademicYear = await resolveActiveAcademicYear(data.academicYear);
   const existingRecords = await getSubmissionSlotRows(studentId);
   const existingCurrentAcademicYearRecord = getLatestRecordForAcademicYear(existingRecords, activeAcademicYear);
-  const expectedYearLevel = getNextSubmissionSlot(existingRecords, activeAcademicYear);
+  const expectedRecordCycle = getNextSubmissionSlot(existingRecords, activeAcademicYear);
 
-  if (!expectedYearLevel) {
-    throw new Error('All four year levels have already been used.');
+  if (!expectedRecordCycle) {
+    throw new Error(`All ${MAX_SUBMISSION_CYCLE} record cycles have already been used.`);
   }
 
-  if (requestedYearLevel !== expectedYearLevel) {
-    throw new Error(`This submission must be filed under ${getSubmissionSlotLabel(expectedYearLevel)} for SY ${activeAcademicYear}.`);
+  if (requestedRecordCycle !== expectedRecordCycle) {
+    throw new Error(
+      `This submission must be filed under ${getSubmissionSlotLabel(expectedRecordCycle)} for SY ${activeAcademicYear}.`,
+    );
   }
 
   const latestAcademicYearStatus = String(existingCurrentAcademicYearRecord?.status || '').toLowerCase();
@@ -3205,8 +3306,6 @@ export async function submitMedicalRecord(data: any) {
     );
   }
 
-  const yearLevel = String(requestedYearLevel);
-
   const studentPayload = {
     student_id: studentId,
     profile_id: me.profile.id,
@@ -3215,6 +3314,7 @@ export async function submitMedicalRecord(data: any) {
     middle_initial: data.middleInitial || null,
     department: data.department || null,
     course: data.course || null,
+    year_level: requestedAcademicYearLevel,
     age: data.age ? Number(data.age) : null,
     sex: data.sex || null,
     birthday: data.birthday || null,
@@ -3238,7 +3338,7 @@ export async function submitMedicalRecord(data: any) {
 
   const submissionInsertPayload = {
     student_id: studentId,
-    year_level: yearLevel,
+    year_level: String(requestedRecordCycle),
     academic_year: activeAcademicYear,
     status: 'pending',
     first_name: data.firstName || null,
@@ -3374,9 +3474,13 @@ export async function updateMedicalRecord(recordId: string, data: any) {
   if (!studentId) {
     throw new Error('Student ID is required.');
   }
-  const requestedYearLevel = normalizeYearLevel(data.yearLevel);
-  if (!requestedYearLevel) {
-    throw new Error('Submission slot is required.');
+  const requestedAcademicYearLevel = normalizeYearLevel(data.yearLevel);
+  if (!requestedAcademicYearLevel) {
+    throw new Error('Academic year level is required.');
+  }
+  const requestedRecordCycle = normalizeSubmissionSlot(data.recordCycle ?? data.year);
+  if (!requestedRecordCycle) {
+    throw new Error('Record cycle is required.');
   }
 
   let existingSubmission: any[] = [];
@@ -3401,9 +3505,9 @@ export async function updateMedicalRecord(recordId: string, data: any) {
     throw new Error('You can only update your own medical record.');
   }
 
-  const existingYearLevel = normalizeYearLevel(submissionRow.year_level);
-  if (existingYearLevel && existingYearLevel !== requestedYearLevel) {
-    throw new Error('The medical record slot for an existing submission cannot be changed.');
+  const existingRecordCycle = normalizeSubmissionSlot(submissionRow.year_level);
+  if (existingRecordCycle && existingRecordCycle !== requestedRecordCycle) {
+    throw new Error('The record cycle for an existing submission cannot be changed.');
   }
   const activeAcademicYear = normalizeAcademicYear(
     getRecordAcademicYear(
@@ -3423,6 +3527,7 @@ export async function updateMedicalRecord(recordId: string, data: any) {
     middle_initial: data.middleInitial || null,
     department: data.department || null,
     course: data.course || null,
+    year_level: requestedAcademicYearLevel,
     age: data.age ? Number(data.age) : null,
     sex: data.sex || null,
     birthday: data.birthday || null,
@@ -3446,7 +3551,7 @@ export async function updateMedicalRecord(recordId: string, data: any) {
 
   const submissionPatchPayload = {
     status: data.status || undefined,
-    year_level: String(requestedYearLevel),
+    year_level: String(requestedRecordCycle),
     academic_year: activeAcademicYear,
     first_name: data.firstName || null,
     last_name: data.lastName || null,
@@ -3703,23 +3808,26 @@ export async function getStudentRecords(studentId?: string, options: GetStudentR
   };
 
   try {
-    const response = await apiRequest<{ records: SubmissionRecord[] }>(
-      `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
+    const records = await getMappedSubmissions(
+      `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
     );
-    const enriched = await attachProfileAssetsFallback(
-      Array.isArray(response?.records) ? response.records : [],
-    );
-    return { records: enriched };
-  } catch (error) {
-    if (!shouldFallbackToRest(error)) {
-      throw error;
+    return { records: await attachProfileAssetsFallback(records as SubmissionRecord[]) };
+  } catch (restError) {
+    try {
+      const response = await apiRequest<{ records: SubmissionRecord[] }>(
+        `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
+      );
+      const enriched = await attachProfileAssetsFallback(
+        Array.isArray(response?.records) ? response.records : [],
+      );
+      return { records: enriched };
+    } catch (routeError) {
+      if (!shouldFallbackToRest(routeError) && routeError instanceof Error) {
+        throw routeError;
+      }
+      throw restError;
     }
   }
-
-  const records = await getMappedSubmissions(
-    `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
-  );
-  return { records: await attachProfileAssetsFallback(records as SubmissionRecord[]) };
 }
 
 export async function getStudentAnnouncements() {
@@ -4188,6 +4296,98 @@ export async function saveStudentNotificationState(
       state,
     }),
   });
+}
+
+export async function getStudentNotifications(studentId?: string) {
+  const targetStudentId = String(studentId || '').trim();
+  const query = targetStudentId ? `?studentId=${encodeURIComponent(targetStudentId)}` : '';
+
+  return apiRequest<{ notifications: StudentNotificationRecord[] }>(
+    `/functions/v1/server/student-notifications${query}`,
+  );
+}
+
+export async function syncStudentNotifications(
+  studentId: string,
+  notifications: StudentNotificationSyncInput[],
+) {
+  const targetStudentId = String(studentId || '').trim();
+  if (!targetStudentId) {
+    return { notifications: [] as StudentNotificationRecord[] };
+  }
+
+  return apiRequest<{ notifications: StudentNotificationRecord[] }>(
+    '/functions/v1/server/student-notifications/sync',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        studentId: targetStudentId,
+        notifications,
+      }),
+    },
+  );
+}
+
+export async function updateStudentNotification(
+  notificationId: string,
+  updates: Pick<StudentNotificationRecord, 'read'>,
+) {
+  return apiRequest<{ notification: StudentNotificationRecord }>(
+    `/functions/v1/server/student-notifications/${encodeURIComponent(notificationId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updates),
+    },
+  );
+}
+
+export async function markAllStudentNotificationsAsRead(studentId?: string) {
+  const targetStudentId = String(studentId || '').trim();
+
+  return apiRequest<{ success: boolean }>(
+    '/functions/v1/server/student-notifications/mark-all-read',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        studentId: targetStudentId || undefined,
+      }),
+    },
+  );
+}
+
+export async function deleteStudentNotification(notificationId: string) {
+  return apiRequest<{ success: boolean }>(
+    `/functions/v1/server/student-notifications/${encodeURIComponent(notificationId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+}
+
+export async function clearStudentNotifications(studentId?: string) {
+  const targetStudentId = String(studentId || '').trim();
+
+  return apiRequest<{ success: boolean }>(
+    '/functions/v1/server/student-notifications/clear',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        studentId: targetStudentId || undefined,
+      }),
+    },
+  );
 }
 
 export async function getStudentProfileAssets(studentId?: string, profileId?: string | null) {
@@ -5368,15 +5568,27 @@ export async function getReportingTermSettings() {
   }
 }
 
-export async function getActiveAcademicYearSettings() {
+export async function getAcademicYearSetting() {
   try {
-    const settings = await apiRequest<Partial<AdminSystemSettings>>('/functions/v1/server/academic-year');
-    const normalized = normalizeAdminSystemSettings(settings);
-    writeStoredAdminSystemSettings(normalized);
-    return normalized;
-  } catch {
-    return readStoredAdminSystemSettings();
+    const rows = await restRequest<Array<{ key?: string; value?: string | null }>>(
+      'system_settings',
+      `select=key,value&key=eq.${encodeURIComponent(CURRENT_ACADEMIC_YEAR_SETTING_KEY)}&limit=1`,
+    );
+    return buildAcademicYearSetting(rows?.[0]?.value || null);
+  } catch (error) {
+    if (!isMissingSystemSettingsError(error)) {
+      throw error;
+    }
+
+    return buildAcademicYearSetting();
   }
+}
+
+export async function getActiveAcademicYearSettings() {
+  const setting = await getAcademicYearSetting();
+  return {
+    academicYear: setting.academicYear,
+  };
 }
 
 export async function getSessionPolicy() {
@@ -5393,6 +5605,35 @@ export async function getSessionPolicy() {
     return {
       sessionTimeoutMinutes: fallback.sessionTimeoutMinutes,
     };
+  }
+}
+
+export async function updateAcademicYearSetting(input: string) {
+  const academicYear = normalizeAcademicYear(input);
+  const payload = {
+    value: formatAcademicYearSettingValue(academicYear),
+  };
+
+  try {
+    const rows = await restRequest<Array<{ key?: string; value?: string | null }>>(
+      'system_settings',
+      `key=eq.${encodeURIComponent(CURRENT_ACADEMIC_YEAR_SETTING_KEY)}&select=key,value`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+    return buildAcademicYearSetting(rows?.[0]?.value || payload.value);
+  } catch (error) {
+    if (!isMissingSystemSettingsError(error)) {
+      throw error;
+    }
+
+    return buildAcademicYearSetting(payload.value);
   }
 }
 

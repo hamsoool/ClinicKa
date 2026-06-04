@@ -1,4 +1,5 @@
 import { forwardRef, memo } from 'react';
+import { formatAcademicYearLabel, getRecordAcademicYear } from '../lib/academic-year';
 import type { SubmissionRecord } from '../lib/record-types';
 
 const S = {
@@ -9,9 +10,9 @@ const S = {
     color: '#000',
     background: '#fff',
     width: '794px',
-    height: '1123px',
+    height: '1132px',
     margin: '0 auto',
-    padding: '10px 18px 10px 18px',
+    padding: '10px 18px 18px 18px',
     boxSizing: 'border-box' as const,
     display: 'flex',
     flexDirection: 'column' as const,
@@ -44,14 +45,6 @@ const S = {
     lineHeight: '1.9',
     marginBottom: '0px',
   },
-  underlineField: (minW = '100px') => ({
-    borderBottom: '1px solid #000',
-    display: 'inline-block' as const,
-    minWidth: minW,
-    textAlign: 'center' as const,
-    paddingBottom: '1px',
-    fontSize: '10.5px',
-  }),
   checkbox: (checked: boolean) => ({
     display: 'inline-block' as const,
     width: '10px',
@@ -124,7 +117,146 @@ function HSULogo({ size = 44 }: { size?: number }) {
   );
 }
 
-function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyType: string }) {
+function UnderlinedField({
+  value,
+  minWidth = '100px',
+  width,
+  align = 'center',
+}: {
+  value?: string | number | null;
+  minWidth?: string;
+  width?: string;
+  align?: 'center' | 'left';
+}) {
+  const text = String(value || '').trim();
+
+  return (
+    <span
+      className="relative inline-flex align-baseline print:align-baseline"
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'flex-end',
+        justifyContent: align === 'left' ? 'flex-start' : 'center',
+        minWidth,
+        width,
+        textAlign: align,
+        padding: '0 2px 6px 2px',
+        fontSize: '10.5px',
+        lineHeight: '1',
+        boxSizing: 'border-box',
+        verticalAlign: 'baseline',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          display: 'inline-block',
+          transform: 'translateY(-2px)',
+        }}
+      >
+        {text || '\u00A0'}
+      </span>
+      <span
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderBottom: '1px solid #000',
+          zIndex: 0,
+        }}
+      />
+    </span>
+  );
+}
+
+function UnderlinedTitleLetter({ letter }: { letter: string }) {
+  return (
+    <span
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        minWidth: '9px',
+        height: '19px',
+        fontSize: '13px',
+        fontWeight: 'bold',
+        padding: '0 0 5px 0',
+        marginRight: '2.5px',
+        textAlign: 'center',
+        lineHeight: 1,
+        boxSizing: 'border-box',
+      }}
+    >
+      <span style={{ position: 'relative', zIndex: 1, transform: 'translateY(-1px)' }}>{letter}</span>
+      <span
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderBottom: '1.5px solid #000',
+          zIndex: 0,
+        }}
+      />
+    </span>
+  );
+}
+
+function CopyTypeBadge({ label }: { label: string }) {
+  const width = label.length > 16 ? 132 : 118;
+  const height = 22;
+  const centerX = width / 2;
+  const centerY = height / 2 + 0.5;
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={label}
+      className="pdf-print-exact block overflow-visible"
+      style={{ display: 'block', overflow: 'visible' }}
+    >
+      <rect
+        x="0.75"
+        y="0.75"
+        width={width - 1.5}
+        height={height - 1.5}
+        fill="#fff"
+        stroke="#000"
+        strokeWidth="1.5"
+      />
+      <text
+        x={centerX}
+        y={centerY}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontFamily="Arial, Helvetica, sans-serif"
+        fontSize="6.5"
+        fontWeight="700"
+        fill="#000"
+      >
+        {label}
+      </text>
+    </svg>
+  );
+}
+
+function ClearanceCopy({
+  record,
+  copyType,
+  academicYearLabel,
+}: {
+  record: SubmissionRecord;
+  copyType: string;
+  academicYearLabel?: string;
+}) {
   const cl = record.clearanceInfo || {};
   const purposes = String(cl.purpose || 'enrolment')
     .split(',')
@@ -142,15 +274,26 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
   const remarksEnding = isStudentCopy
     ? 'at the College Clinic.'
     : 'at the College Clinic for Enrolment purposes only.';
+  const resolvedAcademicYearLabel = academicYearLabel || formatAcademicYearLabel(getRecordAcademicYear(record));
+
+  const renderCheckbox = (checked: boolean) => (
+    <span
+      className="pdf-print-exact relative inline-block h-[10px] w-[10px] shrink-0 align-middle print:shrink-0"
+      style={S.checkbox(checked)}
+    />
+  );
 
   return (
-    <div style={S.copy}>
+    <div className="pdf-print-exact flex flex-col print:flex print:flex-col" style={S.copy}>
 
       {/* HEADER — original logo positions: Gordon+Academic LEFT, HSU RIGHT */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+      <div
+        className="flex items-start gap-2 print:flex print:flex-row print:items-start"
+        style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}
+      >
 
         {/* LEFT: Gordon + Academic logos */}
-        <div style={{ display: 'flex', gap: '4px', flexShrink: 0, paddingTop: '2px' }}>
+        <div className="flex shrink-0 gap-1 print:flex print:flex-row" style={{ display: 'flex', gap: '4px', flexShrink: 0, paddingTop: '2px' }}>
           <GordonCollegeLogo size={44} />
           <AcademicAffairsLogo size={44} />
         </div>
@@ -174,6 +317,7 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
 
         {/* RIGHT: HSU logo + copy-type badge */}
         <div
+          className="flex min-w-[60px] shrink-0 flex-col items-center gap-[3px] print:flex print:flex-col"
           style={{
             flexShrink: 0,
             paddingTop: '2px',
@@ -185,118 +329,122 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
           }}
         >
           <HSULogo size={44} />
-          <div
-            style={{
-              border: '1.5px solid #000',
-              padding: '2px 5px',
-              fontSize: '7px',
-              fontWeight: 'bold',
-              whiteSpace: 'nowrap',
-              background: '#fff',
-              lineHeight: 1,
-              textAlign: 'center',
-            }}
-          >
-            {copyType}
-          </div>
+          <CopyTypeBadge label={copyType} />
         </div>
       </div>
 
       {/* TITLE */}
       <div style={{ textAlign: 'center', margin: '10px 0 8px' }}>
         {'MEDICALCERTIFICATE'.split('').map((ch, i) => (
-          <span
-            key={i}
-            style={{
-              display: 'inline-block',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              borderBottom: '1.5px solid #000',
-              paddingBottom: '1px',
-              marginRight: '2.5px',
-              minWidth: '9px',
-              textAlign: 'center',
-            }}
-          >
-            {ch}
-          </span>
+          <UnderlinedTitleLetter key={i} letter={ch} />
         ))}
+        <div style={{ marginTop: '8px', fontSize: '9px', fontWeight: 'bold', letterSpacing: '0.08em' }}>
+          {resolvedAcademicYearLabel}
+        </div>
       </div>
 
       {/* CONTENT — grows to fill available space, sections spread out */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+      <div
+        className="flex flex-1 flex-col justify-between print:flex print:flex-col"
+        style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+      >
 
         {/* TOP CONTENT */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div
+          className="flex flex-col gap-[10px] print:flex print:flex-col"
+          style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}
+        >
 
           {/* Certification line */}
-          <div style={S.bodyText}>
+          <div className="leading-[1.9] print:leading-[1.9]" style={S.bodyText}>
             This is to certify that Mr/ Ms{' '}
-            <span style={S.underlineField('150px')}>
-              {record.firstName} {record.middleInitial ? record.middleInitial + '. ' : ''}
-              {record.lastName}
-            </span>{' '}
-            Age <span style={S.underlineField('30px')}>{record.age || ''}</span> Sex{' '}
-            <span style={S.underlineField('20px')}>
-              {record.sex === 'female' ? 'F' : 'M'}
-            </span>{' '}
+            <UnderlinedField
+              minWidth="150px"
+              value={`${record.firstName} ${record.middleInitial ? `${record.middleInitial}. ` : ''}${record.lastName}`}
+            />{' '}
+            Age <UnderlinedField minWidth="30px" value={record.age || ''} /> Sex{' '}
+            <UnderlinedField minWidth="20px" value={record.sex === 'female' ? 'F' : 'M'} />{' '}
             has submitted all required medical requirements and upon physical examination.
           </div>
 
           {/* Findings */}
-          <div style={{ fontSize: '10.5px', lineHeight: '2', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+          <div
+            className="flex items-start gap-[6px] print:flex print:flex-row print:items-start"
+            style={{ fontSize: '10.5px', lineHeight: '2', display: 'flex', gap: '6px', alignItems: 'flex-start' }}
+          >
             <span style={{ fontWeight: 'bold', whiteSpace: 'nowrap', marginRight: '4px' }}>
               Findings:
             </span>
             <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}>
-                <span style={S.checkbox(cl.findingsNormal === true)}>
-                  {cl.findingsNormal ? '?' : ''}
-                </span>
+              <div
+                className="flex items-center gap-[5px] print:flex print:flex-row print:items-center"
+                style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}
+              >
+                {renderCheckbox(cl.findingsNormal === true)}
                 <span>Essentially normal physical findings at the time of evaluation</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={S.checkbox(!!cl.diagnosis)}>{cl.diagnosis ? '?' : ''}</span>
+              <div
+                className="flex items-center gap-[5px] print:flex print:flex-row print:items-center"
+                style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+              >
+                {renderCheckbox(!!cl.diagnosis)}
                 <span>Diagnosis:</span>
-                <span style={{ ...S.underlineField('490px'), width: '490px' }}>
-                  {cl.diagnosis || ''}
-                </span>
+                <UnderlinedField minWidth="490px" width="490px" value={cl.diagnosis || ''} align="left" />
               </div>
             </div>
           </div>
 
           {/* Remarks */}
-          <div style={{ fontSize: '10.5px', lineHeight: '2', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div
+            className="flex flex-col gap-1 print:flex print:flex-col"
+            style={{ fontSize: '10.5px', lineHeight: '2', display: 'flex', flexDirection: 'column', gap: '4px' }}
+          >
             <div>
               <span style={{ fontWeight: 'bold' }}>Remarks: </span>
-              <span style={S.underlineField('550px')}>{cl.remarks || ''}</span>
+              <UnderlinedField minWidth="550px" width="550px" value={cl.remarks || ''} align="left" />
             </div>
             <div>
               This was issued on{' '}
-              <span style={S.underlineField('100px')}>
-                {cl.issuedDate
-                  ? new Date(cl.issuedDate).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })
-                  : ''}
-              </span>{' '}
+              <UnderlinedField
+                minWidth="100px"
+                value={
+                  cl.issuedDate
+                    ? new Date(cl.issuedDate).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })
+                    : ''
+                }
+              />{' '}
               {remarksEnding}
             </div>
           </div>
 
           {/* Purpose */}
-          <div style={{ fontSize: '10.5px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            className="flex items-center gap-3 print:flex print:flex-row print:items-center"
+            style={{ fontSize: '10.5px', display: 'flex', alignItems: 'center', gap: '12px' }}
+          >
             <span style={{ fontWeight: 'bold' }}>Purpose:</span>
-            <span><span style={S.checkbox(purposes.includes('enrolment'))}></span> Enrolment</span>
-            <span><span style={S.checkbox(purposes.includes('ojt'))}></span> OJT / Internship</span>
-            <span><span style={S.checkbox(purposes.includes('rle'))}></span> R.L.E</span>
+            <span className="inline-flex items-center gap-[3px] print:inline-flex">
+              {renderCheckbox(purposes.includes('enrolment'))}
+              <span>Enrolment</span>
+            </span>
+            <span className="inline-flex items-center gap-[3px] print:inline-flex">
+              {renderCheckbox(purposes.includes('ojt'))}
+              <span>OJT / Internship</span>
+            </span>
+            <span className="inline-flex items-center gap-[3px] print:inline-flex">
+              {renderCheckbox(purposes.includes('rle'))}
+              <span>R.L.E</span>
+            </span>
           </div>
         </div>
 
         {/* BOTTOM ROW: Control/Student No. LEFT, Signatory RIGHT */}
         <div
+          className="flex items-end justify-between gap-2 print:flex print:flex-row print:items-end"
           style={{
             display: 'flex',
             alignItems: 'flex-end',
@@ -305,18 +453,21 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
             paddingTop: '8px',
           }}
         >
-          <div style={{ fontSize: '10.5px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+          <div
+            className="flex min-w-[190px] flex-col gap-[5px] print:flex print:flex-col print:min-w-[190px]"
+            style={{ fontSize: '10.5px', display: 'flex', flexDirection: 'column', gap: '5px' }}
+          >
             <div>
               <span style={{ fontWeight: 'bold' }}>Control No.: </span>
-              <span style={S.underlineField('120px')}>{cl.controlNo || ''}</span>
+              <UnderlinedField minWidth="120px" value={cl.controlNo || ''} />
             </div>
             <div>
               <span style={{ fontWeight: 'bold' }}>Student No.: </span>
-              <span style={S.underlineField('120px')}>{record.studentId}</span>
+              <UnderlinedField minWidth="120px" value={record.studentId} />
             </div>
           </div>
 
-          <div style={{ ...S.sigBlock, flexShrink: 0, minWidth: '190px' }}>
+          <div className="min-w-[190px] shrink-0 print:min-w-[190px]" style={{ ...S.sigBlock, flexShrink: 0, minWidth: '190px' }}>
             <div style={S.sigName}>{signatoryName}</div>
             <div>{signatoryTitle}</div>
             <div>License No. {licenseNo}</div>
@@ -330,13 +481,18 @@ function ClearanceCopy({ record, copyType }: { record: SubmissionRecord; copyTyp
 
 interface Props {
   record: SubmissionRecord;
+  academicYearLabel?: string;
 }
 
-const MedicalClearancePreviewBase = forwardRef<HTMLDivElement, Props>(({ record }, ref) => {
+const MedicalClearancePreviewBase = forwardRef<HTMLDivElement, Props>(({ record, academicYearLabel }, ref) => {
   return (
-    <div ref={ref} style={S.page}>
+    <div
+      ref={ref}
+      className="pdf-print-exact flex flex-col bg-white print:flex print:flex-col"
+      style={S.page}
+    >
       {COPY_TYPES.map((copyType) => (
-        <ClearanceCopy key={copyType} record={record} copyType={copyType} />
+        <ClearanceCopy key={copyType} record={record} copyType={copyType} academicYearLabel={academicYearLabel} />
       ))}
     </div>
   );

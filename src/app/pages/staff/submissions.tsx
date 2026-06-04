@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ChevronDown, ChevronUp, Eye, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { SubmissionSummaryRecord } from '../../lib/record-types';
+import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
 import { useAuth } from '../../lib/auth';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { getRoleLabel } from '../../lib/api';
@@ -17,12 +18,12 @@ import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import { useStaffSubmissionSummariesQuery } from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
-const YEAR_LABELS: Record<string, string> = {
-  '1': 'Year I',
-  '2': 'Year II',
-  '3': 'Year III',
-  '4': 'Year IV',
-};
+const YEAR_LABELS = Object.fromEntries(
+  Array.from({ length: MAX_SUBMISSION_CYCLE }, (_, index) => {
+    const slot = String(index + 1);
+    return [slot, getSubmissionSlotLabel(slot)];
+  }),
+) as Record<string, string>;
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [20];
 const STATUS_FILTER_VALUES = new Set([

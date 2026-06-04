@@ -35,6 +35,14 @@ const STAFF_SUBMISSION_SUMMARIES_MAX_PAGE_SIZE = 100;
 const STAFF_APPROVED_STUDENTS_DEFAULT_PAGE_SIZE = 20;
 const STAFF_APPROVED_STUDENTS_MAX_PAGE_SIZE = 50;
 const SUBMISSION_ACCESS_COLUMNS = "id,student_id,status,reviewed_by";
+const STAFF_USER_SELECT_WITH_SIGNATURE =
+  "id,profile_id,first_name,last_name,middle_initial,position,name,signature_url";
+const STAFF_USER_SELECT_LEGACY =
+  "id,profile_id,first_name,last_name,middle_initial,position,name";
+const ACTIVE_STAFF_USER_SELECT_WITH_SIGNATURE =
+  "id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url";
+const ACTIVE_STAFF_USER_SELECT_LEGACY =
+  "id,profile_id,first_name,last_name,middle_initial,position,name,is_active";
 
 export const SUBMISSION_LIST_COLUMNS = [
   "id",
@@ -206,6 +214,49 @@ function buildStaffSignatureAssetFromRow(staff: any) {
     uploaded_by: staff.profile_id,
     url: signatureUrl,
   };
+}
+
+function isMissingStaffSignatureUrlColumnError(error: any) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return message.includes("signature_url") && message.includes("staff_users");
+}
+
+async function fetchStaffUsersByIds(staffIds: string[]) {
+  if (!staffIds.length) {
+    return { data: [] as any[], error: null };
+  }
+
+  const primary = await supabase
+    .from("staff_users")
+    .select(STAFF_USER_SELECT_WITH_SIGNATURE)
+    .in("id", staffIds);
+
+  if (!primary.error || !isMissingStaffSignatureUrlColumnError(primary.error)) {
+    return primary;
+  }
+
+  return supabase
+    .from("staff_users")
+    .select(STAFF_USER_SELECT_LEGACY)
+    .in("id", staffIds);
+}
+
+async function fetchActiveStaffDirectory() {
+  const primary = await supabase
+    .from("staff_users")
+    .select(ACTIVE_STAFF_USER_SELECT_WITH_SIGNATURE)
+    .eq("is_active", true)
+    .limit(200);
+
+  if (!primary.error || !isMissingStaffSignatureUrlColumnError(primary.error)) {
+    return primary;
+  }
+
+  return supabase
+    .from("staff_users")
+    .select(ACTIVE_STAFF_USER_SELECT_LEGACY)
+    .eq("is_active", true)
+    .limit(200);
 }
 
 const CLEARANCE_SIGNATORY_NAMES = ["GERALD S. BERNAL, MD", "ARMANDO TAMAYO, MD"] as const;
@@ -421,10 +472,7 @@ async function loadRelatedData(rows: any[]) {
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     reviewerIds.length
-      ? supabase
-          .from("staff_users")
-          .select("id,profile_id,first_name,last_name,middle_initial,position,name,signature_url")
-          .in("id", reviewerIds)
+      ? fetchStaffUsersByIds(reviewerIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
@@ -496,10 +544,7 @@ async function loadRelatedData(rows: any[]) {
     ...new Set([...measurementUpdaterIds, ...certificateIssuerIds]),
   ].filter((id) => !knownReviewerIds.has(id));
   const extraReviewersRes = missingReviewerIds.length
-    ? await supabase
-        .from("staff_users")
-        .select("id,profile_id,first_name,last_name,middle_initial,position,name,signature_url")
-        .in("id", missingReviewerIds)
+    ? await fetchStaffUsersByIds(missingReviewerIds)
     : { data: [] as any[], error: null };
 
   if (extraReviewersRes.error) {
@@ -514,11 +559,7 @@ async function loadRelatedData(rows: any[]) {
     ),
   ];
   const examinerDirectoryRes = examinedByNames.length
-    ? await supabase
-        .from("staff_users")
-        .select("id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url")
-        .eq("is_active", true)
-        .limit(200)
+    ? await fetchActiveStaffDirectory()
     : { data: [] as any[], error: null };
 
   if (examinerDirectoryRes.error) {

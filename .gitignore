@@ -8,6 +8,7 @@
 node_modules/
 dist/
 supabase/.temp/
+supabase/migrations/
 *.log
 
 # React Router
