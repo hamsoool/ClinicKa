@@ -30,7 +30,7 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
 import { formatAcademicYearLabel, getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
 import { useAcademicYear } from '../../lib/academic-year-query';
-import { getRoleLabel, getSubmissions } from '../../lib/api';
+import { getRoleLabel, getSubmissionReportSummaries } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { SubmissionRecord, SubmissionSummaryRecord } from '../../lib/record-types';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
@@ -343,7 +343,7 @@ export default function StaffDashboard() {
   } = useQuery({
     queryKey: ['staffDashboardReportSubmissions'],
     queryFn: async () => {
-      const response = await getSubmissions();
+      const response = await getSubmissionReportSummaries();
       return Array.isArray(response?.submissions) ? response.submissions as SubmissionRecord[] : [];
     },
     staleTime: 45_000,

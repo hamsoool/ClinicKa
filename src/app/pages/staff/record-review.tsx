@@ -933,21 +933,23 @@ export default function StaffRecordReview() {
       return null;
     }
 
-    const medicalRecordDateChecks: Array<[string, string]> = [
-      ['Chest X-Ray date', assessmentForm.xrayDate],
-      ['CBC date', assessmentForm.cbcDate],
-      ['Urinalysis date', assessmentForm.urinalysisDate],
-    ];
+    if (statusToSave !== 'returned') {
+      const medicalRecordDateChecks: Array<[string, string]> = [
+        ['Chest X-Ray date', assessmentForm.xrayDate],
+        ['CBC date', assessmentForm.cbcDate],
+        ['Urinalysis date', assessmentForm.urinalysisDate],
+      ];
 
-    if (canFinalizeClearance) {
-      medicalRecordDateChecks.push(['Issued date', clearanceForm.issuedDate]);
-    }
+      if (canFinalizeClearance) {
+        medicalRecordDateChecks.push(['Issued date', clearanceForm.issuedDate]);
+      }
 
-    for (const [label, value] of medicalRecordDateChecks) {
-      const validationMessage = getMedicalRecordDateValidationMessage(label, value);
-      if (validationMessage) {
-        toast.error(validationMessage);
-        return null;
+      for (const [label, value] of medicalRecordDateChecks) {
+        const validationMessage = getMedicalRecordDateValidationMessage(label, value);
+        if (validationMessage) {
+          toast.error(validationMessage);
+          return null;
+        }
       }
     }
 
@@ -1116,7 +1118,7 @@ export default function StaffRecordReview() {
       }
       if (variables.action === 'pending') {
         toast.success(
-          `Record returned for correction with note: "${prepared.notesToSave.substring(0, 30)}${prepared.notesToSave.length > 30 ? '...' : ''}"`,
+          `Record declined with note: "${prepared.notesToSave.substring(0, 30)}${prepared.notesToSave.length > 30 ? '...' : ''}"`,
         );
         return;
       }
@@ -1128,7 +1130,7 @@ export default function StaffRecordReview() {
         variables.action === 'cleared'
           ? 'Failed to clear this medical record.'
           : variables.action === 'pending'
-            ? 'Failed to mark this record as pending.'
+            ? 'Failed to decline this record.'
             : 'Failed to save review changes.',
       );
     },
@@ -2083,7 +2085,7 @@ export default function StaffRecordReview() {
       action === 'cleared'
         ? 'Medical clearance is processing in the background. You can continue working while it finishes.'
         : action === 'pending'
-          ? 'Pending update is processing in the background. You can continue working while it finishes.'
+          ? 'Decline update is processing in the background. You can continue working while it finishes.'
           : 'Review save is processing in the background. You can continue working while it finishes.',
     );
   }
@@ -3360,7 +3362,7 @@ export default function StaffRecordReview() {
               setReturnReason(staffNotes);
               setShowReturnDialog(true);
             }} disabled={backgroundReviewMutation.isPending}>
-              Pending
+              Decline
             </Button>
             ) : null}
             {canFinalizeClearance && !isArchiveEditMode ? (
@@ -3384,9 +3386,9 @@ export default function StaffRecordReview() {
       <Dialog open={showReturnDialog} onOpenChange={setShowReturnDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Pending</DialogTitle>
+            <DialogTitle>Decline Submission</DialogTitle>
             <DialogDescription>
-              Provide clear instructions or reasons for marking this medical record as pending. The student will see this note on their dashboard.
+              Provide clear instructions or reasons for declining this medical record. The student will see this note on their dashboard.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -3412,7 +3414,7 @@ export default function StaffRecordReview() {
               disabled={!returnReason.trim() || backgroundReviewMutation.isPending}
               loading={backgroundReviewMutation.isPending && savingAction === 'pending'}
             >
-              {backgroundReviewMutation.isPending && savingAction === 'pending' ? 'Pending in background...' : 'Confirm Pending'}
+              {backgroundReviewMutation.isPending && savingAction === 'pending' ? 'Declining in background...' : 'Confirm Decline'}
             </Button>
           </DialogFooter>
         </DialogContent>

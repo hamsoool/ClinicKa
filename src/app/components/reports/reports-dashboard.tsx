@@ -991,7 +991,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               )}
               <Button onClick={downloadPdf} size="sm" className="w-full gap-2 bg-primary text-white hover:bg-primary/90 sm:w-auto sm:shrink-0">
                 <Download className="w-4 h-4" />
-                Download PDF
+                Print
               </Button>
             </div>
           </div>

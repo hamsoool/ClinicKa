@@ -201,6 +201,13 @@ const profileAssetStorageConfigs = [
   { type: "signature", bucket: "student_signature" },
 ] as const;
 
+const submissionStorageConfigs = [
+  { bucket: "lab_chest_xray", type: "xray" },
+  { bucket: "lab_cbc", type: "cbc" },
+  { bucket: "lab_urinalysis", type: "urinalysis" },
+  { bucket: bucketName, type: "" },
+] as const;
+
 const staffSignatureStorageConfigs = [
   { bucket: "staff_signatures", prefixFor: (profileId: string) => `${profileId}/` },
   { bucket: "staff_signatures", prefixFor: (profileId: string) => `staff-signatures/${profileId}/` },
@@ -275,6 +282,83 @@ export async function listProfileAssetsFromStorage(studentId: string) {
   );
 
   return rows.filter(Boolean);
+}
+
+function inferSubmissionFileType(fileName: string, bucket?: string | null) {
+  const haystack = `${bucket || ""} ${fileName || ""}`.trim().toLowerCase();
+  if (
+    String(bucket || "").trim().toLowerCase() === "lab_chest_xray" ||
+    haystack.includes("xray") ||
+    haystack.includes("x-ray") ||
+    haystack.includes("chest")
+  ) {
+    return "xray";
+  }
+  if (
+    String(bucket || "").trim().toLowerCase() === "lab_cbc" ||
+    haystack.includes("cbc") ||
+    haystack.includes("blood") ||
+    haystack.includes("hematology")
+  ) {
+    return "cbc";
+  }
+  if (
+    String(bucket || "").trim().toLowerCase() === "lab_urinalysis" ||
+    haystack.includes("urinalysis") ||
+    haystack.includes("urine")
+  ) {
+    return "urinalysis";
+  }
+  return "other";
+}
+
+export async function listSubmissionFilesFromStorage(submissionId: string) {
+  const targetSubmissionId = String(submissionId || "").trim();
+  if (!targetSubmissionId) return [] as any[];
+
+  const prefix = `${targetSubmissionId}/`;
+  const rows = await Promise.all(
+    submissionStorageConfigs.map(async ({ bucket, type }) => {
+      try {
+        const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+          limit: 100,
+          offset: 0,
+        });
+
+        if (error || !data?.length) return [] as any[];
+
+        const files = await Promise.all(
+          data
+            .filter((item) => item?.name && (item?.id || item?.metadata))
+            .map(async (item) => {
+              const fileName = String(item.name || "").trim();
+              if (!fileName) return null;
+
+              const storagePath = `${prefix}${fileName}`;
+              const row = {
+                id: `submission-${bucket}-${targetSubmissionId}-${storagePath}`,
+                submission_id: targetSubmissionId,
+                type: type || inferSubmissionFileType(fileName, bucket),
+                file_name: fileName,
+                storage_bucket: bucket,
+                storage_path: storagePath,
+                mime_type: null,
+                uploaded_at: new Date(getStorageItemTime(item) || Date.now()).toISOString(),
+                uploaded_by: null,
+              };
+              const url = await createTemporaryFileUrl(row);
+              return url ? { ...row, url } : null;
+            }),
+        );
+
+        return files.filter(Boolean);
+      } catch {
+        return [] as any[];
+      }
+    }),
+  );
+
+  return rows.flat();
 }
 
 export async function listStaffSignatureFromStorage(profileId: string) {

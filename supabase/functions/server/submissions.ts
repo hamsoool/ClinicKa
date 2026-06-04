@@ -16,6 +16,7 @@ import {
 import { getSafeAdminSystemSettings } from "./settings.ts";
 import {
   listProfileAssetsFromStorage,
+  listSubmissionFilesFromStorage,
   listStaffSignatureFromStorage,
   normalizeFileRows,
   normalizeProfileAssetRows,
@@ -34,6 +35,8 @@ const STAFF_SUBMISSION_SUMMARIES_DEFAULT_PAGE_SIZE = 25;
 const STAFF_SUBMISSION_SUMMARIES_MAX_PAGE_SIZE = 100;
 const STAFF_APPROVED_STUDENTS_DEFAULT_PAGE_SIZE = 20;
 const STAFF_APPROVED_STUDENTS_MAX_PAGE_SIZE = 50;
+const STORAGE_FALLBACK_MAX_SUBMISSIONS = 12;
+const PROFILE_ASSET_FALLBACK_MAX_STUDENTS = 20;
 const SUBMISSION_ACCESS_COLUMNS = "id,student_id,status,reviewed_by";
 const STAFF_USER_SELECT_WITH_SIGNATURE =
   "id,profile_id,first_name,last_name,middle_initial,position,name,signature_url";
@@ -198,6 +201,45 @@ function latestFilesByType(files: any[]) {
   }, {} as Record<string, any>);
 }
 
+function byId(rows: any[] | null | undefined) {
+  return (rows || []).reduce((acc, row) => {
+    if (row?.id) acc[row.id] = row;
+    return acc;
+  }, {} as Record<string, any>);
+}
+
+function normalizeStorageFileUrl(url?: string | null) {
+  const trimmed = String(url || "").trim();
+  return trimmed || undefined;
+}
+
+function findLabFileByHint(files: any[], hint: string) {
+  const keys = hint.toLowerCase() === "xray"
+    ? ["xray", "x-ray", "chest"]
+    : hint.toLowerCase() === "cbc"
+      ? ["cbc", "blood", "complete blood count", "hematology"]
+      : ["urinalysis", "urine", "ua", "u/a"];
+
+  return (files || []).find((file) => {
+    const name = String(file?.file_name || "").toLowerCase();
+    const path = String(file?.storage_path || "").toLowerCase();
+    const type = String(file?.type || "").toLowerCase();
+    return keys.some((key) => name.includes(key) || path.includes(key) || type.includes(key));
+  }) || null;
+}
+
+function findGenericLabFile(files: any[]) {
+  return (files || []).find((file) => {
+    const type = String(file?.type || "").toLowerCase();
+    if (["photo", "signature", "certificate"].includes(type)) return false;
+    const mimeType = String(file?.mime_type || "").toLowerCase();
+    const name = String(file?.file_name || "").toLowerCase();
+    return mimeType.includes("pdf") ||
+      mimeType.includes("image") ||
+      /\.(pdf|png|jpe?g|webp|gif)$/i.test(name);
+  }) || null;
+}
+
 function buildStaffSignatureAssetFromRow(staff: any) {
   const signatureUrl = normalizeStorageFileUrl(staff?.signature_url || null);
   if (!signatureUrl || !staff?.id || !staff?.profile_id) return null;
@@ -346,6 +388,16 @@ function mapSubmission(row: any, related: Record<string, any>) {
   const urinalysis = related.urinalysis[row.id];
   const certificate = related.certificates[row.id];
   const files = latestFilesByType(related.files[row.id] || []);
+  const submissionFiles = related.files[row.id] || [];
+  const xrayFileFromLab = xray?.file_id ? related.filesById?.[xray.file_id] : null;
+  const cbcFileFromLab = cbc?.file_id ? related.filesById?.[cbc.file_id] : null;
+  const urinalysisFileFromLab = urinalysis?.file_id
+    ? related.filesById?.[urinalysis.file_id]
+    : null;
+  const xrayFileByHint = findLabFileByHint(submissionFiles, "xray");
+  const cbcFileByHint = findLabFileByHint(submissionFiles, "cbc");
+  const urinalysisFileByHint = findLabFileByHint(submissionFiles, "urinalysis");
+  const genericLabFile = findGenericLabFile(submissionFiles);
   const profileAssets = student?.profile_id
     ? related.profileAssetsByProfileId?.[student.profile_id] || {}
     : related.profileAssetsByStudentId?.[row.student_id] || {};
@@ -420,9 +472,13 @@ function mapSubmission(row: any, related: Record<string, any>) {
       : undefined,
     photoUrl: files.photo?.url || profileAssets.photo?.url,
     signatureUrl: files.signature?.url || profileAssets.signature?.url,
-    xrayFileUrl: files.xray?.url,
-    cbcFileUrl: files.cbc?.url,
-    urinalysisFileUrl: files.urinalysis?.url,
+    xrayFileUrl:
+      xrayFileFromLab?.url || files.xray?.url || xrayFileByHint?.url || genericLabFile?.url,
+    cbcFileUrl:
+      cbcFileFromLab?.url || files.cbc?.url || cbcFileByHint?.url || genericLabFile?.url,
+    urinalysisFileUrl:
+      urinalysisFileFromLab?.url || files.urinalysis?.url || urinalysisFileByHint?.url ||
+      genericLabFile?.url,
     certificatePdfUrl: files.certificate?.url || certificate?.pdf_url,
     labTestLocation: row.lab_test_location || "",
     otherClinicName: row.lab_test_clinic || "",
@@ -531,7 +587,29 @@ async function loadRelatedData(rows: any[]) {
   }
 
   const normalizedFiles = await normalizeFileRows(filesRes.error ? [] : filesRes.data);
-  const filesBySubmission = normalizedFiles.reduce((acc, file) => {
+  const filesBySubmissionCurrent = normalizedFiles.reduce((acc, file) => {
+    acc[file.submission_id] = acc[file.submission_id] || [];
+    acc[file.submission_id].push(file);
+    return acc;
+  }, {} as Record<string, any[]>);
+  const shouldRunStorageFallback =
+    submissionIds.length <= STORAGE_FALLBACK_MAX_SUBMISSIONS;
+  const submissionsMissingFiles = shouldRunStorageFallback
+    ? submissionIds.filter((submissionId) => {
+      const currentFiles = filesBySubmissionCurrent[submissionId] || [];
+      return !currentFiles.length ||
+        currentFiles.some((file) => file?.storage_path && !file?.url);
+    })
+    : [];
+  const storageSubmissionFiles = (
+    await Promise.all(
+      submissionsMissingFiles.map((submissionId) =>
+        listSubmissionFilesFromStorage(submissionId)
+      ),
+    )
+  ).flat();
+  const allSubmissionFiles = [...normalizedFiles, ...storageSubmissionFiles];
+  const filesBySubmission = allSubmissionFiles.reduce((acc, file) => {
     acc[file.submission_id] = acc[file.submission_id] || [];
     acc[file.submission_id].push(file);
     return acc;
@@ -673,10 +751,14 @@ async function loadRelatedData(rows: any[]) {
     acc[file.uploaded_by].push(file);
     return acc;
   }, {} as Record<string, any[]>);
-  const missingProfileAssetStudents = studentRows.filter((student) => {
-    const latest = latestFilesByType(profileAssetsByUploadedBy[student?.profile_id] || []);
-    return !latest.photo || !latest.signature;
-  });
+  const shouldRunProfileAssetFallback =
+    studentRows.length <= PROFILE_ASSET_FALLBACK_MAX_STUDENTS;
+  const missingProfileAssetStudents = shouldRunProfileAssetFallback
+    ? studentRows.filter((student) => {
+      const latest = latestFilesByType(profileAssetsByUploadedBy[student?.profile_id] || []);
+      return !latest.photo?.url || !latest.signature?.url;
+    })
+    : [];
   const storageProfileAssets = await Promise.all(
     missingProfileAssetStudents.map(async (student) => ({
       profileId: student.profile_id,
@@ -718,6 +800,7 @@ async function loadRelatedData(rows: any[]) {
     profileAssetsByProfileId,
     profileAssetsByStudentId,
     files: filesBySubmission,
+    filesById: byId(allSubmissionFiles),
   };
 }
 

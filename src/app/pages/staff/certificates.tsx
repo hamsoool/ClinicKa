@@ -614,7 +614,7 @@ function StaffCertificatesWorkspace() {
                       </div>
                       <Button onClick={downloadRecordPDF} className="w-full shrink-0 bg-primary text-white hover:bg-primary/90 sm:w-auto">
                         <Download className="mr-2 h-4 w-4" />
-                        Download PDF (Long Bond)
+                        Print (Long Bond)
                       </Button>
                     </div>
                   </CardHeader>
@@ -676,7 +676,7 @@ function StaffCertificatesWorkspace() {
                         </div>
                         <Button onClick={downloadClearancePDF} className="w-full shrink-0 bg-primary text-white hover:bg-primary/90 sm:w-auto">
                           <Download className="mr-2 h-4 w-4" />
-                          Download PDF (A4)
+                          Print (A4)
                         </Button>
                       </div>
                     </CardHeader>

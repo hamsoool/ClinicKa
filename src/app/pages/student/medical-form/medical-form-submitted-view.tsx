@@ -28,7 +28,7 @@ export const MedicalFormSubmittedView = memo(function MedicalFormSubmittedView({
           <div className="flex gap-2">
             <Button onClick={onDownload} className="bg-primary text-white hover:bg-primary/90">
               <Download className="mr-2 h-4 w-4" />
-              Download PDF
+              Print
             </Button>
             <Button variant="outline" onClick={onBack}>
               Back to Dashboard

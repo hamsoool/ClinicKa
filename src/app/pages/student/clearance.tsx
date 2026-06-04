@@ -44,12 +44,10 @@ const styles = `
 
 export default function StudentClearance() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
-  const RECORD_PREVIEW_BASE_HEIGHT = 1344;
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const recordPreviewRef = useRef<HTMLDivElement>(null);
-  const recordPreviewFrameRef = useRef<HTMLDivElement>(null);
   const clearanceRef = useRef<HTMLDivElement>(null);
   const activeTab = normalizeClearanceTab(searchParams.get('tab'));
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
@@ -248,23 +246,61 @@ export default function StudentClearance() {
         useCORS: true,
         backgroundColor: '#ffffff',
         width: RECORD_PREVIEW_BASE_WIDTH,
-        height: RECORD_PREVIEW_BASE_HEIGHT,
         windowWidth: RECORD_PREVIEW_BASE_WIDTH,
-        windowHeight: RECORD_PREVIEW_BASE_HEIGHT,
       });
       document.body.removeChild(exportRoot);
 
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: 'legal',
+        format: [330.2, 215.9],
       });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = pageHeight;
+      const margin = 6;
+      const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
+      const imgWidth = usableWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
       const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
+
+      if (imgHeight <= usableHeight) {
+        pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
+      } else {
+        const pageSliceHeightPx = Math.floor((usableHeight * canvas.width) / usableWidth);
+        let renderedPx = 0;
+        let pageIndex = 0;
+
+        while (renderedPx < canvas.height) {
+          const sliceHeightPx = Math.min(pageSliceHeightPx, canvas.height - renderedPx);
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = sliceHeightPx;
+          const ctx = pageCanvas.getContext('2d');
+          if (!ctx) break;
+
+          ctx.drawImage(canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+          if (pageIndex > 0) {
+            pdf.addPage();
+          }
+
+          const sliceHeightMm = (sliceHeightPx * usableWidth) / canvas.width;
+          pdf.addImage(
+            pageCanvas.toDataURL('image/png'),
+            'PNG',
+            margin,
+            margin,
+            usableWidth,
+            sliceHeightMm,
+            undefined,
+            'FAST',
+          );
+
+          renderedPx += sliceHeightPx;
+          pageIndex += 1;
+        }
+      }
 
       pdf.save(`medical_record_${profileRecord.lastName}_${profileRecord.firstName}.pdf`);
       toast.success('Medical record PDF downloaded.');
@@ -467,7 +503,7 @@ export default function StudentClearance() {
                 {profileRecord ? (
                   <Button onClick={downloadRecordPDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
                     <Download className="mr-2 h-4 w-4" />
-                    Download PDF
+                    Print
                   </Button>
                 ) : null}
               </div>
@@ -483,7 +519,6 @@ export default function StudentClearance() {
                       <div className="overflow-x-auto overscroll-x-contain">
                         <div className="flex min-w-full justify-start print:w-full lg:justify-center">
                           <div
-                            ref={recordPreviewFrameRef}
                             className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5 print:w-[816px]"
                             style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                           >
@@ -635,7 +670,7 @@ export default function StudentClearance() {
                       </div>
                       <Button onClick={downloadClearancePDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
                         <Download className="mr-2 h-4 w-4" />
-                        Download PDF
+                        Print
                       </Button>
                     </div>
                   </CardHeader>

@@ -130,8 +130,6 @@ function getStorageErrorMessage(payload: unknown) {
 }
 
 function shouldDisableStorageBucket(status: number, payload: unknown) {
-  if (status >= 500) return true;
-
   const message = getStorageErrorMessage(payload);
   if (!message) return false;
 
@@ -1571,10 +1569,15 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
 
   const promise = (async () => {
     const trySign = async (targetPath: string) => {
-      // Use the bulk sign endpoint to avoid HTTP 400 Bad Request console spam
-      // when an object does not exist.
+      const encodedPath = targetPath
+        .split('/')
+        .filter(Boolean)
+        .map((segment) => encodeURIComponent(segment))
+        .join('/');
+      if (!encodedPath) return null;
+
       const response = await fetch(
-        `${supabaseUrl}/storage/v1/object/sign/${targetBucket}`,
+        `${supabaseUrl}/storage/v1/object/sign/${targetBucket}/${encodedPath}`,
         {
           method: 'POST',
           headers: {
@@ -1582,7 +1585,7 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
             Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ expiresIn: SIGNED_STORAGE_URL_EXPIRES_SECONDS, paths: [targetPath] }),
+          body: JSON.stringify({ expiresIn: SIGNED_STORAGE_URL_EXPIRES_SECONDS }),
         },
       );
       const payload = await response.json().catch(() => ({}));
@@ -1593,12 +1596,8 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
         return null;
       }
 
-      // Bulk sign returns an array of results
-      const result = Array.isArray(payload) ? payload[0] : payload;
-      if (!result || result.error) return null;
-
       const rawSigned =
-        result.signedURL || result.signedUrl || result.signed_url || null;
+        payload?.signedURL || payload?.signedUrl || payload?.signed_url || null;
       if (!rawSigned) return null;
       if (/^https?:\/\//i.test(rawSigned)) return rawSigned as string;
       return `${supabaseUrl}/storage/v1${rawSigned}`;
@@ -1613,20 +1612,7 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
         });
         return signedDirect;
       }
-
-      const encodedPath = path
-        .split('/')
-        .filter(Boolean)
-        .map((segment) => encodeURIComponent(segment))
-        .join('/');
-      const signedEncoded = encodedPath && encodedPath !== path ? await trySign(encodedPath) : null;
-      if (signedEncoded) {
-        _signedUrlCache.set(cacheKey, {
-          value: signedEncoded,
-          expiresAt: Date.now() + SIGNED_URL_CACHE_TTL_MS,
-        });
-      }
-      return signedEncoded;
+      return null;
     } catch {
       return null;
     } finally {
@@ -2038,7 +2024,10 @@ async function loadRelatedData(rows: any[]) {
 
   const shouldRunStorageFallback = submissionIds.length <= STORAGE_FALLBACK_MAX_SUBMISSIONS;
   const submissionsMissingFiles = shouldRunStorageFallback
-    ? submissionIds.filter((id) => !(filesBySubmissionCurrent[id]?.length))
+    ? submissionIds.filter((id) => {
+        const currentFiles = filesBySubmissionCurrent[id] || [];
+        return !currentFiles.length || currentFiles.some((file) => file?.storage_path && !file?.url);
+      })
     : [];
   const fallbackBuckets = [...new Set([STORAGE_BUCKET, ...Object.values(STORAGE_BUCKET_BY_FILE_TYPE)])];
   const listedFallbackFiles = (
@@ -2071,7 +2060,7 @@ async function loadRelatedData(rows: any[]) {
   const missingProfileAssetStudents = shouldRunProfileAssetFallback
     ? studentRows.filter((student) => {
         const latest = latestFilesByType(profileAssetsByUploadedBy[student?.profile_id] || []);
-        return !latest.photo || !latest.signature;
+        return !latest.photo?.url || !latest.signature?.url;
       })
     : [];
   const fallbackProfileAssets = await Promise.all(
@@ -2302,7 +2291,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
         const latest = latestFilesByType(
           profileAssetsByUploadedBy[student?.profile_id] || [],
         );
-        return !latest.photo || !latest.signature;
+        return !latest.photo?.url || !latest.signature?.url;
       })
     : [];
   const fallbackProfileAssets = await Promise.all(
@@ -4589,7 +4578,7 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
 
       const normalizedAssetRows = normalizeProfileAssetRows(await normalizeFileRows(assetRows, token));
       const latestAssets = latestFilesByType(normalizedAssetRows);
-      const needsStorageFallback = !latestAssets.photo || !latestAssets.signature;
+      const needsStorageFallback = !latestAssets.photo?.url || !latestAssets.signature?.url;
       const storageFallbackRows =
         needsStorageFallback && resolvedStudentId
           ? await listProfileAssetsFromStorage(resolvedStudentId, token)
@@ -4681,6 +4670,26 @@ export async function getSubmissions() {
 
   const submissions = await getMappedSubmissions('order=submitted_at.desc');
   return { submissions };
+}
+
+export async function getSubmissionReportSummaries() {
+  const rows = await restRequest<any[]>(
+    'submissions',
+    'select=id,student_id,department,course,year_level,sex,submitted_at,academic_year&order=submitted_at.desc',
+  ).catch(() => []);
+
+  return {
+    submissions: (rows || []).map((row) => ({
+      id: row.id,
+      studentId: row.student_id || '',
+      department: row.department || '',
+      course: row.course || '',
+      year: String(row.year_level || ''),
+      sex: row.sex || '',
+      submittedAt: row.submitted_at,
+      academicYear: row.academic_year || undefined,
+    })),
+  };
 }
 
 
@@ -4833,10 +4842,14 @@ export async function saveSubmissionReview(id: string, review: any) {
   const nextStatus = review.status;
   const now = new Date().toISOString();
 
-  assertMedicalRecordDateInRange('Chest X-Ray date', labResults.xrayDate);
-  assertMedicalRecordDateInRange('CBC date', labResults.cbcDate);
-  assertMedicalRecordDateInRange('Urinalysis date', labResults.urinalysisDate);
-  assertMedicalRecordDateInRange('Issued date', clearanceInfo.issuedDate);
+  const shouldEnforceMedicalRecordDateGuards = nextStatus !== 'returned';
+
+  if (shouldEnforceMedicalRecordDateGuards) {
+    assertMedicalRecordDateInRange('Chest X-Ray date', labResults.xrayDate);
+    assertMedicalRecordDateInRange('CBC date', labResults.cbcDate);
+    assertMedicalRecordDateInRange('Urinalysis date', labResults.urinalysisDate);
+    assertMedicalRecordDateInRange('Issued date', clearanceInfo.issuedDate);
+  }
 
   const me = await getMe();
   const reviewedBy = me.staff?.id || null;
