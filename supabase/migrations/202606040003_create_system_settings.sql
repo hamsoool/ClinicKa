@@ -19,24 +19,30 @@ create policy "system_settings_read_all"
   to anon, authenticated
   using (true);
 
-drop policy if exists "system_settings_update_admin_only" on public.system_settings;
-create policy "system_settings_update_admin_only"
-  on public.system_settings
-  for update
-  to authenticated
-  using (
-    exists (
-      select 1
-      from public.profiles
-      where profiles.id = auth.uid()
-        and profiles.role = 'admin'
-    )
-  )
-  with check (
-    exists (
-      select 1
-      from public.profiles
-      where profiles.id = auth.uid()
-        and profiles.role = 'admin'
-    )
-  );
+do $$
+begin
+  if to_regclass('public.profiles') is not null then
+    drop policy if exists "system_settings_update_admin_only" on public.system_settings;
+    create policy "system_settings_update_admin_only"
+      on public.system_settings
+      for update
+      to authenticated
+      using (
+        exists (
+          select 1
+          from public.profiles
+          where profiles.id = auth.uid()
+            and profiles.role = 'admin'
+        )
+      )
+      with check (
+        exists (
+          select 1
+          from public.profiles
+          where profiles.id = auth.uid()
+            and profiles.role = 'admin'
+        )
+      );
+  end if;
+end
+$$;
