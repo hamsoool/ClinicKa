@@ -23,7 +23,7 @@ export function inferStorageBucket(file: any) {
   if (type === "photo") return "profile";
   if (type === "profile" || type === "profile_photo" || type === "student_photo") return "profile";
   if (type === "signature" || type === "student_signature") return "student_signature";
-  if (type === "staff_signature" || type === "staff-signature") return "staff_signature";
+  if (type === "staff_signature" || type === "staff-signature" || type === "staff_signatures") return "staff_signatures";
   if (type === "xray") return "lab_chest_xray";
   if (type === "cbc") return "lab_cbc";
   if (type === "urinalysis") return "lab_urinalysis";
@@ -61,8 +61,10 @@ export function normalizeProfileAssetType(file: any) {
     rawType === "staff_signature" ||
     rawType === "staff-signature" ||
     bucket === "staff_signature" ||
+    bucket === "staff_signatures" ||
     haystack.includes("staff_signature") ||
     haystack.includes("staff-signature") ||
+    haystack.includes("staff_signatures") ||
     haystack.includes("staff-signatures")
   ) {
     return "";
@@ -126,8 +128,10 @@ export function normalizeStaffSignatureRows(files: any[] | null | undefined) {
         rawType === "staff_signature" ||
         rawType === "staff-signature" ||
         bucket === "staff_signature" ||
+        bucket === "staff_signatures" ||
         haystack.includes("staff_signature") ||
         haystack.includes("staff-signature") ||
+        haystack.includes("staff_signatures") ||
         haystack.includes("staff-signatures");
 
       return isStaffSignature ? { ...file, type: "staff_signature" } : null;
@@ -198,6 +202,8 @@ const profileAssetStorageConfigs = [
 ] as const;
 
 const staffSignatureStorageConfigs = [
+  { bucket: "staff_signatures", prefixFor: (profileId: string) => `${profileId}/` },
+  { bucket: "staff_signatures", prefixFor: (profileId: string) => `staff-signatures/${profileId}/` },
   { bucket: "staff_signature", prefixFor: (profileId: string) => `${profileId}/` },
   { bucket: "staff_signature", prefixFor: (profileId: string) => `staff-signatures/${profileId}/` },
   { bucket: "student_signature", prefixFor: (profileId: string) => `staff-signatures/${profileId}/` },

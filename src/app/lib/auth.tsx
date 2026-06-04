@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useIsMutating } from '@tanstack/react-query';
 import { Navigate, useLocation } from 'react-router';
 import {
   authenticateWithPassword,
@@ -21,6 +22,7 @@ import {
   updateUserPassword,
 } from './api';
 import { flushPendingStudentNotificationSaves } from './student-notification-save-queue';
+import { STAFF_REVIEW_MUTATION_KEY } from './staff-clearance';
 import type { AuthMe, AuthSession, UserRole } from './api';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
@@ -190,7 +192,15 @@ type AuthContextValue = {
   completePasswordSetup: (newPassword: string) => Promise<void>;
   completePasswordRecovery: (newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  pendingStaffClearanceCount: number;
 };
+
+export class LogoutBlockedError extends Error {
+  constructor(message = 'A medical clearance is still processing in the background.') {
+    super(message);
+    this.name = 'LogoutBlockedError';
+  }
+}
 
 const AUTH_CONTEXT_KEY = Symbol.for('gc.auth.context');
 const authGlobal = globalThis as typeof globalThis & {
@@ -238,6 +248,9 @@ async function applyPasswordChange(
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const pendingStaffClearanceCount = useIsMutating({
+    mutationKey: STAFF_REVIEW_MUTATION_KEY,
+  });
   const initialSession =
     typeof window === 'undefined' ? null : getStoredSession();
   const [session, setSession] = useState<AuthSession | null>(() =>
@@ -667,6 +680,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     },
     logout: async () => {
+      if (pendingStaffClearanceCount > 0 && me?.profile.role === 'staff') {
+        throw new LogoutBlockedError(
+          'Please wait for the background clearance process to finish before logging out.',
+        );
+      }
+
       setLoading(true);
       try {
         await flushPendingStudentNotificationSaves(me?.student?.student_id || me?.profile.student_id || undefined);
@@ -755,7 +774,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await applyPasswordChange(session, me, setSession, setMe, setRole, setRequiresPasswordSetup, currentPassword, newPassword);
       setIsPasswordRecovery(false);
     },
-  }), [authRedirectInProgress, isPasswordRecovery, loading, me, requiresPasswordSetup, role, session]);
+    pendingStaffClearanceCount,
+  }), [authRedirectInProgress, isPasswordRecovery, loading, me, pendingStaffClearanceCount, requiresPasswordSetup, role, session]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

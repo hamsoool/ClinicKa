@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
   CalendarRange,
@@ -16,7 +16,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import PasswordChangeCard from '../../components/password-change-card';
 import SettingsLogoutCard from '../../components/settings-logout-card';
-import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -27,8 +26,11 @@ import { PortalPageSkeleton } from '../../components/project-skeletons';
 import {
   createDefaultAdminSystemSettings,
   type AdminSystemSettings,
+  updateAcademicYearSetting,
   updateAdminSystemSettings,
 } from '../../lib/api';
+import { formatAcademicYearLabel, getDefaultAcademicYear, normalizeAcademicYear } from '../../lib/academic-year';
+import { academicYearQueryKey, useAcademicYear } from '../../lib/academic-year-query';
 import { toast } from 'sonner';
 import {
   adminSystemSettingsQueryKey,
@@ -44,6 +46,7 @@ const autoArchiveOptions = [
   { value: 24, label: 'After 24 months' },
   { value: 36, label: 'After 36 months' },
 ] as const;
+const UPCOMING_ACADEMIC_YEAR_OPTION_COUNT = 8;
 
 type SettingSectionProps = {
   icon: LucideIcon;
@@ -89,19 +92,54 @@ function formatArchiveLabel(months: number) {
   return autoArchiveOptions.find((option) => option.value === months)?.label || 'After 12 months';
 }
 
+function getAcademicYearOptionLabel(academicYear: string) {
+  const [startYear, endYear] = academicYear.split('-');
+  return `${startYear} - ${endYear}`;
+}
+
+function buildUpcomingAcademicYearOptions(referenceDate = new Date()) {
+  const baseAcademicYear = getDefaultAcademicYear(referenceDate);
+  const baseStartYear = Number.parseInt(baseAcademicYear.slice(0, 4), 10);
+
+  return Array.from({ length: UPCOMING_ACADEMIC_YEAR_OPTION_COUNT }, (_, index) => {
+    const startYear = baseStartYear + index;
+    const academicYear = `${startYear}-${startYear + 1}`;
+
+    return {
+      value: academicYear,
+      label: getAcademicYearOptionLabel(academicYear),
+    };
+  });
+}
+
 export default function AdminSystemSettings() {
   const queryClient = useQueryClient();
   const defaults = useMemo(() => createDefaultAdminSystemSettings(), []);
   const [savedSettings, setSavedSettings] = useState<AdminSystemSettings>(defaults);
   const [draftSettings, setDraftSettings] = useState<AdminSystemSettings>(defaults);
+  const [academicYearInput, setAcademicYearInput] = useState(defaults.academicYear);
   const [isSaving, setIsSaving] = useState(false);
   const { data: settingsData, isLoading, isError, error } = useAdminSystemSettingsQuery();
+  const {
+    academicYear: activeAcademicYear,
+    academicYearLabel,
+    settingValue: academicYearSettingValue,
+  } = useAcademicYear();
+  const academicYearOptions = useMemo(() => buildUpcomingAcademicYearOptions(), []);
+  const firstAcademicYearOption = academicYearOptions[0]?.value || getDefaultAcademicYear();
 
   useEffect(() => {
     if (!settingsData) return;
     setSavedSettings(settingsData);
     setDraftSettings(settingsData);
   }, [settingsData]);
+
+  useEffect(() => {
+    const nextAcademicYearInput = academicYearOptions.some((option) => option.value === activeAcademicYear)
+      ? activeAcademicYear
+      : firstAcademicYearOption;
+    setAcademicYearInput(nextAcademicYearInput);
+  }, [activeAcademicYear, academicYearOptions, firstAcademicYearOption]);
 
   useEffect(() => {
     if (isError) {
@@ -124,6 +162,33 @@ export default function AdminSystemSettings() {
     }));
   };
 
+  const normalizedAcademicYearInput = normalizeAcademicYear(academicYearInput, '');
+  const hasAcademicYearChanges = normalizedAcademicYearInput !== activeAcademicYear;
+  const selectedAcademicYearLabel = academicYearOptions.find((option) => option.value === academicYearInput)?.label
+    || getAcademicYearOptionLabel(normalizedAcademicYearInput || firstAcademicYearOption);
+  const academicYearMutation = useMutation({
+    mutationFn: updateAcademicYearSetting,
+    onSuccess: async (saved) => {
+      const nextAcademicYearInput = academicYearOptions.some((option) => option.value === saved.academicYear)
+        ? saved.academicYear
+        : firstAcademicYearOption;
+      setAcademicYearInput(nextAcademicYearInput);
+      queryClient.setQueryData(academicYearQueryKey(), saved);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: adminSystemSettingsQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: ['staffDashboardOverview'] }),
+      ]);
+      toast.success(`Active academic year updated to ${formatAcademicYearLabel(saved.academicYear)}.`);
+    },
+    onError: (mutationError) => {
+      toast.error(
+        mutationError instanceof Error
+          ? mutationError.message
+          : 'Failed to update the active academic year.',
+      );
+    },
+  });
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -140,10 +205,14 @@ export default function AdminSystemSettings() {
     }
   };
 
+  const handleAcademicYearSave = async () => {
+    await academicYearMutation.mutateAsync(academicYearInput);
+  };
+
   const settingsSummary = [
     {
-      label: 'Academic Term',
-      value: draftSettings.academicYear,
+      label: 'Active School Year',
+      value: academicYearLabel,
       icon: CalendarRange,
     },
     {
@@ -198,57 +267,123 @@ export default function AdminSystemSettings() {
         })}
       </div>
 
+      <Card className="overflow-hidden border-outline-variant/35 bg-[linear-gradient(135deg,rgba(18,183,106,0.12),rgba(255,255,255,0.98)_46%,rgba(133,246,174,0.16))] shadow-[0px_18px_48px_-24px_rgba(16,24,40,0.28)]">
+        <CardHeader className="border-b border-outline-variant/20 bg-white/65 backdrop-blur">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+                <CalendarRange className="h-5 w-5" />
+              </span>
+              <div>
+                <CardTitle className="text-xl font-semibold text-on-surface">Active School Year</CardTitle>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  Choose the school year used across student submissions, staff dashboards, and generated clinic documents.
+                </p>
+              </div>
+            </div>
+            <Badge className="w-fit rounded-full bg-white/90 px-3 py-1 text-on-surface shadow-sm">
+              Future years only
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.9fr)]">
+          <div className="rounded-[1.5rem] border border-white/70 bg-white/88 p-5 shadow-[0_12px_30px_-24px_rgba(16,24,40,0.35)]">
+            <div className="space-y-2">
+              <Label htmlFor="currentAcademicYear" className="text-sm font-semibold text-on-surface">
+                School Year
+              </Label>
+              <Select value={academicYearInput} onValueChange={setAcademicYearInput}>
+                <SelectTrigger
+                  id="currentAcademicYear"
+                  className="h-12 rounded-xl border-outline-variant/50 bg-surface-container-lowest text-base font-semibold shadow-none"
+                >
+                  <SelectValue placeholder="Select school year" />
+                </SelectTrigger>
+                <SelectContent>
+                  {academicYearOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Badge className="rounded-full bg-primary-container/35 px-3 py-1 text-on-primary-container">
+                Selected: {selectedAcademicYearLabel}
+              </Badge>
+              <Badge className="rounded-full bg-surface-container px-3 py-1 text-on-surface-variant">
+                Stored as {formatAcademicYearLabel(academicYearInput)}
+              </Badge>
+            </div>
+
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">
+              Past school years automatically drop off this list over time, so administrators only see the current term and upcoming choices.
+            </p>
+          </div>
+
+          <div className="flex flex-col justify-between rounded-[1.5rem] border border-primary/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(238,246,236,0.94))] p-5 shadow-[0_12px_30px_-24px_rgba(0,109,60,0.4)]">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">Current Value</p>
+              <p className="mt-3 text-3xl font-bold tracking-tight text-on-surface">{academicYearLabel}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{academicYearSettingValue}</p>
+              <div className="mt-5 rounded-2xl border border-outline-variant/20 bg-white/80 px-4 py-3 text-sm leading-6 text-on-surface-variant">
+                This update takes effect everywhere the active academic year is shown.
+              </div>
+            </div>
+            <Button
+              className="mt-5 h-11 rounded-xl bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+              disabled={academicYearMutation.isPending || !hasAcademicYearChanges}
+              onClick={() => void handleAcademicYearSave()}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {academicYearMutation.isPending ? 'Updating...' : 'Update School Year'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
         <div className="space-y-6">
           <SettingSection
             icon={CalendarRange}
-            title="Academic Term and Student Intake"
+            title="Student Intake and Clinic Term"
           >
-        <div className="grid gap-4 px-5 py-5 sm:grid-cols-2 sm:px-6">
-          <div className="space-y-2">
-            <Label htmlFor="academicYear">Academic Year</Label>
-            <Input
-              id="academicYear"
-              value={draftSettings.academicYear}
-              onChange={(event) => updateField('academicYear', event.target.value)}
-              placeholder="e.g., 2025-2026"
-              autoComplete="off"
-            />
-            <p className="text-xs text-muted-foreground">Use the format YYYY-YYYY.</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="semester">Semester</Label>
-            <Select
-              value={draftSettings.semester}
-              onValueChange={(value) => updateField('semester', value as AdminSystemSettings['semester'])}
+            <div className="grid gap-4 px-5 py-5 sm:px-6">
+              <div className="space-y-2">
+                <Label htmlFor="semester">Semester</Label>
+                <Select
+                  value={draftSettings.semester}
+                  onValueChange={(value) => updateField('semester', value as AdminSystemSettings['semester'])}
+                >
+                  <SelectTrigger id="semester">
+                    <SelectValue placeholder="Select semester" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {semesterOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <SettingRow
+              title="Student medical record submissions"
             >
-              <SelectTrigger id="semester">
-                <SelectValue placeholder="Select semester" />
-              </SelectTrigger>
-              <SelectContent>
-                {semesterOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <SettingRow
-          title="Student medical record submissions"
-        >
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
-            <Badge className={draftSettings.acceptingSubmissions ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>
-              {draftSettings.acceptingSubmissions ? 'Open' : 'Paused'}
-            </Badge>
-            <Switch
-              checked={draftSettings.acceptingSubmissions}
-              onCheckedChange={(checked) => updateField('acceptingSubmissions', checked)}
-            />
-          </div>
-        </SettingRow>
-      </SettingSection>
+              <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <Badge className={draftSettings.acceptingSubmissions ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>
+                  {draftSettings.acceptingSubmissions ? 'Open' : 'Paused'}
+                </Badge>
+                <Switch
+                  checked={draftSettings.acceptingSubmissions}
+                  onCheckedChange={(checked) => updateField('acceptingSubmissions', checked)}
+                />
+              </div>
+            </SettingRow>
+          </SettingSection>
 
           <SettingSection
             icon={Bell}

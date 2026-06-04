@@ -11,8 +11,7 @@ import { useStudentRecordsQuery } from './student-records-query';
 import { useStudentProfileAssetsQuery } from './student-profile-assets-query';
 import type { SubmissionRecord } from '../../lib/record-types';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel } from '../../lib/academic-year';
-
-const yearLabels = ['Year I', 'Year II', 'Year III', 'Year IV'];
+import { useAcademicYear } from '../../lib/academic-year-query';
 const dashboardDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   day: '2-digit',
@@ -38,6 +37,7 @@ function joinMissingItems(items: string[]) {
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
+  const { academicYearLabel } = useAcademicYear();
   const { displayName, studentId, profileId } = useMemo(() => {
     const name = [
       me?.student?.first_name || me?.profile.first_name || '',
@@ -164,32 +164,32 @@ export default function StudentDashboard() {
     return `Age ${age}`;
   };
 
-  const { latestRecord, yearlyRecords } = useMemo(() => {
+  const { latestRecord, cycleRecords } = useMemo(() => {
     const sorted = [...records].sort((a, b) => {
       const aTime = new Date(a.updatedAt || a.submittedAt || 0).getTime();
       const bTime = new Date(b.updatedAt || b.submittedAt || 0).getTime();
       return bTime - aTime;
     });
-    const recordsByYear = new Map<number, typeof sorted>();
+    const recordsByCycle = new Map<number, SubmissionRecord>();
     for (const item of sorted) {
-      const yearNum = Number.parseInt(String(item.year || ''), 10);
-      if (!Number.isFinite(yearNum) || yearNum < 1) continue;
-      const bucket = recordsByYear.get(yearNum) || [];
-      bucket.push(item);
-      recordsByYear.set(yearNum, bucket);
+      const slot = Number.parseInt(String(item.year || ''), 10);
+      if (!Number.isFinite(slot) || slot < 1 || recordsByCycle.has(slot)) continue;
+      recordsByCycle.set(slot, item);
     }
 
     const latest =
       sorted.find((item) => String(item.status || '').toLowerCase() !== 'returned') ||
       sorted[0];
-    const yearly = yearLabels.map((label, index) => {
-      const year = index + 1;
-      const record = sorted.find((item) => Number.parseInt(item.year || '', 10) === year);
-      return { label, record };
-    });
+
     return {
       latestRecord: latest,
-      yearlyRecords: yearly,
+      cycleRecords: [...recordsByCycle.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([slot, record]) => ({
+          slot,
+          label: getSubmissionSlotLabel(slot),
+          record,
+        })),
     };
   }, [records]);
   const completionReminders = useMemo<CompletionReminder[]>(() => {
@@ -407,8 +407,14 @@ export default function StudentDashboard() {
         <div className="border-b border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6">
           <h3 className="text-lg font-semibold text-on-surface">Record Cycle Overview</h3>
         </div>
+        {cycleRecords.length === 0 ? (
+          <div className="px-4 py-8 text-sm text-on-surface-variant sm:px-6">
+            No submission cycles have been started yet.
+          </div>
+        ) : (
+          <>
         <div className="sm:hidden">
-          {yearlyRecords.map(({ label, record }) => (
+          {cycleRecords.map(({ label, record }) => (
             <div
               key={`mobile-${label}`}
               className="border-b border-outline-variant/20 px-4 py-3 last:border-b-0"
@@ -441,14 +447,14 @@ export default function StudentDashboard() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-outline-variant/30 bg-surface-container-low text-xs uppercase tracking-[0.16em] text-on-surface-variant">
-                <th className="px-4 py-3 font-semibold sm:px-6">Year Level</th>
+                <th className="px-4 py-3 font-semibold sm:px-6">Record Slot</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Status</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Academic Year</th>
                 <th className="px-4 py-3 font-semibold sm:px-6">Last Action Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/20">
-              {yearlyRecords.map(({ label, record }) => (
+              {cycleRecords.map(({ label, record }) => (
                 <tr key={label} className="transition-colors hover:bg-surface-container-lowest">
                   <td className={`px-4 py-4 text-sm sm:px-6 ${record ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
                     <div className="min-w-0">
@@ -482,6 +488,8 @@ export default function StudentDashboard() {
             </tbody>
           </table>
         </div>
+          </>
+        )}
       </div>
 
         </div>
@@ -524,7 +532,7 @@ export default function StudentDashboard() {
                   <div className="min-w-0">
                     <p className="text-sm text-on-surface-variant">Latest submission</p>
                     <p className="text-base font-semibold text-on-surface sm:text-lg">
-                      {latestRecord ? formatAcademicYearLabel(getRecordAcademicYear(latestRecord)) : 'School Year'} Medical Record
+                      {latestRecord ? formatAcademicYearLabel(getRecordAcademicYear(latestRecord)) : academicYearLabel} Medical Record
                     </p>
                   </div>
                   <span
@@ -548,7 +556,7 @@ export default function StudentDashboard() {
                 onClick={() => navigate('/student/year-selection')}
               >
                 <Plus className="h-4 w-4" />
-                Submit for Current School Year
+                {`Submit for ${academicYearLabel}`}
               </button>
             </div>
           )}

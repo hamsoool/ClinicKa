@@ -1,5 +1,6 @@
 import { forwardRef, memo } from 'react';
 import type { ForwardedRef } from 'react';
+import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel, normalizeSubmissionSlot } from '../lib/academic-year';
 import type { SubmissionRecord } from '../lib/record-types';
 import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
 
@@ -28,6 +29,12 @@ const EXAM_FIELD_MAP: Record<string, string> = {
 };
 
 const CLEARANCE_SIGNATORY_NAMES = ['GERALD S. BERNAL, MD', 'ARMANDO TAMAYO, MD'] as const;
+const RECORD_COLUMNS_PER_PAGE = 4;
+const RECORD_TABLE_WIDTH = '764px';
+const EXAM_FIRST_COLUMN_WIDTH = '168px';
+const EXAM_YEAR_COLUMN_WIDTH = '149px';
+const LAB_FIRST_COLUMN_WIDTH = '68px';
+const LAB_YEAR_COLUMN_WIDTH = '174px';
 
 const MEDICAL_HISTORY_ROWS: { key: string; label: string }[][] = [
   [
@@ -99,11 +106,11 @@ const S = {
   line: {
     borderBottom: '1.2px solid #000',
     minWidth: '30px',
-    height: '18px',
+    height: '19px',
     display: 'inline-flex',
     alignItems: 'flex-end',
     lineHeight: '1.3',
-    padding: '0 2px 2px 2px',
+    padding: '0 2px 4px 2px',
     boxSizing: 'border-box' as const,
     overflow: 'hidden',
   },
@@ -126,17 +133,18 @@ const S = {
   },
   th: {
     border: '1.5px solid #000',
-    padding: '3px 5px',
+    padding: '2px 5px 6px 5px',
     verticalAlign: 'middle' as const,
     fontWeight: 'bold' as const,
     background: '#fff',
     textAlign: 'left' as const,
+    lineHeight: '1.15',
   },
   td: {
     border: '1.5px solid #000',
-    padding: '4px 5px',
+    padding: '2px 5px 6px 5px',
     verticalAlign: 'middle' as const,
-    lineHeight: '1.35',
+    lineHeight: '1.15',
   },
 };
 
@@ -170,7 +178,8 @@ function HSULogo({ size = 64 }: { size?: number }) {
 
 interface Props {
   record: SubmissionRecord;
-  yearlyRecords?: Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>;
+  records?: SubmissionRecord[];
+  academicYearLabel?: string;
 }
 
 function abbreviateCourseDept(value: string) {
@@ -219,18 +228,96 @@ function formatXrayResult(value?: string | null) {
   return '';
 }
 
+function getExamCompletenessScore(record: SubmissionRecord) {
+  const exam = record.staffMeasurements || {};
+  const values = [
+    exam.bloodPressure,
+    exam.cardiacRate,
+    exam.respiratoryRate,
+    exam.temperature,
+    exam.weight,
+    exam.height,
+    exam.bmi,
+    exam.visualAcuity,
+    exam.skin,
+    exam.heent,
+    exam.chestLungs,
+    exam.heart,
+    exam.abdomen,
+    exam.extremities,
+    exam.others,
+    exam.examinedBy,
+    record.bloodPressure,
+    record.weight,
+    record.height,
+    record.bmi,
+  ];
+
+  return values.filter((value) => String(value || '').trim().length > 0).length;
+}
+
+function buildBestRecordBySlot(records: SubmissionRecord[]) {
+  const recordsBySlot = new Map<number, SubmissionRecord>();
+
+  for (const item of records) {
+    const slot = normalizeSubmissionSlot(item.year);
+    if (!slot) continue;
+
+    const current = recordsBySlot.get(slot);
+    if (!current) {
+      recordsBySlot.set(slot, item);
+      continue;
+    }
+
+    const currentScore = getExamCompletenessScore(current);
+    const nextScore = getExamCompletenessScore(item);
+    if (nextScore > currentScore) {
+      recordsBySlot.set(slot, item);
+      continue;
+    }
+    if (currentScore > nextScore) {
+      continue;
+    }
+
+    const currentTs = new Date(current.updatedAt || current.submittedAt || 0).getTime();
+    const nextTs = new Date(item.updatedAt || item.submittedAt || 0).getTime();
+    if (nextTs >= currentTs) {
+      recordsBySlot.set(slot, item);
+    }
+  }
+
+  return recordsBySlot;
+}
+
+function buildSlotPages(recordsBySlot: Map<number, SubmissionRecord>, fallbackSlot: number) {
+  const highestSlot = Math.max(fallbackSlot, ...recordsBySlot.keys());
+  const totalPages = Math.max(1, Math.ceil(highestSlot / RECORD_COLUMNS_PER_PAGE));
+
+  return Array.from({ length: totalPages }, (_, pageIndex) => {
+    const pageStart = pageIndex * RECORD_COLUMNS_PER_PAGE + 1;
+    return Array.from({ length: RECORD_COLUMNS_PER_PAGE }, (_, columnIndex) => pageStart + columnIndex);
+  });
+}
+
 const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
-  { record, yearlyRecords }: Props,
+  { record, records = [], academicYearLabel }: Props,
   ref: ForwardedRef<HTMLDivElement>
 ) {
-    const exam = record.staffMeasurements || {};
-    const lab = record.labResults || {};
     const history = record.medicalHistory || {};
-    const yr = record.year || '1';
-    const yrIndex = parseInt(yr, 10) - 1;
     const civilStatusNormalized = String(record.civilStatus || '').trim().toLowerCase();
     const photoUrl = record.photoUrl;
     const signatureUrl = record.signatureUrl;
+    const dedupedRecords = Array.from(
+      new Map(
+        [...records, record]
+          .filter((item): item is SubmissionRecord => Boolean(item?.id))
+          .map((item) => [item.id, item]),
+      ).values(),
+    );
+    const fallbackSlot = normalizeSubmissionSlot(record.year) || 1;
+    const recordsBySlot = buildBestRecordBySlot(dedupedRecords);
+    const slotPages = buildSlotPages(recordsBySlot, fallbackSlot);
+    const resolvedAcademicYearLabel = academicYearLabel || formatAcademicYearLabel(getRecordAcademicYear(record));
 
     const getExamFieldValue = (
       sourceRecord: SubmissionRecord | undefined,
@@ -247,34 +334,20 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
       return '';
     };
 
-    const getYearRecord = (year: number) => {
-      const yearRecord = yearlyRecords?.[year as 1 | 2 | 3 | 4];
-      if (yearRecord) return yearRecord;
-      return year - 1 === yrIndex ? record : undefined;
-    };
+    const getSlotRecord = (slot: number) => recordsBySlot.get(slot);
 
-    const getYearExamValue = (year: number, row: string) => {
+    const getSlotExamValue = (slot: number, row: string) => {
       const field = EXAM_FIELD_MAP[row];
       if (!field) return '';
-      const sourceRecord = getYearRecord(year);
+      const sourceRecord = getSlotRecord(slot);
       if (!sourceRecord) return '';
-      const primary = getExamFieldValue(sourceRecord, field);
-      if (String(primary || '').trim()) return primary;
-      if (sourceRecord !== record && year - 1 === yrIndex) {
-        return getExamFieldValue(record, field);
-      }
-      return '';
+      return getExamFieldValue(sourceRecord, field);
     };
 
-    const getYearLab = (year: number) => {
-      const yearRecord = yearlyRecords?.[year as 1 | 2 | 3 | 4];
-      if (yearRecord?.labResults) return yearRecord.labResults;
-      return year - 1 === yrIndex ? lab : {};
-    };
+    const getSlotLab = (slot: number) => getSlotRecord(slot)?.labResults || {};
 
-    const getYearExaminer = (year: number) => {
-      const yearRecord = yearlyRecords?.[year as 1 | 2 | 3 | 4];
-      const sourceExam = yearRecord?.staffMeasurements || (year - 1 === yrIndex ? exam : {});
+    const getSlotExaminer = (slot: number) => {
+      const sourceExam = getSlotRecord(slot)?.staffMeasurements || {};
       return {
         name: String(sourceExam?.examinedBy || '').trim(),
         signatureUrl: String(sourceExam?.examinedBySignatureUrl || '').trim(),
@@ -293,37 +366,30 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
       return parsed.toLocaleDateString();
     };
 
-    const getYearExamDate = (year: number) => formatExamDate(getYearRecord(year));
+    const getSlotExamDate = (slot: number) => formatExamDate(getSlotRecord(slot));
 
-    const renderExaminer = (year: number) => {
-      const examiner = getYearExaminer(year);
+    const renderExaminer = (slot: number) => {
+      const examiner = getSlotExaminer(slot);
       const displayName = isClearanceSignatoryName(examiner.name) ? '' : examiner.name;
-      if (!examiner.signatureUrl) return displayName;
+      if (!examiner.signatureUrl && !displayName) return null;
 
       return (
-        <div
-          style={{
-            display: 'flex',
-            minHeight: '32px',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '1px',
-            textAlign: 'center',
-          }}
-        >
-          <img
-            src={examiner.signatureUrl}
-            alt="Examiner signature"
-            style={{
-              maxWidth: '112px',
-              maxHeight: '20px',
-              width: 'auto',
-              height: 'auto',
-              objectFit: 'contain',
-              display: 'block',
-            }}
-          />
+        <div className="flex min-h-[52px] flex-col items-start gap-1 text-left">
+          {examiner.signatureUrl ? (
+            <img
+              src={examiner.signatureUrl}
+              alt="Examiner signature"
+              className="h-10 w-auto object-contain"
+              style={{
+                maxWidth: '112px',
+                maxHeight: '40px',
+                width: 'auto',
+                height: 'auto',
+                objectFit: 'contain',
+                display: 'block',
+              }}
+            />
+          ) : null}
           {displayName ? (
             <span style={{ fontSize: '7.5px', lineHeight: '1.05' }}>{displayName}</span>
           ) : null}
@@ -335,19 +401,22 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
       const text = String(value || '').trim();
       return (
         <span
+          className="relative inline-block whitespace-nowrap align-baseline print:align-baseline"
           style={{
             position: 'relative',
             display: 'inline-block',
             minWidth,
-            height: '14px',
+            height: '15px',
             lineHeight: '10px',
-            padding: '0 1px 3px 1px',
+            padding: '0 1px 4px 1px',
             verticalAlign: 'baseline',
             whiteSpace: 'nowrap',
             boxSizing: 'border-box',
           }}
         >
-          <span style={{ position: 'relative', zIndex: 1 }}>{text || '\u00A0'}</span>
+          <span style={{ position: 'relative', zIndex: 1, display: 'inline-block', transform: 'translateY(-1px)' }}>
+            {text || '\u00A0'}
+          </span>
           <span
             style={{
               position: 'absolute',
@@ -361,6 +430,13 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
         </span>
       );
     };
+
+    const renderCheckbox = (checked: boolean) => (
+      <span
+        className="pdf-print-exact relative inline-block h-[10px] w-[10px] shrink-0 align-middle print:shrink-0"
+        style={S.checkbox(checked)}
+      />
+    );
 
     const wrappedField = (value: unknown) => {
       const text = String(value || '').trim();
@@ -378,11 +454,34 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
       );
     };
 
+    const getSlotHeaderLabel = (slot: number) => getSubmissionSlotLabel(slot).replace('Year ', 'Yr. ');
+
+    const getSlotReceivedDate = (slot: number) => {
+      const sourceRecord = getSlotRecord(slot);
+      if (!sourceRecord?.updatedAt) return '';
+
+      const parsed = new Date(sourceRecord.updatedAt);
+      if (Number.isNaN(parsed.getTime())) return '';
+      return parsed.toLocaleDateString();
+    };
+
     return (
-      <div ref={ref} style={S.page}>
+      <div ref={ref} className="pdf-print-exact flex flex-col gap-4 bg-white print:gap-0">
+        {slotPages.map((slots, pageIndex) => (
+          <div
+            key={`medical-record-page-${slots[0]}`}
+            className="pdf-print-exact flex flex-col bg-white print:flex print:flex-col"
+            style={{
+              ...S.page,
+              marginBottom: pageIndex === slotPages.length - 1 ? '0' : '16px',
+              breakAfter: pageIndex === slotPages.length - 1 ? 'auto' : 'page',
+              pageBreakAfter: pageIndex === slotPages.length - 1 ? 'auto' : 'always',
+            }}
+          >
 
         {/* ── HEADER ── */}
         <div
+          className="flex items-center justify-between print:flex print:flex-row"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -391,7 +490,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           }}
         >
           {/* Logos */}
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <div className="flex items-center gap-[6px] print:flex print:flex-row" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <div style={S.logoCircle}>
               <GordonCollegeLogo size={64} />
             </div>
@@ -456,6 +555,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
 
         {/* ── STUDENT # + UNIT TITLE ── */}
         <div
+          className="flex items-center justify-between print:flex print:flex-row"
           style={{
             display: 'flex',
             justifyContent: 'space-between',
@@ -477,14 +577,21 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <div style={{ fontSize: '13px', fontWeight: 'bold', textAlign: 'center', flex: 1 }}>
             Health Services Unit
           </div>
-          <div style={{ minWidth: '78px' }} />
+          <div style={{ minWidth: '120px', textAlign: 'right', fontSize: '9px', fontWeight: 'bold', lineHeight: '1.35' }}>
+            <div>School Year</div>
+            <div>{resolvedAcademicYearLabel}</div>
+          </div>
         </div>
 
         {/* ── NAME ROWS ── */}
-        <div style={{ display: 'flex', alignItems: 'stretch', marginTop: '7px' }}>
+        <div
+          className="flex items-stretch print:flex print:flex-row print:items-stretch"
+          style={{ display: 'flex', alignItems: 'stretch', marginTop: '7px' }}
+        >
           {/* Last Name */}
-          <div style={{ width: '130px', flexShrink: 0 }}>
+          <div className="w-[130px] min-w-[130px] shrink-0 print:min-w-[130px]" style={{ width: '130px', flexShrink: 0 }}>
             <div
+              className="flex h-[20px] items-end gap-1 print:flex print:flex-row print:items-end"
               style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '20px' }}
             >
               <span style={S.fieldLabel}>Name:</span>
@@ -496,8 +603,8 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           </div>
 
           {/* First Name */}
-          <div style={{ flex: 2, marginLeft: '6px' }}>
-            <div style={{ height: '20px', display: 'flex', alignItems: 'flex-end' }}>
+          <div className="ml-[6px] min-w-[220px] flex-[2] print:min-w-[220px]" style={{ flex: 2, marginLeft: '6px' }}>
+            <div className="flex h-[20px] items-end print:flex print:flex-row print:items-end" style={{ height: '20px', display: 'flex', alignItems: 'flex-end' }}>
               <div style={{ ...S.line, flex: 1, justifyContent: 'center' }}>
                 {record.firstName || ''}
               </div>
@@ -515,8 +622,8 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           </div>
 
           {/* M.I. */}
-          <div style={{ width: '42px', flexShrink: 0, marginLeft: '8px' }}>
-            <div style={{ height: '20px', display: 'flex', alignItems: 'flex-end' }}>
+          <div className="ml-[8px] w-[42px] min-w-[42px] shrink-0 print:min-w-[42px]" style={{ width: '42px', flexShrink: 0, marginLeft: '8px' }}>
+            <div className="flex h-[20px] items-end print:flex print:flex-row print:items-end" style={{ height: '20px', display: 'flex', alignItems: 'flex-end' }}>
               <div style={{ ...S.line, flex: 1, justifyContent: 'center' }}>
                 {record.middleInitial || ''}
               </div>
@@ -534,8 +641,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           </div>
 
           {/* Course / Age / Sex */}
-          <div style={{ flex: 1.2, marginLeft: '8px' }}>
+          <div className="ml-[8px] min-w-[250px] flex-[1.2] print:min-w-[250px]" style={{ flex: 1.2, marginLeft: '8px' }}>
             <div
+              className="flex h-[20px] items-end gap-1 print:flex print:flex-row print:items-end"
               style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '20px' }}
             >
               <span style={S.fieldLabel}>Course/Dept.</span>
@@ -544,6 +652,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               </div>
             </div>
             <div
+              className="flex items-center gap-2 print:flex print:flex-row print:items-center"
               style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}
             >
               <span style={S.fieldLabel}>Age:</span>
@@ -558,9 +667,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                 {record.age || ''}
               </div>
               <span style={{ ...S.fieldLabel, marginLeft: '4px' }}>Sex: F</span>
-              <span style={S.checkbox(record.sex === 'female')} />
+              {renderCheckbox(record.sex === 'female')}
               <span style={S.fieldLabel}>M</span>
-              <span style={S.checkbox(record.sex === 'male')} />
+              {renderCheckbox(record.sex === 'male')}
             </div>
           </div>
         </div>
@@ -568,6 +677,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
 
         {/* ── BIRTHDAY ROW ── */}
         <div
+          className="flex flex-nowrap items-end gap-[6px] print:flex print:flex-row print:flex-nowrap"
           style={{
             display: 'flex',
             alignItems: 'flex-end',
@@ -579,9 +689,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <span style={S.fieldLabel}>Birthday:</span>
           <div style={{ ...S.line, minWidth: '140px' }}>{record.birthday || ''}</div>
           <span style={{ ...S.fieldLabel, marginLeft: '10px' }}>Civil Status: Single</span>
-          <span style={S.checkbox(civilStatusNormalized === 'single' || !civilStatusNormalized)} />
+          {renderCheckbox(civilStatusNormalized === 'single' || !civilStatusNormalized)}
           <span style={S.fieldLabel}>Married</span>
-          <span style={S.checkbox(civilStatusNormalized === 'married')} />
+          {renderCheckbox(civilStatusNormalized === 'married')}
           <span style={{ ...S.fieldLabel, marginLeft: '14px' }}>Tel. /CPR:</span>
           <div style={{ ...S.line, minWidth: '140px' }}>
             {formatLocalPhone(record.contactNumber || '')}
@@ -590,6 +700,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
 
         {/* ── PRESENT ADDRESS ── */}
         <div
+          className="flex flex-nowrap items-end gap-[6px] print:flex print:flex-row print:flex-nowrap"
           style={{
             display: 'flex',
             alignItems: 'flex-end',
@@ -599,13 +710,13 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           }}
         >
           <span style={S.fieldLabel}>Present Address:</span>
-          <div style={{ ...S.line, flex: 1 }}>{record.address || ''}</div>
+          <div className="min-w-[620px] flex-1 print:min-w-[620px]" style={{ ...S.line, flex: 1 }}>
+            {record.address || ''}
+          </div>
         </div>
 
         {/* ── MEDICAL HISTORY ── */}
-        <div
-          style={{ fontWeight: 'bold', margin: '8px 0 5px 0', fontSize: '10.5px' }}
-        >
+        <div style={{ fontWeight: 'bold', margin: '8px 0 5px 0', fontSize: '10.5px' }}>
           • MEDICAL HISTORY: place a CHECK (✔) if you have or had.
         </div>
         <div
@@ -617,6 +728,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
         >
           {MEDICAL_HISTORY_ROWS.map((row, i) => (
             <div
+              className="flex print:flex print:flex-row"
               key={i}
               style={{
                 display: 'flex',
@@ -625,6 +737,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
             >
               {row.map((item, j) => (
                 <div
+                  className="flex flex-1 items-center gap-1 print:flex print:flex-row print:items-center"
                   key={`${item.key}-${j}`}
                   style={{
                     display: 'flex',
@@ -636,11 +749,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                 >
                   {item.key.startsWith('_blank_') ? null : (
                     <>
-                      <span
-                        style={S.checkbox(
-                          !!history[item.key as keyof typeof history]
-                        )}
-                      />
+                      {renderCheckbox(!!history[item.key as keyof typeof history])}
                       {item.label}
                     </>
                   )}
@@ -652,6 +761,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
 
         {/* ── OPERATION ── */}
         <div
+          className="flex items-end gap-1 print:flex print:flex-row print:items-end"
           style={{
             display: 'flex',
             alignItems: 'flex-end',
@@ -662,11 +772,12 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <span style={S.fieldLabel}>
             • Have you had any operation in the past?&nbsp; YES
           </span>
-          <span style={S.checkbox(record.hadOperation === 'yes')} />
+          {renderCheckbox(record.hadOperation === 'yes')}
           <span style={S.fieldLabel}>&nbsp;NO</span>
-          <span style={S.checkbox(record.hadOperation === 'no')} />
+          {renderCheckbox(record.hadOperation === 'no')}
         </div>
         <div
+          className="flex items-end gap-1 print:flex print:flex-row print:items-end"
           style={{
             display: 'flex',
             alignItems: 'flex-end',
@@ -685,6 +796,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
 
         {/* ── EMERGENCY CONTACT ── */}
         <div
+          className="flex items-end gap-1 print:flex print:flex-row print:items-end"
           style={{
             display: 'flex',
             alignItems: 'flex-end',
@@ -702,6 +814,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           </div>
         </div>
         <div
+          className="flex items-end gap-1 print:flex print:flex-row print:items-end"
           style={{
             display: 'flex',
             alignItems: 'flex-end',
@@ -764,15 +877,25 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
         </div>
 
         {/* ── PHYSICAL EXAMINATION TABLE ── */}
-        <table style={S.table}>
+        <div className="w-full min-w-[764px] print:min-w-[764px]">
+        <table className="w-full min-w-[764px] table-fixed border-collapse print:min-w-[764px]" style={S.table}>
+          <colgroup>
+            <col style={{ width: EXAM_FIRST_COLUMN_WIDTH, minWidth: EXAM_FIRST_COLUMN_WIDTH }} />
+            {slots.map((slot) => (
+              <col key={slot} style={{ width: EXAM_YEAR_COLUMN_WIDTH, minWidth: EXAM_YEAR_COLUMN_WIDTH }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
-              <th style={{ ...S.th, width: '22%' }}>Physical Examination</th>
-              {[1, 2, 3, 4].map((year) => (
-                <th key={year} style={{ ...S.th, width: '19.5%' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <span>{`Yr. ${['I', 'II', 'III', 'IV'][year - 1]} / Date:`}</span>
-                    <span style={{ fontWeight: 'normal' }}>{getYearExamDate(year)}</span>
+              <th style={{ ...S.th, width: EXAM_FIRST_COLUMN_WIDTH, minWidth: EXAM_FIRST_COLUMN_WIDTH }}>Physical Examination</th>
+              {slots.map((slot) => (
+                <th
+                  key={slot}
+                  style={{ ...S.th, width: EXAM_YEAR_COLUMN_WIDTH, minWidth: EXAM_YEAR_COLUMN_WIDTH }}
+                >
+                  <div className="flex flex-col gap-[2px] print:flex print:flex-col" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span>{`${getSlotHeaderLabel(slot)} / Date:`}</span>
+                    <span style={{ fontWeight: 'normal' }}>{getSlotExamDate(slot)}</span>
                   </div>
                 </th>
               ))}
@@ -781,54 +904,69 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <tbody>
             {EXAM_ROWS.map((row) => (
               <tr key={row}>
-                <td style={{ ...S.td, fontWeight: 'bold', height: '20px' }}>{row}</td>
-                {[0, 1, 2, 3].map((i) => (
-                  <td key={i} style={{ ...S.td, height: '20px' }}>
-                    {getYearExamValue(i + 1, row)}
+                <td style={{ ...S.td, fontWeight: 'bold', height: '24px' }}>{row}</td>
+                {slots.map((slot) => (
+                  <td key={slot} style={{ ...S.td, height: '24px' }}>
+                    {getSlotExamValue(slot, row)}
                   </td>
                 ))}
               </tr>
             ))}
             <tr>
-              <td style={{ ...S.td, fontWeight: 'bold', height: '38px' }}>Examined by:</td>
-              {[0, 1, 2, 3].map((i) => (
-                <td key={i} style={{ ...S.td, height: '38px', padding: '2px 4px' }}>
-                  {renderExaminer(i + 1)}
+              <td style={{ ...S.td, fontWeight: 'bold', height: '64px' }}>Examined by:</td>
+              {slots.map((slot) => (
+                <td key={slot} style={{ ...S.td, height: '64px', padding: '2px 4px' }}>
+                  {renderExaminer(slot)}
                 </td>
               ))}
             </tr>
           </tbody>
         </table>
+        </div>
 
         {/* ── LABS TABLE ── */}
-        <table style={{ ...S.table, fontSize: '9.5px' }}>
+        <div className="w-full min-w-[764px] print:min-w-[764px]">
+        <table
+          className="w-full min-w-[764px] table-fixed border-collapse print:min-w-[764px]"
+          style={{ ...S.table, fontSize: '9.5px', minWidth: RECORD_TABLE_WIDTH }}
+        >
+          <colgroup>
+            <col style={{ width: LAB_FIRST_COLUMN_WIDTH, minWidth: LAB_FIRST_COLUMN_WIDTH }} />
+            {slots.map((slot) => (
+              <col key={slot} style={{ width: LAB_YEAR_COLUMN_WIDTH, minWidth: LAB_YEAR_COLUMN_WIDTH }} />
+            ))}
+          </colgroup>
           <tbody>
             {/* Chest X-ray */}
             <tr>
               <td
                 style={{
                   ...S.td,
-                  width: '7%',
+                  width: LAB_FIRST_COLUMN_WIDTH,
+                  minWidth: LAB_FIRST_COLUMN_WIDTH,
                   verticalAlign: 'middle',
                   fontWeight: 'bold',
                 }}
               >
                 Chest :<br />x-ray
               </td>
-              {[1, 2, 3, 4].map((year) => {
-                const y = getYearLab(year);
+              {slots.map((slot) => {
+                const y = getSlotLab(slot);
                 return (
                   <td
-                    key={year}
+                    key={slot}
                     style={{
                       ...S.td,
+                      width: LAB_YEAR_COLUMN_WIDTH,
+                      minWidth: LAB_YEAR_COLUMN_WIDTH,
                       verticalAlign: 'top',
                       lineHeight: '1.8',
                       padding: '5px 5px',
                     }}
                   >
-                    <div>Date: {inlineField(y.xrayDate, '52px')}</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">Date: {inlineField(y.xrayDate, '52px')}</div>
                     <div
+                      className="flex items-baseline justify-between gap-1 print:flex print:flex-row print:items-baseline"
                       style={{
                         display: 'flex',
                         alignItems: 'baseline',
@@ -852,26 +990,28 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               >
                 CBC:
               </td>
-              {[1, 2, 3, 4].map((year) => {
-                const y = getYearLab(year);
+              {slots.map((slot) => {
+                const y = getSlotLab(slot);
                 return (
                   <td
-                    key={year}
+                    key={slot}
                     style={{
                       ...S.td,
+                      width: LAB_YEAR_COLUMN_WIDTH,
+                      minWidth: LAB_YEAR_COLUMN_WIDTH,
                       verticalAlign: 'top',
                       lineHeight: '1.8',
                       padding: '5px 5px',
                     }}
                   >
-                    <div>Date: {inlineField(y.cbcDate, '52px')}</div>
-                    <div>
+                    <div className="min-w-[164px] print:min-w-[164px]">Date: {inlineField(y.cbcDate, '52px')}</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">
                       Hgb. {inlineField(y.hemoglobin, '36px')} Hct.{' '}
                       {inlineField(y.hematocrit, '36px')}
                     </div>
-                    <div>WBC {inlineField(y.wbc, '42px')} &lt;</div>
-                    <div>Plt. Ct. {inlineField(y.plateletCount, '42px')}</div>
-                    <div>Bld. Type {inlineField(y.bloodType, '42px')}</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">WBC {inlineField(y.wbc, '42px')} &lt;</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">Plt. Ct. {inlineField(y.plateletCount, '42px')}</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">Bld. Type {inlineField(y.bloodType, '42px')}</div>
                   </td>
                 );
               })}
@@ -884,13 +1024,15 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               >
                 U/A:
               </td>
-              {[1, 2, 3, 4].map((year) => {
-                const y = getYearLab(year);
+              {slots.map((slot) => {
+                const y = getSlotLab(slot);
                 return (
                   <td
-                    key={year}
+                    key={slot}
                     style={{
                       ...S.td,
+                      width: LAB_YEAR_COLUMN_WIDTH,
+                      minWidth: LAB_YEAR_COLUMN_WIDTH,
                       verticalAlign: 'top',
                       lineHeight: '1.8',
                       padding: '5px 5px',
@@ -909,9 +1051,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               <td style={{ ...S.td, verticalAlign: 'top', fontWeight: 'bold' }}>
                 OTHERS:
               </td>
-              {[1, 2, 3, 4].map((year) => (
-                <td key={year} style={S.td}>
-                  {getYearLab(year).others || ''}
+              {slots.map((slot) => (
+                <td key={slot} style={S.td}>
+                  {getSlotLab(slot).others || ''}
                 </td>
               ))}
             </tr>
@@ -921,29 +1063,15 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               <td style={{ ...S.td, verticalAlign: 'top', fontWeight: 'bold' }}>
                 Date<br />Received:
               </td>
-              <td style={S.td}>
-                {yearlyRecords?.[1]?.updatedAt
-                  ? new Date(yearlyRecords[1]!.updatedAt!).toLocaleDateString()
-                  : ''}
-              </td>
-              <td style={S.td}>
-                {yearlyRecords?.[2]?.updatedAt
-                  ? new Date(yearlyRecords[2]!.updatedAt!).toLocaleDateString()
-                  : ''}
-              </td>
-              <td style={S.td}>
-                {yearlyRecords?.[3]?.updatedAt
-                  ? new Date(yearlyRecords[3]!.updatedAt!).toLocaleDateString()
-                  : ''}
-              </td>
-              <td style={S.td}>
-                {yearlyRecords?.[4]?.updatedAt
-                  ? new Date(yearlyRecords[4]!.updatedAt!).toLocaleDateString()
-                  : ''}
-              </td>
+              {slots.map((slot) => (
+                <td key={slot} style={S.td}>
+                  {getSlotReceivedDate(slot)}
+                </td>
+              ))}
             </tr>
           </tbody>
         </table>
+        </div>
 
         {/* ── FOOTER ── */}
         <div
@@ -956,6 +1084,8 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           Revision#4 &nbsp;&nbsp; 05/2024 qbb
         </div>
 
+      </div>
+        ))}
       </div>
     );
   }

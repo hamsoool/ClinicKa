@@ -10,16 +10,17 @@ import { ChevronDown, Pencil, Search, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
 import type { ApprovedStudentSummary } from '../../lib/record-types';
+import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useStaffApprovedStudentsQuery } from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
-const YEAR_LABELS: Record<string, string> = {
-  '1': 'Year I',
-  '2': 'Year II',
-  '3': 'Year III',
-  '4': 'Year IV',
-};
+const YEAR_LABELS = Object.fromEntries(
+  Array.from({ length: MAX_SUBMISSION_CYCLE }, (_, index) => {
+    const slot = String(index + 1);
+    return [slot, getSubmissionSlotLabel(slot)];
+  }),
+) as Record<string, string>;
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [20];
 

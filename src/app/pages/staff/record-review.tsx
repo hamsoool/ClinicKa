@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   ArrowLeft,
@@ -46,14 +46,18 @@ import {
   extractCbcFields,
   extractChestXrayFindings,
   extractUrinalysisFields,
+  getStaffSignature,
   saveSubmissionReview,
   updateSubmissionStatus,
   uploadFile,
+  uploadStaffSignature,
   type CbcOcrExtraction,
   type ChestXrayOcrExtraction,
+  type StaffSignatureAsset,
   type UrinalysisOcrExtraction,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { STAFF_REVIEW_MUTATION_KEY } from '../../lib/staff-clearance';
 import type { MedicalHistory, SubmissionRecord } from '../../lib/record-types';
 import { SubmittedFilePreview } from './record-review/submitted-file-preview';
 import {
@@ -117,6 +121,13 @@ type UrinalysisOcrState = {
 
 type OcrRunOutcome = 'filled' | 'filled_with_warning' | 'warning' | 'error' | 'skipped';
 type UpdatedAssessmentFields = Partial<Record<keyof AssessmentForm, boolean>>;
+type PreparedReviewSubmission = {
+  statusToSave: ReviewStatus;
+  notesToSave: string;
+  reviewPayload: any;
+  updatedSubmission: SubmissionDetails;
+  studentId: string;
+};
 
 type RecordForm = {
   studentId: string;
@@ -231,6 +242,8 @@ const LAB_RESULT_MAX_FILE_SIZE_LABEL = '5 MB';
 const LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL = '1 MB';
 const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.heic,.heif,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
 const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
+const STAFF_SIGNATURE_ACCEPT_ATTRIBUTE = 'image/*,.png,.jpg,.jpeg,.heic,.heif,.webp';
+const STAFF_SIGNATURE_ALLOWED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'heic', 'heif', 'webp']);
 const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'] as const;
 const BLOOD_PRESSURE_PATTERN = /^\d{2,3}\/\d{2,3}$/;
@@ -342,6 +355,31 @@ function getOcrStatusClass(status: XrayOcrState['status']) {
 function getOcrSourceLabel(source?: ChestXrayOcrExtraction['source'] | CbcOcrExtraction['source'] | UrinalysisOcrExtraction['source']) {
   if (source === 'ocr-space') return 'OCR.space';
   return 'OCR';
+}
+
+function buildEmptyStaffSignature(): StaffSignatureAsset {
+  return {
+    signatureUrl: null,
+    signatureFileName: null,
+  };
+}
+
+function getFileExtension(file?: File | null) {
+  const fileName = String(file?.name || '');
+  return fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() || '' : '';
+}
+
+function isAllowedSignatureImage(file?: File | null) {
+  if (!file) return false;
+  const mimeType = String(file.type || '').toLowerCase();
+  return mimeType.startsWith('image/') || STAFF_SIGNATURE_ALLOWED_EXTENSIONS.has(getFileExtension(file));
+}
+
+function withCacheBust(url: string | null | undefined) {
+  const value = String(url || '').trim();
+  if (!value) return null;
+  const separator = value.includes('?') ? '&' : '?';
+  return `${value}${separator}t=${Date.now()}`;
 }
 
 function createEmptyMedicalHistory(): MedicalHistory {
@@ -808,7 +846,6 @@ export default function StaffRecordReview() {
     isDoctorWorkspace || me?.profile.role === 'staff';
   const canFinalizeClearance = hasFullClinicReviewAccess;
   const [submission, setSubmission] = useState<SubmissionDetails | null>(null);
-  const [saving, setSaving] = useState(false);
   const [recordForm, setRecordForm] = useState<RecordForm>(() => createRecordForm());
   const [assessmentForm, setAssessmentForm] = useState<AssessmentForm>(() => createAssessmentForm());
   const [clearanceForm, setClearanceForm] = useState<ClearanceForm>(() => createClearanceForm());
@@ -843,6 +880,11 @@ export default function StaffRecordReview() {
   });
   const [updatedAssessmentFields, setUpdatedAssessmentFields] = useState<UpdatedAssessmentFields>({});
   const [savingAction, setSavingAction] = useState<ReviewAction | null>(null);
+  const [loadingSignature, setLoadingSignature] = useState(true);
+  const [staffSignature, setStaffSignature] = useState<StaffSignatureAsset>(buildEmptyStaffSignature);
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string | null>(null);
+  const [uploadingSignature, setUploadingSignature] = useState(false);
   const assessmentFormRef = useRef<AssessmentForm>(createAssessmentForm());
   const inReviewTransitionRef = useRef<string | null>(null);
   const hydratedSubmissionIdRef = useRef<string | null>(null);
@@ -859,11 +901,286 @@ export default function StaffRecordReview() {
     .filter(Boolean)
     .join(' ')
     .trim();
+  const currentStaffSignatureUrl = signaturePreviewUrl || staffSignature.signatureUrl || null;
   const {
     data: submissionData,
     isLoading: loading,
     isError,
   } = useStaffSubmissionDetailQuery(submissionId);
+
+  const prepareReviewSubmission = (nextStatus?: ReviewStatus, customNotes?: string): PreparedReviewSubmission | null => {
+    if (!submissionId || !submission) return null;
+    if (!/^\d{2}$/.test(recordForm.age)) {
+      toast.error('Age must be exactly 2 digits.');
+      return null;
+    }
+    if (recordForm.contactNumber && !isValidPhilippinePhoneNumber(recordForm.contactNumber)) {
+      toast.error('Contact number must be exactly 11 digits starting with 09.');
+      return null;
+    }
+    if (recordForm.emergencyContact.phone && !isValidPhilippinePhoneNumber(recordForm.emergencyContact.phone)) {
+      toast.error('Emergency contact phone must be exactly 11 digits starting with 09.');
+      return null;
+    }
+
+    const statusToSave = nextStatus || reviewStatus;
+    if (canFinalizeClearance && statusToSave === 'approved' && clearanceForm.purpose.length === 0) {
+      toast.error('Select at least one clearance purpose.');
+      return null;
+    }
+    if (canFinalizeClearance && statusToSave === 'approved' && !clearanceForm.licenseNo.trim()) {
+      toast.error('License number is required before clearing this record.');
+      return null;
+    }
+
+    const medicalRecordDateChecks: Array<[string, string]> = [
+      ['Chest X-Ray date', assessmentForm.xrayDate],
+      ['CBC date', assessmentForm.cbcDate],
+      ['Urinalysis date', assessmentForm.urinalysisDate],
+    ];
+
+    if (canFinalizeClearance) {
+      medicalRecordDateChecks.push(['Issued date', clearanceForm.issuedDate]);
+    }
+
+    for (const [label, value] of medicalRecordDateChecks) {
+      const validationMessage = getMedicalRecordDateValidationMessage(label, value);
+      if (validationMessage) {
+        toast.error(validationMessage);
+        return null;
+      }
+    }
+
+    const notesToSave = customNotes !== undefined ? customNotes : staffNotes;
+    const preserveDoctorField = (
+      field:
+        | 'skin'
+        | 'heent'
+        | 'chestLungs'
+        | 'heart'
+        | 'abdomen'
+        | 'extremities'
+        | 'others'
+        | 'examinedBy',
+      incoming: string,
+    ) => {
+      if (hasFullClinicReviewAccess) return incoming;
+      const trimmedIncoming = String(incoming || '').trim();
+      if (trimmedIncoming) return incoming;
+      return (submission.staffMeasurements as any)?.[field] || '';
+    };
+
+    const staffMeasurementsPayload = {
+      bloodPressure: assessmentForm.bloodPressure,
+      cardiacRate: assessmentForm.cardiacRate,
+      respiratoryRate: assessmentForm.respiratoryRate,
+      temperature: assessmentForm.temperature,
+      weight: assessmentForm.weight,
+      height: assessmentForm.height,
+      bmi: assessmentForm.bmi,
+      visualAcuity: assessmentForm.visualAcuity,
+      skin: preserveDoctorField('skin', assessmentForm.skin),
+      heent: preserveDoctorField('heent', assessmentForm.heent),
+      chestLungs: preserveDoctorField('chestLungs', assessmentForm.chestLungs),
+      heart: preserveDoctorField('heart', assessmentForm.heart),
+      abdomen: preserveDoctorField('abdomen', assessmentForm.abdomen),
+      extremities: preserveDoctorField('extremities', assessmentForm.extremities),
+      others: preserveDoctorField('others', assessmentForm.others),
+      examinedBy: preserveDoctorField('examinedBy', assessmentForm.examinedBy),
+      staff_notes: notesToSave,
+    };
+    const clearanceInfoPayload = {
+      ...clearanceForm,
+      signatoryName: normalizeClearanceSignatoryName(clearanceForm.signatoryName),
+      purpose: serializeClearancePurposes(clearanceForm.purpose),
+    };
+
+    return {
+      statusToSave,
+      notesToSave,
+      studentId: recordForm.studentId || submission.studentId,
+      reviewPayload: {
+        personalInfo: {
+          studentId: recordForm.studentId,
+          firstName: recordForm.firstName,
+          lastName: recordForm.lastName,
+          middleInitial: recordForm.middleInitial,
+          department: recordForm.department,
+          course: recordForm.course,
+          year: recordForm.year,
+          age: recordForm.age,
+          sex: recordForm.sex,
+          birthday: recordForm.birthday,
+          civilStatus: recordForm.civilStatus,
+          contactNumber: recordForm.contactNumber,
+          address: recordForm.address,
+        },
+        emergencyContact: recordForm.emergencyContact,
+        medicalHistory: recordForm.medicalHistory,
+        allergyDetails: recordForm.allergyDetails,
+        hadOperation: recordForm.hadOperation,
+        operationDetails: recordForm.operationDetails,
+        studentMeasurements: {
+          weight: recordForm.weight,
+          height: recordForm.height,
+          bmi: recordForm.bmi,
+        },
+        staffMeasurements: staffMeasurementsPayload,
+        labResults: {
+          xrayDate: assessmentForm.xrayDate,
+          xrayResult: assessmentForm.xrayResult,
+          xrayFindings: assessmentForm.xrayFindings,
+          cbcDate: assessmentForm.cbcDate,
+          hemoglobin: assessmentForm.hemoglobin,
+          hematocrit: assessmentForm.hematocrit,
+          wbc: assessmentForm.wbc,
+          plateletCount: assessmentForm.plateletCount,
+          bloodType: assessmentForm.bloodType,
+          glucose: assessmentForm.glucose,
+          protein: assessmentForm.protein,
+          urinalysisDate: assessmentForm.urinalysisDate,
+          urinalysisGlucose: assessmentForm.urinalysisGlucose,
+          urinalysisProtein: assessmentForm.urinalysisProtein,
+        },
+        clearanceInfo: clearanceInfoPayload,
+        staffNotes: notesToSave,
+        status: statusToSave,
+      },
+      updatedSubmission: {
+        ...submission,
+        firstName: recordForm.firstName,
+        lastName: recordForm.lastName,
+        middleInitial: recordForm.middleInitial,
+        department: recordForm.department,
+        course: recordForm.course,
+        year: recordForm.year,
+        age: recordForm.age,
+        sex: recordForm.sex,
+        birthday: recordForm.birthday,
+        civilStatus: recordForm.civilStatus,
+        contactNumber: recordForm.contactNumber,
+        address: recordForm.address,
+        allergyDetails: recordForm.allergyDetails,
+        hadOperation: recordForm.hadOperation,
+        operationDetails: recordForm.operationDetails,
+        weight: recordForm.weight,
+        height: recordForm.height,
+        bmi: recordForm.bmi,
+        emergencyContact: recordForm.emergencyContact,
+        medicalHistory: recordForm.medicalHistory,
+        staffMeasurements: {
+          ...staffMeasurementsPayload,
+          examinedBySignatureUrl: currentStaffSignatureUrl || submission.staffMeasurements?.examinedBySignatureUrl,
+        },
+        labResults: {
+          xrayDate: assessmentForm.xrayDate,
+          xrayResult: assessmentForm.xrayResult,
+          xrayFindings: assessmentForm.xrayFindings,
+          cbcDate: assessmentForm.cbcDate,
+          hemoglobin: assessmentForm.hemoglobin,
+          hematocrit: assessmentForm.hematocrit,
+          wbc: assessmentForm.wbc,
+          plateletCount: assessmentForm.plateletCount,
+          bloodType: assessmentForm.bloodType,
+          glucose: assessmentForm.glucose,
+          protein: assessmentForm.protein,
+          urinalysisDate: assessmentForm.urinalysisDate,
+          urinalysisGlucose: assessmentForm.urinalysisGlucose,
+          urinalysisProtein: assessmentForm.urinalysisProtein,
+        },
+        clearanceInfo: clearanceInfoPayload,
+        staffNotes: notesToSave,
+        status: statusToSave,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  };
+
+  const backgroundReviewMutation = useMutation({
+    mutationKey: [...STAFF_REVIEW_MUTATION_KEY, submissionId || 'unknown'],
+    mutationFn: async ({ prepared }: { prepared: PreparedReviewSubmission; action: ReviewAction }) => {
+      if (!submissionId) {
+        throw new Error('Submission ID is required to update this record.');
+      }
+
+      await saveSubmissionReview(submissionId, prepared.reviewPayload);
+      return prepared;
+    },
+    onSuccess: async (prepared, variables) => {
+      setSubmission(prepared.updatedSubmission);
+      setReviewStatus(prepared.statusToSave);
+      await invalidateStaffWorkflowQueries(queryClient, submissionId, prepared.studentId);
+      if (variables.action === 'cleared') {
+        toast.success('Medical clearance approved and issued.');
+        return;
+      }
+      if (variables.action === 'pending') {
+        toast.success(
+          `Record returned for correction with note: "${prepared.notesToSave.substring(0, 30)}${prepared.notesToSave.length > 30 ? '...' : ''}"`,
+        );
+        return;
+      }
+      toast.success('Review saved as draft.');
+    },
+    onError: (error, variables) => {
+      console.error('Error saving review in background:', error);
+      toast.error(
+        variables.action === 'cleared'
+          ? 'Failed to clear this medical record.'
+          : variables.action === 'pending'
+            ? 'Failed to mark this record as pending.'
+            : 'Failed to save review changes.',
+      );
+    },
+    onSettled: () => {
+      setSavingAction(null);
+    },
+  });
+
+  useEffect(() => {
+    if (!me?.profile?.id) {
+      setStaffSignature(buildEmptyStaffSignature());
+      setLoadingSignature(false);
+      return;
+    }
+
+    let active = true;
+    setLoadingSignature(true);
+
+    const loadSignature = async () => {
+      try {
+        const signature = await getStaffSignature();
+        if (active) {
+          setStaffSignature(signature);
+        }
+      } catch {
+        if (active) {
+          setStaffSignature(buildEmptyStaffSignature());
+        }
+      } finally {
+        if (active) {
+          setLoadingSignature(false);
+        }
+      }
+    };
+
+    void loadSignature();
+
+    return () => {
+      active = false;
+    };
+  }, [me?.profile?.id]);
+
+  useEffect(() => {
+    if (!signatureFile) {
+      setSignaturePreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(signatureFile);
+    setSignaturePreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [signatureFile]);
 
   useEffect(() => {
     const loadedSubmission = (submissionData || null) as SubmissionDetails | null;
@@ -930,6 +1247,61 @@ export default function StaffRecordReview() {
     assessmentFormRef.current = nextAssessmentForm;
     setAssessmentForm(nextAssessmentForm);
   }, [defaultSignatoryName]);
+
+  const handleSignatureChange = (file: File | null) => {
+    if (!file) {
+      setSignatureFile(null);
+      return;
+    }
+
+    if (!isAllowedSignatureImage(file)) {
+      toast.error('Please upload an image file.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Staff signature must be 5 MB or smaller.');
+      return;
+    }
+
+    setSignatureFile(file);
+  };
+
+  const handleSignatureUpload = async () => {
+    if (!signatureFile) {
+      toast.info('Choose a signature image first.');
+      return;
+    }
+
+    setUploadingSignature(true);
+    try {
+      const uploaded = await uploadStaffSignature(signatureFile);
+      const refreshed = await getStaffSignature().catch(() => buildEmptyStaffSignature());
+      const nextSignatureUrl = withCacheBust(uploaded.signatureUrl || refreshed.signatureUrl);
+
+      setStaffSignature({
+        signatureUrl: nextSignatureUrl,
+        signatureFileName: signatureFile.name || refreshed.signatureFileName || uploaded.signatureFileName || null,
+      });
+      setSubmission((prev) => (
+        prev
+          ? {
+              ...prev,
+              staffMeasurements: {
+                ...(prev.staffMeasurements || {}),
+                examinedBySignatureUrl: nextSignatureUrl || undefined,
+              },
+            }
+          : prev
+      ));
+      setSignatureFile(null);
+      toast.success('Staff signature uploaded successfully.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to upload staff signature.');
+    } finally {
+      setUploadingSignature(false);
+    }
+  };
 
   useEffect(() => {
     if (!submissionId || !submission) return;
@@ -1701,212 +2073,19 @@ export default function StaffRecordReview() {
     }
   }
 
-  async function persistReview(nextStatus?: ReviewStatus, customNotes?: string, action?: ReviewAction) {
-    if (!submissionId || !submission) return;
-    if (!/^\d{2}$/.test(recordForm.age)) {
-      toast.error('Age must be exactly 2 digits.');
-      return;
-    }
-    if (recordForm.contactNumber && !isValidPhilippinePhoneNumber(recordForm.contactNumber)) {
-      toast.error('Contact number must follow (+63) 9XXXXXXXXX.');
-      return;
-    }
-    if (recordForm.emergencyContact.phone && !isValidPhilippinePhoneNumber(recordForm.emergencyContact.phone)) {
-      toast.error('Emergency contact phone must follow (+63) 9XXXXXXXXX.');
-      return;
-    }
-    const targetStatus = nextStatus || reviewStatus;
-    if (canFinalizeClearance && targetStatus === 'approved' && clearanceForm.purpose.length === 0) {
-      toast.error('Select at least one clearance purpose.');
-      return;
-    }
-    if (canFinalizeClearance && targetStatus === 'approved' && !clearanceForm.licenseNo.trim()) {
-      toast.error('License number is required before clearing this record.');
-      return;
-    }
+  function queueBackgroundReview(action: ReviewAction, nextStatus?: ReviewStatus, customNotes?: string) {
+    const prepared = prepareReviewSubmission(nextStatus, customNotes);
+    if (!prepared) return;
 
-    const medicalRecordDateChecks: Array<[string, string]> = [
-      ['Chest X-Ray date', assessmentForm.xrayDate],
-      ['CBC date', assessmentForm.cbcDate],
-      ['Urinalysis date', assessmentForm.urinalysisDate],
-    ];
-
-    if (canFinalizeClearance) {
-      medicalRecordDateChecks.push(['Issued date', clearanceForm.issuedDate]);
-    }
-
-    for (const [label, value] of medicalRecordDateChecks) {
-      const validationMessage = getMedicalRecordDateValidationMessage(label, value);
-      if (validationMessage) {
-        toast.error(validationMessage);
-        return;
-      }
-    }
-
-    setSavingAction(action ?? null);
-    setSaving(true);
-    try {
-      const statusToSave = targetStatus;
-      const notesToSave = customNotes !== undefined ? customNotes : staffNotes;
-      const preserveDoctorField = (
-        field:
-          | 'skin'
-          | 'heent'
-          | 'chestLungs'
-          | 'heart'
-          | 'abdomen'
-          | 'extremities'
-          | 'others'
-          | 'examinedBy',
-        incoming: string,
-      ) => {
-        if (hasFullClinicReviewAccess) return incoming;
-        const trimmedIncoming = String(incoming || '').trim();
-        if (trimmedIncoming) return incoming;
-        return (submission.staffMeasurements as any)?.[field] || '';
-      };
-      const staffMeasurementsPayload = {
-        bloodPressure: assessmentForm.bloodPressure,
-        cardiacRate: assessmentForm.cardiacRate,
-        respiratoryRate: assessmentForm.respiratoryRate,
-        temperature: assessmentForm.temperature,
-        weight: assessmentForm.weight,
-        height: assessmentForm.height,
-        bmi: assessmentForm.bmi,
-        visualAcuity: assessmentForm.visualAcuity,
-        skin: preserveDoctorField('skin', assessmentForm.skin),
-        heent: preserveDoctorField('heent', assessmentForm.heent),
-        chestLungs: preserveDoctorField('chestLungs', assessmentForm.chestLungs),
-        heart: preserveDoctorField('heart', assessmentForm.heart),
-        abdomen: preserveDoctorField('abdomen', assessmentForm.abdomen),
-        extremities: preserveDoctorField('extremities', assessmentForm.extremities),
-        others: preserveDoctorField('others', assessmentForm.others),
-        examinedBy: preserveDoctorField('examinedBy', assessmentForm.examinedBy),
-        staff_notes: notesToSave,
-      };
-      const clearanceInfoPayload = {
-        ...clearanceForm,
-        signatoryName: normalizeClearanceSignatoryName(clearanceForm.signatoryName),
-        purpose: serializeClearancePurposes(clearanceForm.purpose),
-      };
-
-      await saveSubmissionReview(submissionId, {
-        personalInfo: {
-          studentId: recordForm.studentId,
-          firstName: recordForm.firstName,
-          lastName: recordForm.lastName,
-          middleInitial: recordForm.middleInitial,
-          department: recordForm.department,
-          course: recordForm.course,
-          year: recordForm.year,
-          age: recordForm.age,
-          sex: recordForm.sex,
-          birthday: recordForm.birthday,
-          civilStatus: recordForm.civilStatus,
-          contactNumber: recordForm.contactNumber,
-          address: recordForm.address,
-        },
-        emergencyContact: recordForm.emergencyContact,
-        medicalHistory: recordForm.medicalHistory,
-        allergyDetails: recordForm.allergyDetails,
-        hadOperation: recordForm.hadOperation,
-        operationDetails: recordForm.operationDetails,
-        studentMeasurements: {
-          weight: recordForm.weight,
-          height: recordForm.height,
-          bmi: recordForm.bmi,
-        },
-        staffMeasurements: staffMeasurementsPayload,
-        labResults: {
-          xrayDate: assessmentForm.xrayDate,
-          xrayResult: assessmentForm.xrayResult,
-          xrayFindings: assessmentForm.xrayFindings,
-          cbcDate: assessmentForm.cbcDate,
-          hemoglobin: assessmentForm.hemoglobin,
-          hematocrit: assessmentForm.hematocrit,
-          wbc: assessmentForm.wbc,
-          plateletCount: assessmentForm.plateletCount,
-          bloodType: assessmentForm.bloodType,
-          glucose: assessmentForm.glucose,
-          protein: assessmentForm.protein,
-          urinalysisDate: assessmentForm.urinalysisDate,
-          urinalysisGlucose: assessmentForm.urinalysisGlucose,
-          urinalysisProtein: assessmentForm.urinalysisProtein,
-        },
-        clearanceInfo: clearanceInfoPayload,
-        staffNotes: notesToSave,
-        status: statusToSave,
-      });
-
-      const updatedSubmission: SubmissionDetails = {
-        ...submission,
-        firstName: recordForm.firstName,
-        lastName: recordForm.lastName,
-        middleInitial: recordForm.middleInitial,
-        department: recordForm.department,
-        course: recordForm.course,
-        year: recordForm.year,
-        age: recordForm.age,
-        sex: recordForm.sex,
-        birthday: recordForm.birthday,
-        civilStatus: recordForm.civilStatus,
-        contactNumber: recordForm.contactNumber,
-        address: recordForm.address,
-        allergyDetails: recordForm.allergyDetails,
-        hadOperation: recordForm.hadOperation,
-        operationDetails: recordForm.operationDetails,
-        weight: recordForm.weight,
-        height: recordForm.height,
-        bmi: recordForm.bmi,
-        emergencyContact: recordForm.emergencyContact,
-        medicalHistory: recordForm.medicalHistory,
-        staffMeasurements: {
-          ...staffMeasurementsPayload,
-          examinedBySignatureUrl: submission.staffMeasurements?.examinedBySignatureUrl,
-        },
-        labResults: {
-          xrayDate: assessmentForm.xrayDate,
-          xrayResult: assessmentForm.xrayResult,
-          xrayFindings: assessmentForm.xrayFindings,
-          cbcDate: assessmentForm.cbcDate,
-          hemoglobin: assessmentForm.hemoglobin,
-          hematocrit: assessmentForm.hematocrit,
-          wbc: assessmentForm.wbc,
-          plateletCount: assessmentForm.plateletCount,
-          bloodType: assessmentForm.bloodType,
-          glucose: assessmentForm.glucose,
-          protein: assessmentForm.protein,
-          urinalysisDate: assessmentForm.urinalysisDate,
-          urinalysisGlucose: assessmentForm.urinalysisGlucose,
-          urinalysisProtein: assessmentForm.urinalysisProtein,
-        },
-        clearanceInfo: clearanceInfoPayload,
-        staffNotes: notesToSave,
-        status: statusToSave,
-        updatedAt: new Date().toISOString(),
-      };
-
-      setSubmission(updatedSubmission);
-      setReviewStatus(statusToSave);
-      await invalidateStaffWorkflowQueries(
-        queryClient,
-        submissionId,
-        recordForm.studentId || submission.studentId,
-      );
-      toast.success(
-        nextStatus === 'approved'
-          ? 'Medical clearance approved and issued.'
-          : nextStatus === 'returned'
-            ? `Record returned for correction with note: "${notesToSave.substring(0, 30)}${notesToSave.length > 30 ? '...' : ''}"`
-            : 'Review saved as draft.',
-      );
-    } catch (error) {
-      console.error('Error saving review:', error);
-      toast.error('Failed to save review changes');
-    } finally {
-      setSaving(false);
-      setSavingAction(null);
-    }
+    setSavingAction(action);
+    backgroundReviewMutation.mutate({ prepared, action });
+    toast.success(
+      action === 'cleared'
+        ? 'Medical clearance is processing in the background. You can continue working while it finishes.'
+        : action === 'pending'
+          ? 'Pending update is processing in the background. You can continue working while it finishes.'
+          : 'Review save is processing in the background. You can continue working while it finishes.',
+    );
   }
 
   if (loading) {
@@ -2269,7 +2448,8 @@ export default function StaffRecordReview() {
                       value={recordForm.emergencyContact.phone}
                       onChange={(event) => updateEmergencyContact('phone', event.target.value)}
                       inputMode="numeric"
-                      placeholder="(+63) 9123456789"
+                      maxLength={11}
+                      placeholder="09XXXXXXXXX"
                       className="mt-2"
                     />
                   </div>
@@ -2875,16 +3055,69 @@ export default function StaffRecordReview() {
                   placeholder="Document additional observations, recommendations, or restrictions."
                 />
               </div>
-              <div className="md:col-span-2">
-                <Label htmlFor="examinedBy">Examined By</Label>
-                <Input
-                  id="examinedBy"
-                  value={assessmentForm.examinedBy}
-                  onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
-                  maxLength={MAX_EXAMINED_BY_LENGTH}
-                  className="mt-2"
-                  placeholder="Doctor name"
-                />
+              <div className="grid gap-6 md:col-span-2 md:grid-cols-2 md:items-start">
+                <div>
+                  <Label htmlFor="examinedBy">Examined By</Label>
+                  <Input
+                    id="examinedBy"
+                    value={assessmentForm.examinedBy}
+                    onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
+                    maxLength={MAX_EXAMINED_BY_LENGTH}
+                    className="mt-2"
+                    placeholder="Doctor name"
+                  />
+                </div>
+                <div className="rounded-xl border border-dashed border-outline-variant/60 bg-surface-container-low px-4 py-4">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-medium text-on-surface">Staff signature</p>
+                      <p className="text-xs text-on-surface-variant">
+                        Upload once here to save your signature for the Examined by section.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                      <div className="flex min-h-16 flex-1 items-center rounded-lg border bg-white px-3 py-2">
+                        {currentStaffSignatureUrl ? (
+                          <img
+                            src={currentStaffSignatureUrl}
+                            alt="Staff signature"
+                            className="h-12 w-auto object-contain"
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {loadingSignature ? 'Loading saved signature...' : 'No saved signature yet.'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <FilePickerButton
+                          accept={STAFF_SIGNATURE_ACCEPT_ATTRIBUTE}
+                          ariaLabel="Choose staff signature image"
+                          className="w-full sm:w-auto"
+                          disabled={uploadingSignature}
+                          onFileSelected={handleSignatureChange}
+                        >
+                          <FileUp className="mr-2 h-4 w-4" />
+                          Choose Signature
+                        </FilePickerButton>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleSignatureUpload()}
+                          disabled={uploadingSignature || !signatureFile}
+                          loading={uploadingSignature}
+                        >
+                          {uploadingSignature ? 'Uploading...' : 'Upload Signature'}
+                        </Button>
+                      </div>
+                    </div>
+                    {signatureFile ? (
+                      <p className="text-xs text-on-surface-variant">{signatureFile.name}</p>
+                    ) : staffSignature.signatureFileName ? (
+                      <p className="text-xs text-on-surface-variant">{staffSignature.signatureFileName}</p>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -3115,30 +3348,30 @@ export default function StaffRecordReview() {
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button
               variant="outline"
-              onClick={() => void persistReview(isArchiveEditMode ? 'approved' : undefined, undefined, 'save')}
-              disabled={saving}
-              loading={saving && savingAction === 'save'}
+              onClick={() => queueBackgroundReview('save', isArchiveEditMode ? 'approved' : undefined)}
+              disabled={backgroundReviewMutation.isPending}
+              loading={backgroundReviewMutation.isPending && savingAction === 'save'}
             >
               <Save className="mr-2 h-4 w-4" />
-              {saving && savingAction === 'save' ? 'Saving...' : 'Save Review'}
+              {backgroundReviewMutation.isPending && savingAction === 'save' ? 'Saving in background...' : 'Save Review'}
             </Button>
             {!isArchiveEditMode ? (
             <Button variant="destructive" onClick={() => {
               setReturnReason(staffNotes);
               setShowReturnDialog(true);
-            }} disabled={saving}>
+            }} disabled={backgroundReviewMutation.isPending}>
               Pending
             </Button>
             ) : null}
             {canFinalizeClearance && !isArchiveEditMode ? (
               <Button
-                onClick={() => void persistReview('approved', undefined, 'cleared')}
-                disabled={saving}
-                loading={saving && savingAction === 'cleared'}
+                onClick={() => queueBackgroundReview('cleared', 'approved')}
+                disabled={backgroundReviewMutation.isPending}
+                loading={backgroundReviewMutation.isPending && savingAction === 'cleared'}
                 className="bg-green-600 text-white hover:bg-green-700"
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                {saving && savingAction === 'cleared' ? 'Clearing...' : 'Cleared'}
+                {backgroundReviewMutation.isPending && savingAction === 'cleared' ? 'Clearing in background...' : 'Cleared'}
               </Button>
             ) : null}
           </div>
@@ -3171,15 +3404,15 @@ export default function StaffRecordReview() {
             <Button variant="outline" onClick={() => setShowReturnDialog(false)}>Cancel</Button>
             <Button
               variant="destructive"
-              onClick={async () => {
+              onClick={() => {
                 setStaffNotes(returnReason);
-                await persistReview('returned', returnReason, 'pending');
+                queueBackgroundReview('pending', 'returned', returnReason);
                 setShowReturnDialog(false);
               }}
-              disabled={!returnReason.trim() || saving}
-              loading={saving && savingAction === 'pending'}
+              disabled={!returnReason.trim() || backgroundReviewMutation.isPending}
+              loading={backgroundReviewMutation.isPending && savingAction === 'pending'}
             >
-              {saving && savingAction === 'pending' ? 'Saving Pending...' : 'Confirm Pending'}
+              {backgroundReviewMutation.isPending && savingAction === 'pending' ? 'Pending in background...' : 'Confirm Pending'}
             </Button>
           </DialogFooter>
         </DialogContent>

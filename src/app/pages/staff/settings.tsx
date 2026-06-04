@@ -84,7 +84,7 @@ function buildProfileFormState(me?: ReturnType<typeof useAuth>['me'] | null): St
     name,
     email: me?.staff?.email || me?.profile.email || '',
     position: getRoleLabel(me?.profile?.role, me?.staff?.position),
-    phone: me?.staff?.phone || '',
+    phone: formatPhilippinePhoneInput(me?.staff?.phone || ''),
   };
 }
 
@@ -348,10 +348,11 @@ export default function StaffSettings() {
                   value={profile.phone}
                   onChange={(event) => updateProfileField('phone', event.target.value)}
                   inputMode="numeric"
-                  placeholder="(+63) 9123456789"
+                  maxLength={11}
+                  placeholder="09XXXXXXXXX"
                 />
                 {profile.phone.trim() && !isValidPhilippinePhoneNumber(profile.phone) ? (
-                  <p className="mt-2 text-xs text-red-600">Use the format (+63) 9123456789.</p>
+                  <p className="mt-2 text-xs text-red-600">Use exactly 11 digits starting with 09.</p>
                 ) : null}
               </div>
             </div>

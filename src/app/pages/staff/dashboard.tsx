@@ -28,6 +28,8 @@ import ListPagination from '../../components/list-pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
+import { formatAcademicYearLabel, getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
+import { useAcademicYear } from '../../lib/academic-year-query';
 import { getRoleLabel, getSubmissions } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { SubmissionRecord, SubmissionSummaryRecord } from '../../lib/record-types';
@@ -62,12 +64,12 @@ const GENDER_COLORS: Record<string, string> = {
   other: '#8b5cf6',
   unspecified: '#94a3b8',
 };
-const YEAR_LABELS: Record<string, string> = {
-  '1': 'Year I',
-  '2': 'Year II',
-  '3': 'Year III',
-  '4': 'Year IV',
-};
+const YEAR_LABELS = Object.fromEntries(
+  Array.from({ length: MAX_SUBMISSION_CYCLE }, (_, index) => {
+    const slot = String(index + 1);
+    return [slot, getSubmissionSlotLabel(slot)];
+  }),
+) as Record<string, string>;
 const DASHBOARD_QUEUE_PAGE_SIZE = 20;
 const GENDER_ORDER = ['male', 'female', 'other', 'unspecified'];
 
@@ -75,7 +77,7 @@ const SUBMISSION_RANGE_LABELS = {
   today: 'Today',
   week: 'This Week',
   month: 'This Month',
-  academicYear: 'School Year',
+  academicYear: 'Active School Year',
 } as const;
 type SubmissionRangeKey = keyof typeof SUBMISSION_RANGE_LABELS;
 type ReportGroupKey = keyof typeof REPORT_GROUP_LABELS;
@@ -306,6 +308,7 @@ function ReportBarValueLabel(props: any) {
 export default function StaffDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
+  const { academicYear, academicYearLabel } = useAcademicYear();
   const staffRoleLabel = getRoleLabel(me?.profile?.role, me?.staff?.position);
   const staffPreferenceId = String(me?.staff?.id || me?.profile.email || '').trim();
   const workspacePreferences = useMemo(
@@ -468,8 +471,8 @@ export default function StaffDashboard() {
     {
       key: 'academicYear',
       label: overview?.academicYearLabel
-        ? `SY ${overview.academicYearLabel}`
-        : SUBMISSION_RANGE_LABELS.academicYear,
+        ? formatAcademicYearLabel(overview.academicYearLabel)
+        : academicYearLabel,
       count: overview?.submittedThisAcademicYear || 0,
       fill: SUBMISSION_RANGE_COLORS[3],
       helper: 'Submitted during the active academic year',
@@ -485,7 +488,7 @@ export default function StaffDashboard() {
     const weekOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     weekStart.setDate(weekStart.getDate() + weekOffset);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const academicYearRange = getAcademicYearRange(overview?.academicYearLabel);
+    const academicYearRange = getAcademicYearRange(overview?.academicYearLabel || academicYear);
 
     return reportSubmissions.filter((submission) => {
       const submittedAt = new Date(submission.submittedAt || '');
@@ -496,7 +499,7 @@ export default function StaffDashboard() {
       if (reportRange === 'month') return submittedAt >= monthStart;
       return submittedAt >= academicYearRange.start && submittedAt < academicYearRange.end;
     });
-  }, [overview?.academicYearLabel, reportRange, reportSubmissions]);
+  }, [academicYear, overview?.academicYearLabel, reportRange, reportSubmissions]);
   const uniqueReportSubmissions = useMemo(() => {
     const latestByStudent = new Map<string, SubmissionRecord>();
 
@@ -812,7 +815,7 @@ export default function StaffDashboard() {
                 <TabsTrigger value="today" className="min-h-9 px-3 text-xs sm:text-sm">Today</TabsTrigger>
                 <TabsTrigger value="week" className="min-h-9 px-3 text-xs sm:text-sm">This Week</TabsTrigger>
                 <TabsTrigger value="month" className="min-h-9 px-3 text-xs sm:text-sm">This Month</TabsTrigger>
-                <TabsTrigger value="academicYear" className="min-h-9 px-3 text-xs sm:text-sm">School Year</TabsTrigger>
+                <TabsTrigger value="academicYear" className="min-h-9 px-3 text-xs sm:text-sm">{academicYearLabel}</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>

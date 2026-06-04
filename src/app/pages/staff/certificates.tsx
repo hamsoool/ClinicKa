@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useAuth } from '../../lib/auth';
 import { getRoleLabel } from '../../lib/api';
+import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import {
   useStaffApprovedStudentsQuery,
@@ -29,12 +30,7 @@ type StaffSubmission = SubmissionRecord & {
 };
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
-const YEAR_LABELS: Record<string, string> = {
-  '1': 'Year I',
-  '2': 'Year II',
-  '3': 'Year III',
-  '4': 'Year IV',
-};
+const RECORD_SLOT_FILTERS = Array.from({ length: MAX_SUBMISSION_CYCLE }, (_, index) => String(index + 1));
 type StaffRecordsCertificatesTab = 'archive' | 'certificates';
 
 const CERTIFICATE_SELECTION_STORAGE_KEY_PREFIX = 'gc-staff-certificate-selection';
@@ -76,61 +72,6 @@ async function loadPdfDependencies() {
     import('jspdf'),
   ]);
   return { html2canvas, jsPDF };
-}
-
-function buildLatestPerYear(records: SubmissionRecord[]) {
-  const examCompletenessScore = (record: SubmissionRecord) => {
-    const exam = record.staffMeasurements || {};
-    const values = [
-      exam.bloodPressure,
-      exam.cardiacRate,
-      exam.respiratoryRate,
-      exam.temperature,
-      exam.weight,
-      exam.height,
-      exam.bmi,
-      exam.visualAcuity,
-      exam.skin,
-      exam.heent,
-      exam.chestLungs,
-      exam.heart,
-      exam.abdomen,
-      exam.extremities,
-      exam.others,
-      exam.examinedBy,
-      record.bloodPressure,
-      record.weight,
-      record.height,
-      record.bmi,
-    ];
-
-    return values.filter((value) => String(value || '').trim().length > 0).length;
-  };
-
-  return records.reduce<Partial<Record<1 | 2 | 3 | 4, SubmissionRecord>>>((acc, item) => {
-    const yearNum = Number.parseInt(String(item.year || ''), 10) as 1 | 2 | 3 | 4;
-    if (![1, 2, 3, 4].includes(yearNum)) return acc;
-    const current = acc[yearNum];
-    if (!current) {
-      acc[yearNum] = item;
-      return acc;
-    }
-
-    const currentScore = examCompletenessScore(current);
-    const nextScore = examCompletenessScore(item);
-    if (nextScore > currentScore) {
-      acc[yearNum] = item;
-      return acc;
-    }
-    if (currentScore > nextScore) {
-      return acc;
-    }
-
-    const currentTs = new Date(current.updatedAt || current.submittedAt || 0).getTime();
-    const nextTs = new Date(item.updatedAt || item.submittedAt || 0).getTime();
-    if (nextTs >= currentTs) acc[yearNum] = item;
-    return acc;
-  }, {});
 }
 
 function ApprovedStudentsListSkeleton() {
@@ -361,7 +302,6 @@ function StaffCertificatesWorkspace() {
     [selectedStudentRecords],
   );
   const combinedRecord = selectedRecordsSorted[0] || null;
-  const latestRecordPerYear = useMemo(() => buildLatestPerYear(selectedRecordsSorted), [selectedRecordsSorted]);
   const availableYears = useMemo(
     () =>
       Array.from(new Set(selectedRecordsSorted.map((entry) => String(entry.year || '')).filter(Boolean))).sort(
@@ -409,6 +349,7 @@ function StaffCertificatesWorkspace() {
       exportRoot.style.background = '#fff';
       exportRoot.style.padding = '0';
       exportRoot.style.margin = '0';
+      exportRoot.style.overflow = 'hidden';
 
       const clone = recordPreviewRef.current.cloneNode(true) as HTMLDivElement;
       clone.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
@@ -487,6 +428,8 @@ function StaffCertificatesWorkspace() {
       exportRoot.style.background = '#fff';
       exportRoot.style.padding = '0';
       exportRoot.style.margin = '0';
+      exportRoot.style.overflow = 'hidden';
+      exportRoot.style.paddingBottom = '10px';
 
       const clone = clearancePreviewRef.current.cloneNode(true) as HTMLDivElement;
       clone.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
@@ -498,12 +441,14 @@ function StaffCertificatesWorkspace() {
       exportRoot.appendChild(clone);
       document.body.appendChild(exportRoot);
 
-      const canvas = await html2canvas(clone, {
+      const canvas = await html2canvas(exportRoot, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
         width: CLEARANCE_PREVIEW_BASE_WIDTH,
+        height: exportRoot.scrollHeight,
         windowWidth: CLEARANCE_PREVIEW_BASE_WIDTH,
+        windowHeight: exportRoot.scrollHeight,
       });
       document.body.removeChild(exportRoot);
 
@@ -577,9 +522,9 @@ function StaffCertificatesWorkspace() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Record Slots</SelectItem>
-                      {Object.entries(YEAR_LABELS).map(([val, label]) => (
-                        <SelectItem key={val} value={val}>
-                          {label}
+                      {RECORD_SLOT_FILTERS.map((slot) => (
+                        <SelectItem key={slot} value={slot}>
+                          {getSubmissionSlotLabel(slot)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -589,7 +534,7 @@ function StaffCertificatesWorkspace() {
                 {hasActiveFilters && (
                   <div className="flex flex-wrap items-center gap-1">
                     {departmentFilter !== 'all' && <Badge variant="outline" className="px-1 text-[10px]">{departmentFilter}</Badge>}
-                    {yearFilter !== 'all' && <Badge variant="outline" className="px-1 text-[10px]">{YEAR_LABELS[yearFilter]}</Badge>}
+                    {yearFilter !== 'all' && <Badge variant="outline" className="px-1 text-[10px]">{getSubmissionSlotLabel(yearFilter)}</Badge>}
                     <Button variant="ghost" size="sm" onClick={clearFilters} className="h-5 px-1 text-[10px]">
                       <X className="mr-0.5 h-3 w-3" /> Clear
                     </Button>
@@ -661,7 +606,7 @@ function StaffCertificatesWorkspace() {
                   <CardHeader>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
-                        <CardTitle className="leading-snug">Medical Record Form (Combined Year I-IV)</CardTitle>
+                        <CardTitle className="leading-snug">Medical Record Form</CardTitle>
                         <p className="mt-1 text-sm text-muted-foreground">{combinedRecord.lastName}, {combinedRecord.firstName} | {combinedRecord.studentId}</p>
                         {selectedStudentRecordsFetching ? (
                           <span className="mt-2 block text-xs text-muted-foreground">Refreshing selected student...</span>
@@ -680,15 +625,15 @@ function StaffCertificatesWorkspace() {
                     <div className="overflow-hidden rounded-lg border bg-muted/30">
                       <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
                         <div className="overflow-x-auto overscroll-x-contain">
-                          <div className="mx-auto w-max min-w-full">
+                          <div className="mx-auto w-max min-w-full print:w-full">
                             <div
-                              className="overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5"
+                              className="overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5 print:w-[816px]"
                               style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                             >
                               <MedicalRecordPreview
                                 ref={recordPreviewRef}
                                 record={combinedRecord}
-                                yearlyRecords={latestRecordPerYear}
+                                records={selectedRecordsSorted}
                               />
                             </div>
                           </div>
@@ -712,7 +657,7 @@ function StaffCertificatesWorkspace() {
                           <SelectItem value="all">All Record Slots</SelectItem>
                           {availableYears.map((year) => (
                             <SelectItem key={year} value={year}>
-                              {YEAR_LABELS[String(year || '')] || `Year ${year}`}
+                              {getSubmissionSlotLabel(year)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -740,12 +685,10 @@ function StaffCertificatesWorkspace() {
                         Swipe sideways on mobile to view the full medical clearance.
                       </p>
                       <div className="overflow-hidden rounded-lg border bg-white">
-                        <div className="px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
-                          <div className="overflow-x-auto overscroll-x-contain">
-                            <div className="w-max lg:w-full">
-                              <div className="lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
-                                <MedicalClearancePreview ref={clearancePreviewRef} record={clearanceRecord} />
-                              </div>
+                        <div className="overflow-auto overscroll-contain px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh]">
+                          <div className="w-max print:w-full lg:w-full">
+                            <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
+                              <MedicalClearancePreview ref={clearancePreviewRef} record={clearanceRecord} />
                             </div>
                           </div>
                         </div>

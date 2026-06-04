@@ -2,6 +2,7 @@
 import { supabase } from "./context.ts";
 
 const ADMIN_SYSTEM_SETTINGS_STORE_KEY = "admin.system-settings";
+export const CURRENT_ACADEMIC_YEAR_SETTING_KEY = "current_academic_year";
 const ADMIN_SYSTEM_SETTINGS_SEMESTERS = [
   "First Semester",
   "Second Semester",
@@ -16,6 +17,21 @@ export function getCurrentAcademicYear() {
   const now = new Date();
   const startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
   return `${startYear}-${startYear + 1}`;
+}
+
+function normalizeAcademicYearSettingValue(value: unknown, fallback = getCurrentAcademicYear()) {
+  const match = String(value || "").trim().match(/^(?:sy\s*)?(\d{4})\s*-\s*(\d{4})$/i);
+  if (!match) return fallback;
+
+  const startYear = Number.parseInt(match[1], 10);
+  const endYear = Number.parseInt(match[2], 10);
+  return Number.isFinite(startYear) && endYear - startYear === 1
+    ? `${startYear}-${endYear}`
+    : fallback;
+}
+
+function formatAcademicYearSettingValue(value: unknown) {
+  return `SY ${normalizeAcademicYearSettingValue(value)}`;
 }
 
 export function getDefaultAdminSystemSettings() {
@@ -37,14 +53,7 @@ export function normalizeAdminSystemSettings(input: any = {}) {
   const academicYearValue = String(input?.academicYear ?? defaults.academicYear).trim();
   const parsedTimeout = Number(input?.sessionTimeoutMinutes);
   const parsedAutoArchive = Number(input?.autoArchiveAfterMonths);
-
-  const academicYear =
-    /^\d{4}-\d{4}$/.test(academicYearValue) &&
-      Number(academicYearValue.slice(5, 9)) -
-          Number(academicYearValue.slice(0, 4)) ===
-        1
-      ? academicYearValue
-      : defaults.academicYear;
+  const academicYear = normalizeAcademicYearSettingValue(academicYearValue, defaults.academicYear);
 
   return {
     academicYear,
@@ -91,7 +100,35 @@ export function isMissingKvStoreError(error: any) {
   );
 }
 
+export function isMissingSystemSettingsError(error: any) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return (
+    message.includes("system_settings") ||
+    message.includes("schema cache") ||
+    message.includes("could not find the table") ||
+    (message.includes("relation") && message.includes("does not exist"))
+  );
+}
+
+async function getStoredAcademicYearValue() {
+  const { data, error } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("key", CURRENT_ACADEMIC_YEAR_SETTING_KEY)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingSystemSettingsError(error)) {
+      return null;
+    }
+    throw new Error(error.message);
+  }
+
+  return data?.value ? normalizeAcademicYearSettingValue(data.value, "") : null;
+}
+
 export async function getAdminSystemSettings() {
+  let settings = getDefaultAdminSystemSettings();
   const { data, error } = await supabase
     .from("kv_store_2a5e1a6b")
     .select("value")
@@ -99,13 +136,22 @@ export async function getAdminSystemSettings() {
     .maybeSingle();
 
   if (error) {
-    if (isMissingKvStoreError(error)) {
-      return getDefaultAdminSystemSettings();
+    if (!isMissingKvStoreError(error)) {
+      throw new Error(error.message);
     }
-    throw new Error(error.message);
+  } else {
+    settings = normalizeAdminSystemSettings(data?.value || {});
   }
 
-  return normalizeAdminSystemSettings(data?.value || {});
+  const storedAcademicYear = await getStoredAcademicYearValue();
+  if (storedAcademicYear) {
+    settings = normalizeAdminSystemSettings({
+      ...settings,
+      academicYear: storedAcademicYear,
+    });
+  }
+
+  return settings;
 }
 
 export async function getSafeAdminSystemSettings() {
@@ -114,6 +160,34 @@ export async function getSafeAdminSystemSettings() {
   } catch {
     return getDefaultAdminSystemSettings();
   }
+}
+
+export async function saveAdminSystemSettings(input: any) {
+  const settings = normalizeAdminSystemSettings(input);
+
+  const { error: kvError } = await supabase
+    .from("kv_store_2a5e1a6b")
+    .upsert({
+      key: ADMIN_SYSTEM_SETTINGS_STORE_KEY,
+      value: settings,
+    });
+
+  if (kvError && !isMissingKvStoreError(kvError)) {
+    throw new Error(kvError.message);
+  }
+
+  const { error: systemSettingsError } = await supabase
+    .from("system_settings")
+    .upsert({
+      key: CURRENT_ACADEMIC_YEAR_SETTING_KEY,
+      value: formatAcademicYearSettingValue(settings.academicYear),
+    });
+
+  if (systemSettingsError && !isMissingSystemSettingsError(systemSettingsError)) {
+    throw new Error(systemSettingsError.message);
+  }
+
+  return settings;
 }
 
 export function getStudentNotificationStateKey(requester: any, studentId: string) {

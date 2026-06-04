@@ -8,9 +8,22 @@ type StudentYearSource = {
   } | null;
 };
 
+export const MAX_ACADEMIC_YEAR_LEVEL = 4;
+
+function getOrdinalSuffix(value: number) {
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return 'th';
+
+  const mod10 = value % 10;
+  if (mod10 === 1) return 'st';
+  if (mod10 === 2) return 'nd';
+  if (mod10 === 3) return 'rd';
+  return 'th';
+}
+
 export function normalizeYearLevel(value: unknown) {
   const normalized = Number.parseInt(String(value || '').trim(), 10);
-  if (!Number.isInteger(normalized) || normalized < 1 || normalized > 4) {
+  if (!Number.isInteger(normalized) || normalized < 1 || normalized > MAX_ACADEMIC_YEAR_LEVEL) {
     return null;
   }
 
@@ -19,10 +32,9 @@ export function normalizeYearLevel(value: unknown) {
 
 export function getYearLevelLabel(value: unknown) {
   const yearLevel = normalizeYearLevel(value);
-  if (yearLevel === 1) return '1st Year';
-  if (yearLevel === 2) return '2nd Year';
-  if (yearLevel === 3) return '3rd Year';
-  if (yearLevel === 4) return '4th Year';
+  if (yearLevel) {
+    return `${yearLevel}${getOrdinalSuffix(yearLevel)} Year`;
+  }
   return `Year ${String(value || '').trim()}`.trim();
 }
 
@@ -35,7 +47,10 @@ export function inferStudentYearLevel(studentId?: string | null, referenceDate =
     return 1;
   }
 
-  return Math.min(4, Math.max(1, referenceDate.getFullYear() - enrollmentYear + academicYearOffset));
+  return Math.min(
+    MAX_ACADEMIC_YEAR_LEVEL,
+    Math.max(1, referenceDate.getFullYear() - enrollmentYear + academicYearOffset),
+  );
 }
 
 export function resolveStudentYearLevel(source?: StudentYearSource | null, referenceDate = new Date()) {

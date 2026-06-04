@@ -59,7 +59,7 @@ export function buildCorsHeaders(origin?: string | null) {
     ...(allowedOrigin ? { "Access-Control-Allow-Origin": allowedOrigin } : {}),
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Max-Age": "600",
     Vary: "Origin",
   };
@@ -107,6 +107,7 @@ export const storageBuckets = [
   "profile",
   "student_signature",
   "staff_signature",
+  "staff_signatures",
   "lab_chest_xray",
   "lab_cbc",
   "lab_urinalysis",

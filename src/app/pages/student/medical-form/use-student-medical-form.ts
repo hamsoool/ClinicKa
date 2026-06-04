@@ -11,7 +11,7 @@ import {
   getSubmissionSlotLabel,
   normalizeAcademicYear,
 } from '../../../lib/academic-year';
-import { useActiveAcademicYearSettingsQuery } from '../../../lib/academic-year-query';
+import { useAcademicYear } from '../../../lib/academic-year-query';
 import { invalidateStudentRecordsQuery } from '../student-records-query';
 import { useStudentProfileAssetsQuery } from '../student-profile-assets-query';
 import {
@@ -21,6 +21,7 @@ import {
   normalizeProgramForDepartment,
   resolveDepartmentValue,
 } from './constants';
+import { normalizeYearLevel } from '../../../lib/student-year';
 import type {
   BmiCategory,
   EmergencyContact,
@@ -52,6 +53,11 @@ const LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL = '1 MB';
 const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
 const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.heic,.heif,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
 const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
+
+function resolveAcademicYearLevelValue(me?: AuthMe | null) {
+  const studentYearLevel = normalizeYearLevel(me?.student?.year_level);
+  return String(studentYearLevel || 1);
+}
 
 const LAB_UPLOAD_FIELD_CONFIG: Record<
   LabUploadKind,
@@ -194,7 +200,7 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, init
     middleInitial: normalizeMiddleInitial(student?.middle_initial || ''),
     department,
     course: normalizeProgramForDepartment(department, student?.course || me?.profile.course || ''),
-    yearLevel: year || '1',
+    yearLevel: resolveAcademicYearLevelValue(me),
     age: derivedAge !== null ? sanitizeDigits(String(derivedAge), 2) : student?.age ? sanitizeDigits(String(student.age), 2) : '',
     sex: student?.sex || 'female',
     birthday,
@@ -253,8 +259,7 @@ export function useStudentMedicalForm({
 }: UseStudentMedicalFormArgs) {
   const queryClient = useQueryClient();
   const student = me?.student;
-  const { data: academicYearSettings } = useActiveAcademicYearSettingsQuery();
-  const activeAcademicYear = normalizeAcademicYear(academicYearSettings?.academicYear || getDefaultAcademicYear());
+  const { academicYear: activeAcademicYear } = useAcademicYear();
   const [step, setStep] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -354,7 +359,7 @@ export function useStudentMedicalForm({
             prev.department || submission.department || '',
             prev.course || submission.course || '',
           ),
-          yearLevel: submission.year || prev.yearLevel,
+          yearLevel: resolveAcademicYearLevelValue(me),
           year: submission.year || prev.year,
           age: (() => {
             const chosenBirthday = prev.birthday || submission.birthday || '';
@@ -410,7 +415,7 @@ export function useStudentMedicalForm({
     return () => {
       active = false;
     };
-  }, [editSubmissionId]);
+  }, [editSubmissionId, me]);
 
   useEffect(() => {
     if (editSubmissionId) return;
@@ -491,7 +496,7 @@ export function useStudentMedicalForm({
       contactNumber: formatPhilippinePhoneInput(student?.contact_number || prev.contactNumber),
       address: sanitizeAddress(student?.address || prev.address),
       dataPrivacyConsent: initialDataPrivacyConsent,
-      yearLevel: year || prev.yearLevel,
+      yearLevel: resolveAcademicYearLevelValue(me) || prev.yearLevel,
       year: year || prev.year,
     }));
   }, [
@@ -583,7 +588,7 @@ export function useStudentMedicalForm({
       if (SQL_INJECTION_REGEX.test(safe)) return;
       return setFormData((prev) => ({ ...prev, operationDetails: safe }));
     }
-    if (field === 'yearLevel') return setFormData((prev) => ({ ...prev, yearLevel: year || String(value) }));
+    if (field === 'yearLevel') return setFormData((prev) => ({ ...prev, yearLevel: String(value) }));
 
     setFormData((prev) => ({ ...prev, [field]: value }));
   }, [year]);
@@ -753,6 +758,7 @@ export function useStudentMedicalForm({
     () => {
       return Boolean(
         hasRequiredProfileFields &&
+          formData.year &&
           formData.yearLevel &&
           formData.sex &&
         formData.hadOperation &&
@@ -786,7 +792,7 @@ export function useStudentMedicalForm({
   const submitBlockers = useMemo(() => {
     const blockers: string[] = [];
     if (!hasRequiredProfileFields) blockers.push('Complete all required fields in Profile.');
-    if (!formData.yearLevel) blockers.push('Submission slot could not be determined.');
+    if (!formData.year) blockers.push('Submission slot could not be determined.');
     if (!formData.sex) blockers.push('Select your sex.');
     if (!formData.hadOperation) blockers.push('Answer the operation history question.');
     if (!formData.emergencyContact.name?.trim()) blockers.push('Enter your emergency contact name.');
@@ -829,7 +835,7 @@ export function useStudentMedicalForm({
       middleInitial: formData.middleInitial,
       course: formData.course,
       department: formData.department,
-      year: formData.yearLevel,
+      year: formData.year,
       academicYear: activeAcademicYear,
       status: 'pending',
       submittedAt: new Date().toISOString(),
@@ -897,9 +903,9 @@ export function useStudentMedicalForm({
       const expectedSlot = getNextSubmissionSlot(existingRecords, activeAcademicYear);
       if (!activeSubmissionId) {
         if (!expectedSlot) {
-          throw new Error('All four year levels have already been used.');
+          throw new Error('All record cycles have already been used.');
         }
-        if (Number.parseInt(String(formData.yearLevel || ''), 10) !== expectedSlot) {
+        if (Number.parseInt(String(formData.year || ''), 10) !== expectedSlot) {
           throw new Error(`This school year submission must use ${getSubmissionSlotLabel(expectedSlot)}.`);
         }
       }
@@ -912,6 +918,8 @@ export function useStudentMedicalForm({
         department: formData.department,
         course: formData.course,
         yearLevel: formData.yearLevel,
+        recordCycle: formData.year,
+        year: formData.year,
         academicYear: activeAcademicYear,
         age: formData.age,
         sex: formData.sex,
@@ -937,7 +945,7 @@ export function useStudentMedicalForm({
       let recordId = activeSubmissionId;
       let isResubmission = Boolean(recordId && originalSubmissionStatus === 'returned');
       if (!recordId) {
-        if (myStudentId && formData.yearLevel) {
+        if (myStudentId && formData.year) {
           const latestSameAcademicYear = existingRecords
             .filter((item) => getRecordAcademicYear(item, activeAcademicYear) === activeAcademicYear)
             .sort(

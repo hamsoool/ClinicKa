@@ -489,11 +489,12 @@ export function StudentProfileFormCard({
             inputMode="numeric"
             readOnly={readOnly}
             disabled={readOnly}
-            placeholder={readOnly ? '' : '(+63) 9123456789'}
+            maxLength={11}
+            placeholder={readOnly ? '' : '09XXXXXXXXX'}
             className={`${disabledFieldClass} ${requiredFieldClass(!value.contactNumber.trim() || !hasValidContactNumber)}`.trim()}
           />
           {!readOnly && !hasValidContactNumber && value.contactNumber ? (
-            <p className="mt-1 text-sm text-red-600">Use the format (+63) 9123456789.</p>
+            <p className="mt-1 text-sm text-red-600">Use exactly 11 digits starting with 09.</p>
           ) : null}
         </div>
         <div className="md:col-span-2">

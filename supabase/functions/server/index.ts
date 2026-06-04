@@ -43,8 +43,8 @@ import {
 import {
   getAdminSystemSettings,
   getSafeAdminSystemSettings,
+  saveAdminSystemSettings,
   getStudentNotificationStateKey,
-  normalizeAdminSystemSettings,
   normalizeStudentNotificationState,
 } from "./settings.ts";
 import {
@@ -86,7 +86,7 @@ const LAB_UPLOAD_TYPES = new Set(["xray", "cbc", "urinalysis"]);
 const OCR_SPACE_DEFAULT_MAX_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
-const STAFF_SIGNATURE_BUCKET = "staff_signature";
+const STAFF_SIGNATURE_BUCKET = "staff_signatures";
 const STAFF_SIGNATURE_MAX_BYTES = 5 * 1024 * 1024;
 const PROFILE_ASSET_MAX_BYTES = 5 * 1024 * 1024;
 const PROFILE_ASSET_ALLOWED_EXTENSIONS = new Set([
@@ -820,7 +820,7 @@ app.use(
   cors({
     origin: (origin) => resolveCorsOrigin(origin) || null,
     allowHeaders: ["Content-Type", "Authorization", "apikey", "x-client-info"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
   }),
@@ -841,6 +841,93 @@ app.options('*', (c) => new Response(null, {
 
 function getRequesterStudentId(requester: Requester) {
   return String(requester.student?.student_id || requester.profile?.student_id || '').trim();
+}
+
+function isMissingStudentNotificationsTableError(error: any) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    message.includes('student_notifications')
+    && (message.includes('does not exist') || message.includes('schema cache') || message.includes('could not find the table'))
+  );
+}
+
+function isDuplicateStudentNotificationError(error: any) {
+  return String(error?.code || '').trim() === '23505'
+    || String(error?.message || error || '').toLowerCase().includes('duplicate key');
+}
+
+function normalizeNotificationTimestamp(value: unknown) {
+  const date = new Date(String(value || '').trim());
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function normalizeStudentNotificationItem(value: any) {
+  if (!value || typeof value !== 'object') return null;
+
+  const status = String(value.status || '').trim().toLowerCase();
+  if (status !== 'approved' && status !== 'returned') return null;
+
+  const notificationKey = String(value.notificationKey || '').trim();
+  const submissionId = String(value.submissionId || '').trim();
+  const title = String(value.title || '').trim();
+  const message = String(value.message || '').trim();
+  const actionLabel = String(value.actionLabel || '').trim();
+  const actionPath = String(value.actionPath || '').trim();
+  const yearLabel = String(value.yearLabel || '').trim();
+
+  if (!notificationKey || !submissionId || !title || !message || !actionLabel || !actionPath || !yearLabel) {
+    return null;
+  }
+
+  return {
+    notificationKey,
+    submissionId,
+    status,
+    title,
+    message,
+    note: String(value.note || '').trim() || null,
+    actionLabel,
+    actionPath,
+    yearLabel,
+    timestamp: normalizeNotificationTimestamp(value.timestamp),
+    read: Boolean(value.read),
+  };
+}
+
+function mapStudentNotificationRow(row: any) {
+  return {
+    id: row.id,
+    notificationKey: row.notification_key,
+    submissionId: row.submission_id,
+    status: row.status,
+    title: row.title,
+    message: row.message,
+    note: row.note || '',
+    actionLabel: row.action_label,
+    actionPath: row.action_path,
+    yearLabel: row.year_label,
+    timestamp: row.occurred_at,
+    read: Boolean(row.is_read),
+  };
+}
+
+async function listStudentNotifications(studentId: string) {
+  const { data, error } = await supabase
+    .from('student_notifications')
+    .select('id,notification_key,submission_id,status,title,message,note,action_label,action_path,year_label,occurred_at,is_read')
+    .eq('student_id', studentId)
+    .is('deleted_at', null)
+    .order('occurred_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    if (isMissingStudentNotificationsTableError(error)) {
+      return [];
+    }
+    throw new Error(error.message);
+  }
+
+  return (data || []).map(mapStudentNotificationRow);
 }
 
 async function findProfileIdForStudentId(studentId: string) {
@@ -1095,6 +1182,25 @@ app.get("/staff-signature", async (c) => {
   if (!isStaffRole(requester.profile.role)) return forbidden();
 
   try {
+    const { data: staffRow, error: staffError } = await supabase
+      .from("staff_users")
+      .select("signature_url")
+      .eq("profile_id", requester.profile.id)
+      .maybeSingle();
+
+    if (staffError) {
+      throw new Error(staffError.message);
+    }
+
+    const directSignatureUrl = normalizeStorageFileUrl(staffRow?.signature_url || null);
+    if (directSignatureUrl) {
+      return c.json({
+        success: true,
+        signatureUrl: directSignatureUrl,
+        signatureFileName: null,
+      });
+    }
+
     const latestSignature = await loadLatestStaffSignature(requester.profile.id);
     return c.json({
       success: true,
@@ -1154,13 +1260,28 @@ app.post("/staff-signature", async (c) => {
       throw new Error(uploadError.message);
     }
 
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(STAFF_SIGNATURE_BUCKET).getPublicUrl(storagePath);
+
+    const { error: signatureUpdateError } = await supabase
+      .from("staff_users")
+      .update({
+        signature_url: publicUrl || null,
+      })
+      .eq("profile_id", profileId);
+
+    if (signatureUpdateError) {
+      throw new Error(signatureUpdateError.message);
+    }
+
     let insertedFile: any = null;
     try {
       insertedFile = await insertStaffSignatureMetadata({
         submission_id: null,
         file_name: file.name,
         mime_type: file.type || "application/octet-stream",
-        url: null,
+        url: publicUrl || null,
         storage_bucket: STAFF_SIGNATURE_BUCKET,
         storage_path: storagePath,
         uploaded_by: profileId,
@@ -1184,20 +1305,12 @@ app.post("/staff-signature", async (c) => {
       console.log("Staff signature metadata cleanup warning:", metadataCleanupError);
     }
 
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from(STAFF_SIGNATURE_BUCKET)
-      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
-
-    if (signedUrlError) {
-      throw new Error(signedUrlError.message);
-    }
-
     invalidateDashboardReadCaches();
 
     return c.json({
       success: true,
-      signatureUrl: signedUrlData?.signedUrl || null,
-      signatureFileName: storagePath,
+      signatureUrl: publicUrl || null,
+      signatureFileName: file.name || storagePath,
     });
   } catch (error) {
     console.log("Error uploading staff signature:", error);
@@ -2116,6 +2229,256 @@ app.put("/student-notifications/state", async (c) => {
   } catch (error) {
     console.log('Error saving student notification state:', error);
     return internalServerError(c, 'Failed to save notification state', error);
+  }
+});
+
+app.get("/student-notifications", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const requestedStudentId = String(c.req.query('studentId') || '').trim();
+    const requesterStudentId = getRequesterStudentId(requester);
+    const studentId = requestedStudentId || requesterStudentId;
+    if (!studentId) return badRequest('studentId is required');
+    if (studentId !== requesterStudentId) return forbidden();
+
+    return c.json({
+      notifications: await listStudentNotifications(studentId),
+    });
+  } catch (error) {
+    console.log('Error fetching student notifications:', error);
+    return internalServerError(c, 'Failed to fetch student notifications', error);
+  }
+});
+
+app.post("/student-notifications/sync", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const payload = await c.req.json();
+    const requestedStudentId = String(payload?.studentId || '').trim();
+    const requesterStudentId = getRequesterStudentId(requester);
+    const studentId = requestedStudentId || requesterStudentId;
+    if (!studentId) return badRequest('studentId is required');
+    if (studentId !== requesterStudentId) return forbidden();
+
+    const incomingItems = Array.isArray(payload?.notifications)
+      ? payload.notifications.map(normalizeStudentNotificationItem).filter(Boolean)
+      : [];
+    const dedupedItems = [...new Map(incomingItems.map((item) => [item.notificationKey, item])).values()].slice(0, 50);
+
+    if (dedupedItems.length) {
+      const notificationKeys = dedupedItems.map((item) => item.notificationKey);
+      const { data: existingRows, error: existingError } = await supabase
+        .from('student_notifications')
+        .select('notification_key')
+        .eq('student_id', studentId)
+        .in('notification_key', notificationKeys);
+
+      if (existingError && !isMissingStudentNotificationsTableError(existingError)) {
+        throw new Error(existingError.message);
+      }
+
+      const existingKeys = new Set((existingRows || []).map((row) => String(row.notification_key || '').trim()));
+      const rowsToInsert = dedupedItems
+        .filter((item) => !existingKeys.has(item.notificationKey))
+        .map((item) => ({
+          student_id: studentId,
+          submission_id: item.submissionId,
+          notification_key: item.notificationKey,
+          status: item.status,
+          title: item.title,
+          message: item.message,
+          note: item.note,
+          action_label: item.actionLabel,
+          action_path: item.actionPath,
+          year_label: item.yearLabel,
+          occurred_at: item.timestamp,
+          is_read: Boolean(item.read),
+          updated_at: new Date().toISOString(),
+        }));
+
+      if (rowsToInsert.length) {
+        const { error: insertError } = await supabase
+          .from('student_notifications')
+          .insert(rowsToInsert);
+
+        if (insertError && !isMissingStudentNotificationsTableError(insertError) && !isDuplicateStudentNotificationError(insertError)) {
+          throw new Error(insertError.message);
+        }
+      }
+    }
+
+    return c.json({
+      notifications: await listStudentNotifications(studentId),
+    });
+  } catch (error) {
+    console.log('Error syncing student notifications:', error);
+    return internalServerError(c, 'Failed to sync student notifications', error);
+  }
+});
+
+app.patch("/student-notifications/:id", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const notificationId = String(c.req.param('id') || '').trim();
+    const studentId = getRequesterStudentId(requester);
+    if (!notificationId) return badRequest('notification id is required');
+    if (!studentId) return badRequest('studentId is required');
+
+    const payload = await c.req.json();
+    const updates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (typeof payload?.read === 'boolean') {
+      updates.is_read = payload.read;
+    }
+
+    const { data, error } = await supabase
+      .from('student_notifications')
+      .update(updates)
+      .eq('id', notificationId)
+      .eq('student_id', studentId)
+      .is('deleted_at', null)
+      .select('id,notification_key,submission_id,status,title,message,note,action_label,action_path,year_label,occurred_at,is_read')
+      .maybeSingle();
+
+    if (error) {
+      if (isMissingStudentNotificationsTableError(error)) {
+        return badRequest('Student notifications are not available yet.');
+      }
+      throw new Error(error.message);
+    }
+    if (!data) return forbidden();
+
+    return c.json({
+      notification: mapStudentNotificationRow(data),
+    });
+  } catch (error) {
+    console.log('Error updating student notification:', error);
+    return internalServerError(c, 'Failed to update student notification', error);
+  }
+});
+
+app.post("/student-notifications/mark-all-read", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const payload = await c.req.json().catch(() => ({}));
+    const requestedStudentId = String(payload?.studentId || '').trim();
+    const requesterStudentId = getRequesterStudentId(requester);
+    const studentId = requestedStudentId || requesterStudentId;
+    if (!studentId) return badRequest('studentId is required');
+    if (studentId !== requesterStudentId) return forbidden();
+
+    const { error } = await supabase
+      .from('student_notifications')
+      .update({
+        is_read: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('student_id', studentId)
+      .is('deleted_at', null)
+      .eq('is_read', false);
+
+    if (error) {
+      if (isMissingStudentNotificationsTableError(error)) {
+        return c.json({ success: true });
+      }
+      throw new Error(error.message);
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error marking all student notifications as read:', error);
+    return internalServerError(c, 'Failed to update student notifications', error);
+  }
+});
+
+app.delete("/student-notifications/:id", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const notificationId = String(c.req.param('id') || '').trim();
+    const studentId = getRequesterStudentId(requester);
+    if (!notificationId) return badRequest('notification id is required');
+    if (!studentId) return badRequest('studentId is required');
+
+    const { error } = await supabase
+      .from('student_notifications')
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', notificationId)
+      .eq('student_id', studentId)
+      .is('deleted_at', null);
+
+    if (error) {
+      if (isMissingStudentNotificationsTableError(error)) {
+        return c.json({ success: true });
+      }
+      throw new Error(error.message);
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error deleting student notification:', error);
+    return internalServerError(c, 'Failed to delete student notification', error);
+  }
+});
+
+app.post("/student-notifications/clear", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'student') return forbidden();
+
+  try {
+    const payload = await c.req.json().catch(() => ({}));
+    const requestedStudentId = String(payload?.studentId || '').trim();
+    const requesterStudentId = getRequesterStudentId(requester);
+    const studentId = requestedStudentId || requesterStudentId;
+    if (!studentId) return badRequest('studentId is required');
+    if (studentId !== requesterStudentId) return forbidden();
+
+    const { error } = await supabase
+      .from('student_notifications')
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('student_id', studentId)
+      .is('deleted_at', null);
+
+    if (error) {
+      if (isMissingStudentNotificationsTableError(error)) {
+        return c.json({ success: true });
+      }
+      throw new Error(error.message);
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error clearing student notifications:', error);
+    return internalServerError(c, 'Failed to clear student notifications', error);
   }
 });
 
@@ -3122,23 +3485,7 @@ app.put("/admin/system-settings", async (c) => {
 
   try {
     const payload = await c.req.json();
-    const settings = normalizeAdminSystemSettings(payload);
-
-    const { error } = await supabase
-      .from('kv_store_2a5e1a6b')
-      .upsert({
-        key: ADMIN_SYSTEM_SETTINGS_STORE_KEY,
-        value: settings,
-      });
-
-    if (error) {
-      if (isMissingKvStoreError(error)) {
-        return c.json(settings);
-      }
-      throw new Error(error.message);
-    }
-
-    return c.json(settings);
+    return c.json(await saveAdminSystemSettings(payload));
   } catch (error) {
     console.log('Error saving admin system settings:', error);
     return internalServerError(c, 'Failed to save admin system settings', error);

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { Camera, KeyRound, LogOut, X, type LucideIcon } from 'lucide-react';
-import { useAuth } from '../lib/auth';
+import { toast } from 'sonner';
+import { LogoutBlockedError, useAuth } from '../lib/auth';
 import FilePickerButton from './file-picker-button';
 import { cn } from './ui/utils';
 import {
@@ -109,12 +110,13 @@ export default function PortalShell({
 }: PortalShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, pendingStaffClearanceCount } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profilePic, setProfilePic] = useState<string | null>(initialProfileImageUrl || null);
   const [brandImageFailed, setBrandImageFailed] = useState(false);
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
+  const [logoutBlockedOpen, setLogoutBlockedOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -194,8 +196,18 @@ export default function PortalShell({
   };
 
   const handleSignOut = async () => {
-    await logout();
-    navigate('/');
+    try {
+      await logout();
+      navigate('/');
+    } catch (error) {
+      if (error instanceof LogoutBlockedError) {
+        setConfirmSignOutOpen(false);
+        setLogoutBlockedOpen(true);
+        return;
+      }
+
+      toast.error(error instanceof Error ? error.message : 'Unable to log out right now.');
+    }
   };
 
   const handleProfileUpload = (file: File | null) => {
@@ -506,6 +518,27 @@ export default function PortalShell({
               className="bg-primary text-white hover:bg-primary/90"
             >
               Sign Out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={logoutBlockedOpen} onOpenChange={setLogoutBlockedOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Background clearance still in progress</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingStaffClearanceCount > 1
+                ? `${pendingStaffClearanceCount} medical clearances are still being processed in the background. Please wait until they finish before logging out.`
+                : 'A medical clearance is still being processed in the background. Please wait until it finishes before logging out.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction
+              onClick={() => setLogoutBlockedOpen(false)}
+              className="bg-primary text-white hover:bg-primary/90"
+            >
+              I Understand
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,4 +1,5 @@
 import type { MedicalHistoryState } from './types';
+import { getYearLevelLabel, MAX_ACADEMIC_YEAR_LEVEL } from '../../../lib/student-year';
 
 export const DEPARTMENT_OPTIONS = [
   {
@@ -84,7 +85,7 @@ const PROGRAM_ALIASES: Record<string, Record<string, string>> = {
   },
 };
 
-const PHILIPPINE_MOBILE_REGEX = /^\(\+63\)\s9\d{9}$/;
+const PHILIPPINE_MOBILE_REGEX = /^09\d{9}$/;
 
 function normalizeLookupValue(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
@@ -147,26 +148,24 @@ export function formatPhilippinePhoneInput(value: string) {
   if (normalizedDigits.startsWith('63')) {
     normalizedDigits = normalizedDigits.slice(2);
   }
-  if (normalizedDigits.startsWith('0')) {
-    normalizedDigits = normalizedDigits.slice(1);
+  if (normalizedDigits.startsWith('9')) {
+    normalizedDigits = `0${normalizedDigits}`;
   }
 
-  normalizedDigits = normalizedDigits.slice(0, 10);
-  if (!normalizedDigits) return '';
-
-  return `(+63) ${normalizedDigits}`;
+  return normalizedDigits.slice(0, 11);
 }
 
 export function isValidPhilippinePhoneNumber(value: string) {
   return PHILIPPINE_MOBILE_REGEX.test(formatPhilippinePhoneInput(value));
 }
 
-export const YEAR_LEVELS = [
-  { value: '1', label: 'Year I' },
-  { value: '2', label: 'Year II' },
-  { value: '3', label: 'Year III' },
-  { value: '4', label: 'Year IV' },
-] as const;
+export const YEAR_LEVELS = Array.from({ length: MAX_ACADEMIC_YEAR_LEVEL }, (_, index) => {
+  const level = index + 1;
+  return {
+    value: String(level),
+    label: getYearLevelLabel(level),
+  };
+});
 
 export const LAB_TEST_SITE_OPTIONS = [
   'Hi-Precision Diagnostics Plus - Subic Bay Branch',
