@@ -1401,6 +1401,7 @@ app.post("/student-profile-asset/complete", async (c) => {
   let insertedFile: any = null;
   let rollbackBucket = "";
   let rollbackStoragePath = "";
+  let shouldRollbackStorage = true;
 
   try {
     const payload = await c.req.json();
@@ -1438,14 +1439,6 @@ app.post("/student-profile-asset/complete", async (c) => {
     rollbackBucket = targetBucket;
     rollbackStoragePath = storagePath;
 
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from(targetBucket)
-      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
-
-    if (signedUrlError) {
-      throw new Error(signedUrlError.message);
-    }
-
     let staleMetadataRows: any[] = [];
     try {
       const { data: inserted, error: fileInsertError } = await supabase
@@ -1464,35 +1457,40 @@ app.post("/student-profile-asset/complete", async (c) => {
         .single();
 
       if (fileInsertError || !inserted) {
-        throw new Error(fileInsertError?.message || "Failed to save file metadata");
-      }
-      insertedFile = inserted;
+        console.log(
+          "Student profile asset metadata warning:",
+          fileInsertError?.message || "Missing inserted metadata row",
+        );
+      } else {
+        insertedFile = inserted;
 
-      const { data: staleRows, error: staleMetadataError } = await supabase
-        .from("files")
-        .select("id,storage_bucket,storage_path")
-        .eq("uploaded_by", requester.profile.id)
-        .is("submission_id", null)
-        .eq("type", fileType)
-        .neq("id", insertedFile.id);
+        const { data: staleRows, error: staleMetadataError } = await supabase
+          .from("files")
+          .select("id,storage_bucket,storage_path")
+          .eq("uploaded_by", requester.profile.id)
+          .is("submission_id", null)
+          .eq("type", fileType)
+          .neq("id", insertedFile.id);
 
-      if (staleMetadataError) {
-        throw new Error(staleMetadataError.message);
-      }
+        if (staleMetadataError) {
+          throw new Error(staleMetadataError.message);
+        }
 
-      staleMetadataRows = staleRows || [];
-      const staleMetadataIds = staleMetadataRows.map((item) => item?.id).filter(Boolean);
-      if (staleMetadataIds.length) {
-        const { error: staleDeleteError } = await supabase.from("files").delete().in("id", staleMetadataIds);
-        if (staleDeleteError) {
-          throw new Error(staleDeleteError.message);
+        staleMetadataRows = staleRows || [];
+        const staleMetadataIds = staleMetadataRows.map((item) => item?.id).filter(Boolean);
+        if (staleMetadataIds.length) {
+          const { error: staleDeleteError } = await supabase.from("files").delete().in("id", staleMetadataIds);
+          if (staleDeleteError) {
+            throw new Error(staleDeleteError.message);
+          }
         }
       }
     } catch (metadataError) {
       if (!isMissingFilesTableError(metadataError)) {
-        throw metadataError;
+        console.log("Student profile asset metadata warning:", metadataError);
+      } else {
+        console.log("Student profile asset metadata fallback:", metadataError);
       }
-      console.log("Student profile asset metadata fallback:", metadataError);
       insertedFile = null;
       staleMetadataRows = [];
     }
@@ -1505,10 +1503,26 @@ app.post("/student-profile-asset/complete", async (c) => {
     });
 
     invalidateStudentRecordsCache(studentId);
+    shouldRollbackStorage = false;
+
+    let signedUrl: string | null = null;
+    try {
+      await ensureStorageBucket(targetBucket);
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from(targetBucket)
+        .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
+      if (signedUrlError) {
+        console.log("Student profile asset signed URL warning:", signedUrlError);
+      } else {
+        signedUrl = signedUrlData?.signedUrl || null;
+      }
+    } catch (signedUrlError) {
+      console.log("Student profile asset signed URL warning:", signedUrlError);
+    }
 
     return c.json({
       success: true,
-      url: signedUrlData?.signedUrl || null,
+      url: signedUrl,
       fileName: storagePath,
     });
   } catch (error) {
@@ -1520,7 +1534,7 @@ app.post("/student-profile-asset/complete", async (c) => {
       }
     }
 
-    if (rollbackBucket && rollbackStoragePath) {
+    if (shouldRollbackStorage && rollbackBucket && rollbackStoragePath) {
       try {
         await removeStorageObject(rollbackBucket, rollbackStoragePath);
       } catch (cleanupError) {

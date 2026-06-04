@@ -121,6 +121,25 @@ function inferBucketFromNameOrPath(fileName?: string | null, storagePath?: strin
   return null;
 }
 
+function getStorageErrorMessage(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return '';
+  const record = payload as Record<string, unknown>;
+  return String(record.message || record.error || record.msg || '').trim().toLowerCase();
+}
+
+function shouldDisableStorageBucket(status: number, payload: unknown) {
+  if (status >= 500) return true;
+
+  const message = getStorageErrorMessage(payload);
+  if (!message) return false;
+
+  return (
+    message.includes('resource has been removed') ||
+    (message.includes('bucket') && message.includes('not found')) ||
+    message.includes('bucket not found')
+  );
+}
+
 function buildStorageObjectName(fileType: string, file?: File | null) {
   const normalizedType = String(fileType || 'file')
     .trim()
@@ -1496,6 +1515,7 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
     path = path.slice(targetBucket.length + 1);
   }
   if (!path || !supabaseUrl || !publicAnonKey) return null;
+  if (disabledStorageListBuckets.has(targetBucket)) return null;
   const cacheKey = `${targetBucket}:${path}`;
   const now = Date.now();
   const cached = _signedUrlCache.get(cacheKey);
@@ -1525,7 +1545,12 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
         },
       );
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return null;
+      if (!response.ok) {
+        if (shouldDisableStorageBucket(response.status, payload)) {
+          disabledStorageListBuckets.add(targetBucket);
+        }
+        return null;
+      }
 
       // Bulk sign returns an array of results
       const result = Array.isArray(payload) ? payload[0] : payload;
@@ -1575,6 +1600,7 @@ async function createSignedStorageUrl(storagePath?: string | null, token?: strin
 async function listStorageFilesForSubmission(submissionId: string, token?: string | null, bucket?: string) {
   const targetBucket = (bucket || STORAGE_BUCKET).trim() || STORAGE_BUCKET;
   if (!submissionId || !supabaseUrl || !publicAnonKey) return [] as any[];
+  if (disabledStorageListBuckets.has(targetBucket)) return [] as any[];
   try {
     const response = await fetch(
       `${supabaseUrl}/storage/v1/object/list/${targetBucket}`,
@@ -1593,7 +1619,13 @@ async function listStorageFilesForSubmission(submissionId: string, token?: strin
       },
     );
     const payload = await response.json().catch(() => []);
-    if (!response.ok || !Array.isArray(payload)) return [];
+    if (!response.ok) {
+      if (shouldDisableStorageBucket(response.status, payload)) {
+        disabledStorageListBuckets.add(targetBucket);
+      }
+      return [];
+    }
+    if (!Array.isArray(payload)) return [];
 
     const inferred = await Promise.all(
       payload
@@ -2752,7 +2784,7 @@ async function listProfileAssetsFromStorage(studentId: string, token?: string | 
 
             const payload = await response.json().catch(() => []);
             if (!response.ok) {
-              if (response.status >= 500) {
+              if (shouldDisableStorageBucket(response.status, payload)) {
                 disabledStorageListBuckets.add(bucket);
               }
               return [] as any[];
@@ -2836,7 +2868,7 @@ async function listStaffSignatureFromStorage(profileId: string, token?: string |
 
         const payload = await response.json().catch(() => []);
         if (!response.ok) {
-          if (response.status >= 500) {
+          if (shouldDisableStorageBucket(response.status, payload)) {
             disabledStorageListBuckets.add(bucket);
           }
           return [] as any[];
@@ -3808,20 +3840,18 @@ export async function getStudentRecords(studentId?: string, options: GetStudentR
   };
 
   try {
-    const records = await getMappedSubmissions(
-      `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
+    const response = await apiRequest<{ records: SubmissionRecord[] }>(
+      `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
     );
-    return { records: await attachProfileAssetsFallback(records as SubmissionRecord[]) };
-  } catch (restError) {
+    const records = Array.isArray(response?.records) ? response.records : [];
+    return { records: await attachProfileAssetsFallback(records) };
+  } catch (routeError) {
     try {
-      const response = await apiRequest<{ records: SubmissionRecord[] }>(
-        `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
+      const records = await getMappedSubmissions(
+        `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
       );
-      const enriched = await attachProfileAssetsFallback(
-        Array.isArray(response?.records) ? response.records : [],
-      );
-      return { records: enriched };
-    } catch (routeError) {
+      return { records: await attachProfileAssetsFallback(records as SubmissionRecord[]) };
+    } catch (restError) {
       if (!shouldFallbackToRest(routeError) && routeError instanceof Error) {
         throw routeError;
       }
