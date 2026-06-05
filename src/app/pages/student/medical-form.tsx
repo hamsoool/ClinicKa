@@ -66,9 +66,9 @@ export default function StudentMedicalForm() {
     hasCbcFile,
     hasUrinalysisFile,
     hasXrayFile,
+    requiresPhysicalCopyAgreement,
     labResultAccept,
-    labResultMaxFileSizeLabel,
-    labResultAutoOptimizeThresholdLabel,
+    uploadingLabFile,
     updateField,
     updateEmergencyContact,
     isEmergencyAddressSameAsStudent,
@@ -140,12 +140,12 @@ export default function StudentMedicalForm() {
                 hasCbcFile={hasCbcFile}
                 hasUrinalysisFile={hasUrinalysisFile}
                 hasXrayFile={hasXrayFile}
+                requiresPhysicalCopyAgreement={requiresPhysicalCopyAgreement}
                 requiresCbcFile={requiresCbcFile}
                 requiresUrinalysisFile={requiresUrinalysisFile}
                 requiresXrayFile={requiresXrayFile}
                 labResultAccept={labResultAccept}
-                labResultMaxFileSizeLabel={labResultMaxFileSizeLabel}
-                labResultAutoOptimizeThresholdLabel={labResultAutoOptimizeThresholdLabel}
+                uploadingLabFile={uploadingLabFile}
                 submitBlockers={submitBlockers}
                 onGoToProfile={() => navigate('/student/profile')}
                 onLabFileChange={updateLabFile}

@@ -1,5 +1,5 @@
-import type { FormEvent } from 'react';
-import { ArrowRight, Lock, ShieldCheck, Sparkles } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
+import { ArrowRight, Eye, EyeOff, Lock, ShieldCheck, Sparkles } from 'lucide-react';
 import PasswordStrengthMeter from '../../components/password-strength-meter';
 import type { PasswordPolicyUserInputs } from '../../lib/password-policy';
 import { MIN_PASSWORD_LENGTH } from '../../lib/password-policy';
@@ -30,8 +30,12 @@ export function PasswordSetupScreen({
   userInputs,
 }: PasswordSetupScreenProps) {
   const isRecovery = mode === 'recovery';
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const inputClassName =
-    'h-12 w-full rounded-2xl border border-[#c8d6d1] bg-white/92 px-4 text-sm text-[#0b1c30] outline-none transition focus:border-[#065f46] focus:ring-4 focus:ring-[#065f46]/10';
+    'h-12 w-full rounded-2xl border border-[#c8d6d1] bg-white/92 px-4 pr-12 text-sm text-[#0b1c30] outline-none transition focus:border-[#065f46] focus:ring-4 focus:ring-[#065f46]/10';
+  const toggleClassName =
+    'absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-2xl text-[#60717e] transition hover:text-[#065f46] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#065f46]/20';
 
   return (
     <div
@@ -93,14 +97,25 @@ export function PasswordSetupScreen({
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
                   New password
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(event) => onPasswordChange(event.target.value)}
-                  placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-                  className={inputClassName}
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(event) => onPasswordChange(event.target.value)}
+                    placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                    className={inputClassName}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className={toggleClassName}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 <PasswordStrengthMeter password={password} userInputs={userInputs} className="mt-3" />
               </div>
 
@@ -108,14 +123,25 @@ export function PasswordSetupScreen({
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
                   Confirm password
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(event) => onConfirmPasswordChange(event.target.value)}
-                  placeholder="Re-enter password"
-                  className={inputClassName}
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(event) => onConfirmPasswordChange(event.target.value)}
+                    placeholder="Re-enter password"
+                    className={inputClassName}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((value) => !value)}
+                    className={toggleClassName}
+                    aria-label={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'}
+                    aria-pressed={showConfirmPassword}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
               {error ? (

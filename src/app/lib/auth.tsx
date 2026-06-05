@@ -128,6 +128,17 @@ function clearPendingPasswordSetup(email?: string | null) {
   window.localStorage.setItem(PENDING_PASSWORD_SETUP_MARKER_KEY, JSON.stringify([...markers]));
 }
 
+function isSamePasswordUpdateError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = String(error.message || '').trim().toLowerCase();
+  return (
+    message.includes('different from the old password') ||
+    message.includes('same as the old password') ||
+    message.includes('same password') ||
+    message.includes('old password as the new password')
+  );
+}
+
 function isGoogleAuthUser(user?: SupabaseAuthUser | null) {
   const providers = [
     user?.app_metadata?.provider,
@@ -148,6 +159,10 @@ function getAppMetadataHasPassword(user?: SupabaseAuthUser | null) {
   const metadata = user?.app_metadata as Record<string, unknown> | null | undefined;
   const value = metadata?.has_password;
   return typeof value === 'boolean' ? value : null;
+}
+
+function authUserHasPassword(user?: SupabaseAuthUser | null) {
+  return getAppMetadataHasPassword(user) === true || hasPasswordIdentity(user);
 }
 
 function canOptimisticallyRouteToPasswordSetup(user?: SupabaseAuthUser | null) {
@@ -426,6 +441,39 @@ export function AuthProvider({
       cancelled = true;
     };
   }, [isPasswordRecovery, requiresPasswordSetup, session]);
+
+  useEffect(() => {
+    if (!session?.access_token || isPasswordRecovery) {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const authUser = await getUserByToken(session.access_token);
+        if (cancelled) return;
+
+        if (!authUserHasPassword(authUser)) {
+          return;
+        }
+
+        const accountEmail = authUser.email || session.user?.email || me?.profile?.email || null;
+        markPasswordSetupComplete(accountEmail);
+        clearPendingPasswordSetup(accountEmail);
+
+        if (requiresPasswordSetup) {
+          setRequiresPasswordSetup(false);
+        }
+      } catch {
+        // Best effort reconciliation for stale local setup markers.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPasswordRecovery, me?.profile?.email, requiresPasswordSetup, session]);
 
   useEffect(() => {
     if (!session?.access_token || !role || !ELEVATED_TIMEOUT_ROLES.includes(role)) {
@@ -890,14 +938,26 @@ export function AuthProvider({
       if (!session?.access_token) {
         throw new Error('No active session found. Please sign in with Google again.');
       }
-      await updateCurrentSessionPassword(newPassword, {
-        email: session.user?.email || me?.profile?.email,
-        firstName: me?.profile?.first_name,
-        lastName: me?.profile?.last_name,
-        studentId: me?.profile?.student_id,
-      });
-      await markServerPasswordSetupCompleted(session.access_token);
       const accountEmail = session.user?.email || me?.profile?.email || null;
+      try {
+        await updateCurrentSessionPassword(newPassword, {
+          email: accountEmail,
+          firstName: me?.profile?.first_name,
+          lastName: me?.profile?.last_name,
+          studentId: me?.profile?.student_id,
+        });
+      } catch (error) {
+        if (!isSamePasswordUpdateError(error)) {
+          throw error;
+        }
+
+        const authUser = await getUserByToken(session.access_token);
+        if (!authUserHasPassword(authUser)) {
+          throw error;
+        }
+      }
+
+      await markServerPasswordSetupCompleted(session.access_token);
       markPasswordSetupComplete(accountEmail);
       clearPendingPasswordSetup(accountEmail);
       const resolvedMe = await getMe(session.access_token);
