@@ -35,6 +35,7 @@ import {
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const REPORTING_TERM_REFRESH_INTERVAL_MS = 180_000;
+const REPORTS_QUERY_GC_TIME_MS = 10 * 60_000;
 const YEAR_LABELS: Record<string, string> = { '1': '1st Year', '2': '2nd Year', '3': '3rd Year', '4': '4th Year' };
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Under Review',
@@ -542,6 +543,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     queryKey: analyticsQueryKey,
     queryFn: () => getAnalytics(),
     staleTime: 60_000,
+    gcTime: REPORTS_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(90_000),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -559,6 +561,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       return data.submissions || [];
     },
     staleTime: 60_000,
+    gcTime: REPORTS_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(60_000),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -572,6 +575,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     queryKey: reportingTermQueryKey,
     queryFn: getReportingTermSettings,
     staleTime: 60_000,
+    gcTime: REPORTS_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(REPORTING_TERM_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,

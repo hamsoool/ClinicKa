@@ -92,6 +92,8 @@ export function useStudentNotifications(studentId?: string | null) {
       const response = await getStudentNotifications(normalizedStudentId);
       return sortByTimestamp(response.notifications || []);
     },
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
   });
 
   const notifications = notificationsQuery.data || [];

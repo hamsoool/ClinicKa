@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
@@ -12,10 +13,15 @@ import { toast } from 'sonner';
 import type { SubmissionSummaryRecord } from '../../lib/record-types';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
 import { useAuth } from '../../lib/auth';
+import { getYearLevelLabel } from '../../lib/student-year';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { getRoleLabel } from '../../lib/api';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
-import { useStaffSubmissionSummariesQuery } from './staff-workflow-query';
+import {
+  staffSubmissionDetailQueryOptions,
+  staffSubmissionSummariesQueryOptions,
+  useStaffSubmissionSummariesQuery,
+} from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS = Object.fromEntries(
@@ -50,6 +56,11 @@ function formatTimestamp(value?: string) {
   return `${date.toLocaleDateString()} at ${date.toLocaleTimeString()}`;
 }
 
+function formatStudentYearLevel(value?: string) {
+  const normalizedValue = String(value || '').trim();
+  return normalizedValue ? getYearLevelLabel(normalizedValue) : 'Year Level --';
+}
+
 function getStatusFilterLabel(status: string) {
   switch (status) {
     case 'action_needed':
@@ -75,6 +86,7 @@ function getStatusFilterLabel(status: string) {
 
 export default function StaffSubmissions() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { me } = useAuth();
   const staffRoleLabel = getRoleLabel(me?.profile?.role, me?.staff?.position);
@@ -120,11 +132,7 @@ export default function StaffSubmissions() {
     setSearchParams(nextParams, { replace: true });
   };
 
-  const {
-    data,
-    isLoading: loading,
-    isError,
-  } = useStaffSubmissionSummariesQuery({
+  const summaryFilters = useMemo(() => ({
     searchQuery: deferredSearchQuery,
     statusFilter: queryStatusFilter,
     departmentFilter,
@@ -132,7 +140,13 @@ export default function StaffSubmissions() {
     sortOrder,
     page: currentPage,
     pageSize,
-  });
+  }), [currentPage, deferredSearchQuery, departmentFilter, pageSize, queryStatusFilter, sortOrder, yearFilter]);
+
+  const {
+    data,
+    isLoading: loading,
+    isError,
+  } = useStaffSubmissionSummariesQuery(summaryFilters);
 
   useEffect(() => {
     if (isError) {
@@ -164,6 +178,26 @@ export default function StaffSubmissions() {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (loading || totalPages <= 1) return;
+    if (currentPage < totalPages) {
+      void queryClient.prefetchQuery(staffSubmissionSummariesQueryOptions({
+        ...summaryFilters,
+        page: currentPage + 1,
+      }));
+    }
+    if (currentPage > 1) {
+      void queryClient.prefetchQuery(staffSubmissionSummariesQueryOptions({
+        ...summaryFilters,
+        page: currentPage - 1,
+      }));
+    }
+  }, [currentPage, loading, queryClient, summaryFilters, totalPages]);
+
+  const prefetchSubmissionDetail = (submissionId: string) => {
+    void queryClient.prefetchQuery(staffSubmissionDetailQueryOptions(submissionId));
+  };
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -392,13 +426,14 @@ export default function StaffSubmissions() {
                           {submission.firstName} {submission.lastName}
                         </h4>
                         <Badge variant="outline" className="bg-secondary/50 text-secondary-foreground">
-                          {YEAR_LABELS[String(submission.year || '')] || 'Record Slot --'}
+                          {formatStudentYearLevel(submission.studentYearLevel)}
                         </Badge>
                         {getStatusBadge(submission.status)}
                       </div>
                       <div className="text-sm text-muted-foreground space-y-0.5">
                         <p>Student ID: {submission.studentId}</p>
                         <p>{submission.department || submission.course}</p>
+                        <p>Record Slot: {YEAR_LABELS[String(submission.year || '')] || 'Record Slot --'}</p>
                         <p>Submitted: {formatTimestamp(submission.submittedAt)}</p>
                       </div>
                     </div>
@@ -406,6 +441,8 @@ export default function StaffSubmissions() {
                   <div className="mt-4 sm:mt-0">
                     <Button
                       onClick={() => navigate(`/staff/review/${submission.id}`)}
+                      onFocus={() => prefetchSubmissionDetail(submission.id)}
+                      onMouseEnter={() => prefetchSubmissionDetail(submission.id)}
                       variant="outline"
                       className="w-full sm:w-auto"
                     >

@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
@@ -12,7 +13,11 @@ import { toast } from 'sonner';
 import type { ApprovedStudentSummary } from '../../lib/record-types';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
-import { useStaffApprovedStudentsQuery } from './staff-workflow-query';
+import {
+  staffApprovedStudentsQueryOptions,
+  staffSubmissionDetailQueryOptions,
+  useStaffApprovedStudentsQuery,
+} from './staff-workflow-query';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const YEAR_LABELS = Object.fromEntries(
@@ -37,6 +42,7 @@ function formatDate(value?: string) {
 
 export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -55,12 +61,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
     setExpandedStudentId(null);
   }, [deferredSearchQuery, departmentFilter, yearFilter, courseFilter, fromDate, toDate, pageSize]);
 
-  const {
-    data,
-    isLoading: loading,
-    isFetching,
-    isError,
-  } = useStaffApprovedStudentsQuery({
+  const approvedStudentFilters = useMemo(() => ({
     searchQuery: deferredSearchQuery,
     departmentFilter,
     yearFilter,
@@ -69,7 +70,14 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
     toDate,
     page: currentPage,
     pageSize,
-  });
+  }), [courseFilter, currentPage, deferredSearchQuery, departmentFilter, fromDate, pageSize, toDate, yearFilter]);
+
+  const {
+    data,
+    isLoading: loading,
+    isFetching,
+    isError,
+  } = useStaffApprovedStudentsQuery(approvedStudentFilters);
 
   const students = useMemo(
     () => ((data?.students || []) as ApprovedStudentSummary[]),
@@ -96,6 +104,22 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
   }, [currentPage, totalPages]);
 
   useEffect(() => {
+    if (loading || totalPages <= 1) return;
+    if (currentPage < totalPages) {
+      void queryClient.prefetchQuery(staffApprovedStudentsQueryOptions({
+        ...approvedStudentFilters,
+        page: currentPage + 1,
+      }));
+    }
+    if (currentPage > 1) {
+      void queryClient.prefetchQuery(staffApprovedStudentsQueryOptions({
+        ...approvedStudentFilters,
+        page: currentPage - 1,
+      }));
+    }
+  }, [approvedStudentFilters, currentPage, loading, queryClient, totalPages]);
+
+  useEffect(() => {
     if (expandedStudentId && !students.some((student) => student.studentId === expandedStudentId)) {
       setExpandedStudentId(null);
     }
@@ -112,6 +136,10 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
 
   const hasActiveFilters =
     searchQuery || departmentFilter !== 'all' || yearFilter !== 'all' || courseFilter !== 'all' || fromDate || toDate;
+
+  const prefetchSubmissionDetail = (submissionId: string) => {
+    void queryClient.prefetchQuery(staffSubmissionDetailQueryOptions(submissionId));
+  };
 
   return (
     <div className={embedded ? 'min-w-0' : 'mx-auto w-full max-w-[100rem]'}>
@@ -246,7 +274,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
       <Card>
         <CardHeader>
           <CardTitle>
-            Approved Medical Records ({total} Students)
+            Approved Medical Records ({total} Records)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -306,6 +334,8 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                onFocus={() => prefetchSubmissionDetail(record.id)}
+                                onMouseEnter={() => prefetchSubmissionDetail(record.id)}
                                 onClick={() => navigate(`/staff/review/${record.id}?archiveEdit=1`)}
                               >
                                 <Pencil className="mr-2 h-3.5 w-3.5" />
@@ -330,7 +360,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
               totalItems={total}
               pageSize={pageSize}
               pageSizeOptions={PAGE_SIZE_OPTIONS}
-              itemLabel="students"
+              itemLabel="records"
               onPageChange={setCurrentPage}
               onPageSizeChange={setPageSize}
             />

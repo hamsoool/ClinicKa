@@ -19,6 +19,8 @@ const STAFF_DASHBOARD_REFRESH_INTERVAL_MS = 30_000;
 const STAFF_SUMMARIES_REFRESH_INTERVAL_MS = 30_000;
 const STAFF_ANALYTICS_REFRESH_INTERVAL_MS = 90_000;
 const STAFF_QUERY_STALE_TIME_MS = 45_000;
+const STAFF_QUERY_GC_TIME_MS = 8 * 60_000;
+const STAFF_DETAIL_STALE_TIME_MS = 15_000;
 
 function normalizeSubmissionId(submissionId?: string | null) {
   return String(submissionId || '').trim();
@@ -78,6 +80,7 @@ export function staffDashboardOverviewQueryOptions() {
     queryKey: staffDashboardOverviewQueryKey(),
     queryFn: getStaffDashboardOverview,
     staleTime: STAFF_QUERY_STALE_TIME_MS,
+    gcTime: STAFF_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(STAFF_DASHBOARD_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -93,6 +96,7 @@ export function staffSubmissionSummariesQueryOptions(filters: StaffSubmissionSum
     queryKey: staffSubmissionSummariesQueryKey(normalizedFilters),
     queryFn: () => getStaffSubmissionSummaries(normalizedFilters),
     staleTime: STAFF_QUERY_STALE_TIME_MS,
+    gcTime: STAFF_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(STAFF_SUMMARIES_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -108,6 +112,7 @@ export function staffApprovedStudentsQueryOptions(filters: StaffApprovedStudentF
     queryKey: staffApprovedStudentsQueryKey(normalizedFilters),
     queryFn: () => getStaffApprovedStudents(normalizedFilters),
     staleTime: STAFF_QUERY_STALE_TIME_MS,
+    gcTime: STAFF_QUERY_GC_TIME_MS,
     refetchInterval: false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -121,6 +126,7 @@ export function staffAnalyticsQueryOptions() {
     queryKey: staffAnalyticsQueryKey(),
     queryFn: () => getAnalytics(),
     staleTime: STAFF_QUERY_STALE_TIME_MS,
+    gcTime: STAFF_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(STAFF_ANALYTICS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -140,10 +146,11 @@ export function staffSubmissionDetailQueryOptions(submissionId?: string | null) 
       return data.submission || null;
     },
     enabled: Boolean(normalizedSubmissionId),
-    staleTime: 0,
-    refetchOnWindowFocus: 'always',
+    staleTime: STAFF_DETAIL_STALE_TIME_MS,
+    gcTime: STAFF_QUERY_GC_TIME_MS,
+    refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    refetchOnMount: 'always',
+    refetchOnMount: true,
   });
 }
 
@@ -159,6 +166,7 @@ export function staffStudentCertificateRecordsQueryOptions(studentId?: string | 
     },
     enabled: Boolean(normalizedStudentId),
     staleTime: STAFF_QUERY_STALE_TIME_MS,
+    gcTime: STAFF_QUERY_GC_TIME_MS,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchOnMount: true,

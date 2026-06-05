@@ -41,6 +41,8 @@ const ACTIVE_STAFF_USER_SELECT_WITH_SIGNATURE =
   "id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url";
 const ACTIVE_STAFF_USER_SELECT_LEGACY =
   "id,profile_id,first_name,last_name,middle_initial,position,name,is_active";
+const CERTIFICATE_SELECT_COLUMNS =
+  "submission_id,findings_normal,diagnosis,remarks,purpose,control_no,issued_date,issued_at,license_no,signatory_name,pdf_url,issued_by";
 
 export const SUBMISSION_LIST_COLUMNS = [
   "id",
@@ -466,6 +468,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
     course: row.course || student.course || "",
     department: row.department || student.department || "",
     year: String(row.year_level || ""),
+    studentYearLevel: student?.year_level ? String(student.year_level) : "",
     academicYear: row.academic_year || undefined,
     status: row.status,
     submittedAt: row.submitted_at,
@@ -566,7 +569,7 @@ async function loadRelatedData(rows: any[]) {
       ? supabase
           .from("students")
           .select(
-            "student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at",
+            "student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at",
           )
           .in("student_id", studentIds)
       : Promise.resolve({ data: [] as any[] }),
@@ -618,7 +621,7 @@ async function loadRelatedData(rows: any[]) {
     submissionIds.length
       ? supabase
           .from("certificates")
-          .select("*")
+          .select(CERTIFICATE_SELECT_COLUMNS)
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
@@ -843,8 +846,13 @@ const ACTIONABLE_SUBMISSION_STATUSES = [
   "resubmitted",
 ];
 
-function mapSubmissionSummary(row: any, reviewers: Record<string, any> = {}) {
+function mapSubmissionSummary(
+  row: any,
+  reviewers: Record<string, any> = {},
+  students: Record<string, any> = {},
+) {
   const reviewer = reviewers[row.reviewed_by] || null;
+  const student = students[row.student_id] || null;
   return {
     id: row.id,
     studentId: row.student_id || "",
@@ -854,6 +862,7 @@ function mapSubmissionSummary(row: any, reviewers: Record<string, any> = {}) {
     course: row.course || "",
     department: row.department || "",
     year: String(row.year_level || ""),
+    studentYearLevel: student?.year_level ? String(student.year_level) : "",
     academicYear: row.academic_year || undefined,
     status: row.status,
     submittedAt: row.submitted_at,
@@ -867,13 +876,20 @@ function mapSubmissionSummary(row: any, reviewers: Record<string, any> = {}) {
 async function mapSubmissionSummaries(
   rows: any[],
   reviewerDirectory?: Record<string, any>,
+  studentDirectory?: Record<string, any>,
 ) {
   const resolvedReviewerDirectory = reviewerDirectory ||
     await loadStaffUsersByIds(
       (rows || []).map((row) => row.reviewed_by).filter(Boolean),
     );
+  const resolvedStudentDirectory = studentDirectory ||
+    await loadActiveStudentsByIds(
+      (rows || []).map((row) => row.student_id).filter(Boolean),
+    );
 
-  return (rows || []).map((row) => mapSubmissionSummary(row, resolvedReviewerDirectory));
+  return (rows || []).map((row) =>
+    mapSubmissionSummary(row, resolvedReviewerDirectory, resolvedStudentDirectory)
+  );
 }
 
 function normalizeIlikeValue(value: string) {
@@ -1258,6 +1274,12 @@ async function loadStaffDashboardOverview() {
     ...(returnedQueueRows || []).map((row: any) => row.reviewed_by),
     ...(resubmittedQueueRows || []).map((row: any) => row.reviewed_by),
   ]);
+  const studentDirectory = await loadActiveStudentsByIds([
+    ...(pendingQueueRows || []).map((row: any) => row.student_id),
+    ...(inReviewQueueRows || []).map((row: any) => row.student_id),
+    ...(returnedQueueRows || []).map((row: any) => row.student_id),
+    ...(resubmittedQueueRows || []).map((row: any) => row.student_id),
+  ]);
 
   const [
     pendingQueueItems,
@@ -1265,10 +1287,10 @@ async function loadStaffDashboardOverview() {
     returnedQueueItems,
     resubmittedQueueItems,
   ] = await Promise.all([
-    mapSubmissionSummaries(pendingQueueRows || [], reviewerDirectory),
-    mapSubmissionSummaries(inReviewQueueRows || [], reviewerDirectory),
-    mapSubmissionSummaries(returnedQueueRows || [], reviewerDirectory),
-    mapSubmissionSummaries(resubmittedQueueRows || [], reviewerDirectory),
+    mapSubmissionSummaries(pendingQueueRows || [], reviewerDirectory, studentDirectory),
+    mapSubmissionSummaries(inReviewQueueRows || [], reviewerDirectory, studentDirectory),
+    mapSubmissionSummaries(returnedQueueRows || [], reviewerDirectory, studentDirectory),
+    mapSubmissionSummaries(resubmittedQueueRows || [], reviewerDirectory, studentDirectory),
   ]);
   const departmentBreakdown = (departmentCountResults || []).map((result: any) => ({
     department: result.department,
@@ -1342,7 +1364,10 @@ async function loadStaffSubmissionSummaries(options: any = {}) {
   ]);
 
   if (error) throw new Error(error.message);
-  const items = await mapSubmissionSummaries(data || []);
+  const studentDirectory = await loadActiveStudentsByIds(
+    (data || []).map((row: any) => row.student_id),
+  );
+  const items = await mapSubmissionSummaries(data || [], undefined, studentDirectory);
 
   return {
     items,
@@ -1402,7 +1427,7 @@ async function loadActiveStudentsByIds(studentIds: string[]) {
   const [{ data, error }, archivedUsers] = await Promise.all([
     supabase
       .from("students")
-      .select("student_id,profile_id,first_name,last_name,middle_initial,department,course")
+      .select("student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level")
       .in("student_id", uniqueStudentIds),
     getArchivedUserIds().catch(() => ({
       available: false,
@@ -1433,12 +1458,16 @@ async function loadApprovedStudents(options: any = {}) {
     STAFF_APPROVED_STUDENTS_DEFAULT_PAGE_SIZE,
     STAFF_APPROVED_STUDENTS_MAX_PAGE_SIZE,
   );
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
-  let query = supabase.from("submissions").select(SUBMISSION_SUMMARY_COLUMNS);
+  let query = supabase.from("submissions").select(SUBMISSION_SUMMARY_COLUMNS, {
+    count: "exact",
+  });
   query = applyApprovedStudentFilters(query, options);
-  query = query.order("updated_at", { ascending: false });
+  query = query.order("updated_at", { ascending: false }).range(from, to);
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) throw new Error(error.message);
   const activeStudentsById = await loadActiveStudentsByIds(
     (data || []).map((row: any) => row.student_id),
@@ -1532,13 +1561,11 @@ async function loadApprovedStudents(options: any = {}) {
     ),
   ).sort((a, b) => a.localeCompare(b));
   const total = students.length;
-  const from = (page - 1) * pageSize;
-  const paginatedStudents = students.slice(from, from + pageSize);
 
   return {
-    students: paginatedStudents,
+    students,
     availableCourses,
-    total,
+    total: count || total,
     page,
     pageSize,
   };

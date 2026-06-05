@@ -9,6 +9,7 @@ import type { SubmissionRecord } from '../../lib/record-types';
 
 const STUDENT_RECORDS_REFRESH_INTERVAL_MS = 60_000;
 const STUDENT_RECORDS_STALE_TIME_MS = 60_000;
+const STUDENT_RECORDS_GC_TIME_MS = 10 * 60_000;
 
 type StudentRecordsQueryMode = 'full' | 'summary';
 
@@ -34,6 +35,7 @@ export function studentRecordsQueryOptions(studentId?: string | null, mode: Stud
     },
     enabled: Boolean(normalizedStudentId),
     staleTime: STUDENT_RECORDS_STALE_TIME_MS,
+    gcTime: STUDENT_RECORDS_GC_TIME_MS,
     refetchInterval: normalizedStudentId
       ? () => getActiveAjaxRefetchInterval(STUDENT_RECORDS_REFRESH_INTERVAL_MS)
       : false,

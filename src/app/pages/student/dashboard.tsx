@@ -67,6 +67,7 @@ export default function StudentDashboard() {
     queryKey: ['studentAnnouncements'],
     queryFn: getStudentAnnouncements,
     staleTime: 60_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: true,
   });
   const announcements = useMemo(() => announcementsData?.announcements || [], [announcementsData?.announcements]);

@@ -13,6 +13,8 @@ import type { Requester, TimedValue } from "./context.ts";
 
 const ARCHIVE_TABLE_STATE_TTL_MS = 60_000;
 const ARCHIVED_USER_IDS_TTL_MS = 30_000;
+const PROFILE_SELECT_COLUMNS =
+  "id,role,email,password_setup_completed,student_id,first_name,last_name,department,course,created_at,updated_at";
 
 let archivedTableStateCache: TimedValue<{ available: boolean; rows: any[] }> | null = null;
 let archivedTableStatePromise: Promise<{ available: boolean; rows: any[] }> | null = null;
@@ -347,7 +349,7 @@ async function ensureProfile(user: any) {
   const { firstName, lastName } = deriveNamePartsFromUser(user);
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PROFILE_SELECT_COLUMNS)
     .eq("id", user.id)
     .maybeSingle();
 
@@ -380,7 +382,7 @@ async function ensureProfile(user: any) {
             : (existingProfile.last_name || lastName || null),
         })
         .eq("id", user.id)
-        .select("*")
+        .select(PROFILE_SELECT_COLUMNS)
         .single();
 
       if (updatedProfileError) {
@@ -413,7 +415,7 @@ async function ensureProfile(user: any) {
       first_name: firstName,
       last_name: lastName,
     })
-    .select("*")
+    .select(PROFILE_SELECT_COLUMNS)
     .single();
 
   if (createdProfileError) {

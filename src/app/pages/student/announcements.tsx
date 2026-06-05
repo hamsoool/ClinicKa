@@ -22,6 +22,7 @@ export default function StudentAnnouncements() {
     queryKey: ['studentAnnouncements'],
     queryFn: getStudentAnnouncements,
     staleTime: 60_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: true,
   });
 
