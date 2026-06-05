@@ -6,13 +6,6 @@ export const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 export const requestLoggingEnabled = Deno.env.get("ENABLE_REQUEST_LOGGING") === "true";
 export const debugErrorsEnabled = Deno.env.get("DEBUG_ERRORS") === "true";
 export const minPasswordLength = 8;
-const configuredSignedUrlSeconds = Number(
-  Deno.env.get("SIGNED_STORAGE_URL_EXPIRES_SECONDS") || "900",
-);
-export const signedStorageUrlExpiresSeconds =
-  Number.isFinite(configuredSignedUrlSeconds) && configuredSignedUrlSeconds > 0
-    ? Math.min(configuredSignedUrlSeconds, 60 * 60)
-    : 900;
 export const allowVercelPreviewOrigins =
   Deno.env.get("ALLOW_VERCEL_PREVIEW_ORIGINS") === "true";
 
@@ -101,17 +94,6 @@ export function getManagedPasswordPolicyError(
 }
 
 export const supabase = createClient(supabaseUrl, serviceRoleKey);
-export const bucketName = "medical-files";
-export const storageBuckets = [
-  bucketName,
-  "profile",
-  "student_signature",
-  "staff_signature",
-  "staff_signatures",
-  "lab_chest_xray",
-  "lab_cbc",
-  "lab_urinalysis",
-];
 
 export type TimedValue<T> = {
   value: T;

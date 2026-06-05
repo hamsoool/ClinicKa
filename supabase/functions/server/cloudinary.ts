@@ -2,6 +2,18 @@
 
 const CLOUDINARY_UPLOAD_RESOURCE_TYPE = "auto";
 const DEFAULT_CLOUDINARY_BASE_FOLDER = "clinicka";
+const CLOUDINARY_UPLOAD_FOLDERS = {
+  announcement: ["announcements"],
+  "profile-photo": ["profile", "student_photo"],
+  "student-signature": ["profile", "student_signature"],
+  "staff-signature": ["staff-signature"],
+} as const;
+export const CLOUDINARY_LAB_UPLOAD_TYPES = ["cbc", "urinalysis", "xray"] as const;
+const CLOUDINARY_LAB_UPLOAD_FOLDERS = {
+  cbc: ["labs", "cbc"],
+  urinalysis: ["labs", "urinalysis"],
+  xray: ["labs", "xray"],
+} as const;
 
 export type CloudinaryUploadKind =
   | "announcement"
@@ -9,6 +21,7 @@ export type CloudinaryUploadKind =
   | "student-signature"
   | "staff-signature"
   | "lab";
+export type CloudinaryLabUploadType = (typeof CLOUDINARY_LAB_UPLOAD_TYPES)[number];
 
 export type CloudinaryUploadTicketInput = {
   kind: CloudinaryUploadKind;
@@ -18,7 +31,9 @@ export type CloudinaryUploadTicketInput = {
 };
 
 export type CloudinaryUploadResponse = {
+  asset_folder: string | null;
   bytes: number;
+  folder: string | null;
   format: string | null;
   original_filename: string | null;
   public_id: string;
@@ -100,24 +115,29 @@ export function sanitizeCloudinaryFileName(fileName?: string | null, fallback = 
   return withoutExtension || fallback;
 }
 
-function getKindFolder(kind: CloudinaryUploadKind, ownerId: string, extra: Record<string, any>) {
+export function isCloudinaryLabUploadType(value: unknown): value is CloudinaryLabUploadType {
+  return CLOUDINARY_LAB_UPLOAD_TYPES.includes(String(value || "").trim().toLowerCase() as CloudinaryLabUploadType);
+}
+
+function resolveCloudinaryLabUploadType(value: unknown) {
+  if (isCloudinaryLabUploadType(value)) return value;
+  throw new Error("Unsupported Cloudinary lab upload type.");
+}
+
+function getKindFolder(kind: CloudinaryUploadKind, _ownerId: string, extra: Record<string, any>) {
   const { baseFolder } = getCloudinaryConfig();
-  const ownerSegment = sanitizeCloudinarySegment(ownerId, "owner");
+  const pathSegments = kind === "lab"
+    ? CLOUDINARY_LAB_UPLOAD_FOLDERS[resolveCloudinaryLabUploadType(extra?.labType)]
+    : CLOUDINARY_UPLOAD_FOLDERS[kind];
 
-  if (kind === "announcement") return `${baseFolder}/announcements/${ownerSegment}`;
-  if (kind === "profile-photo") return `${baseFolder}/profile/${ownerSegment}`;
-  if (kind === "student-signature") return `${baseFolder}/student-signature/${ownerSegment}`;
-  if (kind === "staff-signature") return `${baseFolder}/staff-signature/${ownerSegment}`;
-
-  const labType = sanitizeCloudinarySegment(extra?.labType || "lab", "lab");
-  return `${baseFolder}/labs/${labType}/${ownerSegment}`;
+  return [baseFolder, ...pathSegments].join("/");
 }
 
 function getKindPrefix(kind: CloudinaryUploadKind, extra: Record<string, any>) {
   if (kind === "profile-photo") return "photo";
   if (kind === "student-signature" || kind === "staff-signature") return "signature";
   if (kind === "announcement") return "announcement";
-  return sanitizeCloudinarySegment(extra?.labType || "lab", "lab");
+  return resolveCloudinaryLabUploadType(extra?.labType);
 }
 
 export function buildCloudinaryFolder(
@@ -134,10 +154,9 @@ export function buildCloudinaryPublicId(
   safeFileName?: string | null,
   extra: Record<string, any> = {},
 ) {
-  const folder = buildCloudinaryFolder(kind, ownerId, extra);
   const prefix = getKindPrefix(kind, extra);
   const name = sanitizeCloudinaryFileName(safeFileName, prefix);
-  return `${folder}/${prefix}_${Date.now()}_${name}`;
+  return `${prefix}_${Date.now()}_${name}`;
 }
 
 function encodeContextValue(value: unknown) {
@@ -199,11 +218,13 @@ export async function createCloudinaryUploadTicket(input: CloudinaryUploadTicket
     .filter(Boolean)
     .join(",");
   const signedParams = {
+    asset_folder: folder,
     context: contextString,
     overwrite: "true",
     public_id: publicId,
     tags,
     timestamp,
+    use_asset_folder_as_public_id_prefix: "true",
   };
   const signature = await signCloudinaryUpload(signedParams);
 
@@ -215,13 +236,14 @@ export async function createCloudinaryUploadTicket(input: CloudinaryUploadTicket
     timestamp,
     signature,
     apiKey: config.apiKey,
-    folder,
+    assetFolder: folder,
     publicId,
     resourceType: CLOUDINARY_UPLOAD_RESOURCE_TYPE,
     context,
     contextString,
     tags,
     overwrite: true,
+    useAssetFolderAsPublicIdPrefix: true,
   };
 }
 
@@ -239,7 +261,9 @@ export function normalizeCloudinaryUploadResponse(payload: any): CloudinaryUploa
   if (!publicId || !secureUrl || !resourceType || !version) return null;
 
   return {
+    asset_folder: String(payload?.asset_folder || "").trim() || null,
     bytes: normalizeCloudinaryNumber(payload?.bytes),
+    folder: String(payload?.folder || "").trim() || null,
     format: String(payload?.format || "").trim() || null,
     original_filename: String(payload?.original_filename || "").trim() || null,
     public_id: publicId,
@@ -266,9 +290,16 @@ function appendCloudinaryFormFields(formData: FormData, ticket: any) {
   formData.set("timestamp", String(ticket.timestamp));
   formData.set("signature", ticket.signature);
   formData.set("public_id", ticket.publicId);
+  if (ticket.assetFolder) formData.set("asset_folder", ticket.assetFolder);
   if (ticket.contextString) formData.set("context", ticket.contextString);
   if (ticket.tags) formData.set("tags", ticket.tags);
   if (ticket.overwrite !== undefined) formData.set("overwrite", String(Boolean(ticket.overwrite)));
+  if (ticket.useAssetFolderAsPublicIdPrefix !== undefined) {
+    formData.set(
+      "use_asset_folder_as_public_id_prefix",
+      String(Boolean(ticket.useAssetFolderAsPublicIdPrefix)),
+    );
+  }
 }
 
 async function readCloudinaryError(response: Response) {
