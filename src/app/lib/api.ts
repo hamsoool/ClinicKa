@@ -54,23 +54,13 @@ export type { AdminSystemSettings } from './admin-system-settings';
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
 export const PASSWORD_RESET_COOLDOWN_SECONDS = 300;
-const STORAGE_BUCKET = 'medical-files';
 const PASSWORD_RESET_COOLDOWN_KEY_PREFIX = 'lastPasswordResetEmailSent_';
-const STORAGE_BUCKET_BY_FILE_TYPE: Record<string, string> = {
-  photo: 'profile',
-  signature: 'student_signature',
-  xray: 'lab_chest_xray',
-  cbc: 'lab_cbc',
-  urinalysis: 'lab_urinalysis',
-};
-const EXTRA_STORAGE_BUCKETS = ['staff_signature', 'staff_signatures'];
 const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_TARGET_BYTES = 950 * 1024;
 const LAB_UPLOAD_CANVAS_MAX_DIMENSIONS = [2200, 1800, 1500, 1200];
 const LAB_UPLOAD_CANVAS_QUALITIES = [0.86, 0.76, 0.66, 0.56];
 const CURRENT_ACADEMIC_YEAR_SETTING_KEY = 'current_academic_year';
 let studentProfileAssetsRouteUnavailable = false;
-const disabledStorageListBuckets = new Set<string>();
 let authClient: SupabaseClient | null = null;
 
 function getAuthClient() {
@@ -87,57 +77,6 @@ function getAuthClient() {
   }
 
   return authClient;
-}
-
-function inferBucketFromStoragePath(storagePath?: string | null) {
-  const path = String(storagePath || '').replace(/^\/+/, '');
-  if (!path) return null;
-  const first = path.split('/')[0]?.trim();
-  if (!first) return null;
-  const known = new Set([STORAGE_BUCKET, ...Object.values(STORAGE_BUCKET_BY_FILE_TYPE), ...EXTRA_STORAGE_BUCKETS]);
-  return known.has(first) ? first : null;
-}
-
-function inferBucketFromType(fileType?: string | null) {
-  const key = String(fileType || '').trim().toLowerCase();
-  if (key === 'profile' || key === 'profile_photo' || key === 'student_photo') return 'profile';
-  if (key === 'student_signature') return 'student_signature';
-  if (key === 'staff_signature' || key === 'staff-signature' || key === 'staff_signatures') return 'staff_signatures';
-  return STORAGE_BUCKET_BY_FILE_TYPE[key] || null;
-}
-
-function inferBucketFromNameOrPath(fileName?: string | null, storagePath?: string | null) {
-  const haystack = `${String(fileName || '').toLowerCase()} ${String(storagePath || '').toLowerCase()}`;
-  if (haystack.includes('xray_') || haystack.includes('chest_xray')) return 'lab_chest_xray';
-  if (haystack.includes('cbc_')) return 'lab_cbc';
-  if (haystack.includes('urinalysis_') || haystack.includes('ua_')) return 'lab_urinalysis';
-  if (
-    haystack.includes('staff_signature') ||
-    haystack.includes('staff-signature') ||
-    haystack.includes('staff_signatures')
-  ) {
-    return 'staff_signatures';
-  }
-  if (haystack.includes('signature_')) return 'student_signature';
-  if (haystack.includes('photo_') || haystack.includes('profile_')) return 'profile';
-  return null;
-}
-
-function getStorageErrorMessage(payload: unknown) {
-  if (!payload || typeof payload !== 'object') return '';
-  const record = payload as Record<string, unknown>;
-  return String(record.message || record.error || record.msg || '').trim().toLowerCase();
-}
-
-function shouldDisableStorageBucket(status: number, payload: unknown) {
-  const message = getStorageErrorMessage(payload);
-  if (!message) return false;
-
-  return (
-    message.includes('resource has been removed') ||
-    (message.includes('bucket') && message.includes('not found')) ||
-    message.includes('bucket not found')
-  );
 }
 
 function getCanvasUploadFileName(fileName: string) {
@@ -224,31 +163,6 @@ async function optimizeLabImageInBrowser(file: File) {
   }
 
   return file;
-}
-
-async function createSignedStorageUrlWithBucketFallbacks(
-  storagePath?: string | null,
-  token?: string | null,
-  explicitBucket?: string | null,
-  fileType?: string | null,
-) {
-  const buckets = [
-    explicitBucket || null,
-    inferBucketFromStoragePath(storagePath),
-    inferBucketFromType(fileType),
-    STORAGE_BUCKET,
-  ]
-    .map((item) => String(item || '').trim())
-    .filter(Boolean);
-
-  const seen = new Set<string>();
-  for (const bucketName of buckets) {
-    if (seen.has(bucketName)) continue;
-    seen.add(bucketName);
-    const signed = await createSignedStorageUrl(storagePath, token, bucketName);
-    if (signed && !signed.includes('"Bucket not found"')) return signed;
-  }
-  return null;
 }
 
 export type UserRole = 'student' | 'staff' | 'admin' | 'super_admin';
@@ -714,10 +628,6 @@ function isValidStudentRegistrationEmail(email?: string | null) {
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const ME_CACHE_TTL_MS = 15_000;
 const STUDENT_PROFILE_ASSETS_CACHE_TTL_MS = 60_000;
-const SIGNED_URL_CACHE_TTL_MS = 5 * 60 * 1000;
-const SIGNED_STORAGE_URL_EXPIRES_SECONDS = 15 * 60;
-const STORAGE_FALLBACK_MAX_SUBMISSIONS = 12;
-const PROFILE_ASSET_FALLBACK_MAX_STUDENTS = 20;
 
 type TimedValue<T> = {
   value: T;
@@ -728,8 +638,6 @@ const _meCache = new Map<string, TimedValue<AuthMe>>();
 const _mePromiseCache = new Map<string, Promise<AuthMe>>();
 const _studentProfileAssetsCache = new Map<string, TimedValue<StudentProfileAssets>>();
 const _studentProfileAssetsPromiseCache = new Map<string, Promise<StudentProfileAssets>>();
-const _signedUrlCache = new Map<string, TimedValue<string>>();
-const _signedUrlPromiseCache = new Map<string, Promise<string | null>>();
 let _studentProfileAssetsCacheVersion = 0;
 
 function getMeCacheKey(token?: string | null) {
@@ -754,11 +662,6 @@ function invalidateStudentProfileAssetsCache() {
   _studentProfileAssetsCacheVersion += 1;
   _studentProfileAssetsCache.clear();
   _studentProfileAssetsPromiseCache.clear();
-}
-
-function invalidateSignedUrlCache() {
-  _signedUrlCache.clear();
-  _signedUrlPromiseCache.clear();
 }
 
 function getNowUnixSeconds() {
@@ -836,7 +739,6 @@ export function setStoredSession(session: AuthSession | null) {
   if (typeof window === 'undefined') return;
   invalidateMeCache();
   invalidateStudentProfileAssetsCache();
-  invalidateSignedUrlCache();
   removeLegacyStoredSession();
 
   if (!session) {
@@ -1478,6 +1380,48 @@ function buildStaffSignatureAssetFromRow(staff: any) {
   };
 }
 
+function buildStudentProfileAssetFromRow(student: any, type: 'photo' | 'signature') {
+  const url =
+    type === 'photo'
+      ? normalizeStorageFileUrl(student?.profile_photo_url || null)
+      : normalizeStorageFileUrl(student?.signature_url || null);
+  if (!url) return null;
+
+  return {
+    id: `student-${type}-${student?.student_id || student?.profile_id || 'asset'}`,
+    submission_id: null,
+    type,
+    file_name:
+      type === 'photo'
+        ? student?.profile_photo_file_name || null
+        : student?.signature_file_name || null,
+    storage_bucket: null,
+    storage_path: null,
+    mime_type: null,
+    uploaded_at: student?.media_updated_at || null,
+    uploaded_by: student?.profile_id || null,
+    url,
+  };
+}
+
+function buildLabFileAssetFromRow(row: any, type: string) {
+  const url = normalizeStorageFileUrl(row?.file_url || null);
+  if (!url) return null;
+
+  return {
+    id: row?.file_id || `${type}-${row?.submission_id || 'file'}`,
+    submission_id: row?.submission_id || null,
+    type,
+    file_name: row?.file_name || null,
+    storage_bucket: null,
+    storage_path: null,
+    mime_type: row?.mime_type || null,
+    uploaded_at: row?.media_updated_at || null,
+    uploaded_by: null,
+    url,
+  };
+}
+
 function byId(rows: any[] | null | undefined) {
   return (rows || []).reduce((acc, row) => {
     if (row?.id) acc[row.id] = row;
@@ -1512,15 +1456,17 @@ function findGenericLabFile(files: any[]) {
 }
 
 function normalizeStorageFileUrl(url?: string | null) {
-  if (!url || !supabaseUrl) return url || undefined;
-  const trimmed = url.trim();
+  const trimmed = String(url || '').trim();
   if (!trimmed) return undefined;
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  if (trimmed.startsWith('/storage/v1/')) return `${supabaseUrl}${trimmed}`;
-  if (trimmed.startsWith('/object/')) return `${supabaseUrl}/storage/v1${trimmed}`;
-  if (trimmed.startsWith('storage/v1/')) return `${supabaseUrl}/${trimmed}`;
-  if (trimmed.startsWith('object/')) return `${supabaseUrl}/storage/v1/${trimmed}`;
-  return trimmed;
+  if (!/^https?:\/\//i.test(trimmed)) return undefined;
+  try {
+    const hostname = new URL(trimmed).hostname.toLowerCase();
+    return hostname === 'res.cloudinary.com' || hostname.endsWith('.cloudinary.com')
+      ? trimmed
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const cloudinaryCloudName = String(import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '').trim();
@@ -1546,152 +1492,6 @@ function buildCloudinaryDeliveryUrl(file: any) {
     .join('/');
   const versionPath = version ? `v${version}/` : '';
   return `https://res.cloudinary.com/${cloudinaryCloudName}/${resourceType}/upload/${versionPath}${encodedPublicId}`;
-}
-
-async function createSignedStorageUrl(storagePath?: string | null, token?: string | null, bucket?: string | null) {
-  const targetBucket = (bucket || STORAGE_BUCKET).trim() || STORAGE_BUCKET;
-  const rawPath = (storagePath || '').trim();
-  let path = rawPath.replace(/^\/+/, '');
-  if (path.startsWith(`${targetBucket}/`)) {
-    path = path.slice(targetBucket.length + 1);
-  }
-  if (!path || !supabaseUrl || !publicAnonKey) return null;
-  if (disabledStorageListBuckets.has(targetBucket)) return null;
-  const cacheKey = `${targetBucket}:${path}`;
-  const now = Date.now();
-  const cached = _signedUrlCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
-    return cached.value;
-  }
-
-  const inFlight = _signedUrlPromiseCache.get(cacheKey);
-  if (inFlight) {
-    return inFlight;
-  }
-
-  const promise = (async () => {
-    const trySign = async (targetPath: string) => {
-      const encodedPath = targetPath
-        .split('/')
-        .filter(Boolean)
-        .map((segment) => encodeURIComponent(segment))
-        .join('/');
-      if (!encodedPath) return null;
-
-      const response = await fetch(
-        `${supabaseUrl}/storage/v1/object/sign/${targetBucket}/${encodedPath}`,
-        {
-          method: 'POST',
-          headers: {
-            apikey: publicAnonKey,
-            Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ expiresIn: SIGNED_STORAGE_URL_EXPIRES_SECONDS }),
-        },
-      );
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (shouldDisableStorageBucket(response.status, payload)) {
-          disabledStorageListBuckets.add(targetBucket);
-        }
-        return null;
-      }
-
-      const rawSigned =
-        payload?.signedURL || payload?.signedUrl || payload?.signed_url || null;
-      if (!rawSigned) return null;
-      if (/^https?:\/\//i.test(rawSigned)) return rawSigned as string;
-      return `${supabaseUrl}/storage/v1${rawSigned}`;
-    };
-
-    try {
-      const signedDirect = await trySign(path);
-      if (signedDirect) {
-        _signedUrlCache.set(cacheKey, {
-          value: signedDirect,
-          expiresAt: Date.now() + SIGNED_URL_CACHE_TTL_MS,
-        });
-        return signedDirect;
-      }
-      return null;
-    } catch {
-      return null;
-    } finally {
-      _signedUrlPromiseCache.delete(cacheKey);
-    }
-  })();
-
-  _signedUrlPromiseCache.set(cacheKey, promise);
-  return promise;
-}
-
-async function listStorageFilesForSubmission(submissionId: string, token?: string | null, bucket?: string) {
-  const targetBucket = (bucket || STORAGE_BUCKET).trim() || STORAGE_BUCKET;
-  if (!submissionId || !supabaseUrl || !publicAnonKey) return [] as any[];
-  if (disabledStorageListBuckets.has(targetBucket)) return [] as any[];
-  try {
-    const response = await fetch(
-      `${supabaseUrl}/storage/v1/object/list/${targetBucket}`,
-      {
-        method: 'POST',
-        headers: {
-          apikey: publicAnonKey,
-          Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prefix: `${submissionId}/`,
-          limit: 100,
-          offset: 0,
-        }),
-      },
-    );
-    const payload = await response.json().catch(() => []);
-    if (!response.ok) {
-      if (shouldDisableStorageBucket(response.status, payload)) {
-        disabledStorageListBuckets.add(targetBucket);
-      }
-      return [];
-    }
-    if (!Array.isArray(payload)) return [];
-
-    const inferred = await Promise.all(
-      payload
-        .filter((item: any) => item?.name)
-        .map(async (item: any) => {
-          const fileName = String(item.name);
-          const storagePath = `${submissionId}/${fileName}`;
-          const lower = fileName.toLowerCase();
-          const inferredType = lower.startsWith('cbc_')
-            ? 'cbc'
-            : lower.startsWith('xray_')
-            ? 'xray'
-            : lower.startsWith('urinalysis_')
-            ? 'urinalysis'
-            : lower.startsWith('photo_')
-            ? 'photo'
-            : lower.startsWith('signature_')
-            ? 'signature'
-            : 'other';
-          const signedUrl = await createSignedStorageUrl(storagePath, token, targetBucket);
-          return {
-            id: `storage-${submissionId}-${fileName}`,
-            submission_id: submissionId,
-            type: inferredType,
-            file_name: fileName,
-            storage_bucket: targetBucket,
-            storage_path: storagePath,
-            mime_type: null,
-            uploaded_at: new Date().toISOString(),
-            url: signedUrl || null,
-          };
-        }),
-    );
-    return inferred.filter((row) => row.url);
-  } catch {
-    return [];
-  }
 }
 
 function formatStaffDisplayName(staff?: any) {
@@ -1785,11 +1585,21 @@ function mapSubmission(row: any, related: Record<string, any>) {
   const xrayFileFromLab = xray?.file_id ? related.filesById[xray.file_id] : null;
   const cbcFileFromLab = cbc?.file_id ? related.filesById[cbc.file_id] : null;
   const urinalysisFileFromLab = urinalysis?.file_id ? related.filesById[urinalysis.file_id] : null;
+  const directXrayFile = buildLabFileAssetFromRow(xray, 'xray');
+  const directCbcFile = buildLabFileAssetFromRow(cbc, 'cbc');
+  const directUrinalysisFile = buildLabFileAssetFromRow(urinalysis, 'urinalysis');
   const xrayFileByHint = findLabFileByHint(submissionFiles, 'xray');
   const cbcFileByHint = findLabFileByHint(submissionFiles, 'cbc');
   const urinalysisFileByHint = findLabFileByHint(submissionFiles, 'urinalysis');
   const genericLabFile = findGenericLabFile(submissionFiles);
-  const profileAssets = student?.profile_id ? related.profileAssetsByProfileId?.[student.profile_id] || {} : {};
+  const metadataProfileAssets = student?.profile_id ? related.profileAssetsByProfileId?.[student.profile_id] || {} : {};
+  const directPhoto = buildStudentProfileAssetFromRow(student, 'photo');
+  const directSignature = buildStudentProfileAssetFromRow(student, 'signature');
+  const profileAssets = {
+    ...metadataProfileAssets,
+    ...(directPhoto ? { photo: directPhoto } : {}),
+    ...(directSignature ? { signature: directSignature } : {}),
+  };
 
   return {
     id: row.id,
@@ -1861,9 +1671,9 @@ function mapSubmission(row: any, related: Record<string, any>) {
       : undefined,
     photoUrl: normalizeStorageFileUrl(files.photo?.url || profileAssets.photo?.url),
     signatureUrl: normalizeStorageFileUrl(files.signature?.url || profileAssets.signature?.url),
-    xrayFileUrl: normalizeStorageFileUrl(xrayFileFromLab?.url || files.xray?.url || xrayFileByHint?.url || genericLabFile?.url),
-    cbcFileUrl: normalizeStorageFileUrl(cbcFileFromLab?.url || files.cbc?.url || cbcFileByHint?.url || genericLabFile?.url),
-    urinalysisFileUrl: normalizeStorageFileUrl(urinalysisFileFromLab?.url || files.urinalysis?.url || urinalysisFileByHint?.url || genericLabFile?.url),
+    xrayFileUrl: normalizeStorageFileUrl(directXrayFile?.url || xrayFileFromLab?.url || files.xray?.url || xrayFileByHint?.url || genericLabFile?.url),
+    cbcFileUrl: normalizeStorageFileUrl(directCbcFile?.url || cbcFileFromLab?.url || files.cbc?.url || cbcFileByHint?.url || genericLabFile?.url),
+    urinalysisFileUrl: normalizeStorageFileUrl(directUrinalysisFile?.url || urinalysisFileFromLab?.url || files.urinalysis?.url || urinalysisFileByHint?.url || genericLabFile?.url),
     certificatePdfUrl: normalizeStorageFileUrl(files.certificate?.url || certificate?.pdf_url),
     labTestLocation: row.lab_test_location || '',
     otherClinicName: row.lab_test_clinic || '',
@@ -1931,11 +1741,6 @@ async function loadRelatedData(rows: any[]) {
 
   const normalizedFiles = await normalizeFileRows(files, token);
 
-  const filesBySubmissionCurrent = (normalizedFiles || []).reduce((acc, file) => {
-    acc[file.submission_id] = acc[file.submission_id] || [];
-    acc[file.submission_id].push(file);
-    return acc;
-  }, {} as Record<string, any[]>);
   const initialReviewerRows = reviewers || [];
   const knownReviewerIds = new Set(
     initialReviewerRows.map((staff) => String(staff?.id || '').trim()).filter(Boolean),
@@ -1994,22 +1799,7 @@ async function loadRelatedData(rows: any[]) {
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
     await normalizeFileRows(staffSignatureFilesRaw, token),
   );
-  const staffSignatureProfileIds = [
-    ...new Set(normalizedStaffSignatureFiles.map((file) => file?.uploaded_by).filter(Boolean)),
-  ];
-  const missingStaffSignatureProfileIds = staffProfileIds.filter(
-    (profileId) => !staffSignatureProfileIds.includes(profileId),
-  );
-  const staffSignatureStorageFiles = (
-    await Promise.all(
-      missingStaffSignatureProfileIds.map((profileId) => listStaffSignatureFromStorage(profileId, token)),
-    )
-  ).flat();
-  const allStaffSignatureFiles = [
-    ...normalizedStaffSignatureFiles,
-    ...staffSignatureStorageFiles,
-  ];
-  const staffSignaturesByProfileId = allStaffSignatureFiles.reduce((acc, file) => {
+  const staffSignaturesByProfileId = normalizedStaffSignatureFiles.reduce((acc, file) => {
     if (!file?.uploaded_by) return acc;
     const existing = acc[file.uploaded_by];
     if (!existing || new Date(file.uploaded_at || 0).getTime() > new Date(existing.uploaded_at || 0).getTime()) {
@@ -2024,24 +1814,15 @@ async function loadRelatedData(rows: any[]) {
     return acc;
   }, {} as Record<string, any>);
 
-  const shouldRunStorageFallback = submissionIds.length <= STORAGE_FALLBACK_MAX_SUBMISSIONS;
-  const submissionsMissingFiles = shouldRunStorageFallback
-    ? submissionIds.filter((id) => {
-        const currentFiles = filesBySubmissionCurrent[id] || [];
-        return !currentFiles.length || currentFiles.some((file: any) => file?.storage_path && !file?.url);
-      })
-    : [];
-  const fallbackBuckets = [...new Set([STORAGE_BUCKET, ...Object.values(STORAGE_BUCKET_BY_FILE_TYPE)])];
-  const listedFallbackFiles = (
-    await Promise.all(
-      submissionsMissingFiles.flatMap((id) =>
-        fallbackBuckets.map((bucketName) => listStorageFilesForSubmission(id, token, bucketName)),
-      ),
-    )
-  ).flat();
-  const allFiles = [...(normalizedFiles || []), ...listedFallbackFiles];
   const studentRows = students || [];
-  const studentProfileIds = [...new Set(studentRows.map((student) => student?.profile_id).filter(Boolean))];
+  const studentProfileIds = [
+    ...new Set(
+      studentRows
+        .filter((student) => !student?.profile_photo_url || !student?.signature_url)
+        .map((student) => student?.profile_id)
+        .filter(Boolean),
+    ),
+  ];
   const studentProfileIdList = studentProfileIds.map((id) => encodeURIComponent(id)).join(',');
   const profileAssetFilesRaw = studentProfileIds.length
     ? await restRequest<any[]>(
@@ -2058,25 +1839,17 @@ async function loadRelatedData(rows: any[]) {
     acc[file.uploaded_by].push(file);
     return acc;
   }, {} as Record<string, any[]>);
-  const shouldRunProfileAssetFallback = studentRows.length <= PROFILE_ASSET_FALLBACK_MAX_STUDENTS;
-  const missingProfileAssetStudents = shouldRunProfileAssetFallback
-    ? studentRows.filter((student) => {
-        const latest = latestFilesByType(profileAssetsByUploadedBy[student?.profile_id] || []);
-        return !latest.photo?.url || !latest.signature?.url;
-      })
-    : [];
-  const fallbackProfileAssets = await Promise.all(
-    missingProfileAssetStudents.map(async (student) => ({
-      profileId: student.profile_id,
-      files: await listProfileAssetsFromStorage(student.student_id, token),
-    })),
-  );
   const profileAssetsByProfileId = studentRows.reduce((acc, student) => {
     if (!student?.profile_id) return acc;
     const metadataFiles = profileAssetsByUploadedBy[student.profile_id] || [];
-    const storageFallbackFiles =
-      fallbackProfileAssets.find((entry) => entry.profileId === student.profile_id)?.files || [];
-    acc[student.profile_id] = latestFilesByType([...metadataFiles, ...storageFallbackFiles]);
+    const latest = latestFilesByType(metadataFiles);
+    const directPhoto = buildStudentProfileAssetFromRow(student, 'photo');
+    const directSignature = buildStudentProfileAssetFromRow(student, 'signature');
+    acc[student.profile_id] = {
+      ...latest,
+      ...(directPhoto ? { photo: directPhoto } : {}),
+      ...(directSignature ? { signature: directSignature } : {}),
+    };
     return acc;
   }, {} as Record<string, Record<string, any>>);
 
@@ -2086,7 +1859,7 @@ async function loadRelatedData(rows: any[]) {
       return acc;
     }, {} as Record<string, any>);
 
-  const filesBySubmission = allFiles.reduce((acc, file) => {
+  const filesBySubmission = (normalizedFiles || []).reduce((acc, file) => {
     acc[file.submission_id] = acc[file.submission_id] || [];
     acc[file.submission_id].push(file);
     return acc;
@@ -2106,7 +1879,7 @@ async function loadRelatedData(rows: any[]) {
     certificates: byKey(certificates, 'submission_id'),
     profileAssetsByProfileId,
     files: filesBySubmission,
-    filesById: byId(allFiles),
+    filesById: byId(normalizedFiles),
   };
 }
 
@@ -2133,8 +1906,8 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   ] = await Promise.all([
     studentIds.length
       ? restRequest<any[]>(
-          'students',
-          `student_id=in.(${studentIdList})&select=student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address`,
+        'students',
+          `student_id=in.(${studentIdList})&select=student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at`,
         )
       : Promise.resolve([]),
     submissionIds.length
@@ -2235,22 +2008,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
     await normalizeFileRows(staffSignatureFilesRaw, token),
   );
-  const staffSignatureProfileIds = [
-    ...new Set(normalizedStaffSignatureFiles.map((file) => file?.uploaded_by).filter(Boolean)),
-  ];
-  const missingStaffSignatureProfileIds = staffProfileIds.filter(
-    (profileId) => !staffSignatureProfileIds.includes(profileId),
-  );
-  const staffSignatureStorageFiles = (
-    await Promise.all(
-      missingStaffSignatureProfileIds.map((profileId) => listStaffSignatureFromStorage(profileId, token)),
-    )
-  ).flat();
-  const allStaffSignatureFiles = [
-    ...normalizedStaffSignatureFiles,
-    ...staffSignatureStorageFiles,
-  ];
-  const staffSignaturesByProfileId = allStaffSignatureFiles.reduce((acc, file) => {
+  const staffSignaturesByProfileId = normalizedStaffSignatureFiles.reduce((acc, file) => {
     if (!file?.uploaded_by) return acc;
     const existing = acc[file.uploaded_by];
     if (!existing || new Date(file.uploaded_at || 0).getTime() > new Date(existing.uploaded_at || 0).getTime()) {
@@ -2266,7 +2024,12 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   }, {} as Record<string, any>);
   const studentRows = students || [];
   const studentProfileIds = [
-    ...new Set(studentRows.map((student) => student?.profile_id).filter(Boolean)),
+    ...new Set(
+      studentRows
+        .filter((student) => !student?.profile_photo_url || !student?.signature_url)
+        .map((student) => student?.profile_id)
+        .filter(Boolean),
+    ),
   ];
   const studentProfileIdList = studentProfileIds
     .map((id) => encodeURIComponent(id))
@@ -2286,31 +2049,17 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     acc[file.uploaded_by].push(file);
     return acc;
   }, {} as Record<string, any[]>);
-  const shouldRunProfileAssetFallback =
-    studentRows.length <= PROFILE_ASSET_FALLBACK_MAX_STUDENTS;
-  const missingProfileAssetStudents = shouldRunProfileAssetFallback
-    ? studentRows.filter((student) => {
-        const latest = latestFilesByType(
-          profileAssetsByUploadedBy[student?.profile_id] || [],
-        );
-        return !latest.photo?.url || !latest.signature?.url;
-      })
-    : [];
-  const fallbackProfileAssets = await Promise.all(
-    missingProfileAssetStudents.map(async (student) => ({
-      profileId: student.profile_id,
-      files: await listProfileAssetsFromStorage(student.student_id, token),
-    })),
-  );
   const profileAssetsByProfileId = studentRows.reduce((acc, student) => {
     if (!student?.profile_id) return acc;
     const metadataFiles = profileAssetsByUploadedBy[student.profile_id] || [];
-    const storageFallbackFiles =
-      fallbackProfileAssets.find((entry) => entry.profileId === student.profile_id)?.files || [];
-    acc[student.profile_id] = latestFilesByType([
-      ...metadataFiles,
-      ...storageFallbackFiles,
-    ]);
+    const latest = latestFilesByType(metadataFiles);
+    const directPhoto = buildStudentProfileAssetFromRow(student, 'photo');
+    const directSignature = buildStudentProfileAssetFromRow(student, 'signature');
+    acc[student.profile_id] = {
+      ...latest,
+      ...(directPhoto ? { photo: directPhoto } : {}),
+      ...(directSignature ? { signature: directSignature } : {}),
+    };
     return acc;
   }, {} as Record<string, Record<string, any>>);
 
@@ -2779,169 +2528,7 @@ export async function getMe(token?: string | null) {
   }
 }
 
-async function listProfileAssetsFromStorage(studentId: string, token?: string | null) {
-  const targetStudentId = String(studentId || '').trim();
-  if (!targetStudentId || !supabaseUrl || !publicAnonKey) return [] as any[];
-
-  const prefixes = [`${targetStudentId}/`, `profiles/${targetStudentId}/`];
-  const assetConfigs = [
-    { type: 'photo', bucket: 'profile' },
-    { type: 'signature', bucket: 'student_signature' },
-  ] as const;
-
-  try {
-    const results = await Promise.all(
-      assetConfigs.map(async ({ type, bucket }) => {
-        if (disabledStorageListBuckets.has(bucket)) {
-          return [] as any[];
-        }
-        const rowsByPrefix = await Promise.all(
-          prefixes.map(async (prefix) => {
-            const response = await fetch(
-              `${supabaseUrl}/storage/v1/object/list/${bucket}`,
-              {
-                method: 'POST',
-                headers: {
-                  apikey: publicAnonKey,
-                  Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  prefix,
-                  limit: 50,
-                  offset: 0,
-                }),
-              },
-            );
-
-            const payload = await response.json().catch(() => []);
-            if (!response.ok) {
-              if (shouldDisableStorageBucket(response.status, payload)) {
-                disabledStorageListBuckets.add(bucket);
-              }
-              return [] as any[];
-            }
-            if (!Array.isArray(payload)) return [] as any[];
-
-            const candidates = payload
-              .filter((item: any) => item?.name && (item?.id || item?.metadata))
-              .sort((a: any, b: any) => {
-                const aTime = new Date(String(a?.updated_at || a?.created_at || a?.last_accessed_at || 0)).getTime();
-                const bTime = new Date(String(b?.updated_at || b?.created_at || b?.last_accessed_at || 0)).getTime();
-                return bTime - aTime;
-              });
-            const latest = candidates[0];
-            if (!latest?.name) return [] as any[];
-
-            const storagePath = `${prefix}${String(latest.name)}`;
-            const signedUrl = await createSignedStorageUrl(storagePath, token, bucket);
-            if (!signedUrl) return [] as any[];
-
-            return [{
-              id: `profile-${bucket}-${targetStudentId}-${prefix}-${latest.name}`,
-              submission_id: null,
-              type,
-              file_name: String(latest.name),
-              storage_bucket: bucket,
-              storage_path: storagePath,
-              mime_type: null,
-              uploaded_at: String(latest?.updated_at || latest?.created_at || latest?.last_accessed_at || new Date().toISOString()),
-              uploaded_by: null,
-              url: signedUrl,
-            }];
-          }),
-        );
-
-        return rowsByPrefix.flat();
-      }),
-    );
-
-    return results.flat();
-  } catch {
-    return [] as any[];
-  }
-}
-
-async function listStaffSignatureFromStorage(profileId: string, token?: string | null) {
-  const targetProfileId = String(profileId || '').trim();
-  if (!targetProfileId || !supabaseUrl || !publicAnonKey) return [] as any[];
-
-  const storageConfigs = [
-    { bucket: 'staff_signatures', prefix: `${targetProfileId}/` },
-    { bucket: 'staff_signatures', prefix: `staff-signatures/${targetProfileId}/` },
-    { bucket: 'staff_signature', prefix: `${targetProfileId}/` },
-    { bucket: 'staff_signature', prefix: `staff-signatures/${targetProfileId}/` },
-    { bucket: 'student_signature', prefix: `staff-signatures/${targetProfileId}/` },
-  ] as const;
-
-  try {
-    const results = await Promise.all(
-      storageConfigs.map(async ({ bucket, prefix }) => {
-        if (disabledStorageListBuckets.has(bucket)) {
-          return [] as any[];
-        }
-
-        const response = await fetch(
-          `${supabaseUrl}/storage/v1/object/list/${bucket}`,
-          {
-            method: 'POST',
-            headers: {
-              apikey: publicAnonKey,
-              Authorization: `Bearer ${token || getAccessToken() || publicAnonKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              prefix,
-              limit: 50,
-              offset: 0,
-            }),
-          },
-        );
-
-        const payload = await response.json().catch(() => []);
-        if (!response.ok) {
-          if (shouldDisableStorageBucket(response.status, payload)) {
-            disabledStorageListBuckets.add(bucket);
-          }
-          return [] as any[];
-        }
-        if (!Array.isArray(payload)) return [] as any[];
-
-        const latest = payload
-          .filter((item: any) => item?.name && (item?.id || item?.metadata))
-          .sort((a: any, b: any) => {
-            const aTime = new Date(String(a?.updated_at || a?.created_at || a?.last_accessed_at || 0)).getTime();
-            const bTime = new Date(String(b?.updated_at || b?.created_at || b?.last_accessed_at || 0)).getTime();
-            return bTime - aTime;
-          })[0];
-        if (!latest?.name) return [] as any[];
-
-        const storagePath = `${prefix}${String(latest.name)}`;
-        const signedUrl = await createSignedStorageUrl(storagePath, token, bucket);
-        if (!signedUrl) return [] as any[];
-
-        return [{
-          id: `staff-signature-${bucket}-${targetProfileId}-${prefix}-${latest.name}`,
-          submission_id: null,
-          type: 'staff_signature',
-          file_name: String(latest.name),
-          storage_bucket: bucket,
-          storage_path: storagePath,
-          mime_type: null,
-          uploaded_at: String(latest?.updated_at || latest?.created_at || latest?.last_accessed_at || new Date().toISOString()),
-          uploaded_by: targetProfileId,
-          url: signedUrl,
-        }];
-      }),
-    );
-
-    return results.flat();
-  } catch {
-    return [] as any[];
-  }
-}
-
-async function normalizeFileRows(files: any[] | null | undefined, token?: string | null) {
+async function normalizeFileRows(files: any[] | null | undefined, _token?: string | null) {
   return Promise.all(
     (files || []).map(async (file) => {
       if (isCloudinaryFileRow(file)) {
@@ -2953,26 +2540,7 @@ async function normalizeFileRows(files: any[] | null | undefined, token?: string
         };
       }
 
-      if (file?.storage_path) {
-        const resolvedBucket =
-          String(file?.storage_bucket || '').trim() ||
-          inferBucketFromStoragePath(file.storage_path) ||
-          inferBucketFromType(file.type) ||
-          inferBucketFromNameOrPath(file.file_name, file.storage_path) ||
-          STORAGE_BUCKET;
-        const signedUrl = await createSignedStorageUrlWithBucketFallbacks(
-          file.storage_path,
-          token,
-          resolvedBucket,
-          file.type,
-        );
-        return {
-          ...file,
-          storage_bucket: resolvedBucket,
-          url: signedUrl || null,
-        };
-      }
-      return { ...file, url: normalizeStorageFileUrl(file?.url) || null };
+      return { ...file, url: null };
     }),
   );
 }
@@ -3987,20 +3555,16 @@ export async function getStudentAnnouncements() {
   );
 
   const announcements = await Promise.all(
-    (rows || []).map(async (row) => {
+    (rows || []).map((row) => {
       const rawPath = String(row?.image_path || '').trim();
       const absoluteImageUrl = /^https?:\/\//i.test(rawPath) ? normalizeStorageFileUrl(rawPath) : null;
-      const normalizedPath = absoluteImageUrl ? '' : rawPath.replace(/^announcements\//, '');
-      const signedUrl = normalizedPath
-        ? await createSignedStorageUrlWithBucketFallbacks(normalizedPath, getAccessToken(), 'announcements')
-        : null;
 
       return {
         id: String(row?.id || ''),
         title: String(row?.title || '').trim(),
         description: String(row?.description || '').trim(),
         datePosted: String(row?.date_posted || row?.created_at || ''),
-        imageUrl: absoluteImageUrl || normalizeStorageFileUrl(signedUrl) || null,
+        imageUrl: absoluteImageUrl || null,
         imagePath: rawPath || null,
         createdAt: row?.created_at ? String(row.created_at) : null,
       } satisfies StudentAnnouncement;
@@ -4019,20 +3583,16 @@ export async function getManagedAnnouncements() {
   );
 
   const announcements = await Promise.all(
-    (rows || []).map(async (row) => {
+    (rows || []).map((row) => {
       const rawPath = String(row?.image_path || '').trim();
       const absoluteImageUrl = /^https?:\/\//i.test(rawPath) ? normalizeStorageFileUrl(rawPath) : null;
-      const normalizedPath = absoluteImageUrl ? '' : rawPath.replace(/^announcements\//, '');
-      const signedUrl = normalizedPath
-        ? await createSignedStorageUrlWithBucketFallbacks(normalizedPath, getAccessToken(), 'announcements')
-        : null;
 
       return {
         id: String(row?.id || ''),
         title: String(row?.title || '').trim(),
         description: String(row?.description || '').trim(),
         datePosted: String(row?.date_posted || row?.created_at || ''),
-        imageUrl: absoluteImageUrl || normalizeStorageFileUrl(signedUrl) || null,
+        imageUrl: absoluteImageUrl || null,
         imagePath: rawPath || null,
         createdBy: String(row?.created_by || ''),
         isPublished: Boolean(row?.is_published),
@@ -4605,7 +4165,7 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
         if (message.includes('404') || message.includes('not found')) {
           studentProfileAssetsRouteUnavailable = true;
         }
-        // Fall back to legacy REST + storage lookup below when the route is unavailable.
+        // Fall back to Cloudinary metadata rows when the route is unavailable.
       }
     }
 
@@ -4620,18 +4180,12 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
 
       const normalizedAssetRows = normalizeProfileAssetRows(await normalizeFileRows(assetRows, token));
       const latestAssets = latestFilesByType(normalizedAssetRows);
-      const needsStorageFallback = !latestAssets.photo?.url || !latestAssets.signature?.url;
-      const storageFallbackRows =
-        needsStorageFallback && resolvedStudentId
-          ? await listProfileAssetsFromStorage(resolvedStudentId, token)
-          : [];
-      const finalAssets = latestFilesByType([...(normalizedAssetRows || []), ...storageFallbackRows]);
 
       resolvedAssets = {
-        photoUrl: routeAssets?.photoUrl || normalizeStorageFileUrl(finalAssets.photo?.url) || null,
-        signatureUrl: routeAssets?.signatureUrl || normalizeStorageFileUrl(finalAssets.signature?.url) || null,
-        photoFileName: routeAssets?.photoFileName || finalAssets.photo?.file_name || null,
-        signatureFileName: routeAssets?.signatureFileName || finalAssets.signature?.file_name || null,
+        photoUrl: routeAssets?.photoUrl || normalizeStorageFileUrl(latestAssets.photo?.url) || null,
+        signatureUrl: routeAssets?.signatureUrl || normalizeStorageFileUrl(latestAssets.signature?.url) || null,
+        photoFileName: routeAssets?.photoFileName || latestAssets.photo?.file_name || null,
+        signatureFileName: routeAssets?.signatureFileName || latestAssets.signature?.file_name || null,
       };
     }
 
@@ -4659,7 +4213,7 @@ export async function getStudentProfilePhoto(studentId?: string) {
     return { photoUrl: assets.photoUrl };
   }
 
-    const me = await getMe();
+  const me = await getMe();
   const targetStudentId = studentId || me.profile.student_id;
   if (!targetStudentId) return { photoUrl: null as string | null };
 
@@ -4671,7 +4225,6 @@ export async function getStudentProfilePhoto(studentId?: string) {
   if (!submissionIds.length) return { photoUrl: null as string | null };
 
   const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
-  const token = getAccessToken();
   const photoFiles = await restRequest<any[]>(
     'files',
     `select=id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url&submission_id=in.(${idList})&type=eq.photo&order=uploaded_at.desc&limit=20`,
@@ -4684,24 +4237,10 @@ export async function getStudentProfilePhoto(studentId?: string) {
       continue;
     }
 
-    const resolvedBucket =
-      String(file?.storage_bucket || '').trim() ||
-      inferBucketFromStoragePath(file?.storage_path) ||
-      inferBucketFromType(file?.type) ||
-      inferBucketFromNameOrPath(file?.file_name, file?.storage_path) ||
-      'profile';
-
-    const signed = file?.storage_path
-      ? await createSignedStorageUrlWithBucketFallbacks(
-          file.storage_path,
-          token,
-          resolvedBucket,
-          file.type,
-        )
-      : null;
-
-    const finalUrl = signed || (file?.storage_path ? null : normalizeStorageFileUrl(file?.url)) || null;
-    if (finalUrl) return { photoUrl: finalUrl };
+    const finalUrl = normalizeStorageFileUrl(file?.url);
+    if (finalUrl && /res\.cloudinary\.com/i.test(finalUrl)) {
+      return { photoUrl: finalUrl };
+    }
   }
 
   return { photoUrl: null as string | null };

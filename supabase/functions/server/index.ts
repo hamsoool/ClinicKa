@@ -16,7 +16,6 @@ import {
   normalizeEmail,
   requestLoggingEnabled,
   resolveCorsOrigin,
-  signedStorageUrlExpiresSeconds,
   supabase,
   unauthorized,
 } from "./context.ts";
@@ -48,13 +47,9 @@ import {
 } from "./settings.ts";
 import {
   deleteStoredFiles,
-  inferStorageBucket,
-  listProfileAssetsFromStorage,
-  listStaffSignatureFromStorage,
   normalizeFileRows,
   normalizeProfileAssetRows,
   normalizeStaffSignatureRows,
-  normalizeStoragePath,
 } from "./storage.ts";
 import {
   CloudinaryConfigurationError,
@@ -162,6 +157,7 @@ class UploadValidationError extends Error {
 
 function isSupportedOcrFile(file: any) {
   return Boolean(
+    isCloudinaryFile(file) &&
     resolveOcrSpaceInputMimeType(
       file?.mime_type,
       file?.file_name || file?.storage_path || file?.url,
@@ -266,6 +262,19 @@ function pickLatestFile(files: any[]) {
     const aTime = new Date(a?.uploaded_at || 0).getTime();
     return bTime - aTime;
   })[0] || null;
+}
+
+function normalizeMediaUrl(url?: string | null) {
+  const trimmed = String(url || "").trim();
+  if (!/^https?:\/\//i.test(trimmed)) return undefined;
+  try {
+    const hostname = new URL(trimmed).hostname.toLowerCase();
+    return hostname === "res.cloudinary.com" || hostname.endsWith(".cloudinary.com")
+      ? trimmed
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isSupportedSignatureImage(file: File | null) {
@@ -392,6 +401,158 @@ function isMissingFilesTableError(error: unknown) {
   );
 }
 
+function isMissingDirectMediaColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+  return (
+    message.includes("schema cache") ||
+    message.includes("column") ||
+    message.includes("file_url") ||
+    message.includes("profile_photo_url") ||
+    message.includes("signature_file_name")
+  );
+}
+
+async function updateStudentProfileMediaColumns(options: {
+  studentId: string;
+  fileType: string;
+  fileName: string;
+  url: string;
+}) {
+  const targetStudentId = String(options.studentId || "").trim();
+  const fileType = String(options.fileType || "").trim().toLowerCase();
+  const url = normalizeMediaUrl(options.url);
+  if (!targetStudentId || !url) return;
+
+  const payload = fileType === "photo"
+    ? {
+      profile_photo_url: url,
+      profile_photo_file_name: options.fileName || null,
+      media_updated_at: new Date().toISOString(),
+    }
+    : {
+      signature_url: url,
+      signature_file_name: options.fileName || null,
+      media_updated_at: new Date().toISOString(),
+    };
+
+  const { error } = await supabase
+    .from("students")
+    .update(payload)
+    .eq("student_id", targetStudentId);
+
+  if (error) {
+    if (isMissingDirectMediaColumnError(error)) {
+      console.log("Student media columns are not available yet:", error.message);
+      return;
+    }
+    throw new Error(error.message);
+  }
+}
+
+async function loadStudentProfileMediaColumns(studentId?: string | null, profileId?: string | null) {
+  const targetStudentId = String(studentId || "").trim();
+  const targetProfileId = String(profileId || "").trim();
+  if (!targetStudentId && !targetProfileId) return null;
+
+  let query = supabase
+    .from("students")
+    .select("profile_photo_url,profile_photo_file_name,signature_url,signature_file_name");
+
+  query = targetStudentId
+    ? query.eq("student_id", targetStudentId)
+    : query.eq("profile_id", targetProfileId);
+
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    if (isMissingDirectMediaColumnError(error)) return null;
+    throw new Error(error.message);
+  }
+
+  return {
+    photoUrl: normalizeMediaUrl(data?.profile_photo_url || null) || null,
+    signatureUrl: normalizeMediaUrl(data?.signature_url || null) || null,
+    photoFileName: data?.profile_photo_file_name || null,
+    signatureFileName: data?.signature_file_name || null,
+  };
+}
+
+function buildLabFileFromRow(row: any, type: string) {
+  const url = normalizeMediaUrl(row?.file_url || null);
+  if (!url) return null;
+
+  return {
+    id: row?.file_id || `${type}-${row?.submission_id || "file"}`,
+    submission_id: row?.submission_id || null,
+    type,
+    file_name: row?.file_name || `${type}-result`,
+    mime_type: row?.mime_type || null,
+    storage_provider: "cloudinary",
+    storage_bucket: null,
+    storage_path: null,
+    cloudinary_public_id: row?.cloudinary_public_id || null,
+    cloudinary_resource_type: row?.cloudinary_resource_type || "image",
+    cloudinary_version: row?.cloudinary_version || null,
+    uploaded_at: row?.media_updated_at || null,
+    url,
+  };
+}
+
+async function loadLabOcrRow(table: string, submissionId: string) {
+  const primary = await supabase
+    .from(table)
+    .select("submission_id,file_id,file_url,file_name,mime_type,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,media_updated_at")
+    .eq("submission_id", submissionId)
+    .maybeSingle();
+
+  if (!primary.error || !isMissingDirectMediaColumnError(primary.error)) {
+    return primary;
+  }
+
+  return await supabase
+    .from(table)
+    .select("submission_id,file_id")
+    .eq("submission_id", submissionId)
+    .maybeSingle();
+}
+
+async function upsertLabFileReference(options: {
+  labTable: string;
+  submissionId: string;
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  upload: any;
+}) {
+  const payload = {
+    submission_id: options.submissionId,
+    file_id: options.fileId,
+    file_url: options.upload?.secure_url || null,
+    file_name: options.fileName || options.upload?.public_id || null,
+    mime_type: options.mimeType || null,
+    cloudinary_public_id: options.upload?.public_id || null,
+    cloudinary_resource_type: options.upload?.resource_type || "image",
+    cloudinary_version: options.upload?.version || null,
+    media_updated_at: new Date().toISOString(),
+  };
+
+  const result = await supabase
+    .from(options.labTable)
+    .upsert(payload);
+
+  if (!result.error || !isMissingDirectMediaColumnError(result.error)) {
+    if (result.error) throw new Error(result.error.message);
+    return;
+  }
+
+  const legacyResult = await supabase
+    .from(options.labTable)
+    .upsert({ submission_id: options.submissionId, file_id: options.fileId });
+
+  if (legacyResult.error) {
+    throw new Error(legacyResult.error.message);
+  }
+}
+
 async function loadLatestStaffSignature(profileId: string) {
   const targetProfileId = String(profileId || "").trim();
   if (!targetProfileId) return null;
@@ -407,15 +568,7 @@ async function loadLatestStaffSignature(profileId: string) {
   if (error) throw new Error(error.message);
 
   const normalizedRows = normalizeStaffSignatureRows(await normalizeFileRows(data || []));
-  const storageRows = await listStaffSignatureFromStorage(targetProfileId);
-  if (!normalizedRows.length) {
-    return pickLatestFile(storageRows);
-  }
-  if (!storageRows.length) {
-    return pickLatestFile(normalizedRows);
-  }
-
-  return pickLatestFile([...normalizedRows, ...storageRows]);
+  return pickLatestFile(normalizedRows);
 }
 
 async function insertStaffSignatureMetadata(payload: Record<string, unknown>) {
@@ -518,13 +671,12 @@ async function completeStaffSignatureUpload(options: {
 }
 
 async function findChestXrayOcrFile(submissionId: string) {
-  const { data: labRow, error: labError } = await supabase
-    .from("lab_chest_xray")
-    .select("submission_id,file_id")
-    .eq("submission_id", submissionId)
-    .maybeSingle();
+  const { data: labRow, error: labError } = await loadLabOcrRow("lab_chest_xray", submissionId);
 
   if (labError) throw new Error(labError.message);
+
+  const directFile = buildLabFileFromRow(labRow, "xray");
+  if (directFile && isSupportedOcrFile(directFile)) return directFile;
 
   const fileId = String(labRow?.file_id || "").trim();
   if (fileId) {
@@ -557,13 +709,12 @@ async function findChestXrayOcrFile(submissionId: string) {
 }
 
 async function findCbcOcrFile(submissionId: string) {
-  const { data: labRow, error: labError } = await supabase
-    .from("lab_cbc")
-    .select("submission_id,file_id")
-    .eq("submission_id", submissionId)
-    .maybeSingle();
+  const { data: labRow, error: labError } = await loadLabOcrRow("lab_cbc", submissionId);
 
   if (labError) throw new Error(labError.message);
+
+  const directFile = buildLabFileFromRow(labRow, "cbc");
+  if (directFile && isSupportedOcrFile(directFile)) return directFile;
 
   const fileId = String(labRow?.file_id || "").trim();
   if (fileId) {
@@ -596,13 +747,12 @@ async function findCbcOcrFile(submissionId: string) {
 }
 
 async function findUrinalysisOcrFile(submissionId: string) {
-  const { data: labRow, error: labError } = await supabase
-    .from("lab_urinalysis")
-    .select("submission_id,file_id")
-    .eq("submission_id", submissionId)
-    .maybeSingle();
+  const { data: labRow, error: labError } = await loadLabOcrRow("lab_urinalysis", submissionId);
 
   if (labError) throw new Error(labError.message);
+
+  const directFile = buildLabFileFromRow(labRow, "urinalysis");
+  if (directFile && isSupportedOcrFile(directFile)) return directFile;
 
   const fileId = String(labRow?.file_id || "").trim();
   if (fileId) {
@@ -634,20 +784,8 @@ async function findUrinalysisOcrFile(submissionId: string) {
   return supportedFiles.length === 1 ? supportedFiles[0] : null;
 }
 
-async function fetchFileFromStorage(file: any) {
-  if (isCloudinaryFile(file)) return null;
-
-  const bucket = inferStorageBucket(file);
-  const storagePath = normalizeStoragePath(file?.storage_path, bucket);
-  if (!bucket || !storagePath) return null;
-
-  const { data, error } = await supabase.storage.from(bucket).download(storagePath);
-  if (error || !data) return null;
-
-  return data;
-}
-
 async function fetchFileFromUrl(file: any) {
+  if (!isCloudinaryFile(file)) return null;
   const url = String(file?.url || "").trim();
   if (!/^https?:\/\//i.test(url)) return null;
 
@@ -658,10 +796,7 @@ async function fetchFileFromUrl(file: any) {
 }
 
 async function fetchUploadedFileBlob(file: any) {
-  if (isCloudinaryFile(file)) {
-    return await fetchFileFromUrl(file);
-  }
-  return (await fetchFileFromStorage(file)) || (await fetchFileFromUrl(file));
+  return await fetchFileFromUrl(file);
 }
 
 async function loadChestXrayOcrInput(file: any) {
@@ -1117,7 +1252,7 @@ app.get("/staff-signature", async (c) => {
       throw new Error(staffError.message);
     }
 
-    const directSignatureUrl = normalizeStorageFileUrl(staffRow?.signature_url || null);
+    const directSignatureUrl = normalizeMediaUrl(staffRow?.signature_url || null);
     if (directSignatureUrl) {
       return c.json({
         success: true,
@@ -1493,6 +1628,13 @@ app.post("/student-profile-asset/complete", async (c) => {
       throw metadataError;
     }
 
+    await updateStudentProfileMediaColumns({
+      studentId,
+      fileType,
+      fileName: fileName || upload.public_id,
+      url: upload.secure_url,
+    });
+
     runBackgroundTask("Profile asset cleanup", async () => {
       if (staleMetadataRows?.length) {
         await deleteStoredFiles(staleMetadataRows);
@@ -1632,6 +1774,13 @@ app.post("/student-profile-asset", async (c) => {
       }
     }
 
+    await updateStudentProfileMediaColumns({
+      studentId,
+      fileType,
+      fileName: file.name || upload.public_id,
+      url: upload.secure_url,
+    });
+
     shouldRollbackCloudinary = false;
 
     return c.json({
@@ -1690,8 +1839,16 @@ app.get("/student-profile-assets", async (c) => {
       });
     }
 
+    const directAssets = await loadStudentProfileMediaColumns(targetStudentId, targetProfileId);
+    if (directAssets?.photoUrl && directAssets?.signatureUrl) {
+      return c.json({
+        success: true,
+        ...directAssets,
+      });
+    }
+
     let assetRows: any[] = [];
-    if (targetProfileId) {
+    if (targetProfileId && (!directAssets?.photoUrl || !directAssets?.signatureUrl)) {
       const { data, error: assetError } = await supabase
         .from("files")
         .select("id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url")
@@ -1715,22 +1872,12 @@ app.get("/student-profile-assets", async (c) => {
       return acc;
     }, {} as Record<string, any>);
 
-    const storageAssets = targetStudentId && (!latestByType.photo || !latestByType.signature)
-      ? await listProfileAssetsFromStorage(targetStudentId)
-      : [];
-    const latestStorageByType = (storageAssets || []).reduce((acc, row) => {
-      const type = String(row?.type || "").trim().toLowerCase();
-      if (!type || acc[type]) return acc;
-      acc[type] = row;
-      return acc;
-    }, {} as Record<string, any>);
-
     return c.json({
       success: true,
-      photoUrl: latestByType.photo?.url || latestStorageByType.photo?.url || null,
-      signatureUrl: latestByType.signature?.url || latestStorageByType.signature?.url || null,
-      photoFileName: latestByType.photo?.file_name || latestStorageByType.photo?.file_name || null,
-      signatureFileName: latestByType.signature?.file_name || latestStorageByType.signature?.file_name || null,
+      photoUrl: directAssets?.photoUrl || latestByType.photo?.url || null,
+      signatureUrl: directAssets?.signatureUrl || latestByType.signature?.url || null,
+      photoFileName: directAssets?.photoFileName || latestByType.photo?.file_name || null,
+      signatureFileName: directAssets?.signatureFileName || latestByType.signature?.file_name || null,
     });
   } catch (error) {
     return internalServerError(c, "Failed to load student profile assets", error);
@@ -2839,13 +2986,14 @@ app.post("/upload-file/complete", async (c) => {
         : fileType === "cbc"
           ? "lab_cbc"
           : "lab_urinalysis";
-    const { error: labUpsertError } = await supabase
-      .from(labTable)
-      .upsert({ submission_id: recordId, file_id: insertedFile.id });
-
-    if (labUpsertError) {
-      throw new Error(labUpsertError.message);
-    }
+    await upsertLabFileReference({
+      labTable,
+      submissionId: recordId,
+      fileId: insertedFile.id,
+      fileName: fileName || upload.public_id,
+      mimeType: finalizedMimeType || "application/octet-stream",
+      upload,
+    });
 
     if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
 
@@ -2991,12 +3139,14 @@ app.post("/upload-file", async (c) => {
         : fileType === 'cbc'
           ? 'lab_cbc'
           : 'lab_urinalysis';
-    const { error: labUpsertError } = await supabase
-      .from(labTable)
-      .upsert({ submission_id: recordId, file_id: insertedFile.id });
-    if (labUpsertError) {
-      throw new Error(labUpsertError.message);
-    }
+    await upsertLabFileReference({
+      labTable,
+      submissionId: recordId,
+      fileId: insertedFile.id,
+      fileName: file.name || upload.public_id,
+      mimeType: finalizedMimeType || "application/octet-stream",
+      upload,
+    });
 
     if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
 

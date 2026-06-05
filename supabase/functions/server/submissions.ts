@@ -15,9 +15,6 @@ import {
 } from "./requester.ts";
 import { getSafeAdminSystemSettings } from "./settings.ts";
 import {
-  listProfileAssetsFromStorage,
-  listSubmissionFilesFromStorage,
-  listStaffSignatureFromStorage,
   normalizeFileRows,
   normalizeProfileAssetRows,
   normalizeStaffSignatureRows,
@@ -35,8 +32,6 @@ const STAFF_SUBMISSION_SUMMARIES_DEFAULT_PAGE_SIZE = 25;
 const STAFF_SUBMISSION_SUMMARIES_MAX_PAGE_SIZE = 100;
 const STAFF_APPROVED_STUDENTS_DEFAULT_PAGE_SIZE = 20;
 const STAFF_APPROVED_STUDENTS_MAX_PAGE_SIZE = 50;
-const STORAGE_FALLBACK_MAX_SUBMISSIONS = 12;
-const PROFILE_ASSET_FALLBACK_MAX_STUDENTS = 20;
 const SUBMISSION_ACCESS_COLUMNS = "id,student_id,status,reviewed_by";
 const STAFF_USER_SELECT_WITH_SIGNATURE =
   "id,profile_id,first_name,last_name,middle_initial,position,name,signature_url";
@@ -210,7 +205,15 @@ function byId(rows: any[] | null | undefined) {
 
 function normalizeStorageFileUrl(url?: string | null) {
   const trimmed = String(url || "").trim();
-  return trimmed || undefined;
+  if (!/^https?:\/\//i.test(trimmed)) return undefined;
+  try {
+    const hostname = new URL(trimmed).hostname.toLowerCase();
+    return hostname === "res.cloudinary.com" || hostname.endsWith(".cloudinary.com")
+      ? trimmed
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function findLabFileByHint(files: any[], hint: string) {
@@ -255,6 +258,46 @@ function buildStaffSignatureAssetFromRow(staff: any) {
     uploaded_at: null,
     uploaded_by: staff.profile_id,
     url: signatureUrl,
+  };
+}
+
+function buildStudentProfileAssetFromRow(student: any, type: "photo" | "signature") {
+  const url = type === "photo"
+    ? normalizeStorageFileUrl(student?.profile_photo_url || null)
+    : normalizeStorageFileUrl(student?.signature_url || null);
+  if (!url) return null;
+
+  return {
+    id: `student-${type}-${student?.student_id || student?.profile_id || "asset"}`,
+    submission_id: null,
+    type,
+    file_name: type === "photo"
+      ? student?.profile_photo_file_name || null
+      : student?.signature_file_name || null,
+    storage_bucket: null,
+    storage_path: null,
+    mime_type: null,
+    uploaded_at: student?.media_updated_at || null,
+    uploaded_by: student?.profile_id || null,
+    url,
+  };
+}
+
+function buildLabFileAssetFromRow(row: any, type: string) {
+  const url = normalizeStorageFileUrl(row?.file_url || null);
+  if (!url) return null;
+
+  return {
+    id: row?.file_id || `${type}-${row?.submission_id || "file"}`,
+    submission_id: row?.submission_id || null,
+    type,
+    file_name: row?.file_name || null,
+    storage_bucket: null,
+    storage_path: null,
+    mime_type: row?.mime_type || null,
+    uploaded_at: row?.media_updated_at || null,
+    uploaded_by: null,
+    url,
   };
 }
 
@@ -394,13 +437,25 @@ function mapSubmission(row: any, related: Record<string, any>) {
   const urinalysisFileFromLab = urinalysis?.file_id
     ? related.filesById?.[urinalysis.file_id]
     : null;
+  const directXrayFile = buildLabFileAssetFromRow(xray, "xray");
+  const directCbcFile = buildLabFileAssetFromRow(cbc, "cbc");
+  const directUrinalysisFile = buildLabFileAssetFromRow(urinalysis, "urinalysis");
   const xrayFileByHint = findLabFileByHint(submissionFiles, "xray");
   const cbcFileByHint = findLabFileByHint(submissionFiles, "cbc");
   const urinalysisFileByHint = findLabFileByHint(submissionFiles, "urinalysis");
   const genericLabFile = findGenericLabFile(submissionFiles);
-  const profileAssets = student?.profile_id
+  const metadataProfileAssets = student?.profile_id
     ? related.profileAssetsByProfileId?.[student.profile_id] || {}
     : related.profileAssetsByStudentId?.[row.student_id] || {};
+  const profileAssets = {
+    ...metadataProfileAssets,
+    ...(buildStudentProfileAssetFromRow(student, "photo")
+      ? { photo: buildStudentProfileAssetFromRow(student, "photo") }
+      : {}),
+    ...(buildStudentProfileAssetFromRow(student, "signature")
+      ? { signature: buildStudentProfileAssetFromRow(student, "signature") }
+      : {}),
+  };
 
   return {
     id: row.id,
@@ -473,11 +528,11 @@ function mapSubmission(row: any, related: Record<string, any>) {
     photoUrl: files.photo?.url || profileAssets.photo?.url,
     signatureUrl: files.signature?.url || profileAssets.signature?.url,
     xrayFileUrl:
-      xrayFileFromLab?.url || files.xray?.url || xrayFileByHint?.url || genericLabFile?.url,
+      directXrayFile?.url || xrayFileFromLab?.url || files.xray?.url || xrayFileByHint?.url || genericLabFile?.url,
     cbcFileUrl:
-      cbcFileFromLab?.url || files.cbc?.url || cbcFileByHint?.url || genericLabFile?.url,
+      directCbcFile?.url || cbcFileFromLab?.url || files.cbc?.url || cbcFileByHint?.url || genericLabFile?.url,
     urinalysisFileUrl:
-      urinalysisFileFromLab?.url || files.urinalysis?.url || urinalysisFileByHint?.url ||
+      directUrinalysisFile?.url || urinalysisFileFromLab?.url || files.urinalysis?.url || urinalysisFileByHint?.url ||
       genericLabFile?.url,
     certificatePdfUrl: files.certificate?.url || certificate?.pdf_url,
     labTestLocation: row.lab_test_location || "",
@@ -511,7 +566,7 @@ async function loadRelatedData(rows: any[]) {
       ? supabase
           .from("students")
           .select(
-            "student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address",
+            "student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at",
           )
           .in("student_id", studentIds)
       : Promise.resolve({ data: [] as any[] }),
@@ -543,21 +598,21 @@ async function loadRelatedData(rows: any[]) {
     submissionIds.length
       ? supabase
           .from("lab_chest_xray")
-          .select("submission_id,xray_date,xray_result,xray_findings,file_id")
+          .select("submission_id,xray_date,xray_result,xray_findings,file_id,file_url,file_name,mime_type,media_updated_at")
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
           .from("lab_cbc")
           .select(
-            "submission_id,cbc_date,hemoglobin,hematocrit,wbc,platelet_count,blood_type,glucose,protein,file_id",
+            "submission_id,cbc_date,hemoglobin,hematocrit,wbc,platelet_count,blood_type,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at",
           )
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
           .from("lab_urinalysis")
-          .select("submission_id,urinalysis_date,glucose,protein,file_id")
+          .select("submission_id,urinalysis_date,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at")
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
@@ -587,29 +642,7 @@ async function loadRelatedData(rows: any[]) {
   }
 
   const normalizedFiles = await normalizeFileRows(filesRes.error ? [] : filesRes.data);
-  const filesBySubmissionCurrent = normalizedFiles.reduce((acc, file) => {
-    acc[file.submission_id] = acc[file.submission_id] || [];
-    acc[file.submission_id].push(file);
-    return acc;
-  }, {} as Record<string, any[]>);
-  const shouldRunStorageFallback =
-    submissionIds.length <= STORAGE_FALLBACK_MAX_SUBMISSIONS;
-  const submissionsMissingFiles = shouldRunStorageFallback
-    ? submissionIds.filter((submissionId) => {
-      const currentFiles = filesBySubmissionCurrent[submissionId] || [];
-      return !currentFiles.length ||
-        currentFiles.some((file) => file?.storage_path && !file?.url);
-    })
-    : [];
-  const storageSubmissionFiles = (
-    await Promise.all(
-      submissionsMissingFiles.map((submissionId) =>
-        listSubmissionFilesFromStorage(submissionId)
-      ),
-    )
-  ).flat();
-  const allSubmissionFiles = [...normalizedFiles, ...storageSubmissionFiles];
-  const filesBySubmission = allSubmissionFiles.reduce((acc, file) => {
+  const filesBySubmission = normalizedFiles.reduce((acc, file) => {
     acc[file.submission_id] = acc[file.submission_id] || [];
     acc[file.submission_id].push(file);
     return acc;
@@ -688,22 +721,7 @@ async function loadRelatedData(rows: any[]) {
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
     await normalizeFileRows(staffSignatureFilesRes.error ? [] : (staffSignatureFilesRes.data || [])),
   );
-  const staffSignatureProfileIds = [
-    ...new Set(normalizedStaffSignatureFiles.map((file) => file?.uploaded_by).filter(Boolean)),
-  ];
-  const missingStaffSignatureProfileIds = staffProfileIds.filter(
-    (profileId) => !staffSignatureProfileIds.includes(profileId),
-  );
-  const staffSignatureStorageFiles = (
-    await Promise.all(
-      missingStaffSignatureProfileIds.map((profileId) => listStaffSignatureFromStorage(profileId)),
-    )
-  ).flat();
-  const allStaffSignatureFiles = [
-    ...normalizedStaffSignatureFiles,
-    ...staffSignatureStorageFiles,
-  ];
-  const staffSignaturesByProfileId = allStaffSignatureFiles.reduce((acc, file) => {
+  const staffSignaturesByProfileId = normalizedStaffSignatureFiles.reduce((acc, file) => {
     if (!file?.uploaded_by) return acc;
     const existing = acc[file.uploaded_by];
     if (
@@ -723,7 +741,12 @@ async function loadRelatedData(rows: any[]) {
   }, {} as Record<string, any>);
   const studentRows = studentsRes.data || [];
   const studentProfileIds = [
-    ...new Set(studentRows.map((student) => student?.profile_id).filter(Boolean)),
+    ...new Set(
+      studentRows
+        .filter((student) => !student?.profile_photo_url || !student?.signature_url)
+        .map((student) => student?.profile_id)
+        .filter(Boolean),
+    ),
   ];
   const profileAssetFilesRes = studentProfileIds.length
     ? await supabase
@@ -751,27 +774,17 @@ async function loadRelatedData(rows: any[]) {
     acc[file.uploaded_by].push(file);
     return acc;
   }, {} as Record<string, any[]>);
-  const shouldRunProfileAssetFallback =
-    studentRows.length <= PROFILE_ASSET_FALLBACK_MAX_STUDENTS;
-  const missingProfileAssetStudents = shouldRunProfileAssetFallback
-    ? studentRows.filter((student) => {
-      const latest = latestFilesByType(profileAssetsByUploadedBy[student?.profile_id] || []);
-      return !latest.photo?.url || !latest.signature?.url;
-    })
-    : [];
-  const storageProfileAssets = await Promise.all(
-    missingProfileAssetStudents.map(async (student) => ({
-      profileId: student.profile_id,
-      studentId: student.student_id,
-      files: await listProfileAssetsFromStorage(student.student_id),
-    })),
-  );
   const profileAssetsByProfileId = studentRows.reduce((acc, student) => {
     if (!student?.profile_id) return acc;
     const metadataFiles = profileAssetsByUploadedBy[student.profile_id] || [];
-    const fallbackFiles =
-      storageProfileAssets.find((entry) => entry.profileId === student.profile_id)?.files || [];
-    acc[student.profile_id] = latestFilesByType([...metadataFiles, ...fallbackFiles]);
+    const latest = latestFilesByType(metadataFiles);
+    const directPhoto = buildStudentProfileAssetFromRow(student, "photo");
+    const directSignature = buildStudentProfileAssetFromRow(student, "signature");
+    acc[student.profile_id] = {
+      ...latest,
+      ...(directPhoto ? { photo: directPhoto } : {}),
+      ...(directSignature ? { signature: directSignature } : {}),
+    };
     return acc;
   }, {} as Record<string, Record<string, any>>);
   const profileAssetsByStudentId = studentRows.reduce((acc, student) => {
@@ -779,9 +792,14 @@ async function loadRelatedData(rows: any[]) {
     const metadataFiles = student?.profile_id
       ? profileAssetsByUploadedBy[student.profile_id] || []
       : [];
-    const fallbackFiles =
-      storageProfileAssets.find((entry) => entry.studentId === student.student_id)?.files || [];
-    acc[student.student_id] = latestFilesByType([...metadataFiles, ...fallbackFiles]);
+    const latest = latestFilesByType(metadataFiles);
+    const directPhoto = buildStudentProfileAssetFromRow(student, "photo");
+    const directSignature = buildStudentProfileAssetFromRow(student, "signature");
+    acc[student.student_id] = {
+      ...latest,
+      ...(directPhoto ? { photo: directPhoto } : {}),
+      ...(directSignature ? { signature: directSignature } : {}),
+    };
     return acc;
   }, {} as Record<string, Record<string, any>>);
 
@@ -800,7 +818,7 @@ async function loadRelatedData(rows: any[]) {
     profileAssetsByProfileId,
     profileAssetsByStudentId,
     files: filesBySubmission,
-    filesById: byId(allSubmissionFiles),
+    filesById: byId(normalizedFiles),
   };
 }
 
