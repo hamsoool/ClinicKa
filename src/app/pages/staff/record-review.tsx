@@ -86,16 +86,15 @@ type SubmissionDetails = SubmissionRecord & {
 
 type ReviewStatus = SubmissionRecord['status'];
 type LabUploadSource = 'file' | 'camera';
-type PendingLabReplacement = {
-  file: File;
-  fileType: LabUploadType;
-  title: string;
-  source: LabUploadSource;
-};
-const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
+const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Memorial Hospital';
+const CLINIC_INTERNAL_LAB_SOURCE_ALIASES = [
+  CLINIC_INTERNAL_LAB_SOURCE,
+  'James L. Gordon Hospital',
+];
 
 function isClinicManagedLabSource(source?: string | null) {
-  return String(source || '').trim().toLowerCase() === CLINIC_INTERNAL_LAB_SOURCE.toLowerCase();
+  const normalizedSource = String(source || '').trim().toLowerCase();
+  return CLINIC_INTERNAL_LAB_SOURCE_ALIASES.some((value) => value.toLowerCase() === normalizedSource);
 }
 
 type XrayOcrState = {
@@ -239,7 +238,6 @@ const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }
 
 const LAB_RESULT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const LAB_RESULT_MAX_FILE_SIZE_LABEL = '5 MB';
-const LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL = '1 MB';
 const LAB_RESULT_ACCEPT_ATTRIBUTE = '.pdf,.png,.jpg,.jpeg,.heic,.heif,.webp,.avif,.gif,.bmp,.tif,.tiff,image/*,application/pdf';
 const LAB_RESULT_ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'avif', 'gif', 'bmp', 'tif', 'tiff'];
 const STAFF_SIGNATURE_ACCEPT_ATTRIBUTE = 'image/*,.png,.jpg,.jpeg,.heic,.heif,.webp';
@@ -247,6 +245,10 @@ const STAFF_SIGNATURE_ALLOWED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'heic'
 const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'] as const;
 const BLOOD_PRESSURE_PATTERN = /^\d{2,3}\/\d{2,3}$/;
+const MIN_SYSTOLIC_BLOOD_PRESSURE = 20;
+const MAX_SYSTOLIC_BLOOD_PRESSURE = 300;
+const MIN_DIASTOLIC_BLOOD_PRESSURE = 20;
+const MAX_DIASTOLIC_BLOOD_PRESSURE = 200;
 const VISUAL_ACUITY_PATTERN = /^\d{1,2}\/\d{1,3}$/;
 const REVIEW_STEPS = ['record', 'labs', 'assessment', 'decision'] as const;
 const MAX_FIRST_NAME_LENGTH = 30;
@@ -310,10 +312,6 @@ function LabUploadActions({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium text-on-surface">Add or replace {title} file</p>
-          <p className="text-xs text-on-surface-variant">
-            PDF or image only, up to {LAB_RESULT_MAX_FILE_SIZE_LABEL}. Images over{' '}
-            {LAB_RESULT_AUTO_OPTIMIZE_THRESHOLD_LABEL} are optimized automatically.
-          </p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           <FilePickerButton
@@ -417,13 +415,60 @@ function sanitizeFractionLikeInput(value: string, maxLeftDigits: number, maxRigh
   const right = rightParts.join('');
   const normalizedRight = right.slice(0, maxRightDigits);
 
-  if (!sanitized.includes('/')) return normalizedLeft;
+  if (!sanitized.includes('/')) {
+    const digitsOnly = sanitized.replace(/\D/g, '');
+
+    if (digitsOnly.length <= 3) {
+      return digitsOnly.slice(0, maxLeftDigits);
+    }
+
+    const candidateLeftLengths = [3, 2].filter((candidate) => candidate <= maxLeftDigits);
+    for (const candidateLeftLength of candidateLeftLengths) {
+      const candidateRightLength = digitsOnly.length - candidateLeftLength;
+      if (candidateRightLength < 2 || candidateRightLength > maxRightDigits) {
+        continue;
+      }
+
+      const candidateLeft = digitsOnly.slice(0, candidateLeftLength);
+      const candidateRight = digitsOnly.slice(candidateLeftLength, candidateLeftLength + candidateRightLength);
+      const leftValue = Number(candidateLeft);
+      const rightValue = Number(candidateRight);
+      const isValidSystolic =
+        Number.isFinite(leftValue)
+        && leftValue >= MIN_SYSTOLIC_BLOOD_PRESSURE
+        && leftValue <= MAX_SYSTOLIC_BLOOD_PRESSURE;
+      const isValidDiastolic =
+        Number.isFinite(rightValue)
+        && rightValue >= MIN_DIASTOLIC_BLOOD_PRESSURE
+        && rightValue <= MAX_DIASTOLIC_BLOOD_PRESSURE;
+
+      if (isValidSystolic && isValidDiastolic) {
+        return `${candidateLeft}/${candidateRight}`;
+      }
+    }
+
+    return digitsOnly.slice(0, maxLeftDigits + maxRightDigits);
+  }
   return `${normalizedLeft}/${normalizedRight}`;
 }
 
 function isValidBloodPressure(value: string) {
   const trimmedValue = value.trim();
-  return !trimmedValue || BLOOD_PRESSURE_PATTERN.test(trimmedValue);
+  if (!trimmedValue) return true;
+  if (!BLOOD_PRESSURE_PATTERN.test(trimmedValue)) return false;
+
+  const [systolicText = '', diastolicText = ''] = trimmedValue.split('/');
+  const systolicValue = Number(systolicText);
+  const diastolicValue = Number(diastolicText);
+
+  return (
+    Number.isFinite(systolicValue)
+    && Number.isFinite(diastolicValue)
+    && systolicValue >= MIN_SYSTOLIC_BLOOD_PRESSURE
+    && systolicValue <= MAX_SYSTOLIC_BLOOD_PRESSURE
+    && diastolicValue >= MIN_DIASTOLIC_BLOOD_PRESSURE
+    && diastolicValue <= MAX_DIASTOLIC_BLOOD_PRESSURE
+  );
 }
 
 function isValidVisualAcuity(value: string) {
@@ -864,7 +909,6 @@ export default function StaffRecordReview() {
     cbc: null,
     urinalysis: null,
   });
-  const [pendingLabReplacement, setPendingLabReplacement] = useState<PendingLabReplacement | null>(null);
   const [showAutoFillReplaceDialog, setShowAutoFillReplaceDialog] = useState(false);
   const [xrayOcrState, setXrayOcrState] = useState<XrayOcrState>({
     message: '',
@@ -1250,40 +1294,22 @@ export default function StaffRecordReview() {
     setAssessmentForm(nextAssessmentForm);
   }, [defaultSignatoryName]);
 
-  const handleSignatureChange = (file: File | null) => {
-    if (!file) {
-      setSignatureFile(null);
-      return;
-    }
-
-    if (!isAllowedSignatureImage(file)) {
-      toast.error('Please upload an image file.');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Staff signature must be 5 MB or smaller.');
-      return;
-    }
-
-    setSignatureFile(file);
-  };
-
-  const handleSignatureUpload = async () => {
-    if (!signatureFile) {
+  const handleSignatureUpload = async (nextFile?: File | null) => {
+    const targetFile = nextFile || signatureFile;
+    if (!targetFile) {
       toast.info('Choose a signature image first.');
       return;
     }
 
     setUploadingSignature(true);
     try {
-      const uploaded = await uploadStaffSignature(signatureFile);
+      const uploaded = await uploadStaffSignature(targetFile);
       const refreshed = await getStaffSignature().catch(() => buildEmptyStaffSignature());
       const nextSignatureUrl = withCacheBust(uploaded.signatureUrl || refreshed.signatureUrl);
 
       setStaffSignature({
         signatureUrl: nextSignatureUrl,
-        signatureFileName: signatureFile.name || refreshed.signatureFileName || uploaded.signatureFileName || null,
+        signatureFileName: targetFile.name || refreshed.signatureFileName || uploaded.signatureFileName || null,
       });
       setSubmission((prev) => (
         prev
@@ -1303,6 +1329,26 @@ export default function StaffRecordReview() {
     } finally {
       setUploadingSignature(false);
     }
+  };
+
+  const handleSignatureChange = (file: File | null) => {
+    if (!file) {
+      setSignatureFile(null);
+      return;
+    }
+
+    if (!isAllowedSignatureImage(file)) {
+      toast.error('Please upload an image file.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Staff signature must be 5 MB or smaller.');
+      return;
+    }
+
+    setSignatureFile(file);
+    void handleSignatureUpload(file);
   };
 
   useEffect(() => {
@@ -1637,7 +1683,8 @@ export default function StaffRecordReview() {
     if (!validateLabResultFile(file, title)) return;
 
     if (getCurrentLabFileUrl(fileType)) {
-      setPendingLabReplacement({ file, fileType, title, source });
+      toast.info(`${title} replacement started. You can keep reviewing while it uploads.`);
+      await uploadLabResultFile(fileType, file, true, source);
       return;
     }
 
@@ -1694,15 +1741,6 @@ export default function StaffRecordReview() {
       setUploadingLabFile((prev) => ({ ...prev, [fileType]: false }));
       setUploadingLabSource((prev) => ({ ...prev, [fileType]: null }));
     }
-  }
-
-  function confirmPendingLabReplacement() {
-    if (!pendingLabReplacement) return;
-
-    const { file, fileType, title, source } = pendingLabReplacement;
-    setPendingLabReplacement(null);
-    toast.info(`${title} replacement started. You can keep reviewing while it uploads.`);
-    void uploadLabResultFile(fileType, file, true, source);
   }
 
   function normalizeCbcOcrFields(fields: CbcOcrExtraction['fields']) {
@@ -2166,36 +2204,6 @@ export default function StaffRecordReview() {
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-6">
       <Dialog
-        open={Boolean(pendingLabReplacement)}
-        onOpenChange={(open) => {
-          if (!open) setPendingLabReplacement(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Replace {pendingLabReplacement?.title} file?</DialogTitle>
-            <DialogDescription>
-              Do you want to replace the current uploaded file?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPendingLabReplacement(null)}
-            >
-              No
-            </Button>
-            <Button
-              type="button"
-              onClick={confirmPendingLabReplacement}
-            >
-              Yes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog
         open={showAutoFillReplaceDialog}
         onOpenChange={(open) => {
           if (!open && !isLabAutoFillProcessing) {
@@ -2338,7 +2346,7 @@ export default function StaffRecordReview() {
             }}
             readOnly
             title="Student Profile"
-            yearLevelLabel="Record Slot"
+            yearLevelLabel="Year Level"
           />
 
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -2451,7 +2459,7 @@ export default function StaffRecordReview() {
                       onChange={(event) => updateEmergencyContact('phone', event.target.value)}
                       inputMode="numeric"
                       maxLength={11}
-                      placeholder="09XXXXXXXXX"
+                      placeholder="e.g. 09XXXXXXXXX"
                       className="mt-2"
                     />
                   </div>
@@ -2504,7 +2512,7 @@ export default function StaffRecordReview() {
                 <SubmittedFilePreview title="Chest X-Ray Result" fileUrl={submission.xrayFileUrl} alt="Student chest X-ray result" />
               ) : xrayManagedByClinic ? (
                 <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-                  No student upload required. Results from James L. Gordon Hospital are sent directly to the clinic.
+                  No student upload required. Results from James L. Gordon Memorial Hospital are sent directly to the clinic.
                 </div>
               ) : (
                 <SubmittedFilePreview title="Chest X-Ray Result" fileUrl={submission.xrayFileUrl} alt="Student chest X-ray result" />
@@ -2613,7 +2621,7 @@ export default function StaffRecordReview() {
                 <SubmittedFilePreview title="CBC Result" fileUrl={submission.cbcFileUrl} alt="Student CBC result" />
               ) : cbcManagedByClinic ? (
                 <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-                  No student upload required. Results from James L. Gordon Hospital are sent directly to the clinic.
+                  No student upload required. Results from James L. Gordon Memorial Hospital are sent directly to the clinic.
                 </div>
               ) : (
                 <SubmittedFilePreview title="CBC Result" fileUrl={submission.cbcFileUrl} alt="Student CBC result" />
@@ -2683,7 +2691,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.hemoglobin}
                     onChange={(event) => updateAssessmentField('hemoglobin', event.target.value)}
                     inputMode="decimal"
-                    placeholder="13.5"
+                    placeholder="e.g. 13.5"
                     maxLength={4}
                     className={cn('mt-2', getUpdatedFieldClass('hemoglobin'))}
                   />
@@ -2695,7 +2703,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.hematocrit}
                     onChange={(event) => updateAssessmentField('hematocrit', event.target.value)}
                     inputMode="decimal"
-                    placeholder="40.2"
+                    placeholder="e.g. 40.2"
                     maxLength={5}
                     className={cn('mt-2', getUpdatedFieldClass('hematocrit'))}
                   />
@@ -2707,7 +2715,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.wbc}
                     onChange={(event) => updateAssessmentField('wbc', event.target.value)}
                     inputMode="decimal"
-                    placeholder="7.8"
+                    placeholder="e.g. 7.8"
                     maxLength={9}
                     className={cn('mt-2', getUpdatedFieldClass('wbc'))}
                   />
@@ -2719,7 +2727,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.plateletCount}
                     onChange={(event) => updateAssessmentField('plateletCount', event.target.value)}
                     inputMode="decimal"
-                    placeholder="250"
+                    placeholder="e.g. 250"
                     maxLength={10}
                     className={cn('mt-2', getUpdatedFieldClass('plateletCount'))}
                   />
@@ -2759,7 +2767,7 @@ export default function StaffRecordReview() {
                 <SubmittedFilePreview title="Urinalysis Result" fileUrl={submission.urinalysisFileUrl} alt="Student urinalysis result" />
               ) : urinalysisManagedByClinic ? (
                 <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-                  No student upload required. Results from James L. Gordon Hospital are sent directly to the clinic.
+                  No student upload required. Results from James L. Gordon Memorial Hospital are sent directly to the clinic.
                 </div>
               ) : (
                 <SubmittedFilePreview title="Urinalysis Result" fileUrl={submission.urinalysisFileUrl} alt="Student urinalysis result" />
@@ -2883,7 +2891,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.bloodPressure}
                     onChange={(event) => updateAssessmentField('bloodPressure', event.target.value)}
                     inputMode="numeric"
-                    placeholder="120/80"
+                    placeholder="e.g. 120/80"
                     className="mt-2"
                   />
                 </div>
@@ -2894,7 +2902,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.cardiacRate}
                     onChange={(event) => updateAssessmentField('cardiacRate', event.target.value)}
                     inputMode="decimal"
-                    placeholder="72"
+                    placeholder="e.g. 72"
                     maxLength={3}
                     className="mt-2"
                   />
@@ -2906,7 +2914,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.respiratoryRate}
                     onChange={(event) => updateAssessmentField('respiratoryRate', event.target.value)}
                     inputMode="decimal"
-                    placeholder="16"
+                    placeholder="e.g. 16"
                     maxLength={3}
                     className="mt-2"
                   />
@@ -2918,7 +2926,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.temperature}
                     onChange={(event) => updateAssessmentField('temperature', event.target.value)}
                     inputMode="decimal"
-                    placeholder="36.8"
+                    placeholder="e.g. 36.8"
                     maxLength={4}
                     className="mt-2"
                   />
@@ -2930,7 +2938,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.weight}
                     onChange={(event) => updateAssessmentField('weight', event.target.value)}
                     inputMode="decimal"
-                    placeholder="60.5"
+                    placeholder="e.g. 60.5"
                     maxLength={5}
                     className="mt-2"
                   />
@@ -2942,7 +2950,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.height}
                     onChange={(event) => updateAssessmentField('height', event.target.value)}
                     inputMode="decimal"
-                    placeholder="170"
+                    placeholder="e.g. 170"
                     maxLength={5}
                     className="mt-2"
                   />
@@ -2959,7 +2967,7 @@ export default function StaffRecordReview() {
                     value={assessmentForm.visualAcuity}
                     onChange={(event) => updateAssessmentField('visualAcuity', event.target.value)}
                     inputMode="text"
-                    placeholder="20/20"
+                    placeholder="e.g. 20/20"
                     maxLength={20}
                     className="mt-2"
                   />
@@ -2981,7 +2989,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('skin', event.target.value)}
                   className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
-                  placeholder="Normal / With rashes"
+                  placeholder="e.g. Normal / With rashes"
                   rows={3}
                 />
               </div>
@@ -2993,7 +3001,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('heent', event.target.value)}
                   className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
-                  placeholder="Normal HEENT"
+                  placeholder="e.g. Normal HEENT"
                   rows={3}
                 />
               </div>
@@ -3005,7 +3013,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('chestLungs', event.target.value)}
                   className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
-                  placeholder="Clear breath sounds"
+                  placeholder="e.g. Clear breath sounds"
                   rows={3}
                 />
               </div>
@@ -3017,7 +3025,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('heart', event.target.value)}
                   className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
-                  placeholder="Regular rate and rhythm"
+                  placeholder="e.g. Regular rate and rhythm"
                   rows={3}
                 />
               </div>
@@ -3029,7 +3037,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('abdomen', event.target.value)}
                   className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
-                  placeholder="Soft, non-tender"
+                  placeholder="e.g. Soft, non-tender"
                   rows={3}
                 />
               </div>
@@ -3041,7 +3049,7 @@ export default function StaffRecordReview() {
                   onChange={(event) => updateAssessmentField('extremities', event.target.value)}
                   className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
-                  placeholder="No edema"
+                  placeholder="e.g. No edema"
                   rows={3}
                 />
               </div>
@@ -3066,7 +3074,7 @@ export default function StaffRecordReview() {
                     onChange={(event) => updateAssessmentField('examinedBy', event.target.value)}
                     maxLength={MAX_EXAMINED_BY_LENGTH}
                     className="mt-2"
-                    placeholder="Doctor name"
+                    placeholder="e.g. Dr. Maria Santos"
                   />
                 </div>
                 <div className="rounded-xl border border-dashed border-outline-variant/60 bg-surface-container-low px-4 py-4">
@@ -3102,15 +3110,6 @@ export default function StaffRecordReview() {
                           <FileUp className="mr-2 h-4 w-4" />
                           Choose Signature
                         </FilePickerButton>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => void handleSignatureUpload()}
-                          disabled={uploadingSignature || !signatureFile}
-                          loading={uploadingSignature}
-                        >
-                          {uploadingSignature ? 'Uploading...' : 'Upload Signature'}
-                        </Button>
                       </div>
                     </div>
                     {signatureFile ? (

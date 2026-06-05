@@ -2931,7 +2931,16 @@ export async function uploadStaffSignature(file: File) {
   };
 }
 
-const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Hospital';
+const CLINIC_INTERNAL_LAB_SOURCE = 'James L. Gordon Memorial Hospital';
+const CLINIC_INTERNAL_LAB_SOURCE_ALIASES = [
+  CLINIC_INTERNAL_LAB_SOURCE,
+  'James L. Gordon Hospital',
+];
+
+function isClinicManagedLabSource(source?: string | null) {
+  const normalizedSource = String(source || '').trim().toLowerCase();
+  return CLINIC_INTERNAL_LAB_SOURCE_ALIASES.some((value) => value.toLowerCase() === normalizedSource);
+}
 
 function deriveSubmissionLabSourceMetadata(data: any) {
   const explicitLocation = String(data?.labTestLocation || '').trim().toLowerCase();
@@ -2968,9 +2977,7 @@ function deriveSubmissionLabSourceMetadata(data: any) {
     };
   }
 
-  const externalSource = resolvedSources.find(
-    (source) => source.toLowerCase() !== CLINIC_INTERNAL_LAB_SOURCE.toLowerCase(),
-  );
+  const externalSource = resolvedSources.find((source) => !isClinicManagedLabSource(source));
 
   if (!externalSource) {
     return {

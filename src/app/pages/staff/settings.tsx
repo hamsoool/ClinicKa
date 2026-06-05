@@ -230,6 +230,30 @@ export default function StaffSettings() {
     }
   };
 
+  const handleSignatureUpload = async (nextFile?: File | null) => {
+    const targetFile = nextFile || signatureFile;
+    if (!targetFile) {
+      toast.info('Choose a signature image first.');
+      return;
+    }
+
+    setUploadingSignature(true);
+    try {
+      const uploaded = await uploadStaffSignature(targetFile);
+      const refreshed = await getStaffSignature().catch(() => buildEmptyStaffSignature());
+      setStaffSignature({
+        signatureUrl: withCacheBust(uploaded.signatureUrl || refreshed.signatureUrl),
+        signatureFileName: targetFile.name || refreshed.signatureFileName || uploaded.signatureFileName || null,
+      });
+      setSignatureFile(null);
+      toast.success('Staff signature uploaded successfully.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to upload staff signature.');
+    } finally {
+      setUploadingSignature(false);
+    }
+  };
+
   const handleSignatureChange = (file: File | null) => {
     if (!file) {
       setSignatureFile(null);
@@ -247,29 +271,7 @@ export default function StaffSettings() {
     }
 
     setSignatureFile(file);
-  };
-
-  const handleSignatureUpload = async () => {
-    if (!signatureFile) {
-      toast.info('Choose a signature image first.');
-      return;
-    }
-
-    setUploadingSignature(true);
-    try {
-      const uploaded = await uploadStaffSignature(signatureFile);
-      const refreshed = await getStaffSignature().catch(() => buildEmptyStaffSignature());
-      setStaffSignature({
-        signatureUrl: withCacheBust(uploaded.signatureUrl || refreshed.signatureUrl),
-        signatureFileName: signatureFile.name || refreshed.signatureFileName || uploaded.signatureFileName || null,
-      });
-      setSignatureFile(null);
-      toast.success('Staff signature uploaded successfully.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to upload staff signature.');
-    } finally {
-      setUploadingSignature(false);
-    }
+    void handleSignatureUpload(file);
   };
 
   const handleWorkspacePreferenceSave = () => {
@@ -584,17 +586,6 @@ export default function StaffSettings() {
                 </div>
               </div>
 
-              <Button
-                type="button"
-                onClick={() => {
-                  void handleSignatureUpload();
-                }}
-                disabled={uploadingSignature || !signatureFile}
-                loading={uploadingSignature}
-                className="w-full"
-              >
-                {uploadingSignature ? 'Uploading...' : 'Save Signature'}
-              </Button>
             </CardContent>
           </Card>
 

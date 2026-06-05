@@ -33,6 +33,7 @@ import { useAcademicYear } from '../../lib/academic-year-query';
 import { getRoleLabel, getSubmissionReportSummaries } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { SubmissionRecord, SubmissionSummaryRecord } from '../../lib/record-types';
+import { getYearLevelLabel } from '../../lib/student-year';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import { useStaffDashboardOverviewQuery } from './staff-workflow-query';
 
@@ -223,6 +224,11 @@ function resolveDepartmentValue(department?: string, course?: string) {
   if (matchedDepartment) return matchedDepartment;
 
   return normalizedDepartment || 'Unspecified';
+}
+
+function formatSubmittedYearLevel(value?: string) {
+  const normalizedValue = String(value || '').trim();
+  return normalizedValue ? getYearLevelLabel(normalizedValue) : 'Year Level --';
 }
 
 function getAcademicYearRange(label?: string) {
@@ -757,7 +763,7 @@ export default function StaffDashboard() {
                         ) : null}
                       </div>
                       <p className="mt-1 break-words text-xs text-on-surface-variant">
-                        {submission.studentId} | {submission.course}
+                        {submission.studentId} | {formatSubmittedYearLevel(submission.year)} | {submission.course}
                       </p>
                       <p className="mt-2 text-sm text-on-surface-variant">
                         Submitted {formatDate(submission.submittedAt)}

@@ -179,7 +179,7 @@ export const LAB_TEST_SITE_OPTIONS = [
   'Tubban-Lab Ob Gyne And Medical Diagnostic Center',
   'ZMMG COOP Hospital',
   'Holy Infant Clinic',
-  'James L. Gordon Hospital',
+  'James L. Gordon Memorial Hospital',
 ] as const;
 
 export const EMERGENCY_CONTACT_RELATIONSHIPS = [
