@@ -5,6 +5,11 @@ import {
   storageBuckets,
   supabase,
 } from "./context.ts";
+import {
+  buildCloudinaryDeliveryUrl,
+  destroyCloudinaryAsset,
+  isCloudinaryFile,
+} from "./cloudinary.ts";
 
 const SIGNED_URL_REFRESH_BUFFER_SECONDS = 60;
 const SIGNED_URL_CACHE_MAX_ENTRIES = 500;
@@ -140,6 +145,10 @@ export function normalizeStaffSignatureRows(files: any[] | null | undefined) {
 }
 
 async function createTemporaryFileUrl(file: any) {
+  if (isCloudinaryFile(file)) {
+    return buildCloudinaryDeliveryUrl(file);
+  }
+
   const resolvedBucket = inferStorageBucket(file);
   const storagePath = normalizeStoragePath(file?.storage_path, resolvedBucket);
   if (!resolvedBucket || !storagePath) {
@@ -186,9 +195,19 @@ async function createTemporaryFileUrl(file: any) {
 export async function normalizeFileRows(files: any[] | null | undefined) {
   return Promise.all(
     (files || []).map(async (file) => {
+      if (isCloudinaryFile(file)) {
+        return {
+          ...file,
+          storage_provider: "cloudinary",
+          storage_bucket: file?.storage_bucket || null,
+          url: await createTemporaryFileUrl(file),
+        };
+      }
+
       const storageBucket = inferStorageBucket(file);
       return {
         ...file,
+        storage_provider: file?.storage_provider || "supabase",
         storage_bucket: storageBucket,
         url: await createTemporaryFileUrl(file),
       };
@@ -430,7 +449,16 @@ export async function ensureStorageBucket(targetBucket: string) {
 }
 
 export async function deleteStoredFiles(files: any[]) {
+  const cloudinaryFiles = (files || []).filter(isCloudinaryFile);
+  for (const file of cloudinaryFiles) {
+    await destroyCloudinaryAsset(
+      file?.cloudinary_public_id,
+      file?.cloudinary_resource_type || "image",
+    );
+  }
+
   const filesByBucket = (files || []).reduce((acc, file) => {
+    if (isCloudinaryFile(file)) return acc;
     const resolvedBucket = inferStorageBucket(file);
     const storagePath = normalizeStoragePath(file?.storage_path, resolvedBucket);
     if (!resolvedBucket || !storagePath) return acc;

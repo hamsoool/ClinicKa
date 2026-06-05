@@ -2,7 +2,7 @@
 
 ClinicKa is a web application for managing student medical requirements at Gordon College.
 
-If you’re new to web dev: you can think of this project as **a website (frontend)** that talks to **Supabase (backend as a service)** for login, database, and file uploads.
+If you’re new to web dev: you can think of this project as **a website (frontend)** that talks to **Supabase (backend as a service)** for login and database records, with **Cloudinary** handling uploaded media files.
 
 ## Contents
 
@@ -86,7 +86,11 @@ There are **two moving parts**:
    - It renders pages for student/staff/admin portals.
 
 2. **Supabase (backend)**
-   - Handles sign-in (Auth), database tables (Postgres), and file uploads (Storage).
+   - Handles sign-in (Auth), database tables (Postgres), and Edge Functions.
+
+3. **Cloudinary (media storage)**
+   - Stores uploaded announcement images, profile photos, signatures, and lab files.
+   - Supabase still stores the metadata rows that point to those uploaded assets.
 
 Sometimes the frontend needs to do a “server-only” action (for example: calling OCR.space, sending SMTP emails, or using admin privileges safely). For that, the app calls a Supabase **Edge Function** named `server`.
 
@@ -94,9 +98,11 @@ Sometimes the frontend needs to do a “server-only” action (for example: call
 
 ```mermaid
 graph TD
-   UI[Browser - React app] -->|Login + Database + Storage| SB[Supabase]
-   UI -->|Server-only actions| FX[Edge Function - server]
+   UI[Browser - React app] -->|Login + Database| SB[Supabase]
+   UI -->|Signed media upload| CLD[Cloudinary]
+   UI -->|Server-only actions + upload signatures| FX[Edge Function - server]
    FX --> SB
+   FX --> CLD
    FX --> OCR[OCR Space]
    FX --> SMTP[SMTP Email Provider]
 ```
@@ -192,10 +198,15 @@ Tip: on Supabase Edge Functions, SMTP port `465` is commonly the one that works.
 
 - `OCR_SPACE_API_KEY` (or `OCRSPACE_API_KEY`)
 
-### TinyPNG/Tinify (Optional)
+### Cloudinary (Media Uploads)
 
-- `TINIFY_API_KEY` (or `TINYPNG_API_KEY`)
-- Lab uploads accept files up to 5 MB. Supported image uploads above 1 MB are optimized through TinyPNG/Tinify before they are stored.
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+- `CLOUDINARY_BASE_FOLDER` (optional, defaults to `clinicka`)
+- `VITE_CLOUDINARY_CLOUD_NAME`
+
+Cloudinary stores uploaded media and handles media delivery/optimization. Supabase remains the backend for auth, database records, Edge Functions, and file metadata. Do not expose `CLOUDINARY_API_SECRET` through any `VITE_` variable.
 
 ## Useful Scripts
 

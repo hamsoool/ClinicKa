@@ -17,7 +17,6 @@ import {
   requestLoggingEnabled,
   resolveCorsOrigin,
   signedStorageUrlExpiresSeconds,
-  storageBuckets,
   supabase,
   unauthorized,
 } from "./context.ts";
@@ -49,8 +48,6 @@ import {
 } from "./settings.ts";
 import {
   deleteStoredFiles,
-  deleteStoragePrefixes,
-  ensureStorageBucket,
   inferStorageBucket,
   listProfileAssetsFromStorage,
   listStaffSignatureFromStorage,
@@ -59,6 +56,17 @@ import {
   normalizeStaffSignatureRows,
   normalizeStoragePath,
 } from "./storage.ts";
+import {
+  CloudinaryConfigurationError,
+  CloudinaryRequestError,
+  buildCloudinaryFolder,
+  createCloudinaryUploadTicket,
+  destroyCloudinaryAsset,
+  isCloudinaryFile,
+  normalizeCloudinaryUploadResponse,
+  uploadFileToCloudinary,
+  verifyCloudinaryUploadResponse,
+} from "./cloudinary.ts";
 import {
   OcrSpaceConfigurationError,
   OcrSpaceRequestError,
@@ -85,8 +93,7 @@ const app = new Hono().basePath("/server");
 const LAB_UPLOAD_TYPES = new Set(["xray", "cbc", "urinalysis"]);
 const OCR_SPACE_DEFAULT_MAX_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
-const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
-const STAFF_SIGNATURE_BUCKET = "staff_signatures";
+const ANNOUNCEMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const STAFF_SIGNATURE_MAX_BYTES = 5 * 1024 * 1024;
 const PROFILE_ASSET_MAX_BYTES = 5 * 1024 * 1024;
 const PROFILE_ASSET_ALLOWED_EXTENSIONS = new Set([
@@ -97,15 +104,7 @@ const PROFILE_ASSET_ALLOWED_EXTENSIONS = new Set([
   "heif",
   "webp",
 ]);
-const TINIFY_COMPRESSIBLE_MIME_TYPES = new Set([
-  "image/avif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
-const FILE_SELECT_COLUMNS = "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by";
-
-class TinifyConfigurationError extends Error {}
+const FILE_SELECT_COLUMNS = "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by";
 
 function normalizeAcademicYear(value: unknown, fallback = "") {
   const match = String(value || "").trim().match(/^(\d{4})\s*-\s*(\d{4})$/);
@@ -152,15 +151,6 @@ function getNextSubmissionSlot(rows: any[], academicYear: string) {
   return maxSlot >= 4 ? null : maxSlot + 1;
 }
 
-class TinifyRequestError extends Error {
-  status: number;
-
-  constructor(message: string, status = 502) {
-    super(message);
-    this.status = status;
-  }
-}
-
 class UploadValidationError extends Error {
   status: number;
 
@@ -198,139 +188,22 @@ function formatFileSize(bytes: number) {
   return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`;
 }
 
-function getTinifyApiKey() {
-  return String(
-    Deno.env.get("TINIFY_API_KEY") ||
-      Deno.env.get("TINYPNG_API_KEY") ||
-      "",
-  ).trim();
-}
-
-function resolveTinifyMimeType(mimeType?: string | null, fileName?: string | null) {
-  const normalized = String(mimeType || "").split(";")[0].trim().toLowerCase();
-  const name = String(fileName || "").toLowerCase();
-  if (normalized === "image/jpg") return "image/jpeg";
-  if (TINIFY_COMPRESSIBLE_MIME_TYPES.has(normalized)) return normalized;
-  if (name.endsWith(".avif")) return "image/avif";
-  if (name.endsWith(".webp")) return "image/webp";
-  if (name.endsWith(".png")) return "image/png";
-  if (/\.(jpe?g)$/i.test(name)) return "image/jpeg";
-  return "";
-}
-
 function resolveLabUploadMimeType(mimeType?: string | null, fileName?: string | null) {
   const ocrMimeType = resolveOcrSpaceInputMimeType(mimeType, fileName);
   if (ocrMimeType) return ocrMimeType;
   const normalized = String(mimeType || "").split(";")[0].trim().toLowerCase();
   const name = String(fileName || "").toLowerCase();
+  if (normalized === "image/jpg") return "image/jpeg";
+  if (normalized.startsWith("image/")) return normalized;
   if (normalized === "image/heic" || name.endsWith(".heic")) return "image/heic";
   if (normalized === "image/heif" || name.endsWith(".heif")) return "image/heif";
-  return resolveTinifyMimeType(mimeType, fileName);
-}
-
-async function readTinifyError(response: Response) {
-  try {
-    const payload = await response.json();
-    return String(payload?.message || payload?.error || response.statusText || "").trim();
-  } catch {
-    return response.statusText || "";
-  }
-}
-
-function getTinifyErrorMessage(response: Response, detail: string) {
-  if (response.status === 401 || response.status === 403) {
-    return "TinyPNG API key was rejected. Check TINIFY_API_KEY in Supabase Edge Function secrets.";
-  }
-  if (response.status === 429) {
-    return "TinyPNG compression limit was reached. Check your TinyPNG account usage.";
-  }
-  if (response.status === 415 || response.status === 400) {
-    return detail || "TinyPNG could not optimize this image type.";
-  }
-  return detail || "TinyPNG could not optimize the lab result image.";
-}
-
-async function compressImageWithTinify(bytes: ArrayBuffer, mimeType: string) {
-  const apiKey = getTinifyApiKey();
-  if (!apiKey) {
-    throw new TinifyConfigurationError(
-      "TinyPNG compression is not configured. Set TINIFY_API_KEY in Supabase Edge Function secrets.",
-    );
-  }
-
-  const authorization = `Basic ${btoa(`api:${apiKey}`)}`;
-  const shrinkResponse = await fetch("https://api.tinify.com/shrink", {
-    method: "POST",
-    headers: {
-      Authorization: authorization,
-      "Content-Type": mimeType,
-    },
-    body: bytes,
-  });
-
-  if (!shrinkResponse.ok) {
-    const detail = await readTinifyError(shrinkResponse);
-    throw new TinifyRequestError(
-      getTinifyErrorMessage(shrinkResponse, detail),
-      shrinkResponse.status === 401 || shrinkResponse.status === 403 || shrinkResponse.status === 429
-        ? 503
-        : 400,
-    );
-  }
-
-  const outputUrl = shrinkResponse.headers.get("location");
-  if (!outputUrl) {
-    throw new TinifyRequestError("TinyPNG did not return an optimized image URL.");
-  }
-
-  const outputResponse = await fetch(outputUrl, {
-    headers: {
-      Authorization: authorization,
-    },
-  });
-
-  if (!outputResponse.ok) {
-    const detail = await readTinifyError(outputResponse);
-    throw new TinifyRequestError(
-      getTinifyErrorMessage(outputResponse, detail),
-      outputResponse.status === 401 || outputResponse.status === 403 || outputResponse.status === 429
-        ? 503
-        : 502,
-    );
-  }
-
-  const outputMimeType = String(outputResponse.headers.get("content-type") || mimeType)
-    .split(";")[0]
-    .trim()
-    .toLowerCase() || mimeType;
-
-  return {
-    bytes: await outputResponse.arrayBuffer(),
-    mimeType: outputMimeType,
-  };
-}
-
-function getLargeNonCompressibleOcrUploadMessage(maxOcrBytes: number) {
-  return `Large OCR uploads above ${formatFileSize(maxOcrBytes)} must be JPEG, PNG, WebP, or AVIF so they can be compressed for OCR. Upload a smaller PDF/HEIC/HEIF file or replace it with a JPG/PNG image.`;
-}
-
-function getTinifyStillTooLargeMessage(maxOcrBytes: number) {
-  return `TinyPNG could not reduce this lab result enough for OCR. Upload a smaller JPG, PNG, WebP, or AVIF image under ${formatFileSize(maxOcrBytes)}.`;
-}
-
-async function prepareLabUploadFile(file: File, supportedMimeType: string) {
-  const originalBytes = await file.arrayBuffer();
-  const tinifyMimeType = resolveTinifyMimeType(supportedMimeType || file.type, file.name);
-
-  return {
-    bytes: originalBytes,
-    mimeType: supportedMimeType || file.type || "application/octet-stream",
-    optimizationPending: originalBytes.byteLength > LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES && Boolean(tinifyMimeType),
-    tinifyMimeType,
-    optimized: false,
-    originalSize: originalBytes.byteLength,
-    storedSize: originalBytes.byteLength,
-  };
+  if (name.endsWith(".avif")) return "image/avif";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".png")) return "image/png";
+  if (/\.(jpe?g)$/i.test(name)) return "image/jpeg";
+  if (name.endsWith(".gif")) return "image/gif";
+  if (/\.(tiff?|bmp)$/i.test(name)) return "image/*";
+  return "";
 }
 
 function runBackgroundTask(label: string, task: () => Promise<void>) {
@@ -342,56 +215,6 @@ function runBackgroundTask(label: string, task: () => Promise<void>) {
   const edgeRuntime = (globalThis as any).EdgeRuntime;
   if (typeof edgeRuntime?.waitUntil === "function") {
     edgeRuntime.waitUntil(promise);
-  }
-}
-
-async function isLabFileStillCurrent(fileId: string, bucket: string, storagePath: string) {
-  const { data, error } = await supabase
-    .from("files")
-    .select("id,storage_bucket,storage_path")
-    .eq("id", fileId)
-    .maybeSingle();
-
-  if (error || !data) return false;
-  return data.storage_bucket === bucket && data.storage_path === storagePath;
-}
-
-async function optimizeStoredLabUpload(options: {
-  fileId: string;
-  bucket: string;
-  storagePath: string;
-  bytes: ArrayBuffer;
-  tinifyMimeType?: string | null;
-  fallbackMimeType?: string | null;
-}) {
-  const tinifyMimeType = String(options.tinifyMimeType || "").trim();
-  if (!tinifyMimeType) return;
-
-  const optimized = await compressImageWithTinify(options.bytes, tinifyMimeType);
-  if (optimized.bytes.byteLength >= options.bytes.byteLength) return;
-
-  const stillCurrent = await isLabFileStillCurrent(options.fileId, options.bucket, options.storagePath);
-  if (!stillCurrent) return;
-
-  const optimizedMimeType = optimized.mimeType || options.fallbackMimeType || tinifyMimeType;
-  const { error: uploadError } = await supabase.storage
-    .from(options.bucket)
-    .upload(options.storagePath, optimized.bytes, {
-      contentType: optimizedMimeType,
-      upsert: true,
-    });
-
-  if (uploadError) {
-    throw new Error(uploadError.message);
-  }
-
-  const { error: updateError } = await supabase
-    .from("files")
-    .update({ mime_type: optimizedMimeType })
-    .eq("id", options.fileId);
-
-  if (updateError) {
-    throw new Error(updateError.message);
   }
 }
 
@@ -453,33 +276,6 @@ function isSupportedSignatureImage(file: File | null) {
   return ["png", "jpg", "jpeg", "heic", "heif", "webp"].includes(extension);
 }
 
-function sanitizeStorageFileName(fileName?: string | null, fallback = "file.bin") {
-  const cleaned = String(fileName || fallback).trim().replace(/[^a-zA-Z0-9._-]/g, "_");
-  return cleaned || fallback;
-}
-
-function buildLabStoragePath(recordId: string, fileType: string, fileName?: string | null) {
-  return `${recordId}/${fileType}_${Date.now()}_${sanitizeStorageFileName(fileName, `${fileType}.bin`)}`;
-}
-
-function buildProfileAssetStoragePath(studentId: string, fileType: string, fileName?: string | null) {
-  return `${studentId}/${fileType}_${Date.now()}_${sanitizeStorageFileName(fileName, `${fileType}.bin`)}`;
-}
-
-function isExpectedLabStoragePath(recordId: string, fileType: string, storagePath: string) {
-  const normalizedPath = String(storagePath || "").replace(/^\/+/, "");
-  const expectedPrefix = `${recordId}/${fileType}_`;
-  return normalizedPath.startsWith(expectedPrefix);
-}
-
-function isExpectedProfileAssetStoragePath(studentId: string, fileType: string, storagePath: string) {
-  const normalizedPath = String(storagePath || "").replace(/^\/+/, "");
-  return (
-    normalizedPath.startsWith(`${studentId}/${fileType}_`) ||
-    normalizedPath.startsWith(`profiles/${studentId}/${fileType}_`)
-  );
-}
-
 function isSupportedProfileAssetMimeType(mimeType?: string | null, fileName?: string | null) {
   const normalizedMimeType = String(mimeType || "").split(";")[0].trim().toLowerCase();
   if (normalizedMimeType.startsWith("image/")) return normalizedMimeType;
@@ -490,6 +286,102 @@ function isSupportedProfileAssetMimeType(mimeType?: string | null, fileName?: st
     : "";
 }
 
+function getCloudinaryPublicIdPrefix(kind: string, fileType?: string | null) {
+  if (kind === "profile-photo") return "photo";
+  if (kind === "student-signature" || kind === "staff-signature") return "signature";
+  if (kind === "announcement") return "announcement";
+  return String(fileType || "lab").trim().toLowerCase() || "lab";
+}
+
+async function validateCloudinaryUpload(
+  payload: any,
+  options: {
+    kind: "announcement" | "profile-photo" | "student-signature" | "staff-signature" | "lab";
+    ownerId: string;
+    fileType?: string | null;
+    maxBytes?: number;
+    requireImage?: boolean;
+  },
+) {
+  const upload = normalizeCloudinaryUploadResponse(payload);
+  if (!upload) {
+    throw new UploadValidationError("Cloudinary upload response is missing required metadata.");
+  }
+
+  const verified = await verifyCloudinaryUploadResponse(payload);
+  if (!verified) {
+    throw new UploadValidationError("Cloudinary upload response could not be verified.");
+  }
+
+  const extra = options.kind === "lab" ? { labType: options.fileType || "lab" } : {};
+  const expectedFolder = buildCloudinaryFolder(options.kind, options.ownerId, extra);
+  const expectedPrefix = `${expectedFolder}/${getCloudinaryPublicIdPrefix(options.kind, options.fileType)}_`;
+  if (!upload.public_id.startsWith(expectedPrefix)) {
+    throw new UploadValidationError("Cloudinary upload destination is invalid.");
+  }
+
+  if (!/^https:\/\/res\.cloudinary\.com\//i.test(upload.secure_url)) {
+    throw new UploadValidationError("Cloudinary upload URL is invalid.");
+  }
+
+  if (!upload.bytes) {
+    throw new UploadValidationError("Cloudinary upload size is invalid.");
+  }
+
+  if (options.requireImage && upload.resource_type !== "image") {
+    throw new UploadValidationError("Uploaded asset must be an image.");
+  }
+
+  if (options.maxBytes && upload.bytes > options.maxBytes) {
+    throw new UploadValidationError(`Uploaded asset must be ${formatFileSize(options.maxBytes)} or smaller.`);
+  }
+
+  return {
+    upload,
+    folder: expectedFolder,
+  };
+}
+
+function getMimeTypeFromCloudinaryUpload(upload: any, fallbackMimeType?: string | null, fallbackFileName?: string | null) {
+  const normalizedFallback = String(fallbackMimeType || "").split(";")[0].trim().toLowerCase();
+  if (normalizedFallback) return normalizedFallback;
+
+  const format = String(upload?.format || "").trim().toLowerCase();
+  if (format === "jpg" || format === "jpeg") return "image/jpeg";
+  if (format === "png") return "image/png";
+  if (format === "webp") return "image/webp";
+  if (format === "gif") return "image/gif";
+  if (format === "pdf") return "application/pdf";
+  if (format === "heic") return "image/heic";
+  if (format === "heif") return "image/heif";
+  if (format === "avif") return "image/avif";
+
+  return resolveLabUploadMimeType("", fallbackFileName) || "application/octet-stream";
+}
+
+function buildCloudinaryFileMetadata(upload: any, folder: string) {
+  return {
+    storage_provider: "cloudinary",
+    cloudinary_public_id: upload.public_id,
+    cloudinary_resource_type: upload.resource_type,
+    cloudinary_version: upload.version,
+    cloudinary_folder: folder,
+    storage_bucket: null,
+    storage_path: null,
+    url: upload.secure_url,
+  };
+}
+
+function cloudinaryRouteError(c: any, error: unknown) {
+  if (error instanceof CloudinaryConfigurationError) {
+    return c.json({ error: error.message }, 503);
+  }
+  if (error instanceof CloudinaryRequestError) {
+    return c.json({ error: error.message }, error.status || 502);
+  }
+  return null;
+}
+
 function isMissingFilesTableError(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
   return (
@@ -498,59 +390,6 @@ function isMissingFilesTableError(error: unknown) {
     (message.includes("could not find the table") && message.includes("files")) ||
     (message.includes("schema cache") && message.includes("files"))
   );
-}
-
-async function listStorageObjectPaths(bucket: string, prefix: string) {
-  const normalizedPrefix = String(prefix || "").replace(/^\/+/, "");
-  if (!normalizedPrefix) return [] as string[];
-
-  const { data, error } = await supabase.storage.from(bucket).list(normalizedPrefix, {
-    limit: 100,
-    offset: 0,
-  });
-
-  if (error || !data?.length) {
-    return [] as string[];
-  }
-
-  return data
-    .filter((item) => item?.name && (item?.id || item?.metadata))
-    .map((item) => `${normalizedPrefix}${item.name}`);
-}
-
-async function cleanupProfileAssetStorageVersions(
-  bucket: string,
-  studentId: string,
-  keepStoragePath: string,
-) {
-  const normalizedKeepPath = String(keepStoragePath || "").replace(/^\/+/, "");
-  const candidates = new Set<string>();
-  const prefixes = [`${studentId}/`, `profiles/${studentId}/`];
-
-  for (const prefix of prefixes) {
-    const paths = await listStorageObjectPaths(bucket, prefix);
-    for (const path of paths) {
-      if (path && path !== normalizedKeepPath) {
-        candidates.add(path);
-      }
-    }
-  }
-
-  if (!candidates.size) return;
-
-  const { error } = await supabase.storage.from(bucket).remove([...candidates]);
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-async function removeStorageObject(bucket: string, storagePath: string) {
-  const normalizedPath = String(storagePath || "").replace(/^\/+/, "");
-  if (!bucket || !normalizedPath) return;
-  const { error } = await supabase.storage.from(bucket).remove([normalizedPath]);
-  if (error) {
-    throw new Error(error.message);
-  }
 }
 
 async function loadLatestStaffSignature(profileId: string) {
@@ -594,6 +433,88 @@ async function insertStaffSignatureMetadata(payload: Record<string, unknown>) {
   }
 
   return insertedFile;
+}
+
+async function completeStaffSignatureUpload(options: {
+  profileId: string;
+  fileName: string;
+  mimeType?: string | null;
+  cloudinary: any;
+}) {
+  const { upload, folder } = await validateCloudinaryUpload(options.cloudinary, {
+    kind: "staff-signature",
+    ownerId: options.profileId,
+    maxBytes: STAFF_SIGNATURE_MAX_BYTES,
+    requireImage: true,
+  });
+  const resolvedMimeType = isSupportedProfileAssetMimeType(
+    getMimeTypeFromCloudinaryUpload(upload, options.mimeType, options.fileName),
+    options.fileName,
+  );
+
+  if (!resolvedMimeType) {
+    throw new UploadValidationError("Staff signature must be an image file.");
+  }
+
+  const { error: signatureUpdateError } = await supabase
+    .from("staff_users")
+    .update({
+      signature_url: upload.secure_url,
+    })
+    .eq("profile_id", options.profileId);
+
+  if (signatureUpdateError) {
+    throw new Error(signatureUpdateError.message);
+  }
+
+  let insertedFile: any = null;
+  try {
+    insertedFile = await insertStaffSignatureMetadata({
+      submission_id: null,
+      file_name: options.fileName,
+      mime_type: resolvedMimeType || "application/octet-stream",
+      ...buildCloudinaryFileMetadata(upload, folder),
+      uploaded_by: options.profileId,
+    });
+  } catch (metadataError) {
+    console.log("Staff signature metadata warning:", metadataError);
+  }
+
+  try {
+    if (insertedFile?.id) {
+      const { data: staleRows, error: staleRowsError } = await supabase
+        .from("files")
+        .select(FILE_SELECT_COLUMNS)
+        .eq("uploaded_by", options.profileId)
+        .is("submission_id", null)
+        .neq("id", insertedFile.id);
+
+      if (staleRowsError) {
+        throw new Error(staleRowsError.message);
+      }
+
+      const staleSignatureRows = normalizeStaffSignatureRows(staleRows || []);
+      const staleIds = staleSignatureRows.map((row) => row?.id).filter(Boolean);
+      if (staleIds.length) {
+        const { error: staleDeleteError } = await supabase.from("files").delete().in("id", staleIds);
+        if (staleDeleteError) {
+          throw new Error(staleDeleteError.message);
+        }
+        runBackgroundTask("Staff signature cleanup", async () => {
+          await deleteStoredFiles(staleSignatureRows);
+        });
+      }
+    }
+  } catch (metadataCleanupError) {
+    console.log("Staff signature metadata cleanup warning:", metadataCleanupError);
+  }
+
+  invalidateDashboardReadCaches();
+
+  return {
+    signatureUrl: upload.secure_url,
+    signatureFileName: options.fileName || upload.public_id,
+  };
 }
 
 async function findChestXrayOcrFile(submissionId: string) {
@@ -714,6 +635,8 @@ async function findUrinalysisOcrFile(submissionId: string) {
 }
 
 async function fetchFileFromStorage(file: any) {
+  if (isCloudinaryFile(file)) return null;
+
   const bucket = inferStorageBucket(file);
   const storagePath = normalizeStoragePath(file?.storage_path, bucket);
   if (!bucket || !storagePath) return null;
@@ -722,21 +645,6 @@ async function fetchFileFromStorage(file: any) {
   if (error || !data) return null;
 
   return data;
-}
-
-async function downloadStorageObjectBytes(bucket: string, storagePath: string) {
-  const normalizedBucket = String(bucket || "").trim();
-  const normalizedPath = String(storagePath || "").replace(/^\/+/, "");
-  if (!normalizedBucket || !normalizedPath) {
-    throw new Error("Uploaded file storage location is missing.");
-  }
-
-  const { data, error } = await supabase.storage.from(normalizedBucket).download(normalizedPath);
-  if (error || !data) {
-    throw new Error(error?.message || "Failed to download the uploaded lab file from storage.");
-  }
-
-  return await data.arrayBuffer();
 }
 
 async function fetchFileFromUrl(file: any) {
@@ -749,8 +657,15 @@ async function fetchFileFromUrl(file: any) {
   return await response.blob();
 }
 
+async function fetchUploadedFileBlob(file: any) {
+  if (isCloudinaryFile(file)) {
+    return await fetchFileFromUrl(file);
+  }
+  return (await fetchFileFromStorage(file)) || (await fetchFileFromUrl(file));
+}
+
 async function loadChestXrayOcrInput(file: any) {
-  const blob = (await fetchFileFromStorage(file)) || (await fetchFileFromUrl(file));
+  const blob = await fetchUploadedFileBlob(file);
   if (!blob) {
     throw new Error("The Chest X-Ray result file could not be downloaded from storage.");
   }
@@ -774,7 +689,7 @@ async function loadChestXrayOcrInput(file: any) {
 }
 
 async function loadCbcOcrInput(file: any) {
-  const blob = (await fetchFileFromStorage(file)) || (await fetchFileFromUrl(file));
+  const blob = await fetchUploadedFileBlob(file);
   if (!blob) {
     throw new Error("The CBC result file could not be downloaded from storage.");
   }
@@ -798,7 +713,7 @@ async function loadCbcOcrInput(file: any) {
 }
 
 async function loadUrinalysisOcrInput(file: any) {
-  const blob = (await fetchFileFromStorage(file)) || (await fetchFileFromUrl(file));
+  const blob = await fetchUploadedFileBlob(file);
   if (!blob) {
     throw new Error("The Urinalysis result file could not be downloaded from storage.");
   }
@@ -1223,6 +1138,168 @@ app.get("/staff-signature", async (c) => {
   }
 });
 
+app.post("/announcement-image/prepare", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const payload = await c.req.json();
+    const fileName = String(payload?.fileName || "").trim();
+    const fileSize = Number(payload?.size || 0);
+    const resolvedMimeType = isSupportedProfileAssetMimeType(payload?.mimeType, fileName);
+    const ownerId = String(requester.profile.id || "").trim();
+
+    if (!fileName) {
+      return badRequest("fileName is required");
+    }
+    if (!ownerId) {
+      return badRequest("Announcement owner is required");
+    }
+    if (!Number.isFinite(fileSize) || fileSize <= 0) {
+      return badRequest("Announcement image size is required");
+    }
+    if (fileSize > ANNOUNCEMENT_IMAGE_MAX_BYTES) {
+      return badRequest("Announcement image must be 5 MB or smaller.");
+    }
+    if (!resolvedMimeType) {
+      return badRequest("Announcement image must be an image file.");
+    }
+
+    return c.json({
+      ...(await createCloudinaryUploadTicket({
+        kind: "announcement",
+        ownerId,
+        fileName,
+      })),
+      mimeType: resolvedMimeType,
+    });
+  } catch (error) {
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
+    console.log("Error preparing announcement image upload:", error);
+    return internalServerError(c, "Failed to prepare announcement image upload", error);
+  }
+});
+
+app.post("/announcement-image/complete", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const payload = await c.req.json();
+    const fileName = String(payload?.fileName || "").trim();
+    const ownerId = String(requester.profile.id || "").trim();
+    const { upload } = await validateCloudinaryUpload(payload?.cloudinary, {
+      kind: "announcement",
+      ownerId,
+      maxBytes: ANNOUNCEMENT_IMAGE_MAX_BYTES,
+      requireImage: true,
+    });
+    const resolvedMimeType = isSupportedProfileAssetMimeType(
+      getMimeTypeFromCloudinaryUpload(upload, payload?.mimeType, fileName),
+      fileName,
+    );
+
+    if (!resolvedMimeType) {
+      return badRequest("Announcement image must be an image file.");
+    }
+
+    return c.json({
+      success: true,
+      imagePath: upload.secure_url,
+      imageUrl: upload.secure_url,
+      publicId: upload.public_id,
+    });
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: error.message }, error.status || 400);
+    }
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
+    console.log("Error completing announcement image upload:", error);
+    return internalServerError(c, "Failed to complete announcement image upload", error);
+  }
+});
+
+app.post("/staff-signature/prepare", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const payload = await c.req.json();
+    const fileName = String(payload?.fileName || "").trim();
+    const fileSize = Number(payload?.size || 0);
+    const profileId = String(requester.profile.id || "").trim();
+    const resolvedMimeType = isSupportedProfileAssetMimeType(payload?.mimeType, fileName);
+
+    if (!fileName) {
+      return badRequest("fileName is required");
+    }
+    if (!profileId) {
+      return badRequest("Staff profile is required");
+    }
+    if (!Number.isFinite(fileSize) || fileSize <= 0) {
+      return badRequest("Staff signature size is required");
+    }
+    if (fileSize > STAFF_SIGNATURE_MAX_BYTES) {
+      return badRequest("Staff signature must be 5 MB or smaller.");
+    }
+    if (!resolvedMimeType) {
+      return badRequest("Staff signature must be an image file.");
+    }
+
+    return c.json({
+      ...(await createCloudinaryUploadTicket({
+        kind: "staff-signature",
+        ownerId: profileId,
+        fileName,
+      })),
+      mimeType: resolvedMimeType,
+    });
+  } catch (error) {
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
+    console.log("Error preparing staff signature upload:", error);
+    return internalServerError(c, "Failed to prepare staff signature upload", error);
+  }
+});
+
+app.post("/staff-signature/complete", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    const payload = await c.req.json();
+    const result = await completeStaffSignatureUpload({
+      profileId: String(requester.profile.id || "").trim(),
+      fileName: String(payload?.fileName || "").trim(),
+      mimeType: payload?.mimeType,
+      cloudinary: payload?.cloudinary,
+    });
+
+    return c.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: error.message }, error.status || 400);
+    }
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
+    console.log("Error completing staff signature upload:", error);
+    return internalServerError(c, "Failed to complete staff signature upload", error);
+  }
+});
+
 app.post("/staff-signature", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
@@ -1247,82 +1324,28 @@ app.post("/staff-signature", async (c) => {
       return badRequest("Staff signature must be 5 MB or smaller.");
     }
 
-    const safeFileName = String(file.name || "signature.bin").replace(/[^a-zA-Z0-9._-]/g, "_");
-    const storagePath = `${profileId}/staff_signature_${Date.now()}_${safeFileName}`;
-    const fileBuffer = await file.arrayBuffer();
-
-    await ensureStorageBucket(STAFF_SIGNATURE_BUCKET);
-
-    try {
-      await deleteStoragePrefixes([STAFF_SIGNATURE_BUCKET], [`${profileId}/`]);
-    } catch (cleanupError) {
-      console.log("Staff signature cleanup warning:", cleanupError);
-    }
-
-    const { error: uploadError } = await supabase.storage
-      .from(STAFF_SIGNATURE_BUCKET)
-      .upload(storagePath, fileBuffer, {
-        contentType: file.type || "application/octet-stream",
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw new Error(uploadError.message);
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(STAFF_SIGNATURE_BUCKET).getPublicUrl(storagePath);
-
-    const { error: signatureUpdateError } = await supabase
-      .from("staff_users")
-      .update({
-        signature_url: publicUrl || null,
-      })
-      .eq("profile_id", profileId);
-
-    if (signatureUpdateError) {
-      throw new Error(signatureUpdateError.message);
-    }
-
-    let insertedFile: any = null;
-    try {
-      insertedFile = await insertStaffSignatureMetadata({
-        submission_id: null,
-        file_name: file.name,
-        mime_type: file.type || "application/octet-stream",
-        url: publicUrl || null,
-        storage_bucket: STAFF_SIGNATURE_BUCKET,
-        storage_path: storagePath,
-        uploaded_by: profileId,
-      });
-    } catch (metadataError) {
-      console.log("Staff signature metadata warning:", metadataError);
-    }
-
-    try {
-      if (insertedFile?.id) {
-        await supabase
-          .from("files")
-          .delete()
-          .eq("uploaded_by", profileId)
-          .is("submission_id", null)
-          .eq("storage_bucket", STAFF_SIGNATURE_BUCKET)
-          .like("storage_path", `${profileId}/%`)
-          .neq("id", insertedFile.id);
-      }
-    } catch (metadataCleanupError) {
-      console.log("Staff signature metadata cleanup warning:", metadataCleanupError);
-    }
-
-    invalidateDashboardReadCaches();
+    const { upload } = await uploadFileToCloudinary(file, {
+      kind: "staff-signature",
+      ownerId: profileId,
+      fileName: file.name,
+    });
+    const result = await completeStaffSignatureUpload({
+      profileId,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      cloudinary: upload,
+    });
 
     return c.json({
       success: true,
-      signatureUrl: publicUrl || null,
-      signatureFileName: file.name || storagePath,
+      ...result,
     });
   } catch (error) {
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: error.message }, error.status || 400);
+    }
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
     console.log("Error uploading staff signature:", error);
     return internalServerError(c, "Failed to upload staff signature", error);
   }
@@ -1365,28 +1388,17 @@ app.post("/student-profile-asset/prepare", async (c) => {
       return badRequest("Profile photo and signature must be an image file.");
     }
 
-    const targetBucket = fileType === "photo" ? "profile" : "student_signature";
-    const storagePath = buildProfileAssetStoragePath(studentId, fileType, fileName);
-
-    await ensureStorageBucket(targetBucket);
-
-    const { data, error } = await supabase.storage
-      .from(targetBucket)
-      .createSignedUploadUrl(storagePath, { upsert: true });
-
-    if (error || !data?.token) {
-      throw new Error(error?.message || "Failed to prepare student profile asset upload");
-    }
-
     return c.json({
-      success: true,
-      bucket: targetBucket,
-      path: storagePath,
-      token: data.token,
-      signedUrl: data.signedUrl,
+      ...(await createCloudinaryUploadTicket({
+        kind: fileType === "photo" ? "profile-photo" : "student-signature",
+        ownerId: studentId,
+        fileName,
+      })),
       mimeType: resolvedMimeType,
     });
   } catch (error) {
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
     console.log("Error preparing student profile asset upload:", error);
     return internalServerError(c, "Failed to prepare student profile asset upload", error);
   }
@@ -1399,25 +1411,21 @@ app.post("/student-profile-asset/complete", async (c) => {
   if (requester.profile.role !== "student") return forbidden();
 
   let insertedFile: any = null;
-  let rollbackBucket = "";
-  let rollbackStoragePath = "";
-  let shouldRollbackStorage = true;
+  let rollbackCloudinary: any = null;
+  let shouldRollbackCloudinary = true;
 
   try {
     const payload = await c.req.json();
     const fileType = String(payload?.fileType || "").trim().toLowerCase();
     const requestedStudentId = String(payload?.studentId || "").trim();
     const fileName = String(payload?.fileName || "").trim();
-    const storagePath = String(payload?.storagePath || "").replace(/^\/+/, "");
-    const storageBucket = String(payload?.storageBucket || "").trim();
-    const resolvedMimeType = isSupportedProfileAssetMimeType(payload?.mimeType, fileName);
     const studentId =
       requester.profile.student_id ||
       requester.student?.student_id ||
       requestedStudentId;
 
-    if (!fileType || !fileName || !storagePath) {
-      return badRequest("fileType, fileName, and storagePath are required");
+    if (!fileType || !fileName) {
+      return badRequest("fileType and fileName are required");
     }
     if (fileType !== "photo" && fileType !== "signature") {
       return badRequest("Unsupported profile asset type");
@@ -1425,19 +1433,20 @@ app.post("/student-profile-asset/complete", async (c) => {
     if (!studentId) {
       return badRequest("Student ID is required");
     }
+    const { upload, folder } = await validateCloudinaryUpload(payload?.cloudinary, {
+      kind: fileType === "photo" ? "profile-photo" : "student-signature",
+      ownerId: studentId,
+      maxBytes: PROFILE_ASSET_MAX_BYTES,
+      requireImage: true,
+    });
+    rollbackCloudinary = upload;
+    const resolvedMimeType = isSupportedProfileAssetMimeType(
+      getMimeTypeFromCloudinaryUpload(upload, payload?.mimeType, fileName),
+      fileName,
+    );
     if (!resolvedMimeType) {
       return badRequest("Profile photo and signature must be an image file.");
     }
-
-    const targetBucket = fileType === "photo" ? "profile" : "student_signature";
-    if (storageBucket && storageBucket !== targetBucket) {
-      return badRequest("Profile asset upload bucket does not match the selected asset type.");
-    }
-    if (!isExpectedProfileAssetStoragePath(studentId, fileType, storagePath)) {
-      return badRequest("Profile asset upload path is invalid.");
-    }
-    rollbackBucket = targetBucket;
-    rollbackStoragePath = storagePath;
 
     let staleMetadataRows: any[] = [];
     try {
@@ -1448,25 +1457,20 @@ app.post("/student-profile-asset/complete", async (c) => {
           type: fileType,
           file_name: fileName,
           mime_type: resolvedMimeType || "application/octet-stream",
-          url: null,
-          storage_bucket: targetBucket,
-          storage_path: storagePath,
+          ...buildCloudinaryFileMetadata(upload, folder),
           uploaded_by: requester.profile.id,
         })
         .select("*")
         .single();
 
       if (fileInsertError || !inserted) {
-        console.log(
-          "Student profile asset metadata warning:",
-          fileInsertError?.message || "Missing inserted metadata row",
-        );
+        throw new Error(fileInsertError?.message || "Failed to save student profile asset metadata");
       } else {
         insertedFile = inserted;
 
         const { data: staleRows, error: staleMetadataError } = await supabase
           .from("files")
-          .select("id,storage_bucket,storage_path")
+          .select(FILE_SELECT_COLUMNS)
           .eq("uploaded_by", requester.profile.id)
           .is("submission_id", null)
           .eq("type", fileType)
@@ -1486,44 +1490,22 @@ app.post("/student-profile-asset/complete", async (c) => {
         }
       }
     } catch (metadataError) {
-      if (!isMissingFilesTableError(metadataError)) {
-        console.log("Student profile asset metadata warning:", metadataError);
-      } else {
-        console.log("Student profile asset metadata fallback:", metadataError);
-      }
-      insertedFile = null;
-      staleMetadataRows = [];
+      throw metadataError;
     }
 
     runBackgroundTask("Profile asset cleanup", async () => {
       if (staleMetadataRows?.length) {
         await deleteStoredFiles(staleMetadataRows);
       }
-      await cleanupProfileAssetStorageVersions(targetBucket, studentId, storagePath);
     });
 
     invalidateStudentRecordsCache(studentId);
-    shouldRollbackStorage = false;
-
-    let signedUrl: string | null = null;
-    try {
-      await ensureStorageBucket(targetBucket);
-      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-        .from(targetBucket)
-        .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
-      if (signedUrlError) {
-        console.log("Student profile asset signed URL warning:", signedUrlError);
-      } else {
-        signedUrl = signedUrlData?.signedUrl || null;
-      }
-    } catch (signedUrlError) {
-      console.log("Student profile asset signed URL warning:", signedUrlError);
-    }
+    shouldRollbackCloudinary = false;
 
     return c.json({
       success: true,
-      url: signedUrl,
-      fileName: storagePath,
+      url: upload.secure_url,
+      fileName: fileName || upload.public_id,
     });
   } catch (error) {
     if (insertedFile?.id) {
@@ -1534,14 +1516,22 @@ app.post("/student-profile-asset/complete", async (c) => {
       }
     }
 
-    if (shouldRollbackStorage && rollbackBucket && rollbackStoragePath) {
+    if (shouldRollbackCloudinary && rollbackCloudinary?.public_id) {
       try {
-        await removeStorageObject(rollbackBucket, rollbackStoragePath);
+        await destroyCloudinaryAsset(
+          rollbackCloudinary.public_id,
+          rollbackCloudinary.resource_type || "image",
+        );
       } catch (cleanupError) {
-        console.log("Profile asset rollback storage warning:", cleanupError);
+        console.log("Profile asset rollback Cloudinary warning:", cleanupError);
       }
     }
 
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: error.message }, error.status || 400);
+    }
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
     console.log("Error completing student profile asset upload:", error);
     return internalServerError(c, "Failed to complete student profile asset upload", error);
   }
@@ -1552,6 +1542,9 @@ app.post("/student-profile-asset", async (c) => {
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
   if (requester.profile.role !== 'student') return forbidden();
+
+  let rollbackCloudinary: any = null;
+  let shouldRollbackCloudinary = true;
 
   try {
     const formData = await c.req.formData();
@@ -1582,28 +1575,18 @@ app.post("/student-profile-asset", async (c) => {
       return badRequest('Profile photo and signature must be an image file.');
     }
 
-    const targetBucket = fileType === 'photo' ? 'profile' : 'student_signature';
-    const storagePath = buildProfileAssetStoragePath(studentId, fileType, file.name);
-    const fileBuffer = await file.arrayBuffer();
-
-    await ensureStorageBucket(targetBucket);
-
-    try {
-      await deleteStoragePrefixes([targetBucket], [`${studentId}/`, `profiles/${studentId}/`]);
-    } catch (cleanupError) {
-      console.log('Profile asset cleanup warning:', cleanupError);
-    }
-
-    const { error: uploadError } = await supabase.storage
-      .from(targetBucket)
-      .upload(storagePath, fileBuffer, {
-        contentType: resolvedMimeType || 'application/octet-stream',
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw new Error(uploadError.message);
-    }
+    const cloudinaryResult = await uploadFileToCloudinary(file, {
+      kind: fileType === 'photo' ? 'profile-photo' : 'student-signature',
+      ownerId: studentId,
+      fileName: file.name,
+    });
+    const { upload, folder } = await validateCloudinaryUpload(cloudinaryResult.upload, {
+      kind: fileType === 'photo' ? 'profile-photo' : 'student-signature',
+      ownerId: studentId,
+      maxBytes: PROFILE_ASSET_MAX_BYTES,
+      requireImage: true,
+    });
+    rollbackCloudinary = upload;
 
     const { data: insertedFile, error: fileInsertError } = await supabase
       .from('files')
@@ -1612,44 +1595,66 @@ app.post("/student-profile-asset", async (c) => {
         type: fileType,
         file_name: file.name,
         mime_type: resolvedMimeType || 'application/octet-stream',
-        url: null,
-        storage_bucket: targetBucket,
-        storage_path: storagePath,
+        ...buildCloudinaryFileMetadata(upload, folder),
         uploaded_by: requester.profile.id,
       })
       .select('*')
       .single();
 
     if (fileInsertError || !insertedFile) {
-      console.log('Profile asset metadata warning:', fileInsertError?.message || 'Missing inserted metadata row');
+      throw new Error(fileInsertError?.message || 'Failed to save student profile asset metadata');
     } else {
       try {
-        await supabase
+        const { data: staleRows, error: staleRowsError } = await supabase
           .from('files')
-          .delete()
+          .select(FILE_SELECT_COLUMNS)
           .eq('uploaded_by', requester.profile.id)
           .is('submission_id', null)
           .eq('type', fileType)
           .neq('id', insertedFile.id);
+
+        if (staleRowsError) {
+          throw new Error(staleRowsError.message);
+        }
+
+        const staleIds = (staleRows || []).map((item) => item?.id).filter(Boolean);
+        if (staleIds.length) {
+          const { error: staleDeleteError } = await supabase.from('files').delete().in('id', staleIds);
+          if (staleDeleteError) {
+            throw new Error(staleDeleteError.message);
+          }
+          runBackgroundTask('Profile asset cleanup', async () => {
+            await deleteStoredFiles(staleRows || []);
+          });
+        }
       } catch (metadataCleanupError) {
         console.log('Profile asset cleanup warning:', metadataCleanupError);
       }
     }
 
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from(targetBucket)
-      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
-
-    if (signedUrlError) {
-      throw new Error(signedUrlError.message);
-    }
+    shouldRollbackCloudinary = false;
 
     return c.json({
       success: true,
-      url: signedUrlData?.signedUrl || null,
-      fileName: storagePath,
+      url: upload.secure_url,
+      fileName: file.name || upload.public_id,
     });
   } catch (error) {
+    if (shouldRollbackCloudinary && rollbackCloudinary?.public_id) {
+      try {
+        await destroyCloudinaryAsset(
+          rollbackCloudinary.public_id,
+          rollbackCloudinary.resource_type || "image",
+        );
+      } catch (cleanupError) {
+        console.log("Profile asset rollback Cloudinary warning:", cleanupError);
+      }
+    }
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: error.message }, error.status || 400);
+    }
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
     console.log('Error uploading student profile asset:', error);
     return internalServerError(c, 'Failed to upload student profile asset', error);
   }
@@ -1689,7 +1694,7 @@ app.get("/student-profile-assets", async (c) => {
     if (targetProfileId) {
       const { data, error: assetError } = await supabase
         .from("files")
-        .select("id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url")
+        .select("id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url")
         .eq("uploaded_by", targetProfileId)
         .is("submission_id", null)
         .order("uploaded_at", { ascending: false })
@@ -2738,42 +2743,23 @@ app.post("/upload-file/prepare", async (c) => {
     if (!supportedMimeType) {
       return badRequest("Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.");
     }
-    if (originalFileSize > getOcrSpaceMaxBytes() && !resolveTinifyMimeType(supportedMimeType, fileName)) {
-      return badRequest(getLargeNonCompressibleOcrUploadMessage(getOcrSpaceMaxBytes()));
-    }
-
     const access = await requireSubmissionAccess(requester, recordId, {
       columns: "id,student_id",
     });
     if (access.response) return access.response;
 
-    const targetBucket =
-      fileType === "xray"
-        ? "lab_chest_xray"
-        : fileType === "cbc"
-          ? "lab_cbc"
-          : "lab_urinalysis";
-    const storagePath = buildLabStoragePath(recordId, fileType, fileName);
-
-    await ensureStorageBucket(targetBucket);
-
-    const { data, error } = await supabase.storage
-      .from(targetBucket)
-      .createSignedUploadUrl(storagePath, { upsert: true });
-
-    if (error || !data?.token) {
-      throw new Error(error?.message || "Failed to prepare file upload");
-    }
-
     return c.json({
-      success: true,
-      bucket: targetBucket,
-      path: storagePath,
-      token: data.token,
-      signedUrl: data.signedUrl,
+      ...(await createCloudinaryUploadTicket({
+        kind: "lab",
+        ownerId: recordId,
+        fileName,
+        extra: { labType: fileType },
+      })),
       mimeType: supportedMimeType,
     });
   } catch (error) {
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
     console.log("Error preparing file upload:", error);
     return internalServerError(c, "Failed to prepare file upload", error);
   }
@@ -2785,8 +2771,8 @@ app.post("/upload-file/complete", async (c) => {
   if (authError) return authError;
 
   let insertedFile: any = null;
-  let rollbackBucket = "";
-  let rollbackStoragePath = "";
+  let rollbackCloudinary: any = null;
+  let shouldRollbackCloudinary = true;
   let submissionStudentId = "";
 
   try {
@@ -2795,27 +2781,16 @@ app.post("/upload-file/complete", async (c) => {
     const fileType = String(payload?.fileType || "").trim().toLowerCase();
     const fileName = String(payload?.fileName || "").trim();
     const uploadedFileName = String(payload?.uploadedFileName || fileName).trim() || fileName;
-    const storagePath = String(payload?.storagePath || "").replace(/^\/+/, "");
-    const storageBucket = String(payload?.storageBucket || "").trim();
     const originalFileSize = Number(payload?.originalFileSize ?? payload?.originalSize ?? 0);
-    const uploadedFileSize = Number(payload?.uploadedFileSize ?? payload?.uploadedSize ?? 0);
-    const uploadedMimeType = String(payload?.uploadedMimeType || payload?.mimeType || "").trim();
-    const supportedMimeType = resolveLabUploadMimeType(uploadedMimeType, uploadedFileName);
 
-    if (!recordId || !fileType || !fileName || !storagePath) {
-      return badRequest("recordId, fileType, fileName, and storagePath are required");
+    if (!recordId || !fileType || !fileName) {
+      return badRequest("recordId, fileType, and fileName are required");
     }
     if (!LAB_UPLOAD_TYPES.has(fileType)) {
       return badRequest("Unsupported laboratory file type");
     }
     if (!Number.isFinite(originalFileSize) || originalFileSize <= 0) {
       return badRequest("originalFileSize is required");
-    }
-    if (!Number.isFinite(uploadedFileSize) || uploadedFileSize <= 0) {
-      return badRequest("uploadedFileSize is required");
-    }
-    if (!supportedMimeType) {
-      return badRequest("Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.");
     }
 
     const access = await requireSubmissionAccess(requester, recordId, {
@@ -2824,63 +2799,20 @@ app.post("/upload-file/complete", async (c) => {
     if (access.response) return access.response;
     submissionStudentId = String(access.submission?.student_id || "").trim();
 
-    const targetBucket =
-      fileType === "xray"
-        ? "lab_chest_xray"
-        : fileType === "cbc"
-          ? "lab_cbc"
-          : "lab_urinalysis";
+    const { upload, folder } = await validateCloudinaryUpload(payload?.cloudinary, {
+      kind: "lab",
+      ownerId: recordId,
+      fileType,
+      maxBytes: getLabUploadMaxBytes(),
+    });
+    rollbackCloudinary = upload;
 
-    if (storageBucket && storageBucket !== targetBucket) {
-      return badRequest("Laboratory upload bucket does not match the selected file type.");
-    }
-    if (!isExpectedLabStoragePath(recordId, fileType, storagePath)) {
-      return badRequest("Laboratory upload path is invalid.");
-    }
-
-    rollbackBucket = targetBucket;
-    rollbackStoragePath = storagePath;
-
-    const maxOcrBytes = getOcrSpaceMaxBytes();
-    const requiresGuaranteedCompression = originalFileSize > maxOcrBytes;
-    const tinifyMimeType = resolveTinifyMimeType(supportedMimeType, uploadedFileName);
-    let finalizedBytes = uploadedFileSize;
-    let finalizedMimeType = supportedMimeType || "application/octet-stream";
-    let optimized = false;
-
-    if (requiresGuaranteedCompression) {
-      if (!tinifyMimeType) {
-        throw new UploadValidationError(getLargeNonCompressibleOcrUploadMessage(maxOcrBytes));
-      }
-
-      const uploadedBytes = await downloadStorageObjectBytes(targetBucket, storagePath);
-      const optimizedResult = await compressImageWithTinify(uploadedBytes, tinifyMimeType);
-      finalizedBytes = optimizedResult.bytes.byteLength;
-      finalizedMimeType = optimizedResult.mimeType || finalizedMimeType;
-      optimized = finalizedBytes !== uploadedBytes.byteLength || finalizedMimeType !== supportedMimeType;
-
-      if (finalizedBytes > maxOcrBytes) {
-        throw new UploadValidationError(getTinifyStillTooLargeMessage(maxOcrBytes));
-      }
-
-      const { error: uploadError } = await supabase.storage
-        .from(targetBucket)
-        .upload(storagePath, optimizedResult.bytes, {
-          contentType: finalizedMimeType,
-          upsert: true,
-        });
-
-      if (uploadError) {
-        throw new Error(uploadError.message);
-      }
-    }
-
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from(targetBucket)
-      .createSignedUrl(storagePath, signedStorageUrlExpiresSeconds);
-
-    if (signedUrlError) {
-      throw new Error(signedUrlError.message);
+    const finalizedMimeType = resolveLabUploadMimeType(
+      getMimeTypeFromCloudinaryUpload(upload, payload?.uploadedMimeType || payload?.mimeType, uploadedFileName),
+      uploadedFileName,
+    );
+    if (!finalizedMimeType) {
+      return badRequest("Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.");
     }
 
     const { data: inserted, error: fileInsertError } = await supabase
@@ -2890,9 +2822,7 @@ app.post("/upload-file/complete", async (c) => {
         type: fileType,
         file_name: fileName,
         mime_type: finalizedMimeType || "application/octet-stream",
-        url: null,
-        storage_bucket: targetBucket,
-        storage_path: storagePath,
+        ...buildCloudinaryFileMetadata(upload, folder),
         uploaded_by: requester.profile.id,
       })
       .select("*")
@@ -2922,7 +2852,7 @@ app.post("/upload-file/complete", async (c) => {
     runBackgroundTask("Laboratory file cleanup", async () => {
       const { data: existingFiles, error: existingFilesError } = await supabase
         .from("files")
-        .select("id,storage_bucket,storage_path")
+        .select(FILE_SELECT_COLUMNS)
         .eq("submission_id", recordId)
         .eq("type", fileType);
 
@@ -2937,14 +2867,16 @@ app.post("/upload-file/complete", async (c) => {
       if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
     });
 
+    shouldRollbackCloudinary = false;
+
     return c.json({
       success: true,
-      url: signedUrlData?.signedUrl || null,
-      fileName: storagePath,
+      url: upload.secure_url,
+      fileName: fileName || upload.public_id,
       directUpload: true,
-      optimized,
+      optimized: false,
       originalSize: originalFileSize,
-      storedSize: finalizedBytes,
+      storedSize: upload.bytes,
       optimizationPending: false,
     });
   } catch (error) {
@@ -2955,23 +2887,22 @@ app.post("/upload-file/complete", async (c) => {
         console.log("Laboratory upload rollback metadata warning:", rollbackError);
       }
     }
-    if (rollbackBucket && rollbackStoragePath) {
+    if (shouldRollbackCloudinary && rollbackCloudinary?.public_id) {
       try {
-        await removeStorageObject(rollbackBucket, rollbackStoragePath);
+        await destroyCloudinaryAsset(
+          rollbackCloudinary.public_id,
+          rollbackCloudinary.resource_type || "image",
+        );
       } catch (cleanupError) {
-        console.log("Laboratory upload rollback storage warning:", cleanupError);
+        console.log("Laboratory upload rollback Cloudinary warning:", cleanupError);
       }
     }
 
     if (error instanceof UploadValidationError) {
       return c.json({ error: error.message }, error.status || 400);
     }
-    if (error instanceof TinifyConfigurationError) {
-      return c.json({ error: error.message }, 503);
-    }
-    if (error instanceof TinifyRequestError) {
-      return c.json({ error: error.message }, error.status || 502);
-    }
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
 
     console.log("Error completing file upload:", error);
     return internalServerError(c, "Failed to complete file upload", error);
@@ -2982,6 +2913,10 @@ app.post("/upload-file", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
+
+  let insertedFile: any = null;
+  let rollbackCloudinary: any = null;
+  let shouldRollbackCloudinary = true;
 
   try {
     const formData = await c.req.formData();
@@ -3011,56 +2946,44 @@ app.post("/upload-file", async (c) => {
     if (access.response) return access.response;
     const submissionStudentId = String(access.submission?.student_id || "").trim();
 
-    const targetBucket =
-      fileType === 'xray'
-        ? 'lab_chest_xray'
-        : fileType === 'cbc'
-          ? 'lab_cbc'
-          : 'lab_urinalysis';
-    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const storagePath = `${recordId}/${fileType}_${Date.now()}_${safeFileName}`;
-    const [preparedFile] = await Promise.all([
-      prepareLabUploadFile(file, supportedMimeType),
-      ensureStorageBucket(targetBucket),
-    ]);
-
-    const { error: uploadError } = await supabase.storage
-      .from(targetBucket)
-      .upload(storagePath, preparedFile.bytes, {
-        contentType: preparedFile.mimeType || 'application/octet-stream',
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw new Error(uploadError.message);
+    const cloudinaryResult = await uploadFileToCloudinary(file, {
+      kind: "lab",
+      ownerId: recordId,
+      fileName: file.name,
+      extra: { labType: fileType },
+    });
+    const { upload, folder } = await validateCloudinaryUpload(cloudinaryResult.upload, {
+      kind: "lab",
+      ownerId: recordId,
+      fileType,
+      maxBytes: maxLabUploadBytes,
+    });
+    rollbackCloudinary = upload;
+    const finalizedMimeType = resolveLabUploadMimeType(
+      getMimeTypeFromCloudinaryUpload(upload, supportedMimeType, file.name),
+      file.name,
+    );
+    if (!finalizedMimeType) {
+      return badRequest('Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.');
     }
 
-    const [signedUrlResult, insertResult] = await Promise.all([
-      supabase.storage.from(targetBucket).createSignedUrl(storagePath, signedStorageUrlExpiresSeconds),
-      supabase
-        .from('files')
-        .insert({
-          submission_id: recordId,
-          type: fileType,
-          file_name: file.name,
-          mime_type: preparedFile.mimeType || 'application/octet-stream',
-          url: null,
-          storage_bucket: targetBucket,
-          storage_path: storagePath,
-          uploaded_by: requester.profile.id,
-        })
-        .select('*')
-        .single(),
-    ]);
+    const { data: inserted, error: fileInsertError } = await supabase
+      .from('files')
+      .insert({
+        submission_id: recordId,
+        type: fileType,
+        file_name: file.name,
+        mime_type: finalizedMimeType || 'application/octet-stream',
+        ...buildCloudinaryFileMetadata(upload, folder),
+        uploaded_by: requester.profile.id,
+      })
+      .select('*')
+      .single();
 
-    const { data: signedUrlData, error: signedUrlError } = signedUrlResult;
-    if (signedUrlError) throw new Error(signedUrlError.message);
-
-    const { data: insertedFile, error: fileInsertError } = insertResult;
-
-    if (fileInsertError || !insertedFile) {
+    if (fileInsertError || !inserted) {
       throw new Error(fileInsertError?.message || 'Failed to save file metadata');
     }
+    insertedFile = inserted;
 
     const labTable =
       fileType === 'xray'
@@ -3075,25 +2998,12 @@ app.post("/upload-file", async (c) => {
       throw new Error(labUpsertError.message);
     }
 
-    if (preparedFile.optimizationPending) {
-      runBackgroundTask("Laboratory file optimization", async () => {
-        await optimizeStoredLabUpload({
-          fileId: insertedFile.id,
-          bucket: targetBucket,
-          storagePath,
-          bytes: preparedFile.bytes,
-          tinifyMimeType: preparedFile.tinifyMimeType,
-          fallbackMimeType: preparedFile.mimeType,
-        });
-        if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
-      });
-    }
     if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
 
     runBackgroundTask("Laboratory file cleanup", async () => {
       const { data: existingFiles, error: existingFilesError } = await supabase
         .from('files')
-        .select('id,storage_bucket,storage_path')
+        .select(FILE_SELECT_COLUMNS)
         .eq('submission_id', recordId)
         .eq('type', fileType);
 
@@ -3107,22 +3017,40 @@ app.post("/upload-file", async (c) => {
       await cleanupStaleLabFiles(staleFiles);
       if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
     });
+    shouldRollbackCloudinary = false;
+
     return c.json({
       success: true,
-      url: signedUrlData?.signedUrl,
-      fileName: storagePath,
-      optimized: preparedFile.optimized,
-      optimizationPending: preparedFile.optimizationPending,
-      originalSize: preparedFile.originalSize,
-      storedSize: preparedFile.storedSize,
+      url: upload.secure_url,
+      fileName: file.name || upload.public_id,
+      optimized: false,
+      optimizationPending: false,
+      originalSize: file.size,
+      storedSize: upload.bytes,
     });
   } catch (error) {
-    if (error instanceof TinifyConfigurationError) {
-      return c.json({ error: error.message }, 503);
+    if (insertedFile?.id) {
+      try {
+        await supabase.from("files").delete().eq("id", insertedFile.id);
+      } catch (rollbackError) {
+        console.log("Laboratory upload rollback metadata warning:", rollbackError);
+      }
     }
-    if (error instanceof TinifyRequestError) {
-      return c.json({ error: error.message }, error.status || 502);
+    if (shouldRollbackCloudinary && rollbackCloudinary?.public_id) {
+      try {
+        await destroyCloudinaryAsset(
+          rollbackCloudinary.public_id,
+          rollbackCloudinary.resource_type || "image",
+        );
+      } catch (cleanupError) {
+        console.log("Laboratory upload rollback Cloudinary warning:", cleanupError);
+      }
     }
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: error.message }, error.status || 400);
+    }
+    const cloudinaryError = cloudinaryRouteError(c, error);
+    if (cloudinaryError) return cloudinaryError;
     console.log('Error in file upload:', error);
     return internalServerError(c, 'Failed to upload file', error);
   }

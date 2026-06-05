@@ -570,7 +570,7 @@ async function loadRelatedData(rows: any[]) {
       ? supabase
           .from("files")
           .select(
-            "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by",
+            "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by",
           )
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
@@ -672,7 +672,7 @@ async function loadRelatedData(rows: any[]) {
     ? await supabase
         .from("files")
         .select(
-          "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by",
+          "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by",
         )
         .in("uploaded_by", staffProfileIds)
         .is("submission_id", null)
@@ -729,7 +729,7 @@ async function loadRelatedData(rows: any[]) {
     ? await supabase
         .from("files")
         .select(
-          "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by",
+          "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by",
         )
         .in("uploaded_by", studentProfileIds)
         .is("submission_id", null)
