@@ -14,6 +14,7 @@ import {
 } from '../../lib/api';
 
 const ADMIN_QUERY_STALE_TIME_MS = 60_000;
+const ADMIN_QUERY_GC_TIME_MS = 10 * 60_000;
 const ADMIN_ANALYTICS_REFRESH_INTERVAL_MS = 90_000;
 const ADMIN_SUBMISSIONS_REFRESH_INTERVAL_MS = 60_000;
 const ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS = 120_000;
@@ -48,6 +49,7 @@ export function adminAnalyticsQueryOptions() {
     queryKey: adminAnalyticsQueryKey(),
     queryFn: getAnalytics,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
+    gcTime: ADMIN_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_ANALYTICS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -64,6 +66,7 @@ export function adminSubmissionsQueryOptions() {
       return data.submissions || [];
     },
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
+    gcTime: ADMIN_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_SUBMISSIONS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -77,6 +80,7 @@ export function adminStaffUsersQueryOptions() {
     queryKey: adminStaffUsersQueryKey(),
     queryFn: getStaffUsers,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
+    gcTime: ADMIN_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -90,6 +94,7 @@ export function adminUserAccountsQueryOptions() {
     queryKey: adminUserAccountsQueryKey(),
     queryFn: getUserAccounts,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
+    gcTime: ADMIN_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -103,6 +108,7 @@ export function adminArchivedAccountsQueryOptions() {
     queryKey: adminArchivedAccountsQueryKey(),
     queryFn: getArchivedUserAccounts,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
+    gcTime: ADMIN_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_ACCOUNTS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -116,6 +122,7 @@ export function adminSystemSettingsQueryOptions() {
     queryKey: adminSystemSettingsQueryKey(),
     queryFn: getAdminSystemSettings,
     staleTime: ADMIN_QUERY_STALE_TIME_MS,
+    gcTime: ADMIN_QUERY_GC_TIME_MS,
     refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_SETTINGS_REFRESH_INTERVAL_MS),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,

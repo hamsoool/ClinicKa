@@ -100,6 +100,13 @@ const PROFILE_ASSET_ALLOWED_EXTENSIONS = new Set([
   "heif",
   "webp",
 ]);
+const PROFILE_SELECT_COLUMNS = "id,role,email,password_setup_completed,student_id,first_name,last_name,department,course,created_at,updated_at";
+const STUDENT_SELECT_COLUMNS = "student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at";
+const STAFF_PROFILE_SELECT_COLUMNS = "id,profile_id,email,first_name,last_name,middle_initial,position,phone,is_active";
+const ARCHIVED_ACCOUNT_SELECT_COLUMNS = "id,user_id,role,email,display_name,account_identifier,archive_reason,archived_at,snapshot";
+const ARCHIVE_PROFILE_SELECT_COLUMNS = "id,role,email,first_name,last_name,department,course,student_id";
+const ARCHIVE_STAFF_SELECT_COLUMNS = "id,profile_id,email,first_name,last_name,position,is_active";
+const ARCHIVE_STUDENT_SELECT_COLUMNS = "student_id,profile_id,first_name,last_name,department,course,year_level";
 const FILE_SELECT_COLUMNS = "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by";
 const FILE_SELECT_COLUMNS_LEGACY = "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by";
 
@@ -444,7 +451,7 @@ async function insertFileMetadataWithFallback(payload: Record<string, unknown>) 
   const primary = await supabase
     .from("files")
     .insert(payload)
-    .select("*")
+    .select(FILE_SELECT_COLUMNS)
     .single();
 
   if (!primary.error || !isMissingCloudinaryFilesColumnError(primary.error)) {
@@ -465,7 +472,7 @@ async function insertFileMetadataWithFallback(payload: Record<string, unknown>) 
   return await supabase
     .from("files")
     .insert(fallbackPayload)
-    .select("*")
+    .select(FILE_SELECT_COLUMNS_LEGACY)
     .single();
 }
 
@@ -1156,7 +1163,7 @@ app.put("/student-profile", async (c) => {
         student_id: studentId,
       })
       .eq('id', requester.profile.id)
-      .select('*')
+      .select(PROFILE_SELECT_COLUMNS)
       .single();
 
     if (profileError || !updatedProfile) {
@@ -1185,7 +1192,7 @@ app.put("/student-profile", async (c) => {
       .upsert(studentPayload, {
         onConflict: 'student_id',
       })
-      .select('*')
+      .select(STUDENT_SELECT_COLUMNS)
       .single();
 
     if (studentError || !updatedStudent) {
@@ -1235,7 +1242,7 @@ app.put("/staff-profile", async (c) => {
           email,
         })
         .eq("id", requester.profile.id)
-        .select("*")
+        .select(PROFILE_SELECT_COLUMNS)
         .single();
 
       if (profileError || !profileRow) {
@@ -1259,7 +1266,7 @@ app.put("/staff-profile", async (c) => {
       .upsert(staffPayload, {
         onConflict: "profile_id",
       })
-      .select("*")
+      .select(STAFF_PROFILE_SELECT_COLUMNS)
       .single();
 
     if (staffError || !updatedStaff) {
@@ -1998,7 +2005,7 @@ app.post("/submit-record", async (c) => {
         bmi: data.bmi || null,
         data_privacy_consent: Boolean(data.dataPrivacyConsent),
       })
-      .select('*')
+      .select(SUBMISSION_LIST_COLUMNS)
       .single();
 
     if (submissionError || !insertedSubmission) {
@@ -3585,7 +3592,7 @@ app.post("/super-admin/administrators/:archiveId/restore", async (c) => {
 
     const { data: archivedAccount, error: archiveLookupError } = await supabase
       .from('archived_accounts')
-      .select('*')
+      .select(ARCHIVED_ACCOUNT_SELECT_COLUMNS)
       .eq('id', archiveId)
       .maybeSingle();
 
@@ -3713,7 +3720,7 @@ app.post("/admin/archive-account", async (c) => {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('*')
+      .select(ARCHIVE_PROFILE_SELECT_COLUMNS)
       .eq('id', userId)
       .maybeSingle();
 
@@ -3729,9 +3736,9 @@ app.post("/admin/archive-account", async (c) => {
     }
 
     const [{ data: linkedStaff }, { data: linkedStudent }, { data: submissions, error: submissionsError }] = await Promise.all([
-      supabase.from('staff_users').select('*').eq('profile_id', userId).maybeSingle(),
+      supabase.from('staff_users').select(ARCHIVE_STAFF_SELECT_COLUMNS).eq('profile_id', userId).maybeSingle(),
       profile.student_id
-        ? supabase.from('students').select('*').eq('student_id', profile.student_id).maybeSingle()
+        ? supabase.from('students').select(ARCHIVE_STUDENT_SELECT_COLUMNS).eq('student_id', profile.student_id).maybeSingle()
         : Promise.resolve({ data: null }),
       profile.student_id
         ? supabase.from('submissions').select('id,submitted_at').eq('student_id', profile.student_id)
@@ -3830,7 +3837,7 @@ app.post("/admin/restore-account/:archiveId", async (c) => {
 
     const { data: archivedAccount, error: archiveLookupError } = await supabase
       .from('archived_accounts')
-      .select('*')
+      .select(ARCHIVED_ACCOUNT_SELECT_COLUMNS)
       .eq('id', archiveId)
       .maybeSingle();
 

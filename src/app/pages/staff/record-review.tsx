@@ -73,6 +73,8 @@ import {
   normalizeProgramForDepartment,
   resolveDepartmentValue,
 } from '../student/medical-form/constants';
+import { getSubmissionSlotLabel } from '../../lib/academic-year';
+import { getYearLevelLabel } from '../../lib/student-year';
 
 type SubmissionDetails = SubmissionRecord & {
   photoUrl?: string;
@@ -135,7 +137,8 @@ type RecordForm = {
   middleInitial: string;
   department: string;
   course: string;
-  year: string;
+  yearLevel: string;
+  recordSlot: string;
   age: string;
   sex: string;
   birthday: string;
@@ -683,7 +686,8 @@ function createRecordForm(submission?: SubmissionDetails | null): RecordForm {
     middleInitial: sanitizeMiddleInitial(submission?.middleInitial || ''),
     department,
     course: normalizeProgramForDepartment(department, submission?.course || ''),
-    year: submission?.year || '',
+    yearLevel: submission?.studentYearLevel || '',
+    recordSlot: submission?.year || '',
     age: String(submission?.age || '').replace(/\D/g, '').slice(0, MAX_AGE_LENGTH),
     sex: normalizeSexValue(submission?.sex || ''),
     birthday: normalizeDateInputValue(submission?.birthday),
@@ -1053,7 +1057,7 @@ export default function StaffRecordReview() {
           middleInitial: recordForm.middleInitial,
           department: recordForm.department,
           course: recordForm.course,
-          year: recordForm.year,
+          year: recordForm.recordSlot,
           age: recordForm.age,
           sex: recordForm.sex,
           birthday: recordForm.birthday,
@@ -1099,7 +1103,8 @@ export default function StaffRecordReview() {
         middleInitial: recordForm.middleInitial,
         department: recordForm.department,
         course: recordForm.course,
-        year: recordForm.year,
+        year: recordForm.recordSlot,
+        studentYearLevel: recordForm.yearLevel,
         age: recordForm.age,
         sex: recordForm.sex,
         birthday: recordForm.birthday,
@@ -2153,7 +2158,8 @@ export default function StaffRecordReview() {
   ].filter(Boolean).length;
   const reportedConditionCount = countVerifiedConditions(recordForm.medicalHistory);
   const studentDisplayName = [recordForm.firstName, recordForm.lastName].filter(Boolean).join(' ') || 'Student';
-  const studentYearLevel = recordForm.year ? `Year ${recordForm.year}` : 'Year not set';
+  const studentYearLevel = recordForm.yearLevel ? getYearLevelLabel(recordForm.yearLevel) : 'Year level not set';
+  const recordSlotLabel = recordForm.recordSlot ? getSubmissionSlotLabel(recordForm.recordSlot) : 'Record slot not set';
   const submittedDate = new Date(submission.submittedAt).toLocaleDateString();
   const persistedStatus = submission.status;
   const hasUnsavedStatusChange = reviewStatus !== persistedStatus;
@@ -2336,7 +2342,7 @@ export default function StaffRecordReview() {
               middleInitial: recordForm.middleInitial,
               department: recordForm.department,
               course: recordForm.course,
-              yearLevel: recordForm.year,
+              yearLevel: recordForm.yearLevel,
               age: recordForm.age,
               sex: recordForm.sex,
               birthday: recordForm.birthday,
@@ -2347,6 +2353,7 @@ export default function StaffRecordReview() {
             readOnly
             title="Student Profile"
             yearLevelLabel="Year Level"
+            extraFields={[{ id: 'recordSlot', label: 'Record Slot', value: recordSlotLabel }]}
           />
 
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">

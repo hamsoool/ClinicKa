@@ -353,6 +353,7 @@ export default function StaffDashboard() {
       return Array.isArray(response?.submissions) ? response.submissions as SubmissionRecord[] : [];
     },
     staleTime: 45_000,
+    gcTime: 8 * 60_000,
     refetchInterval: () => getActiveAjaxRefetchInterval(60_000),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -763,7 +764,7 @@ export default function StaffDashboard() {
                         ) : null}
                       </div>
                       <p className="mt-1 break-words text-xs text-on-surface-variant">
-                        {submission.studentId} | {formatSubmittedYearLevel(submission.year)} | {submission.course}
+                        {submission.studentId} | {formatSubmittedYearLevel(submission.studentYearLevel)} | {submission.course}
                       </p>
                       <p className="mt-2 text-sm text-on-surface-variant">
                         Submitted {formatDate(submission.submittedAt)}

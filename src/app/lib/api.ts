@@ -56,11 +56,64 @@ const GC_DOMAIN = 'gordoncollege.edu.ph';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
 export const PASSWORD_RESET_COOLDOWN_SECONDS = 300;
 const PASSWORD_RESET_COOLDOWN_KEY_PREFIX = 'lastPasswordResetEmailSent_';
+const LAB_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_TARGET_BYTES = 950 * 1024;
 const LAB_UPLOAD_CANVAS_MAX_DIMENSIONS = [2200, 1800, 1500, 1200];
 const LAB_UPLOAD_CANVAS_QUALITIES = [0.86, 0.76, 0.66, 0.56];
+const IMAGE_UPLOAD_OPTIMIZE_THRESHOLD_BYTES = 512 * 1024;
+const IMAGE_UPLOAD_TARGET_BYTES = 450 * 1024;
+const IMAGE_UPLOAD_CANVAS_MAX_DIMENSIONS = [1600, 1200, 960];
+const IMAGE_UPLOAD_CANVAS_QUALITIES = [0.86, 0.76, 0.66];
 const CURRENT_ACADEMIC_YEAR_SETTING_KEY = 'current_academic_year';
+const PROFILE_SELECT_COLUMNS = 'id,role,email,password_setup_completed,student_id,first_name,last_name,department,course,created_at,updated_at';
+const STUDENT_SELECT_COLUMNS = 'student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at';
+const STAFF_SELECT_COLUMNS = 'id,profile_id,email,first_name,last_name,middle_initial,position,phone,is_active';
+const SUBMISSION_LIST_COLUMNS = [
+  'id',
+  'student_id',
+  'first_name',
+  'last_name',
+  'middle_initial',
+  'course',
+  'department',
+  'year_level',
+  'academic_year',
+  'status',
+  'reviewed_by',
+  'submitted_at',
+  'updated_at',
+  'staff_notes',
+  'age',
+  'sex',
+  'birthday',
+  'civil_status',
+  'contact_number',
+  'address',
+  'allergy_details',
+  'had_operation',
+  'operation_details',
+  'blood_pressure',
+  'weight',
+  'height',
+  'bmi',
+  'lab_test_location',
+  'lab_test_clinic',
+  'cbc_test_clinic',
+  'urinalysis_test_clinic',
+  'xray_test_clinic',
+].join(',');
+const SUBMISSION_SUMMARY_COLUMNS = 'id,student_id,first_name,last_name,middle_initial,course,department,year_level,academic_year,status,reviewed_by,submitted_at,updated_at';
+const EMERGENCY_CONTACT_SELECT_COLUMNS = 'submission_id,name,relationship,phone,address';
+const MEDICAL_HISTORY_SELECT_COLUMNS = 'submission_id,allergy,asthma,chicken_pox,diabetes,dysmenorrhea,epilepsy_seizure,heart_disorder,hepatitis,hypertension,measles,mumps,anxiety_disorder,panic_attack,pneumonia,ptb_primary_complex,typhoid_fever,covid19,uti';
+const STAFF_MEASUREMENTS_SELECT_COLUMNS = 'submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by,updated_at';
+const LAB_CHEST_XRAY_SELECT_COLUMNS = 'submission_id,xray_date,xray_result,xray_findings,file_id,file_url,file_name,mime_type,media_updated_at';
+const LAB_CBC_SELECT_COLUMNS = 'submission_id,cbc_date,hemoglobin,hematocrit,wbc,platelet_count,blood_type,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at';
+const LAB_URINALYSIS_SELECT_COLUMNS = 'submission_id,urinalysis_date,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at';
+const CERTIFICATE_SELECT_COLUMNS = 'submission_id,findings_normal,diagnosis,remarks,purpose,control_no,issued_date,issued_at,license_no,signatory_name,pdf_url,issued_by';
+const FILE_SELECT_COLUMNS = 'id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by';
+const ANNOUNCEMENT_SELECT_COLUMNS = 'id,title,description,date_posted,image_path,is_published,created_at,updated_at,created_by';
 let studentProfileAssetsRouteUnavailable = false;
 let authClient: SupabaseClient | null = null;
 
@@ -86,6 +139,36 @@ function getCanvasUploadFileName(fileName: string) {
   return `${withoutExtension || 'lab-result'}.jpg`;
 }
 
+function formatUploadSize(bytes: number) {
+  const megabytes = bytes / (1024 * 1024);
+  return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`;
+}
+
+function getFileExtension(fileName?: string | null) {
+  return String(fileName || '').split('.').pop()?.toLowerCase() || '';
+}
+
+function isSupportedImageUpload(file: File) {
+  const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+  if (mimeType.startsWith('image/')) return true;
+  return ['png', 'jpg', 'jpeg', 'heic', 'heif', 'webp'].includes(getFileExtension(file.name));
+}
+
+function isSupportedLabUpload(file: File) {
+  const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+  if (mimeType.startsWith('image/') || mimeType === 'application/pdf') return true;
+  return /\.(pdf|png|jpe?g|heic|heif|webp|avif|gif|tiff?|bmp)$/i.test(file.name || '');
+}
+
+function assertUploadFileSize(file: File, maxBytes: number, label: string) {
+  if (file.size <= 0) {
+    throw new Error(`${label} is empty.`);
+  }
+  if (file.size > maxBytes) {
+    throw new Error(`${label} must be ${formatUploadSize(maxBytes)} or smaller.`);
+  }
+}
+
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
   return new Promise<Blob | null>((resolve) => {
     canvas.toBlob((blob) => resolve(blob), type, quality);
@@ -108,9 +191,17 @@ async function loadImageForUpload(file: File) {
   }
 }
 
-async function optimizeLabImageInBrowser(file: File) {
+async function optimizeImageInBrowser(
+  file: File,
+  options: {
+    thresholdBytes: number;
+    targetBytes: number;
+    maxDimensions: number[];
+    qualities: number[];
+  },
+) {
   if (
-    file.size <= LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES ||
+    file.size <= options.thresholdBytes ||
     !file.type.toLowerCase().startsWith('image/') ||
     typeof window === 'undefined' ||
     typeof document === 'undefined' ||
@@ -126,7 +217,7 @@ async function optimizeLabImageInBrowser(file: File) {
     if (!sourceWidth || !sourceHeight) return file;
 
     let bestBlob: Blob | null = null;
-    for (const maxDimension of LAB_UPLOAD_CANVAS_MAX_DIMENSIONS) {
+    for (const maxDimension of options.maxDimensions) {
       const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
       const width = Math.max(1, Math.round(sourceWidth * scale));
       const height = Math.max(1, Math.round(sourceHeight * scale));
@@ -140,11 +231,11 @@ async function optimizeLabImageInBrowser(file: File) {
       context.fillRect(0, 0, width, height);
       context.drawImage(image, 0, 0, width, height);
 
-      for (const quality of LAB_UPLOAD_CANVAS_QUALITIES) {
+      for (const quality of options.qualities) {
         const blob = await canvasToBlob(canvas, 'image/jpeg', quality);
         if (!blob) continue;
         if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
-        if (blob.size <= LAB_UPLOAD_TARGET_BYTES) {
+        if (blob.size <= options.targetBytes) {
           return new File([blob], getCanvasUploadFileName(file.name), {
             type: 'image/jpeg',
             lastModified: file.lastModified,
@@ -164,6 +255,42 @@ async function optimizeLabImageInBrowser(file: File) {
   }
 
   return file;
+}
+
+async function optimizeLabImageInBrowser(file: File) {
+  return optimizeImageInBrowser(file, {
+    thresholdBytes: LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES,
+    targetBytes: LAB_UPLOAD_TARGET_BYTES,
+    maxDimensions: LAB_UPLOAD_CANVAS_MAX_DIMENSIONS,
+    qualities: LAB_UPLOAD_CANVAS_QUALITIES,
+  });
+}
+
+async function optimizeProfileImageInBrowser(file: File) {
+  return optimizeImageInBrowser(file, {
+    thresholdBytes: IMAGE_UPLOAD_OPTIMIZE_THRESHOLD_BYTES,
+    targetBytes: IMAGE_UPLOAD_TARGET_BYTES,
+    maxDimensions: IMAGE_UPLOAD_CANVAS_MAX_DIMENSIONS,
+    qualities: IMAGE_UPLOAD_CANVAS_QUALITIES,
+  });
+}
+
+async function prepareLabFileForUpload(file: File) {
+  if (!isSupportedLabUpload(file)) {
+    throw new Error('Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.');
+  }
+  const optimizedFile = await optimizeLabImageInBrowser(file);
+  assertUploadFileSize(optimizedFile, LAB_UPLOAD_MAX_BYTES, 'Laboratory result file');
+  return optimizedFile;
+}
+
+async function prepareImageFileForUpload(file: File, label: string) {
+  if (!isSupportedImageUpload(file)) {
+    throw new Error(`${label} must be an image file.`);
+  }
+  const optimizedFile = await optimizeProfileImageInBrowser(file);
+  assertUploadFileSize(optimizedFile, IMAGE_UPLOAD_MAX_BYTES, label);
+  return optimizedFile;
 }
 
 export type UserRole = 'student' | 'staff' | 'admin' | 'super_admin';
@@ -1611,6 +1738,7 @@ function mapSubmission(row: any, related: Record<string, any>) {
     course: row.course || student.course || row.department || student.department || '',
     department: row.department || student.department || row.course || student.course || '',
     year: String(row.year_level || ''),
+    studentYearLevel: student?.year_level ? String(student.year_level) : '',
     academicYear: row.academic_year || undefined,
     status: row.status,
     submittedAt: row.submitted_at,
@@ -1706,16 +1834,16 @@ async function loadRelatedData(rows: any[]) {
     files,
   ] = await Promise.all([
     studentIds.length
-      ? restRequest<any[]>('students', `student_id=in.(${studentIdList})`)
+      ? restRequest<any[]>('students', `student_id=in.(${studentIdList})&select=${STUDENT_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('emergency_contacts', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('emergency_contacts', `submission_id=in.(${idList})&select=${EMERGENCY_CONTACT_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('medical_history', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('medical_history', `submission_id=in.(${idList})&select=${MEDICAL_HISTORY_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     reviewerIds.length
       ? restRequestStaffUsers(
@@ -1724,19 +1852,19 @@ async function loadRelatedData(rows: any[]) {
         )
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})&select=${LAB_CHEST_XRAY_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('lab_cbc', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('lab_cbc', `submission_id=in.(${idList})&select=${LAB_CBC_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('lab_urinalysis', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('lab_urinalysis', `submission_id=in.(${idList})&select=${LAB_URINALYSIS_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('certificates', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('certificates', `submission_id=in.(${idList})&select=${CERTIFICATE_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('files', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('files', `submission_id=in.(${idList})&select=${FILE_SELECT_COLUMNS}`)
       : Promise.resolve([]),
   ]);
 
@@ -1828,7 +1956,7 @@ async function loadRelatedData(rows: any[]) {
   const profileAssetFilesRaw = studentProfileIds.length
     ? await restRequest<any[]>(
         'files',
-        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
+        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&select=${FILE_SELECT_COLUMNS}&order=uploaded_at.desc`,
       ).catch(() => [])
     : [];
   const normalizedProfileAssetFiles = normalizeProfileAssetRows(
@@ -1912,30 +2040,30 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
         )
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('emergency_contacts', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('emergency_contacts', `submission_id=in.(${idList})&select=${EMERGENCY_CONTACT_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('medical_history', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('medical_history', `submission_id=in.(${idList})&select=${MEDICAL_HISTORY_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})&select=${LAB_CHEST_XRAY_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('lab_cbc', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('lab_cbc', `submission_id=in.(${idList})&select=${LAB_CBC_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('lab_urinalysis', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('lab_urinalysis', `submission_id=in.(${idList})&select=${LAB_URINALYSIS_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('certificates', `submission_id=in.(${idList})`)
+      ? restRequest<any[]>('certificates', `submission_id=in.(${idList})&select=${CERTIFICATE_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>(
           'files',
-          `submission_id=in.(${idList})&type=in.(photo,signature)&order=uploaded_at.desc`,
+          `submission_id=in.(${idList})&type=in.(photo,signature)&select=${FILE_SELECT_COLUMNS}&order=uploaded_at.desc`,
         ).catch(() => [])
       : Promise.resolve([]),
     reviewerIds.length
@@ -2038,7 +2166,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   const profileAssetFilesRaw = studentProfileIds.length
     ? await restRequest<any[]>(
         'files',
-        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
+        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&select=${FILE_SELECT_COLUMNS}&order=uploaded_at.desc`,
       ).catch(() => [])
     : [];
   const normalizedProfileAssetFiles = normalizeProfileAssetRows(
@@ -2100,7 +2228,7 @@ async function getMappedCertificatePreviewSubmissions(studentId: string) {
 
   const rows = await restRequest<any[]>(
     'submissions',
-    `student_id=eq.${encodeURIComponent(normalizedStudentId)}&status=eq.approved&order=submitted_at.desc`,
+    `student_id=eq.${encodeURIComponent(normalizedStudentId)}&status=eq.approved&select=${SUBMISSION_LIST_COLUMNS}&order=submitted_at.desc`,
   );
   if (!rows.length) return [] as SubmissionRecord[];
 
@@ -2109,7 +2237,10 @@ async function getMappedCertificatePreviewSubmissions(studentId: string) {
 }
 
 async function getMappedSubmissions(query: string) {
-  const rows = await restRequest<any[]>('submissions', query);
+  const normalizedQuery = String(query || '').includes('select=')
+    ? query
+    : `select=${SUBMISSION_LIST_COLUMNS}${query ? `&${query}` : ''}`;
+  const rows = await restRequest<any[]>('submissions', normalizedQuery);
   const related = await loadRelatedData(rows || []);
   return (rows || []).map((row: any) => mapSubmission(row, related));
 }
@@ -2374,7 +2505,7 @@ export async function getMe(token?: string | null) {
       const { firstName, lastName } = deriveNamePartsFromUser(user);
       const profileRows = await restRequest<any[]>(
         'profiles',
-        `id=eq.${user.id}&select=*`,
+        `id=eq.${user.id}&select=${PROFILE_SELECT_COLUMNS}`,
         {
           token,
           headers: { Prefer: 'count=exact' },
@@ -2391,7 +2522,7 @@ export async function getMe(token?: string | null) {
         resolvedProfile = (
           await restRequest<any[]>(
             'profiles',
-            'select=*',
+            `select=${PROFILE_SELECT_COLUMNS}`,
             {
               method: 'POST',
               token,
@@ -2430,7 +2561,7 @@ export async function getMe(token?: string | null) {
         resolvedProfile = (
           await restRequest<any[]>(
             'profiles',
-            `id=eq.${user.id}&select=*`,
+            `id=eq.${user.id}&select=${PROFILE_SELECT_COLUMNS}`,
             {
               method: 'PATCH',
               token,
@@ -2465,11 +2596,11 @@ export async function getMe(token?: string | null) {
         resolvedProfile.student_id
           ? restRequest<any[]>(
               'students',
-              `student_id=eq.${encodeURIComponent(resolvedProfile.student_id)}&select=*`,
+              `student_id=eq.${encodeURIComponent(resolvedProfile.student_id)}&select=${STUDENT_SELECT_COLUMNS}`,
               { token },
             )
           : Promise.resolve([]),
-        restRequest<any[]>('staff_users', `profile_id=eq.${user.id}&select=*`, { token }),
+        restRequest<any[]>('staff_users', `profile_id=eq.${user.id}&select=${STAFF_SELECT_COLUMNS}`, { token }),
       ]);
 
       let resolvedStudent = studentRows[0] || null;
@@ -2489,7 +2620,7 @@ export async function getMe(token?: string | null) {
           : `student_id=eq.${encodeURIComponent(derivedStudentId || '')}`;
         const patchedStudents = await restRequest<any[]>(
           'students',
-          `${studentMatchQuery}&select=*`,
+          `${studentMatchQuery}&select=${STUDENT_SELECT_COLUMNS}`,
           {
             method: 'PATCH',
             token,
@@ -2602,7 +2733,7 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
 
   const profileRows = await restRequest<any[]>(
     'profiles',
-    `id=eq.${encodeURIComponent(me.profile.id)}&select=*`,
+    `id=eq.${encodeURIComponent(me.profile.id)}&select=${PROFILE_SELECT_COLUMNS}`,
     {
       method: 'PATCH',
       headers: {
@@ -2625,7 +2756,7 @@ export async function updateStudentProfile(data: StudentProfileUpdateInput) {
 
   const studentRows = await restRequest<any[]>(
     'students',
-    'on_conflict=student_id&select=*',
+    `on_conflict=student_id&select=${STUDENT_SELECT_COLUMNS}`,
     {
       method: 'POST',
       headers: {
@@ -2770,7 +2901,7 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
   if (payload.applyAcrossRoles) {
     updatedProfileRows = await restRequest<any[]>(
       'profiles',
-      `id=eq.${encodeURIComponent(me.profile.id)}&select=*`,
+      `id=eq.${encodeURIComponent(me.profile.id)}&select=${PROFILE_SELECT_COLUMNS}`,
       {
         method: 'PATCH',
         headers: {
@@ -2891,6 +3022,7 @@ export async function uploadStaffSignature(file: File) {
   if (!token || !supabaseUrl || !publicAnonKey) {
     throw new Error('You must be signed in to upload files.');
   }
+  const transportFile = await prepareImageFileForUpload(file, 'Staff signature');
 
   const prepare = await apiRequest<CloudinaryUploadTicket>(
     '/functions/v1/server/staff-signature/prepare',
@@ -2900,15 +3032,15 @@ export async function uploadStaffSignature(file: File) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        size: file.size,
+        fileName: transportFile.name,
+        mimeType: transportFile.type || file.type || 'application/octet-stream',
+        size: transportFile.size,
       }),
     },
   );
   assertCloudinaryUploadTicket(prepare, 'Staff signature upload');
 
-  const cloudinary = await uploadToCloudinary(prepare, file);
+  const cloudinary = await uploadToCloudinary(prepare, transportFile);
   const payload = await apiRequest<{ success: true; signatureUrl?: string | null; signatureFileName?: string | null }>(
     '/functions/v1/server/staff-signature/complete',
     {
@@ -2917,8 +3049,8 @@ export async function uploadStaffSignature(file: File) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        fileName: file.name,
-        mimeType: prepare.mimeType || file.type || 'application/octet-stream',
+        fileName: transportFile.name,
+        mimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
         cloudinary,
       }),
     },
@@ -3096,7 +3228,7 @@ export async function submitMedicalRecord(data: any) {
   try {
     insertedSubmission = await restRequest<any[]>(
       'submissions',
-      'select=*',
+      `select=${SUBMISSION_LIST_COLUMNS}`,
       {
         method: 'POST',
         headers: {
@@ -3116,7 +3248,7 @@ export async function submitMedicalRecord(data: any) {
 
     insertedSubmission = await restRequest<any[]>(
       'submissions',
-      'select=*',
+      `select=${SUBMISSION_LIST_COLUMNS}`,
       {
         method: 'POST',
         headers: {
@@ -3617,7 +3749,7 @@ export async function createAnnouncement(payload: AnnouncementUpsertInput) {
   const authUser = await getCurrentAuthUser();
   const rows = await restRequest<any[]>(
     'announcements',
-    'select=*',
+    `select=${ANNOUNCEMENT_SELECT_COLUMNS}`,
     {
       method: 'POST',
       headers: {
@@ -3643,7 +3775,7 @@ export async function updateAnnouncement(id: string, payload: AnnouncementUpsert
 
   const rows = await restRequest<any[]>(
     'announcements',
-    `id=eq.${encodeURIComponent(targetId)}&select=*`,
+    `id=eq.${encodeURIComponent(targetId)}&select=${ANNOUNCEMENT_SELECT_COLUMNS}`,
     {
       method: 'PATCH',
       headers: {
@@ -3686,6 +3818,7 @@ export async function uploadAnnouncementImage(file: File, ownerId: string) {
   if (!token || !supabaseUrl || !publicAnonKey || !cleanedOwnerId) {
     throw new Error('You must be signed in to upload announcement images.');
   }
+  const transportFile = await prepareImageFileForUpload(file, 'Announcement image');
 
   const prepare = await apiRequest<CloudinaryUploadTicket>(
     '/functions/v1/server/announcement-image/prepare',
@@ -3696,15 +3829,15 @@ export async function uploadAnnouncementImage(file: File, ownerId: string) {
       },
       body: JSON.stringify({
         ownerId: cleanedOwnerId,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        size: file.size,
+        fileName: transportFile.name,
+        mimeType: transportFile.type || file.type || 'application/octet-stream',
+        size: transportFile.size,
       }),
     },
   );
   assertCloudinaryUploadTicket(prepare, 'Announcement image upload');
 
-  const cloudinary = await uploadToCloudinary(prepare, file);
+  const cloudinary = await uploadToCloudinary(prepare, transportFile);
   const payload = await apiRequest<{ success: true; imagePath?: string | null; imageUrl?: string | null }>(
     '/functions/v1/server/announcement-image/complete',
     {
@@ -3714,8 +3847,8 @@ export async function uploadAnnouncementImage(file: File, ownerId: string) {
       },
       body: JSON.stringify({
         ownerId: cleanedOwnerId,
-        fileName: file.name,
-        mimeType: prepare.mimeType || file.type || 'application/octet-stream',
+        fileName: transportFile.name,
+        mimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
         cloudinary,
       }),
     },
@@ -3811,10 +3944,14 @@ function normalizeApprovedStudentsDate(value?: string | null, endOfDay = false) 
   return Number.isNaN(timestamp) ? null : timestamp;
 }
 
+function normalizePostgrestFilterValue(value: string) {
+  return String(value || '').trim().replace(/[%_,]/g, ' ');
+}
+
 async function loadApprovedStudentsFromDatabase(
   filters: StaffApprovedStudentFilters = {},
 ) {
-  const searchQuery = String(filters.searchQuery || '').trim().toLowerCase();
+  const searchQuery = normalizePostgrestFilterValue(String(filters.searchQuery || '').toLowerCase());
   const departmentFilter = String(filters.departmentFilter || '').trim();
   const yearFilter = String(filters.yearFilter || '').trim();
   const courseFilter = String(filters.courseFilter || '').trim();
@@ -3822,11 +3959,62 @@ async function loadApprovedStudentsFromDatabase(
   const pageSize = Math.max(1, Number(filters.pageSize || 20) || 20);
   const fromDate = normalizeApprovedStudentsDate(filters.fromDate);
   const toDate = normalizeApprovedStudentsDate(filters.toDate, true);
+  const offset = (page - 1) * pageSize;
+  const params = new URLSearchParams({
+    select: SUBMISSION_SUMMARY_COLUMNS,
+    status: 'eq.approved',
+    order: 'updated_at.desc',
+    limit: String(pageSize),
+    offset: String(offset),
+  });
+  const countParams = new URLSearchParams({
+    select: 'id',
+    status: 'eq.approved',
+  });
+  const setParam = (key: string, value: string) => {
+    params.set(key, value);
+    countParams.set(key, value);
+  };
+  const appendParam = (key: string, value: string) => {
+    params.append(key, value);
+    countParams.append(key, value);
+  };
 
-  const approvedRows = await restRequest<any[]>(
-    'submissions',
-    'select=id,student_id,first_name,last_name,middle_initial,course,department,year_level,academic_year,status,submitted_at,updated_at&status=eq.approved&order=updated_at.desc',
-  );
+  if (searchQuery) {
+    appendParam(
+      'or',
+      `(first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,student_id.ilike.%${searchQuery}%,course.ilike.%${searchQuery}%)`,
+    );
+  }
+
+  if (departmentFilter && departmentFilter !== 'all') {
+    const normalizedDepartmentFilter = normalizePostgrestFilterValue(departmentFilter);
+    appendParam(
+      'or',
+      `(department.eq.${normalizedDepartmentFilter},course.ilike.%${normalizedDepartmentFilter}%)`,
+    );
+  }
+
+  if (yearFilter && yearFilter !== 'all') {
+    setParam('year_level', `eq.${yearFilter}`);
+  }
+
+  if (courseFilter && courseFilter !== 'all') {
+    setParam('course', `eq.${courseFilter}`);
+  }
+
+  if (fromDate) {
+    appendParam('updated_at', `gte.${new Date(fromDate).toISOString()}`);
+  }
+
+  if (toDate) {
+    appendParam('updated_at', `lte.${new Date(toDate).toISOString()}`);
+  }
+
+  const [approvedRows, total] = await Promise.all([
+    restRequest<any[]>('submissions', params.toString()),
+    restCount('submissions', countParams.toString()).catch(() => 0),
+  ]);
 
   const activeStudentsById = await loadActiveStudentDirectory(
     (approvedRows || []).map((row) => row.student_id),
@@ -3838,43 +4026,10 @@ async function loadApprovedStudentsFromDatabase(
     const activeStudent = activeStudentsById[studentId];
     if (!studentId || !activeStudent) continue;
 
-    const updatedTimestamp = new Date(row.updated_at || row.submitted_at || 0).getTime();
-    if (fromDate && updatedTimestamp < fromDate) continue;
-    if (toDate && updatedTimestamp > toDate) continue;
-
     const rowYear = String(row.year_level || '').trim();
-    if (yearFilter && yearFilter !== 'all' && rowYear !== yearFilter) continue;
-
     const rowCourse = String(row.course || activeStudent.course || '').trim();
-    if (courseFilter && courseFilter !== 'all' && rowCourse !== courseFilter) continue;
-
     const rowDepartment = String(row.department || activeStudent.department || '').trim();
-    if (
-      departmentFilter
-      && departmentFilter !== 'all'
-      && rowDepartment !== departmentFilter
-      && !rowCourse.toLowerCase().includes(departmentFilter.toLowerCase())
-    ) {
-      continue;
-    }
-
-    if (searchQuery) {
-      const haystack = [
-        row.first_name,
-        activeStudent.first_name,
-        row.last_name,
-        activeStudent.last_name,
-        row.middle_initial,
-        activeStudent.middle_initial,
-        row.student_id,
-        row.course,
-        activeStudent.course,
-      ]
-        .map((value) => String(value || '').trim().toLowerCase())
-        .filter(Boolean)
-        .join(' ');
-      if (!haystack.includes(searchQuery)) continue;
-    }
+    const updatedTimestamp = new Date(row.updated_at || row.submitted_at || 0).getTime();
 
     const firstName = String(row.first_name || activeStudent.first_name || '').trim();
     const lastName = String(row.last_name || activeStudent.last_name || '').trim();
@@ -3954,20 +4109,49 @@ async function loadApprovedStudentsFromDatabase(
         .filter(Boolean),
     ),
   ).sort((a, b) => a.localeCompare(b));
-  const total = students.length;
-  const from = (page - 1) * pageSize;
-  const paginatedStudents = students.slice(from, from + pageSize);
-
   return {
-    students: paginatedStudents,
+    students,
     availableCourses,
-    total,
+    total: total || students.length,
     page,
     pageSize,
   };
 }
 
 export async function getStaffApprovedStudents(filters: StaffApprovedStudentFilters = {}) {
+  const params = new URLSearchParams();
+  const searchQuery = String(filters.searchQuery || '').trim();
+  const departmentFilter = String(filters.departmentFilter || '').trim();
+  const yearFilter = String(filters.yearFilter || '').trim();
+  const courseFilter = String(filters.courseFilter || '').trim();
+  const fromDate = String(filters.fromDate || '').trim();
+  const toDate = String(filters.toDate || '').trim();
+  const page = Math.max(1, Number(filters.page || 1) || 1);
+  const pageSize = Math.max(1, Number(filters.pageSize || 20) || 20);
+
+  if (searchQuery) params.set('search', searchQuery);
+  if (departmentFilter && departmentFilter !== 'all') params.set('department', departmentFilter);
+  if (yearFilter && yearFilter !== 'all') params.set('year', yearFilter);
+  if (courseFilter && courseFilter !== 'all') params.set('course', courseFilter);
+  if (fromDate) params.set('fromDate', fromDate);
+  if (toDate) params.set('toDate', toDate);
+  params.set('page', String(page));
+  params.set('pageSize', String(pageSize));
+
+  try {
+    return await apiRequest<{
+      students: ApprovedStudentSummary[];
+      availableCourses: string[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }>(`/functions/v1/server/staff/approved-students?${params.toString()}`);
+  } catch (error) {
+    if (!shouldFallbackToRest(error)) {
+      throw error;
+    }
+  }
+
   return loadApprovedStudentsFromDatabase(filters);
 }
 
@@ -5046,7 +5230,7 @@ export async function uploadFile(file: File, recordId: string, fileType: LabUplo
   const finishTrackedUpload = beginTrackedUpload();
 
   try {
-    const transportFile = await optimizeLabImageInBrowser(file);
+    const transportFile = await prepareLabFileForUpload(file);
     const originalFileSize = file.size;
     const normalizedRecordId = String(recordId || '').trim();
     const normalizedFileType = String(fileType || '').trim().toLowerCase();
@@ -5119,6 +5303,7 @@ export async function uploadStudentProfileAsset(
   const finishTrackedUpload = beginTrackedUpload();
 
   try {
+    const transportFile = await prepareImageFileForUpload(file, fileType === 'photo' ? 'Profile photo' : 'Profile signature');
     const prepare = await apiRequest<CloudinaryUploadTicket>(
       '/functions/v1/server/student-profile-asset/prepare',
       {
@@ -5129,15 +5314,15 @@ export async function uploadStudentProfileAsset(
         body: JSON.stringify({
           fileType,
           studentId: targetStudentId,
-          fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          size: file.size,
+          fileName: transportFile.name,
+          mimeType: transportFile.type || file.type || 'application/octet-stream',
+          size: transportFile.size,
         }),
       },
     );
     assertCloudinaryUploadTicket(prepare, 'Student profile asset upload');
 
-    const cloudinary = await uploadToCloudinary(prepare, file);
+    const cloudinary = await uploadToCloudinary(prepare, transportFile);
     const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
       '/functions/v1/server/student-profile-asset/complete',
       {
@@ -5148,8 +5333,8 @@ export async function uploadStudentProfileAsset(
         body: JSON.stringify({
           fileType,
           studentId: targetStudentId,
-          fileName: file.name,
-          mimeType: prepare.mimeType || file.type || 'application/octet-stream',
+          fileName: transportFile.name,
+          mimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
           cloudinary,
         }),
       },

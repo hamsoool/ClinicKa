@@ -3,6 +3,7 @@ import { formatAcademicYearLabel, getDefaultAcademicYear, normalizeAcademicYear 
 import { getAcademicYearSetting } from './api';
 
 const ACADEMIC_YEAR_STALE_TIME_MS = 12 * 60 * 60_000;
+const ACADEMIC_YEAR_GC_TIME_MS = 24 * 60 * 60_000;
 
 export function academicYearQueryKey() {
   return ['academicYearSetting'] as const;
@@ -13,6 +14,7 @@ export function academicYearQueryOptions() {
     queryKey: academicYearQueryKey(),
     queryFn: getAcademicYearSetting,
     staleTime: ACADEMIC_YEAR_STALE_TIME_MS,
+    gcTime: ACADEMIC_YEAR_GC_TIME_MS,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

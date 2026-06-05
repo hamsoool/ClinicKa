@@ -5,6 +5,7 @@ import {
 import { getStudentProfileAssets, type StudentProfileAssets } from '../../lib/api';
 
 const STUDENT_PROFILE_ASSETS_STALE_TIME_MS = 60_000;
+const STUDENT_PROFILE_ASSETS_GC_TIME_MS = 10 * 60_000;
 
 const EMPTY_STUDENT_PROFILE_ASSETS: StudentProfileAssets = {
   photoUrl: null,
@@ -33,6 +34,7 @@ export function studentProfileAssetsQueryOptions(studentId?: string | null, prof
     },
     enabled: Boolean(normalizedStudentId && normalizedProfileId),
     staleTime: STUDENT_PROFILE_ASSETS_STALE_TIME_MS,
+    gcTime: STUDENT_PROFILE_ASSETS_GC_TIME_MS,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });

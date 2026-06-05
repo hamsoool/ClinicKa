@@ -131,6 +131,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
     queryKey: ['managedAnnouncements', mode],
     queryFn: getManagedAnnouncements,
     staleTime: 30_000,
+    gcTime: 5 * 60_000,
   });
 
   const announcements = useMemo(() => {

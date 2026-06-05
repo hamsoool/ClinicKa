@@ -104,6 +104,7 @@ export type SubmissionRecord = {
   course: string;
   department?: string;
   year: string;
+  studentYearLevel?: string;
   academicYear?: string;
   status: SubmissionStatus;
   submittedAt: string;
@@ -156,6 +157,7 @@ export type SubmissionSummaryRecord = {
   course: string;
   department?: string;
   year: string;
+  studentYearLevel?: string;
   academicYear?: string;
   status: SubmissionStatus;
   submittedAt: string;

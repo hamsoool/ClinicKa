@@ -285,21 +285,82 @@ export async function verifyCloudinaryUploadResponse(payload: any) {
   return expected === normalized.signature;
 }
 
-function appendCloudinaryFormFields(formData: FormData, ticket: any) {
-  formData.set("api_key", ticket.apiKey);
-  formData.set("timestamp", String(ticket.timestamp));
-  formData.set("signature", ticket.signature);
-  formData.set("public_id", ticket.publicId);
-  if (ticket.assetFolder) formData.set("asset_folder", ticket.assetFolder);
-  if (ticket.contextString) formData.set("context", ticket.contextString);
-  if (ticket.tags) formData.set("tags", ticket.tags);
-  if (ticket.overwrite !== undefined) formData.set("overwrite", String(Boolean(ticket.overwrite)));
+function buildCloudinaryFormFields(ticket: any) {
+  const fields: Record<string, string> = {
+    api_key: String(ticket.apiKey),
+    timestamp: String(ticket.timestamp),
+    signature: String(ticket.signature),
+    public_id: String(ticket.publicId),
+  };
+  if (ticket.assetFolder) fields.asset_folder = String(ticket.assetFolder);
+  if (ticket.contextString) fields.context = String(ticket.contextString);
+  if (ticket.tags) fields.tags = String(ticket.tags);
+  if (ticket.overwrite !== undefined) fields.overwrite = String(Boolean(ticket.overwrite));
   if (ticket.useAssetFolderAsPublicIdPrefix !== undefined) {
-    formData.set(
-      "use_asset_folder_as_public_id_prefix",
-      String(Boolean(ticket.useAssetFolderAsPublicIdPrefix)),
-    );
+    fields.use_asset_folder_as_public_id_prefix = String(Boolean(ticket.useAssetFolderAsPublicIdPrefix));
   }
+  return fields;
+}
+
+function escapeMultipartValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r|\n/g, " ");
+}
+
+function buildStreamingMultipartBody(
+  fields: Record<string, string>,
+  file: File,
+) {
+  const encoder = new TextEncoder();
+  const boundary = `----clinicka-${crypto.randomUUID()}`;
+  const fieldChunks = Object.entries(fields).map(([key, value]) =>
+    encoder.encode(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${escapeMultipartValue(key)}"\r\n\r\n${value}\r\n`,
+    )
+  );
+  const fileName = escapeMultipartValue(file.name || "upload");
+  const mimeType = String(file.type || "application/octet-stream").trim() || "application/octet-stream";
+  const fileHeader = encoder.encode(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${mimeType}\r\n\r\n`,
+  );
+  const closingBoundary = encoder.encode(`\r\n--${boundary}--\r\n`);
+  const preludeChunks = [...fieldChunks, fileHeader];
+  const fileReader = file.stream().getReader();
+  let preludeIndex = 0;
+  let fileDone = false;
+  let closingSent = false;
+
+  return {
+    contentType: `multipart/form-data; boundary=${boundary}`,
+    body: new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (preludeIndex < preludeChunks.length) {
+          controller.enqueue(preludeChunks[preludeIndex]);
+          preludeIndex += 1;
+          return;
+        }
+
+        if (!fileDone) {
+          const { value, done } = await fileReader.read();
+          if (!done) {
+            controller.enqueue(value);
+            return;
+          }
+          fileDone = true;
+        }
+
+        if (!closingSent) {
+          controller.enqueue(closingBoundary);
+          closingSent = true;
+          return;
+        }
+
+        controller.close();
+      },
+      cancel() {
+        return fileReader.cancel();
+      },
+    }),
+  };
 }
 
 async function readCloudinaryError(response: Response) {
@@ -314,13 +375,17 @@ async function readCloudinaryError(response: Response) {
 
 export async function uploadFileToCloudinary(file: File, input: CloudinaryUploadTicketInput) {
   const ticket = await createCloudinaryUploadTicket(input);
-  const formData = new FormData();
-  formData.set("file", file);
-  appendCloudinaryFormFields(formData, ticket);
+  const multipartUpload = buildStreamingMultipartBody(
+    buildCloudinaryFormFields(ticket),
+    file,
+  );
 
   const response = await fetch(ticket.uploadUrl, {
     method: "POST",
-    body: formData,
+    headers: {
+      "Content-Type": multipartUpload.contentType,
+    },
+    body: multipartUpload.body,
   });
   const rawText = await response.text().catch(() => "");
   let rawPayload: any = null;
