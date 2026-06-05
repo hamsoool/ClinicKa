@@ -54,9 +54,11 @@ import {
 import {
   CloudinaryConfigurationError,
   CloudinaryRequestError,
+  type CloudinaryLabUploadType,
   buildCloudinaryFolder,
   createCloudinaryUploadTicket,
   destroyCloudinaryAsset,
+  isCloudinaryLabUploadType,
   isCloudinaryFile,
   normalizeCloudinaryUploadResponse,
   uploadFileToCloudinary,
@@ -85,7 +87,6 @@ import {
 } from "./submissions.ts";
 
 const app = new Hono().basePath("/server");
-const LAB_UPLOAD_TYPES = new Set(["xray", "cbc", "urinalysis"]);
 const OCR_SPACE_DEFAULT_MAX_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const ANNOUNCEMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -100,6 +101,7 @@ const PROFILE_ASSET_ALLOWED_EXTENSIONS = new Set([
   "webp",
 ]);
 const FILE_SELECT_COLUMNS = "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by";
+const FILE_SELECT_COLUMNS_LEGACY = "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,uploaded_at,uploaded_by";
 
 function normalizeAcademicYear(value: unknown, fallback = "") {
   const match = String(value || "").trim().match(/^(\d{4})\s*-\s*(\d{4})$/);
@@ -295,11 +297,11 @@ function isSupportedProfileAssetMimeType(mimeType?: string | null, fileName?: st
     : "";
 }
 
-function getCloudinaryPublicIdPrefix(kind: string, fileType?: string | null) {
+function getCloudinaryPublicIdPrefix(kind: string, fileType?: CloudinaryLabUploadType | null) {
   if (kind === "profile-photo") return "photo";
   if (kind === "student-signature" || kind === "staff-signature") return "signature";
   if (kind === "announcement") return "announcement";
-  return String(fileType || "lab").trim().toLowerCase() || "lab";
+  return fileType || "lab";
 }
 
 async function validateCloudinaryUpload(
@@ -307,7 +309,7 @@ async function validateCloudinaryUpload(
   options: {
     kind: "announcement" | "profile-photo" | "student-signature" | "staff-signature" | "lab";
     ownerId: string;
-    fileType?: string | null;
+    fileType?: CloudinaryLabUploadType | null;
     maxBytes?: number;
     requireImage?: boolean;
   },
@@ -322,11 +324,27 @@ async function validateCloudinaryUpload(
     throw new UploadValidationError("Cloudinary upload response could not be verified.");
   }
 
-  const extra = options.kind === "lab" ? { labType: options.fileType || "lab" } : {};
+  const extra = options.kind === "lab"
+    ? (() => {
+      if (!options.fileType) {
+        throw new UploadValidationError("Laboratory upload type is required.");
+      }
+      return { labType: options.fileType };
+    })()
+    : {};
   const expectedFolder = buildCloudinaryFolder(options.kind, options.ownerId, extra);
-  const expectedPrefix = `${expectedFolder}/${getCloudinaryPublicIdPrefix(options.kind, options.fileType)}_`;
-  if (!upload.public_id.startsWith(expectedPrefix)) {
+  const expectedPrefix = `${getCloudinaryPublicIdPrefix(options.kind, options.fileType)}_`;
+  const normalizedPublicId = String(upload.public_id || "").trim();
+  const publicIdWithinFolder = normalizedPublicId.startsWith(`${expectedFolder}/`)
+    ? normalizedPublicId.slice(expectedFolder.length + 1)
+    : normalizedPublicId;
+
+  if (!publicIdWithinFolder.startsWith(expectedPrefix)) {
     throw new UploadValidationError("Cloudinary upload destination is invalid.");
+  }
+  const reportedFolder = String(upload.asset_folder || upload.folder || "").trim();
+  if (reportedFolder && reportedFolder !== expectedFolder) {
+    throw new UploadValidationError("Cloudinary upload folder is invalid.");
   }
 
   if (!/^https:\/\/res\.cloudinary\.com\//i.test(upload.secure_url)) {
@@ -399,6 +417,56 @@ function isMissingFilesTableError(error: unknown) {
     (message.includes("could not find the table") && message.includes("files")) ||
     (message.includes("schema cache") && message.includes("files"))
   );
+}
+
+function isMissingCloudinaryFilesColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+  return (
+    message.includes("schema cache") ||
+    message.includes("storage_provider") ||
+    message.includes("cloudinary_public_id") ||
+    message.includes("cloudinary_resource_type") ||
+    message.includes("cloudinary_version") ||
+    message.includes("cloudinary_folder")
+  );
+}
+
+async function selectFilesWithFallback(apply: (query: any) => any) {
+  const primary = await apply(supabase.from("files").select(FILE_SELECT_COLUMNS));
+  if (!primary.error || !isMissingCloudinaryFilesColumnError(primary.error)) {
+    return primary;
+  }
+
+  return await apply(supabase.from("files").select(FILE_SELECT_COLUMNS_LEGACY));
+}
+
+async function insertFileMetadataWithFallback(payload: Record<string, unknown>) {
+  const primary = await supabase
+    .from("files")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (!primary.error || !isMissingCloudinaryFilesColumnError(primary.error)) {
+    return primary;
+  }
+
+  const fallbackPayload = {
+    submission_id: payload.submission_id ?? null,
+    type: payload.type ?? null,
+    file_name: payload.file_name ?? null,
+    mime_type: payload.mime_type ?? null,
+    url: payload.url ?? null,
+    storage_bucket: payload.storage_bucket ?? null,
+    storage_path: payload.storage_path ?? null,
+    uploaded_by: payload.uploaded_by ?? null,
+  };
+
+  return await supabase
+    .from("files")
+    .insert(fallbackPayload)
+    .select("*")
+    .single();
 }
 
 function isMissingDirectMediaColumnError(error: unknown) {
@@ -557,13 +625,15 @@ async function loadLatestStaffSignature(profileId: string) {
   const targetProfileId = String(profileId || "").trim();
   if (!targetProfileId) return null;
 
-  const { data, error } = await supabase
-    .from("files")
-    .select(FILE_SELECT_COLUMNS)
-    .eq("uploaded_by", targetProfileId)
-    .is("submission_id", null)
-    .order("uploaded_at", { ascending: false })
-    .limit(50);
+  const filesResponse = await selectFilesWithFallback((query) =>
+    query
+      .eq("uploaded_by", targetProfileId)
+      .is("submission_id", null)
+      .order("uploaded_at", { ascending: false })
+      .limit(50)
+  );
+
+  const { data, error } = filesResponse;
 
   if (error) throw new Error(error.message);
 
@@ -572,14 +642,10 @@ async function loadLatestStaffSignature(profileId: string) {
 }
 
 async function insertStaffSignatureMetadata(payload: Record<string, unknown>) {
-  const { data: insertedFile, error: fileInsertError } = await supabase
-    .from("files")
-    .insert({
-      ...payload,
-      type: "signature",
-    })
-    .select("*")
-    .single();
+  const { data: insertedFile, error: fileInsertError } = await insertFileMetadataWithFallback({
+    ...payload,
+    type: "signature",
+  });
 
   if (fileInsertError || !insertedFile) {
     throw new Error(fileInsertError?.message || "Failed to save staff signature metadata");
@@ -635,12 +701,12 @@ async function completeStaffSignatureUpload(options: {
 
   try {
     if (insertedFile?.id) {
-      const { data: staleRows, error: staleRowsError } = await supabase
-        .from("files")
-        .select(FILE_SELECT_COLUMNS)
-        .eq("uploaded_by", options.profileId)
-        .is("submission_id", null)
-        .neq("id", insertedFile.id);
+      const { data: staleRows, error: staleRowsError } = await selectFilesWithFallback((query) =>
+        query
+          .eq("uploaded_by", options.profileId)
+          .is("submission_id", null)
+          .neq("id", insertedFile.id)
+      );
 
       if (staleRowsError) {
         throw new Error(staleRowsError.message);
@@ -680,21 +746,19 @@ async function findChestXrayOcrFile(submissionId: string) {
 
   const fileId = String(labRow?.file_id || "").trim();
   if (fileId) {
-    const { data: linkedFile, error: linkedFileError } = await supabase
-      .from("files")
-      .select(FILE_SELECT_COLUMNS)
-      .eq("id", fileId)
-      .maybeSingle();
+    const { data: linkedFile, error: linkedFileError } = await selectFilesWithFallback((query) =>
+      query.eq("id", fileId).maybeSingle()
+    );
 
     if (linkedFileError) throw new Error(linkedFileError.message);
     if (linkedFile && isSupportedOcrFile(linkedFile)) return linkedFile;
   }
 
-  const { data: files, error: filesError } = await supabase
-    .from("files")
-    .select(FILE_SELECT_COLUMNS)
-    .eq("submission_id", submissionId)
-    .order("uploaded_at", { ascending: false });
+  const { data: files, error: filesError } = await selectFilesWithFallback((query) =>
+    query
+      .eq("submission_id", submissionId)
+      .order("uploaded_at", { ascending: false })
+  );
 
   if (filesError) throw new Error(filesError.message);
 
@@ -718,21 +782,19 @@ async function findCbcOcrFile(submissionId: string) {
 
   const fileId = String(labRow?.file_id || "").trim();
   if (fileId) {
-    const { data: linkedFile, error: linkedFileError } = await supabase
-      .from("files")
-      .select(FILE_SELECT_COLUMNS)
-      .eq("id", fileId)
-      .maybeSingle();
+    const { data: linkedFile, error: linkedFileError } = await selectFilesWithFallback((query) =>
+      query.eq("id", fileId).maybeSingle()
+    );
 
     if (linkedFileError) throw new Error(linkedFileError.message);
     if (linkedFile && isSupportedOcrFile(linkedFile)) return linkedFile;
   }
 
-  const { data: files, error: filesError } = await supabase
-    .from("files")
-    .select(FILE_SELECT_COLUMNS)
-    .eq("submission_id", submissionId)
-    .order("uploaded_at", { ascending: false });
+  const { data: files, error: filesError } = await selectFilesWithFallback((query) =>
+    query
+      .eq("submission_id", submissionId)
+      .order("uploaded_at", { ascending: false })
+  );
 
   if (filesError) throw new Error(filesError.message);
 
@@ -756,21 +818,19 @@ async function findUrinalysisOcrFile(submissionId: string) {
 
   const fileId = String(labRow?.file_id || "").trim();
   if (fileId) {
-    const { data: linkedFile, error: linkedFileError } = await supabase
-      .from("files")
-      .select(FILE_SELECT_COLUMNS)
-      .eq("id", fileId)
-      .maybeSingle();
+    const { data: linkedFile, error: linkedFileError } = await selectFilesWithFallback((query) =>
+      query.eq("id", fileId).maybeSingle()
+    );
 
     if (linkedFileError) throw new Error(linkedFileError.message);
     if (linkedFile && isSupportedOcrFile(linkedFile)) return linkedFile;
   }
 
-  const { data: files, error: filesError } = await supabase
-    .from("files")
-    .select(FILE_SELECT_COLUMNS)
-    .eq("submission_id", submissionId)
-    .order("uploaded_at", { ascending: false });
+  const { data: files, error: filesError } = await selectFilesWithFallback((query) =>
+    query
+      .eq("submission_id", submissionId)
+      .order("uploaded_at", { ascending: false })
+  );
 
   if (filesError) throw new Error(filesError.message);
 
@@ -1585,31 +1645,27 @@ app.post("/student-profile-asset/complete", async (c) => {
 
     let staleMetadataRows: any[] = [];
     try {
-      const { data: inserted, error: fileInsertError } = await supabase
-        .from("files")
-        .insert({
-          submission_id: null,
-          type: fileType,
-          file_name: fileName,
-          mime_type: resolvedMimeType || "application/octet-stream",
-          ...buildCloudinaryFileMetadata(upload, folder),
-          uploaded_by: requester.profile.id,
-        })
-        .select("*")
-        .single();
+      const { data: inserted, error: fileInsertError } = await insertFileMetadataWithFallback({
+        submission_id: null,
+        type: fileType,
+        file_name: fileName,
+        mime_type: resolvedMimeType || "application/octet-stream",
+        ...buildCloudinaryFileMetadata(upload, folder),
+        uploaded_by: requester.profile.id,
+      });
 
       if (fileInsertError || !inserted) {
         throw new Error(fileInsertError?.message || "Failed to save student profile asset metadata");
       } else {
         insertedFile = inserted;
 
-        const { data: staleRows, error: staleMetadataError } = await supabase
-          .from("files")
-          .select(FILE_SELECT_COLUMNS)
-          .eq("uploaded_by", requester.profile.id)
-          .is("submission_id", null)
-          .eq("type", fileType)
-          .neq("id", insertedFile.id);
+        const { data: staleRows, error: staleMetadataError } = await selectFilesWithFallback((query) =>
+          query
+            .eq("uploaded_by", requester.profile.id)
+            .is("submission_id", null)
+            .eq("type", fileType)
+            .neq("id", insertedFile.id)
+        );
 
         if (staleMetadataError) {
           throw new Error(staleMetadataError.message);
@@ -1625,7 +1681,7 @@ app.post("/student-profile-asset/complete", async (c) => {
         }
       }
     } catch (metadataError) {
-      throw metadataError;
+      console.log("Student profile asset metadata warning:", metadataError);
     }
 
     await updateStudentProfileMediaColumns({
@@ -1730,30 +1786,26 @@ app.post("/student-profile-asset", async (c) => {
     });
     rollbackCloudinary = upload;
 
-    const { data: insertedFile, error: fileInsertError } = await supabase
-      .from('files')
-      .insert({
-        submission_id: null,
-        type: fileType,
-        file_name: file.name,
-        mime_type: resolvedMimeType || 'application/octet-stream',
-        ...buildCloudinaryFileMetadata(upload, folder),
-        uploaded_by: requester.profile.id,
-      })
-      .select('*')
-      .single();
+    const { data: insertedFile, error: fileInsertError } = await insertFileMetadataWithFallback({
+      submission_id: null,
+      type: fileType,
+      file_name: file.name,
+      mime_type: resolvedMimeType || 'application/octet-stream',
+      ...buildCloudinaryFileMetadata(upload, folder),
+      uploaded_by: requester.profile.id,
+    });
 
     if (fileInsertError || !insertedFile) {
-      throw new Error(fileInsertError?.message || 'Failed to save student profile asset metadata');
+      console.log('Student profile asset metadata warning:', fileInsertError?.message || 'Insert returned no row');
     } else {
       try {
-        const { data: staleRows, error: staleRowsError } = await supabase
-          .from('files')
-          .select(FILE_SELECT_COLUMNS)
-          .eq('uploaded_by', requester.profile.id)
-          .is('submission_id', null)
-          .eq('type', fileType)
-          .neq('id', insertedFile.id);
+        const { data: staleRows, error: staleRowsError } = await selectFilesWithFallback((query) =>
+          query
+            .eq('uploaded_by', requester.profile.id)
+            .is('submission_id', null)
+            .eq('type', fileType)
+            .neq('id', insertedFile.id)
+        );
 
         if (staleRowsError) {
           throw new Error(staleRowsError.message);
@@ -1849,13 +1901,13 @@ app.get("/student-profile-assets", async (c) => {
 
     let assetRows: any[] = [];
     if (targetProfileId && (!directAssets?.photoUrl || !directAssets?.signatureUrl)) {
-      const { data, error: assetError } = await supabase
-        .from("files")
-        .select("id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url")
-        .eq("uploaded_by", targetProfileId)
-        .is("submission_id", null)
-        .order("uploaded_at", { ascending: false })
-        .limit(50);
+      const { data, error: assetError } = await selectFilesWithFallback((query) =>
+        query
+          .eq("uploaded_by", targetProfileId)
+          .is("submission_id", null)
+          .order("uploaded_at", { ascending: false })
+          .limit(50)
+      );
 
       if (assetError && !isMissingFilesTableError(assetError)) {
         throw new Error(assetError.message);
@@ -2871,7 +2923,7 @@ app.post("/upload-file/prepare", async (c) => {
     if (!recordId || !fileType || !fileName) {
       return badRequest("recordId, fileType, and fileName are required");
     }
-    if (!LAB_UPLOAD_TYPES.has(fileType)) {
+    if (!isCloudinaryLabUploadType(fileType)) {
       return badRequest("Unsupported laboratory file type");
     }
     if (!Number.isFinite(fileSize) || fileSize <= 0) {
@@ -2933,7 +2985,7 @@ app.post("/upload-file/complete", async (c) => {
     if (!recordId || !fileType || !fileName) {
       return badRequest("recordId, fileType, and fileName are required");
     }
-    if (!LAB_UPLOAD_TYPES.has(fileType)) {
+    if (!isCloudinaryLabUploadType(fileType)) {
       return badRequest("Unsupported laboratory file type");
     }
     if (!Number.isFinite(originalFileSize) || originalFileSize <= 0) {
@@ -2962,18 +3014,14 @@ app.post("/upload-file/complete", async (c) => {
       return badRequest("Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.");
     }
 
-    const { data: inserted, error: fileInsertError } = await supabase
-      .from("files")
-      .insert({
-        submission_id: recordId,
-        type: fileType,
-        file_name: fileName,
-        mime_type: finalizedMimeType || "application/octet-stream",
-        ...buildCloudinaryFileMetadata(upload, folder),
-        uploaded_by: requester.profile.id,
-      })
-      .select("*")
-      .single();
+    const { data: inserted, error: fileInsertError } = await insertFileMetadataWithFallback({
+      submission_id: recordId,
+      type: fileType,
+      file_name: fileName,
+      mime_type: finalizedMimeType || "application/octet-stream",
+      ...buildCloudinaryFileMetadata(upload, folder),
+      uploaded_by: requester.profile.id,
+    });
 
     if (fileInsertError || !inserted) {
       throw new Error(fileInsertError?.message || "Failed to save file metadata");
@@ -2998,11 +3046,11 @@ app.post("/upload-file/complete", async (c) => {
     if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
 
     runBackgroundTask("Laboratory file cleanup", async () => {
-      const { data: existingFiles, error: existingFilesError } = await supabase
-        .from("files")
-        .select(FILE_SELECT_COLUMNS)
-        .eq("submission_id", recordId)
-        .eq("type", fileType);
+      const { data: existingFiles, error: existingFilesError } = await selectFilesWithFallback((query) =>
+        query
+          .eq("submission_id", recordId)
+          .eq("type", fileType)
+      );
 
       if (existingFilesError) {
         throw new Error(existingFilesError.message);
@@ -3075,7 +3123,7 @@ app.post("/upload-file", async (c) => {
     if (!file || !recordId || !fileType) {
       return badRequest('file, recordId, and fileType are required');
     }
-    if (!LAB_UPLOAD_TYPES.has(fileType)) {
+    if (!isCloudinaryLabUploadType(fileType)) {
       return badRequest('Unsupported laboratory file type');
     }
     const maxLabUploadBytes = getLabUploadMaxBytes();
@@ -3115,18 +3163,14 @@ app.post("/upload-file", async (c) => {
       return badRequest('Laboratory result files must be PDF, PNG, JPG, HEIC/HEIF, WebP, AVIF, GIF, TIF, BMP, or another supported image file.');
     }
 
-    const { data: inserted, error: fileInsertError } = await supabase
-      .from('files')
-      .insert({
-        submission_id: recordId,
-        type: fileType,
-        file_name: file.name,
-        mime_type: finalizedMimeType || 'application/octet-stream',
-        ...buildCloudinaryFileMetadata(upload, folder),
-        uploaded_by: requester.profile.id,
-      })
-      .select('*')
-      .single();
+    const { data: inserted, error: fileInsertError } = await insertFileMetadataWithFallback({
+      submission_id: recordId,
+      type: fileType,
+      file_name: file.name,
+      mime_type: finalizedMimeType || 'application/octet-stream',
+      ...buildCloudinaryFileMetadata(upload, folder),
+      uploaded_by: requester.profile.id,
+    });
 
     if (fileInsertError || !inserted) {
       throw new Error(fileInsertError?.message || 'Failed to save file metadata');
@@ -3151,11 +3195,11 @@ app.post("/upload-file", async (c) => {
     if (submissionStudentId) invalidateStudentRecordsCache(submissionStudentId);
 
     runBackgroundTask("Laboratory file cleanup", async () => {
-      const { data: existingFiles, error: existingFilesError } = await supabase
-        .from('files')
-        .select(FILE_SELECT_COLUMNS)
-        .eq('submission_id', recordId)
-        .eq('type', fileType);
+      const { data: existingFiles, error: existingFilesError } = await selectFilesWithFallback((query) =>
+        query
+          .eq('submission_id', recordId)
+          .eq('type', fileType)
+      );
 
       if (existingFilesError) {
         throw new Error(existingFilesError.message);

@@ -47,6 +47,7 @@ import {
   normalizeSubmissionSlot,
 } from './academic-year';
 import { beginTrackedUpload } from './upload-activity';
+import type { LabUploadType, StudentProfileAssetUploadType } from './media-upload-types';
 
 export { createDefaultAdminSystemSettings } from './admin-system-settings';
 export type { AdminSystemSettings } from './admin-system-settings';
@@ -4965,6 +4966,7 @@ type CloudinaryUploadTicket = {
   signature: string;
   apiKey: string;
   folder?: string | null;
+  assetFolder?: string | null;
   publicId: string;
   resourceType?: string | null;
   mimeType?: string | null;
@@ -4972,6 +4974,7 @@ type CloudinaryUploadTicket = {
   contextString?: string | null;
   tags?: string | null;
   overwrite?: boolean;
+  useAssetFolderAsPublicIdPrefix?: boolean;
 };
 
 function isCloudinaryUploadTicket(ticket: unknown): ticket is CloudinaryUploadTicket {
@@ -4991,9 +4994,16 @@ async function uploadToCloudinary(ticket: CloudinaryUploadTicket, file: File) {
   formData.set('timestamp', String(ticket.timestamp));
   formData.set('signature', ticket.signature);
   formData.set('public_id', ticket.publicId);
+  if (ticket.assetFolder) formData.set('asset_folder', ticket.assetFolder);
   if (ticket.contextString) formData.set('context', ticket.contextString);
   if (ticket.tags) formData.set('tags', ticket.tags);
   if (ticket.overwrite !== undefined) formData.set('overwrite', String(Boolean(ticket.overwrite)));
+  if (ticket.useAssetFolderAsPublicIdPrefix !== undefined) {
+    formData.set(
+      'use_asset_folder_as_public_id_prefix',
+      String(Boolean(ticket.useAssetFolderAsPublicIdPrefix)),
+    );
+  }
 
   const response = await fetch(ticket.uploadUrl, {
     method: 'POST',
@@ -5020,7 +5030,7 @@ async function uploadToCloudinary(ticket: CloudinaryUploadTicket, file: File) {
   return payload;
 }
 
-export async function uploadFile(file: File, recordId: string, fileType: string) {
+export async function uploadFile(file: File, recordId: string, fileType: LabUploadType) {
   const token = getAccessToken();
   if (!token || !supabaseUrl || !publicAnonKey) {
     throw new Error('You must be signed in to upload files.');
@@ -5084,7 +5094,11 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
   }
 }
 
-export async function uploadStudentProfileAsset(file: File, studentId: string, fileType: 'photo' | 'signature') {
+export async function uploadStudentProfileAsset(
+  file: File,
+  studentId: string,
+  fileType: StudentProfileAssetUploadType,
+) {
   const targetStudentId = String(studentId || '').trim();
   if (!targetStudentId) {
     throw new Error('Student ID is required to upload profile assets.');

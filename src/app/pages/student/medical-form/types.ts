@@ -1,5 +1,6 @@
 import type { SubmissionRecord } from '../../../lib/record-types';
 import type { MEDICAL_CONDITIONS } from './constants';
+export type { LabUploadType as LabUploadKind } from '../../../lib/media-upload-types';
 
 export type MedicalConditionKey = (typeof MEDICAL_CONDITIONS)[number]['key'];
 
@@ -11,8 +12,6 @@ export type EmergencyContact = {
   phone: string;
   address: string;
 };
-
-export type LabUploadKind = 'cbc' | 'urinalysis' | 'xray';
 
 export type MedicalFormData = {
   studentId: string;

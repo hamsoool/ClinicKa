@@ -65,6 +65,7 @@ import {
   staffSubmissionDetailQueryKey,
   useStaffSubmissionDetailQuery,
 } from './staff-workflow-query';
+import type { LabUploadType } from '../../lib/media-upload-types';
 import {
   EMERGENCY_CONTACT_RELATIONSHIPS,
   formatPhilippinePhoneInput,
@@ -84,7 +85,6 @@ type SubmissionDetails = SubmissionRecord & {
 };
 
 type ReviewStatus = SubmissionRecord['status'];
-type LabUploadType = 'xray' | 'cbc' | 'urinalysis';
 type LabUploadSource = 'file' | 'camera';
 type PendingLabReplacement = {
   file: File;
