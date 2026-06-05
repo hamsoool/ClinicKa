@@ -140,29 +140,6 @@ function shouldDisableStorageBucket(status: number, payload: unknown) {
   );
 }
 
-function buildStorageObjectName(fileType: string, file?: File | null) {
-  const normalizedType = String(fileType || 'file')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'file';
-
-  const mime = String(file?.type || '').toLowerCase();
-  const originalName = String(file?.name || '');
-  const originalExt = originalName.includes('.') ? originalName.split('.').pop() || '' : '';
-
-  let ext = '';
-  if (mime.includes('png')) ext = 'png';
-  else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
-  else if (mime.includes('webp')) ext = 'webp';
-  else if (mime.includes('gif')) ext = 'gif';
-  else if (mime.includes('pdf')) ext = 'pdf';
-  else if (originalExt) ext = originalExt.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-  const timestamp = Date.now();
-  return ext ? `${normalizedType}_${timestamp}.${ext}` : `${normalizedType}_${timestamp}`;
-}
-
 function getCanvasUploadFileName(fileName: string) {
   const cleanedName = String(fileName || 'lab-result').trim() || 'lab-result';
   const withoutExtension = cleanedName.includes('.') ? cleanedName.replace(/\.[^.]+$/, '') : cleanedName;
@@ -1546,6 +1523,31 @@ function normalizeStorageFileUrl(url?: string | null) {
   return trimmed;
 }
 
+const cloudinaryCloudName = String(import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '').trim();
+
+function isCloudinaryFileRow(file: any) {
+  const provider = String(file?.storage_provider || '').trim().toLowerCase();
+  const publicId = String(file?.cloudinary_public_id || '').trim();
+  const url = String(file?.url || '').trim();
+  return provider === 'cloudinary' || Boolean(publicId) || /res\.cloudinary\.com/i.test(url);
+}
+
+function buildCloudinaryDeliveryUrl(file: any) {
+  const url = normalizeStorageFileUrl(file?.url || null);
+  if (url && /^https?:\/\//i.test(url)) return url;
+  const publicId = String(file?.cloudinary_public_id || '').trim();
+  if (!publicId || !cloudinaryCloudName) return null;
+  const resourceType = String(file?.cloudinary_resource_type || 'image').trim() || 'image';
+  const version = String(file?.cloudinary_version || '').trim();
+  const encodedPublicId = publicId
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  const versionPath = version ? `v${version}/` : '';
+  return `https://res.cloudinary.com/${cloudinaryCloudName}/${resourceType}/upload/${versionPath}${encodedPublicId}`;
+}
+
 async function createSignedStorageUrl(storagePath?: string | null, token?: string | null, bucket?: string | null) {
   const targetBucket = (bucket || STORAGE_BUCKET).trim() || STORAGE_BUCKET;
   const rawPath = (storagePath || '').trim();
@@ -1986,7 +1988,7 @@ async function loadRelatedData(rows: any[]) {
   const staffSignatureFilesRaw = staffProfileIds.length
     ? await restRequest<any[]>(
         'files',
-        `select=id,submission_id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
+        `select=id,submission_id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
       ).catch(() => [])
     : [];
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
@@ -2026,7 +2028,7 @@ async function loadRelatedData(rows: any[]) {
   const submissionsMissingFiles = shouldRunStorageFallback
     ? submissionIds.filter((id) => {
         const currentFiles = filesBySubmissionCurrent[id] || [];
-        return !currentFiles.length || currentFiles.some((file) => file?.storage_path && !file?.url);
+        return !currentFiles.length || currentFiles.some((file: any) => file?.storage_path && !file?.url);
       })
     : [];
   const fallbackBuckets = [...new Set([STORAGE_BUCKET, ...Object.values(STORAGE_BUCKET_BY_FILE_TYPE)])];
@@ -2227,7 +2229,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   const staffSignatureFilesRaw = staffProfileIds.length
     ? await restRequest<any[]>(
         'files',
-        `select=id,submission_id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
+        `select=id,submission_id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
       ).catch(() => [])
     : [];
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
@@ -2942,6 +2944,15 @@ async function listStaffSignatureFromStorage(profileId: string, token?: string |
 async function normalizeFileRows(files: any[] | null | undefined, token?: string | null) {
   return Promise.all(
     (files || []).map(async (file) => {
+      if (isCloudinaryFileRow(file)) {
+        return {
+          ...file,
+          storage_provider: 'cloudinary',
+          storage_bucket: file?.storage_bucket || null,
+          url: buildCloudinaryDeliveryUrl(file) || null,
+        };
+      }
+
       if (file?.storage_path) {
         const resolvedBucket =
           String(file?.storage_bucket || '').trim() ||
@@ -3296,7 +3307,7 @@ export async function getStaffSignature(): Promise<StaffSignatureAsset> {
 
   const rows = await restRequest<any[]>(
     'files',
-    `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url,uploaded_by&uploaded_by=eq.${encodeURIComponent(profileId)}&submission_id=is.null&order=uploaded_at.desc&limit=50`,
+    `select=id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url,uploaded_by&uploaded_by=eq.${encodeURIComponent(profileId)}&submission_id=is.null&order=uploaded_at.desc&limit=50`,
   ).catch(() => []);
   const latest = latestFilesByType(normalizeStaffSignatureRows(await normalizeFileRows(rows, token))).staff_signature;
 
@@ -3312,14 +3323,35 @@ export async function uploadStaffSignature(file: File) {
     throw new Error('You must be signed in to upload files.');
   }
 
-  const formData = new FormData();
-  formData.set('file', file);
-
-  const payload = await apiRequest<{ success: true; signatureUrl?: string | null; signatureFileName?: string | null }>(
-    '/functions/v1/server/staff-signature',
+  const prepare = await apiRequest<CloudinaryUploadTicket>(
+    '/functions/v1/server/staff-signature/prepare',
     {
       method: 'POST',
-      body: formData,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        size: file.size,
+      }),
+    },
+  );
+  assertCloudinaryUploadTicket(prepare, 'Staff signature upload');
+
+  const cloudinary = await uploadToCloudinary(prepare, file);
+  const payload = await apiRequest<{ success: true; signatureUrl?: string | null; signatureFileName?: string | null }>(
+    '/functions/v1/server/staff-signature/complete',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: prepare.mimeType || file.type || 'application/octet-stream',
+        cloudinary,
+      }),
     },
   );
 
@@ -3957,7 +3989,8 @@ export async function getStudentAnnouncements() {
   const announcements = await Promise.all(
     (rows || []).map(async (row) => {
       const rawPath = String(row?.image_path || '').trim();
-      const normalizedPath = rawPath.replace(/^announcements\//, '');
+      const absoluteImageUrl = /^https?:\/\//i.test(rawPath) ? normalizeStorageFileUrl(rawPath) : null;
+      const normalizedPath = absoluteImageUrl ? '' : rawPath.replace(/^announcements\//, '');
       const signedUrl = normalizedPath
         ? await createSignedStorageUrlWithBucketFallbacks(normalizedPath, getAccessToken(), 'announcements')
         : null;
@@ -3967,7 +4000,7 @@ export async function getStudentAnnouncements() {
         title: String(row?.title || '').trim(),
         description: String(row?.description || '').trim(),
         datePosted: String(row?.date_posted || row?.created_at || ''),
-        imageUrl: normalizeStorageFileUrl(signedUrl) || null,
+        imageUrl: absoluteImageUrl || normalizeStorageFileUrl(signedUrl) || null,
         imagePath: rawPath || null,
         createdAt: row?.created_at ? String(row.created_at) : null,
       } satisfies StudentAnnouncement;
@@ -3988,7 +4021,8 @@ export async function getManagedAnnouncements() {
   const announcements = await Promise.all(
     (rows || []).map(async (row) => {
       const rawPath = String(row?.image_path || '').trim();
-      const normalizedPath = rawPath.replace(/^announcements\//, '');
+      const absoluteImageUrl = /^https?:\/\//i.test(rawPath) ? normalizeStorageFileUrl(rawPath) : null;
+      const normalizedPath = absoluteImageUrl ? '' : rawPath.replace(/^announcements\//, '');
       const signedUrl = normalizedPath
         ? await createSignedStorageUrlWithBucketFallbacks(normalizedPath, getAccessToken(), 'announcements')
         : null;
@@ -3998,7 +4032,7 @@ export async function getManagedAnnouncements() {
         title: String(row?.title || '').trim(),
         description: String(row?.description || '').trim(),
         datePosted: String(row?.date_posted || row?.created_at || ''),
-        imageUrl: normalizeStorageFileUrl(signedUrl) || null,
+        imageUrl: absoluteImageUrl || normalizeStorageFileUrl(signedUrl) || null,
         imagePath: rawPath || null,
         createdBy: String(row?.created_by || ''),
         isPublished: Boolean(row?.is_published),
@@ -4085,38 +4119,46 @@ export async function uploadAnnouncementImage(file: File, ownerId: string) {
     throw new Error('You must be signed in to upload announcement images.');
   }
 
-  const safeName = buildStorageObjectName('announcement', file);
-  const storagePath = `${cleanedOwnerId}/${safeName}`;
-  const uploadResponse = await fetch(
-    `${supabaseUrl}/storage/v1/object/announcements/${storagePath}`,
+  const prepare = await apiRequest<CloudinaryUploadTicket>(
+    '/functions/v1/server/announcement-image/prepare',
     {
       method: 'POST',
       headers: {
-        apikey: publicAnonKey,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': file.type || 'application/octet-stream',
+        'Content-Type': 'application/json',
       },
-      body: file,
+      body: JSON.stringify({
+        ownerId: cleanedOwnerId,
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        size: file.size,
+      }),
+    },
+  );
+  assertCloudinaryUploadTicket(prepare, 'Announcement image upload');
+
+  const cloudinary = await uploadToCloudinary(prepare, file);
+  const payload = await apiRequest<{ success: true; imagePath?: string | null; imageUrl?: string | null }>(
+    '/functions/v1/server/announcement-image/complete',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ownerId: cleanedOwnerId,
+        fileName: file.name,
+        mimeType: prepare.mimeType || file.type || 'application/octet-stream',
+        cloudinary,
+      }),
     },
   );
 
-  if (!uploadResponse.ok) {
-    const raw = await uploadResponse.text().catch(() => '');
-    let message = raw || `Failed to upload file (${uploadResponse.status})`;
-    try {
-      const parsed = raw ? JSON.parse(raw) : null;
-      message =
-        parsed?.message ||
-        parsed?.error ||
-        parsed?.details ||
-        message;
-    } catch {
-      // Keep raw message fallback
-    }
-    throw new Error(message);
+  const imagePath = normalizeStorageFileUrl(payload.imagePath || payload.imageUrl || cloudinary?.secure_url || null);
+  if (!imagePath) {
+    throw new Error('Cloudinary upload did not return an image URL.');
   }
 
-  return { imagePath: storagePath };
+  return { imagePath };
 }
 
 export async function getStaffDashboardOverview() {
@@ -4572,7 +4614,7 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
       if (resolvedProfileId) {
         assetRows = await restRequest<any[]>(
           'files',
-          `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url&uploaded_by=eq.${encodeURIComponent(resolvedProfileId)}&submission_id=is.null&order=uploaded_at.desc&limit=50`,
+          `select=id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url&uploaded_by=eq.${encodeURIComponent(resolvedProfileId)}&submission_id=is.null&order=uploaded_at.desc&limit=50`,
         ).catch(() => []);
       }
 
@@ -4632,10 +4674,16 @@ export async function getStudentProfilePhoto(studentId?: string) {
   const token = getAccessToken();
   const photoFiles = await restRequest<any[]>(
     'files',
-    `select=id,type,file_name,storage_bucket,storage_path,mime_type,uploaded_at,url&submission_id=in.(${idList})&type=eq.photo&order=uploaded_at.desc&limit=20`,
+    `select=id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url&submission_id=in.(${idList})&type=eq.photo&order=uploaded_at.desc&limit=20`,
   );
 
   for (const file of photoFiles || []) {
+    if (isCloudinaryFileRow(file)) {
+      const cloudinaryUrl = buildCloudinaryDeliveryUrl(file);
+      if (cloudinaryUrl) return { photoUrl: cloudinaryUrl };
+      continue;
+    }
+
     const resolvedBucket =
       String(file?.storage_bucket || '').trim() ||
       inferBucketFromStoragePath(file?.storage_path) ||
@@ -5369,37 +5417,68 @@ export async function extractUrinalysisFields(id: string) {
   );
 }
 
-type SignedStorageUploadTicket = {
-  bucket: string;
-  path: string;
-  token: string;
-  signedUrl?: string | null;
+type CloudinaryUploadTicket = {
+  success?: boolean;
+  provider: 'cloudinary';
+  cloudName: string;
+  uploadUrl: string;
+  timestamp: number;
+  signature: string;
+  apiKey: string;
+  folder?: string | null;
+  publicId: string;
+  resourceType?: string | null;
   mimeType?: string | null;
+  context?: Record<string, unknown> | null;
+  contextString?: string | null;
+  tags?: string | null;
+  overwrite?: boolean;
 };
 
-async function uploadToSignedStorageUrl(
-  bucket: string,
-  path: string,
-  token: string,
-  file: File,
-  mimeType?: string | null,
-) {
-  const bytes = await file.arrayBuffer();
-  const { error } = await getAuthClient().storage.from(bucket).uploadToSignedUrl(path, token, bytes, {
-    cacheControl: '3600',
-    contentType: mimeType || file.type || 'application/octet-stream',
-    upsert: true,
-  });
+function isCloudinaryUploadTicket(ticket: unknown): ticket is CloudinaryUploadTicket {
+  return String((ticket as CloudinaryUploadTicket)?.provider || '').toLowerCase() === 'cloudinary';
+}
 
-  if (error) {
-    throw new Error(error.message);
+function assertCloudinaryUploadTicket(ticket: unknown, label: string): asserts ticket is CloudinaryUploadTicket {
+  if (!isCloudinaryUploadTicket(ticket)) {
+    throw new Error(`${label} did not receive a Cloudinary upload ticket.`);
   }
 }
 
-function isMissingDirectUploadRoute(error: unknown) {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  return message.includes('404') || message.includes('not found');
+async function uploadToCloudinary(ticket: CloudinaryUploadTicket, file: File) {
+  const formData = new FormData();
+  formData.set('file', file);
+  formData.set('api_key', ticket.apiKey);
+  formData.set('timestamp', String(ticket.timestamp));
+  formData.set('signature', ticket.signature);
+  formData.set('public_id', ticket.publicId);
+  if (ticket.contextString) formData.set('context', ticket.contextString);
+  if (ticket.tags) formData.set('tags', ticket.tags);
+  if (ticket.overwrite !== undefined) formData.set('overwrite', String(Boolean(ticket.overwrite)));
+
+  const response = await fetch(ticket.uploadUrl, {
+    method: 'POST',
+    body: formData,
+  });
+  const raw = await response.text().catch(() => '');
+  let payload: any = null;
+  try {
+    payload = raw ? JSON.parse(raw) : null;
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      payload?.error?.message ||
+      payload?.message ||
+      payload?.error ||
+      raw ||
+      `Cloudinary upload failed (${response.status})`;
+    throw new Error(String(message));
+  }
+
+  return payload;
 }
 
 export async function uploadFile(file: File, recordId: string, fileType: string) {
@@ -5415,58 +5494,26 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
     const originalFileSize = file.size;
     const normalizedRecordId = String(recordId || '').trim();
     const normalizedFileType = String(fileType || '').trim().toLowerCase();
-    let prepare: SignedStorageUploadTicket;
-    try {
-      prepare = await apiRequest<SignedStorageUploadTicket>(
-        '/functions/v1/server/upload-file/prepare',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            recordId: normalizedRecordId,
-            fileType: normalizedFileType,
-            fileName: transportFile.name,
-            mimeType: transportFile.type || file.type || 'application/octet-stream',
-            size: transportFile.size,
-            originalFileSize,
-          }),
+    const prepare = await apiRequest<CloudinaryUploadTicket>(
+      '/functions/v1/server/upload-file/prepare',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      );
-    } catch (error) {
-      if (!isMissingDirectUploadRoute(error)) {
-        throw error;
-      }
-
-      const legacyFormData = new FormData();
-      legacyFormData.set('file', transportFile);
-      legacyFormData.set('recordId', normalizedRecordId);
-      legacyFormData.set('fileType', normalizedFileType);
-
-      const legacyPayload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
-        '/functions/v1/server/upload-file',
-        {
-          method: 'POST',
-          body: legacyFormData,
-        },
-      );
-
-      return {
-        success: true as const,
-        url: normalizeStorageFileUrl(legacyPayload.url || null) || undefined,
-        fileName: legacyPayload.fileName || undefined,
-      };
-    }
-
-    await uploadToSignedStorageUrl(
-      prepare.bucket,
-      prepare.path,
-      prepare.token,
-      transportFile,
-      prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
+        body: JSON.stringify({
+          recordId: normalizedRecordId,
+          fileType: normalizedFileType,
+          fileName: transportFile.name,
+          mimeType: transportFile.type || file.type || 'application/octet-stream',
+          size: transportFile.size,
+          originalFileSize,
+        }),
+      },
     );
+    assertCloudinaryUploadTicket(prepare, 'Laboratory file upload');
 
+    const cloudinary = await uploadToCloudinary(prepare, transportFile);
     const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
       '/functions/v1/server/upload-file/complete',
       {
@@ -5483,8 +5530,7 @@ export async function uploadFile(file: File, recordId: string, fileType: string)
           uploadedFileSize: transportFile.size,
           uploadedFileName: transportFile.name,
           uploadedMimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
-          storageBucket: prepare.bucket,
-          storagePath: prepare.path,
+          cloudinary,
         }),
       },
     );
@@ -5513,58 +5559,25 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
   const finishTrackedUpload = beginTrackedUpload();
 
   try {
-    let prepare: SignedStorageUploadTicket;
-    try {
-      prepare = await apiRequest<SignedStorageUploadTicket>(
-        '/functions/v1/server/student-profile-asset/prepare',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileType,
-            studentId: targetStudentId,
-            fileName: file.name,
-            mimeType: file.type || 'application/octet-stream',
-            size: file.size,
-          }),
+    const prepare = await apiRequest<CloudinaryUploadTicket>(
+      '/functions/v1/server/student-profile-asset/prepare',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      );
-    } catch (error) {
-      if (!isMissingDirectUploadRoute(error)) {
-        throw error;
-      }
-
-      const legacyFormData = new FormData();
-      legacyFormData.set('file', file);
-      legacyFormData.set('fileType', fileType);
-      legacyFormData.set('studentId', targetStudentId);
-
-      const legacyPayload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
-        '/functions/v1/server/student-profile-asset',
-        {
-          method: 'POST',
-          body: legacyFormData,
-        },
-      );
-      invalidateStudentProfileAssetsCache();
-
-      return {
-        success: true as const,
-        url: normalizeStorageFileUrl(legacyPayload.url || null) || undefined,
-        fileName: legacyPayload.fileName || undefined,
-      };
-    }
-
-    await uploadToSignedStorageUrl(
-      prepare.bucket,
-      prepare.path,
-      prepare.token,
-      file,
-      prepare.mimeType || file.type || 'application/octet-stream',
+        body: JSON.stringify({
+          fileType,
+          studentId: targetStudentId,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          size: file.size,
+        }),
+      },
     );
+    assertCloudinaryUploadTicket(prepare, 'Student profile asset upload');
 
+    const cloudinary = await uploadToCloudinary(prepare, file);
     const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
       '/functions/v1/server/student-profile-asset/complete',
       {
@@ -5577,8 +5590,7 @@ export async function uploadStudentProfileAsset(file: File, studentId: string, f
           studentId: targetStudentId,
           fileName: file.name,
           mimeType: prepare.mimeType || file.type || 'application/octet-stream',
-          storageBucket: prepare.bucket,
-          storagePath: prepare.path,
+          cloudinary,
         }),
       },
     );
