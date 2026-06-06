@@ -76,7 +76,7 @@ const studentFaqs = [
   },
   {
     value: 'faq-clearance',
-    question: 'When can I view my medical clearance or certificate?',
+    question: 'When can I view my medical certificate?',
     answer:
       'Once the clinic finishes reviewing your submission and marks it approved, you can return to your student record and clearance pages to view the latest cleared information available to you.',
   },
@@ -134,6 +134,7 @@ export default function RoleSelection() {
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute left-[-8rem] top-20 h-80 w-80 rounded-full bg-[#d9e8ff] blur-3xl" />
         <div className="absolute right-[-10rem] top-12 h-[28rem] w-[28rem] rounded-full bg-[#d4f0e2] blur-3xl" />
+        <div className="absolute left-1/3 top-0 h-64 w-64 rounded-full bg-[#d6f5eb]/60 blur-3xl" />
       </div>
 
       <nav
@@ -253,11 +254,13 @@ export default function RoleSelection() {
 
               <div className="space-y-5">
                 <h1 className="max-w-2xl text-4xl font-bold leading-[1.1] tracking-[-0.04em] text-[#0b1c30] md:text-5xl lg:text-6xl xl:text-[4.2rem]">
-                  ClinicKa! Clinic Management Portal
+                  <span className="text-[#065f46]">ClinicKa!</span>{' '}
+                  <span className="text-[#0b1c30]">Student Health Record Portal</span>
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-[#4a5b68] md:text-lg md:leading-8">
-                  A role-based system for Gordon College students, clinic staff, and administrators to submit medical
-                  requirements, review health records, issue clearances, and manage clinic operations online.
+                  A web-based medical clearance and student health record management system designed for Gordon College,
+                  helping students submit yearly medical requirements, clinic staff review records, and administrators
+                  manage health service workflows in one centralized platform.
                 </p>
               </div>
 
@@ -345,10 +348,10 @@ export default function RoleSelection() {
                   <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
                     <ShieldCheck className="h-6 w-6" />
                   </div>
-                  <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em]">Medical clearance processing</h3>
+                  <h3 className="mt-6 text-2xl font-semibold tracking-[-0.03em]">Medical certificate processing</h3>
                   <p className="mt-3 text-sm leading-7 text-white/85">
-                    Clinic personnel review submissions, mark physical examination completion, approve records, and
-                    prepare clearance details for eligible students.
+                    Clinic staff and doctors review submitted health records, complete assessment requirements, and
+                    prepare student medical certificates for qualified and approved submissions.
                   </p>
                 </div>
               </div>

@@ -55,9 +55,10 @@ export default function SuperAdminLayout() {
     <PortalShell
       navItems={navItems}
       portalLabel="Super Admin Console"
-      brandSubtitle="ClinicKa!"
+      brandTitle="ClinicKa!"
+      brandSubtitle="GC Health Services Unit"
       brandIcon={ShieldPlus}
-      brandImageSrc="/gchsu.png"
+      brandImageSrc="/clinickalogo.png"
       displayName={displayName}
       profileSubtitle="Super Administrator"
       email={me?.profile.email || undefined}

@@ -26,10 +26,6 @@ const navItems = [
   { path: '/student/profile', label: 'Profile', mobileLabel: 'Profile', icon: User },
 ] as const satisfies readonly PortalNavItem[];
 
-const topActions = [
-  { label: 'Profile settings', icon: User, path: '/student/profile' },
-] as const satisfies readonly PortalTopAction[];
-
 export default function StudentLayout() {
   const { me } = useAuth();
   const [profilePic, setProfilePic] = useState<string | null>(null);
@@ -107,17 +103,16 @@ export default function StudentLayout() {
     <PortalShell
       navItems={navItems}
       portalLabel="Student Portal"
-      brandSubtitle="ClinicKa!"
+      brandTitle="ClinicKa!"
+      brandSubtitle="GC Health Services Unit"
       brandIcon={FileCheck2}
-      brandImageSrc="/gchsu.png"
+      brandImageSrc="/clinickalogo.png"
       displayName={displayName}
       profileSubtitle={profileSubtitle}
       initials={getInitials(displayName, 'ST')}
-      roleBadge="Gordon College Health Services"
       initialProfileImageUrl={profilePic}
       profileUploadId="student-profile-upload"
       profileUploadLabel="Upload student profile picture"
-      topActions={topActions}
       topBarSlot={(
         <StudentNotificationMenu
           notifications={notifications}

@@ -66,7 +66,7 @@ export default function StudentYearSelection() {
       ? 'Open'
       : 'Complete';
   const actionLabel = isApproved
-    ? 'Open clearance form'
+    ? 'Open medical certificate'
     : isReturned
       ? 'Edit returned record'
       : canStartSubmission
@@ -77,7 +77,7 @@ export default function StudentYearSelection() {
   const isActionable = canOpen && !isPending;
   const introCopy = currentAcademicYearRecord
     ? isApproved
-      ? 'Your submission for this school year is already approved. Open your clearance to review or download it.'
+      ? 'Your submission for this school year is already approved. Open your medical certificate to review or download it.'
       : isReturned
         ? 'Your latest medical record needs updates. Open it to review the clinic feedback and resubmit.'
         : 'Your current school year submission is already in progress. You can continue once the clinic requests changes.'
@@ -142,7 +142,7 @@ export default function StudentYearSelection() {
                   </p>
                   <h1 className="mt-2 text-2xl font-bold tracking-tight text-on-surface sm:text-3xl">
                     {isApproved
-                      ? 'Open your medical clearance'
+                      ? 'Open your medical certificate'
                       : isReturned
                         ? 'Continue your returned submission'
                         : canStartSubmission
@@ -184,7 +184,7 @@ export default function StudentYearSelection() {
               </dl>
 
               <div className="mt-6 rounded-xl bg-surface-container-low px-4 py-3 text-sm leading-6 text-on-surface-variant">
-                {nextSlot ? `Your next clinic submission will be filed under ${selectedSlotLabel}.` : 'No additional record cycles are available.'}
+                {nextSlot ? 'You can submit relevant requirements again next year.' : 'No additional record cycles are available.'}
               </div>
             </div>
           </div>

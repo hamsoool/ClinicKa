@@ -22,7 +22,7 @@ type StudentClearanceTab = 'history' | 'form' | 'medical-clearance';
 const clearanceTabs = new Set<StudentClearanceTab>(['history', 'form', 'medical-clearance']);
 
 function normalizeClearanceTab(value: string | null): StudentClearanceTab {
-  return clearanceTabs.has(value as StudentClearanceTab) ? (value as StudentClearanceTab) : 'history';
+  return clearanceTabs.has(value as StudentClearanceTab) ? (value as StudentClearanceTab) : 'form';
 }
 
 const styles = `
@@ -313,13 +313,7 @@ export default function StudentClearance() {
   const handleTabChange = (value: string) => {
     const nextTab = normalizeClearanceTab(value);
     const nextParams = new URLSearchParams(searchParams);
-
-    if (nextTab === 'history') {
-      nextParams.delete('tab');
-    } else {
-      nextParams.set('tab', nextTab);
-    }
-
+    nextParams.set('tab', nextTab);
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -371,9 +365,9 @@ export default function StudentClearance() {
 
       <Tabs className="min-w-0" value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-3">
-          <TabsTrigger value="history" className="min-h-11 justify-center px-3 text-center whitespace-normal">History</TabsTrigger>
           <TabsTrigger value="form" className="min-h-11 justify-center px-3 text-center whitespace-normal">Form</TabsTrigger>
-          <TabsTrigger value="medical-clearance" className="min-h-11 justify-center px-3 text-center whitespace-normal">Medical Clearance</TabsTrigger>
+          <TabsTrigger value="medical-clearance" className="min-h-11 justify-center px-3 text-center whitespace-normal">Medical Certificate</TabsTrigger>
+          <TabsTrigger value="history" className="min-h-11 justify-center px-3 text-center whitespace-normal">History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="history" className="min-w-0 space-y-4 animate-fade-in">
@@ -487,7 +481,7 @@ export default function StudentClearance() {
               <div className="min-w-0">
                 <CardTitle className="text-base sm:text-lg">Medical Record Form</CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Submit the active school year medical record or continue an existing one before clearance is issued.
+                  Submit the active school year medical record or continue an existing one before your medical certificate is issued.
                 </p>
               </div>
               <Button onClick={() => navigate('/student/year-selection')} className="w-full shrink-0 sm:w-auto">
@@ -588,7 +582,7 @@ export default function StudentClearance() {
                             <p className="font-medium text-yellow-800">Clearance Not Yet Available</p>
                             <p className="mt-1 text-sm text-muted-foreground">
                               {isInReview
-                                ? 'A clinic staff member is currently reviewing your medical record. Once approved, your medical clearance will be available for download here.'
+                                ? 'A clinic staff member is currently reviewing your medical record. Once approved, your medical certificate will be available for download here.'
                                 : 'Your medical record is waiting to be picked up for review. Once clinic staff starts processing it, your status will update here.'}
                             </p>
                             <Badge variant="secondary" className="mt-2 bg-yellow-100 text-yellow-800">
@@ -634,7 +628,7 @@ export default function StudentClearance() {
                           <div>
                             <p className="font-medium text-amber-900">Physical Exam Completed</p>
                             <p className="mt-1 text-sm text-muted-foreground">
-                              Your checkup is complete, but the clearance is not yet finalized. Please wait for clinic approval.
+                              Your checkup is complete, but the medical certificate is not yet finalized. Please wait for clinic approval.
                             </p>
                             <Badge variant="secondary" className="mt-2 bg-amber-100 text-amber-800">
                               <Clock className="mr-1 h-3 w-3" /> Awaiting Final Approval
@@ -647,7 +641,7 @@ export default function StudentClearance() {
                           <div>
                             <p className="font-medium text-yellow-900">Clearance Not Available Yet</p>
                             <p className="mt-1 text-sm text-muted-foreground">
-                              Current status: <span className="font-medium">{normalizedStatus || 'unknown'}</span>. Your medical clearance will appear here once approved.
+                              Current status: <span className="font-medium">{normalizedStatus || 'unknown'}</span>. Your medical certificate will appear here once approved.
                             </p>
                           </div>
                         </>
@@ -664,7 +658,7 @@ export default function StudentClearance() {
                       <div className="flex items-center gap-3">
                         <ShieldCheck className="h-5 w-5 text-green-600" />
                         <div>
-                          <CardTitle>Medical Clearance Certificate</CardTitle>
+                          <CardTitle>Medical Certificate</CardTitle>
                           <p className="mt-0.5 text-sm font-medium text-green-600">Approved - 3 copies on A4</p>
                         </div>
                       </div>
@@ -676,7 +670,7 @@ export default function StudentClearance() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <p className="text-xs text-muted-foreground lg:hidden">
-                      Swipe sideways on mobile to view the full medical clearance.
+                      Swipe sideways on mobile to view the full medical certificate.
                     </p>
                     <div className="overflow-hidden rounded-lg border bg-white">
                       <div className="overflow-auto overscroll-contain px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh]">
@@ -697,7 +691,7 @@ export default function StudentClearance() {
                 <Card>
                   <CardContent className="flex flex-col items-center justify-center px-4 py-12 text-center sm:py-16">
                     <FileText className="mb-4 h-16 w-16 text-muted-foreground opacity-40" />
-                    <p className="text-muted-foreground">Medical clearance preview will appear here once your record is approved.</p>
+                    <p className="text-muted-foreground">Medical certificate preview will appear here once your record is approved.</p>
                   </CardContent>
                 </Card>
               )}

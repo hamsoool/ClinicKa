@@ -718,7 +718,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               />
               <Label htmlFor="submissionConfirmed" className="text-sm leading-6 font-normal">
                 I confirm that all details and laboratory test source information are complete and true. I understand that
-                inaccurate information may delay medical clearance.
+                inaccurate information may delay medical certificate issuance.
               </Label>
             </div>
           </div>

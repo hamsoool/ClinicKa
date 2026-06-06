@@ -402,125 +402,125 @@ export default function StudentProfile() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-6 sm:space-y-8">
       <StudentPageIntro
         title="Profile"
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
-        <form onSubmit={handleSubmit} className="space-y-6">
-        <StudentProfileFormCard
-          value={formData}
-          onChange={(field, value) => updateField(field as keyof StudentProfileFormState, value as StudentProfileFormState[keyof StudentProfileFormState])}
-          title="Student Information"
-          hasValidBirthday={hasValidBirthday}
-          hasValidContactNumber={hasValidContactNumber}
-        />
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
+        <form onSubmit={handleSubmit} className="w-full min-w-0 space-y-6 p-4 md:p-0">
+          <StudentProfileFormCard
+            value={formData}
+            onChange={(field, value) => updateField(field as keyof StudentProfileFormState, value as StudentProfileFormState[keyof StudentProfileFormState])}
+            title="Student Information"
+            hasValidBirthday={hasValidBirthday}
+            hasValidContactNumber={hasValidContactNumber}
+          />
 
-        <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-          <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
-            <CardTitle className="text-xl font-semibold text-on-surface">Student Assets</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 pt-6 sm:gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
-              <div className="mb-4 flex items-center gap-3">
-                <ImageIcon className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="font-semibold text-on-surface">1x1 Student Photo</p>
+          <Card className="box-border w-full min-w-0 overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+            <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
+              <CardTitle className="text-xl font-semibold text-on-surface">Student Assets</CardTitle>
+            </CardHeader>
+            <CardContent className="grid w-full min-w-0 gap-4 px-4 pt-6 sm:gap-6 sm:px-6 lg:grid-cols-2">
+              <div className="box-border w-full min-w-0 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
+                <div className="mb-4 flex items-center gap-3">
+                  <ImageIcon className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="font-semibold text-on-surface">1x1 Student Photo</p>
+                  </div>
+                </div>
+                <FilePickerButton
+                  accept={PROFILE_ASSET_ACCEPT_ATTRIBUTE}
+                  ariaLabel="Choose 1x1 student photo"
+                  disabled={saving}
+                  loading={isUploadingAssets}
+                  onFileSelected={(file) => handleAssetChange('photo', file)}
+                >
+                  Choose Photo
+                </FilePickerButton>
+                <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
+                  <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border bg-white">
+                    {currentPhotoUrl ? (
+                      <img src={currentPhotoUrl} alt="Student profile" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No photo</span>
+                    )}
+                  </div>
+                  <div className="w-full min-w-0 text-sm">
+                    {photoFile ? (
+                      <div className="flex items-center gap-2 text-green-700">
+                        <Check className="h-4 w-4" />
+                        <span className="block min-w-0 truncate" title={photoFile.name}>{photoFile.name}</span>
+                      </div>
+                    ) : profileAssets.photoFileName ? (
+                      <p className="truncate text-on-surface-variant" title={profileAssets.photoFileName}>{profileAssets.photoFileName}</p>
+                    ) : loadingAssets ? (
+                      <p className="text-on-surface-variant">Loading current photo...</p>
+                    ) : (
+                      <p className="text-amber-700">No saved photo yet.</p>
+                    )}
+                  </div>
                 </div>
               </div>
-              <FilePickerButton
-                accept={PROFILE_ASSET_ACCEPT_ATTRIBUTE}
-                ariaLabel="Choose 1x1 student photo"
-                disabled={saving}
-                loading={isUploadingAssets}
-                onFileSelected={(file) => handleAssetChange('photo', file)}
-              >
-                Choose Photo
-              </FilePickerButton>
-              <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
-                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border bg-white">
-                  {currentPhotoUrl ? (
-                    <img src={currentPhotoUrl} alt="Student profile" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">No photo</span>
-                  )}
-                </div>
-                <div className="w-full min-w-0 text-sm">
-                  {photoFile ? (
-                    <div className="flex items-center gap-2 text-green-700">
-                      <Check className="h-4 w-4" />
-                      <span className="block min-w-0 truncate" title={photoFile.name}>{photoFile.name}</span>
-                    </div>
-                  ) : profileAssets.photoFileName ? (
-                    <p className="truncate text-on-surface-variant" title={profileAssets.photoFileName}>{profileAssets.photoFileName}</p>
-                  ) : loadingAssets ? (
-                    <p className="text-on-surface-variant">Loading current photo...</p>
-                  ) : (
-                    <p className="text-amber-700">No saved photo yet.</p>
-                  )}
-                </div>
-              </div>
-            </div>
 
-            <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
-              <div className="mb-4 flex items-center gap-3">
-                <PenLine className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="font-semibold text-on-surface">Signature of Student</p>
+              <div className="box-border w-full min-w-0 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
+                <div className="mb-4 flex items-center gap-3">
+                  <PenLine className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="font-semibold text-on-surface">Signature of Student</p>
+                  </div>
+                </div>
+                <FilePickerButton
+                  accept={PROFILE_ASSET_ACCEPT_ATTRIBUTE}
+                  ariaLabel="Choose student signature image"
+                  disabled={saving}
+                  loading={isUploadingAssets}
+                  onFileSelected={(file) => handleAssetChange('signature', file)}
+                >
+                  Choose Signature
+                </FilePickerButton>
+                <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
+                  <div className="flex h-24 w-full max-w-[10rem] items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
+                    {currentSignatureUrl ? (
+                      <img src={currentSignatureUrl} alt="Student signature" className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No signature</span>
+                    )}
+                  </div>
+                  <div className="w-full min-w-0 text-sm">
+                    {signatureFile ? (
+                      <div className="flex items-center gap-2 text-green-700">
+                        <Check className="h-4 w-4" />
+                        <span className="block min-w-0 truncate" title={signatureFile.name}>{signatureFile.name}</span>
+                      </div>
+                    ) : profileAssets.signatureFileName ? (
+                      <p className="truncate text-on-surface-variant" title={profileAssets.signatureFileName}>{profileAssets.signatureFileName}</p>
+                    ) : loadingAssets ? (
+                      <p className="text-on-surface-variant">Loading current signature...</p>
+                    ) : (
+                      <p className="text-amber-700">No saved signature yet.</p>
+                    )}
+                  </div>
                 </div>
               </div>
-              <FilePickerButton
-                accept={PROFILE_ASSET_ACCEPT_ATTRIBUTE}
-                ariaLabel="Choose student signature image"
-                disabled={saving}
+            </CardContent>
+            <CardFooter className="flex flex-col items-stretch gap-3 border-t border-outline-variant/30 bg-surface-container-low px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <p className="text-xs text-on-surface-variant sm:text-sm">
+                {hasChanges ? 'You have unsaved profile changes.' : 'Your profile and student assets are up to date.'}
+              </p>
+              <Button
+                type="submit"
+                disabled={saving || !hasChanges || !isValid}
                 loading={isUploadingAssets}
-                onFileSelected={(file) => handleAssetChange('signature', file)}
+                className="w-full sm:w-auto"
               >
-                Choose Signature
-              </FilePickerButton>
-              <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
-                <div className="flex h-24 w-full max-w-[10rem] items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
-                  {currentSignatureUrl ? (
-                    <img src={currentSignatureUrl} alt="Student signature" className="max-h-full max-w-full object-contain" />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">No signature</span>
-                  )}
-                </div>
-                <div className="w-full min-w-0 text-sm">
-                  {signatureFile ? (
-                    <div className="flex items-center gap-2 text-green-700">
-                      <Check className="h-4 w-4" />
-                      <span className="block min-w-0 truncate" title={signatureFile.name}>{signatureFile.name}</span>
-                    </div>
-                  ) : profileAssets.signatureFileName ? (
-                    <p className="truncate text-on-surface-variant" title={profileAssets.signatureFileName}>{profileAssets.signatureFileName}</p>
-                  ) : loadingAssets ? (
-                    <p className="text-on-surface-variant">Loading current signature...</p>
-                  ) : (
-                    <p className="text-amber-700">No saved signature yet.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col items-stretch gap-3 border-t border-outline-variant/30 bg-surface-container-low px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <p className="text-xs text-on-surface-variant sm:text-sm">
-              {hasChanges ? 'You have unsaved profile changes.' : 'Your profile and student assets are up to date.'}
-            </p>
-            <Button
-              type="submit"
-              disabled={saving || !hasChanges || !isValid}
-              loading={isUploadingAssets}
-              className="w-full sm:w-auto"
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </CardFooter>
-        </Card>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </CardFooter>
+          </Card>
         </form>
 
-        <div className="space-y-6 xl:sticky xl:top-24">
+        <div className="w-full min-w-0 space-y-6 xl:sticky xl:top-24">
           <PasswordChangeCard title="Change Password" />
 
           <SettingsLogoutCard className="flex justify-end" />

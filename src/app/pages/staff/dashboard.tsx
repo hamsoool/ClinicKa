@@ -633,7 +633,7 @@ export default function StaffDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-5 sm:space-y-8">
       <PortalPageIntro
         eyebrow={(
           <span className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
@@ -643,7 +643,7 @@ export default function StaffDashboard() {
         title={`Welcome, ${displayName}`}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
         {summaryCards.map((card) => {
           const Icon = card.icon;
           return (
@@ -651,7 +651,7 @@ export default function StaffDashboard() {
               type="button"
               key={card.label}
               onClick={() => navigate(card.href)}
-              className="flex min-h-[8.5rem] w-full flex-col justify-between rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest p-3.5 text-left shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] transition-colors hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:rounded-2xl sm:p-5"
+              className="box-border flex min-h-[8.5rem] w-full flex-col justify-between rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest p-3.5 text-left shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] transition-colors hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:rounded-2xl sm:p-5"
             >
               <div className="flex items-start justify-between gap-2 sm:gap-4">
                 <div>
@@ -671,23 +671,23 @@ export default function StaffDashboard() {
         })}
       </div>
 
-      <div className="grid gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)]">
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="grid min-w-0 gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)]">
+        <div className="box-border w-full min-w-0 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:px-6 sm:py-6">
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Submission Queue</h2>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:justify-end">
               <button
                 onClick={() => setQueueSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface sm:w-auto"
+                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface md:w-auto"
               >
                 <ArrowUpDown className="h-3.5 w-3.5" />
                 {queueSortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
               </button>
               <button
                 onClick={() => navigate('/staff/submissions')}
-                className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90 sm:w-auto"
+                className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90 md:w-auto"
               >
                 Open Queue
               </button>
@@ -699,7 +699,7 @@ export default function StaffDashboard() {
                 disabled={overviewFetching}
                 aria-label="Refresh queue"
                 title="Refresh queue"
-                className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
               >
                 <RefreshCw className={`h-4 w-4 ${overviewFetching ? 'animate-spin' : ''}`} />
               </button>
@@ -711,17 +711,17 @@ export default function StaffDashboard() {
             className="mb-5"
           >
             <div className="pb-1">
-              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-4">
-                <TabsTrigger value="pending" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
+              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-2xl p-2 md:grid-cols-4">
+                <TabsTrigger value="pending" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal md:text-sm">
                   Pending ({(overview.pendingRecords || 0) + (overview.inReviewRecords || 0)})
                 </TabsTrigger>
-                <TabsTrigger value="returned" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
+                <TabsTrigger value="returned" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal md:text-sm">
                   Returned ({overview.returnedRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="resubmitted" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
+                <TabsTrigger value="resubmitted" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal md:text-sm">
                   Resubmitted ({overview.resubmittedRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="all" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal sm:text-sm">
+                <TabsTrigger value="all" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal md:text-sm">
                   All Action Needed ({overview.actionableRecords || 0})
                 </TabsTrigger>
               </TabsList>
@@ -744,9 +744,9 @@ export default function StaffDashboard() {
                 <button
                   key={submission.id}
                   onClick={() => navigate(`/staff/review/${submission.id}`)}
-                  className="flex w-full flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low sm:flex-row sm:items-start sm:gap-4"
+                  className="box-border flex w-full min-w-0 flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low md:flex-row md:items-start md:gap-4"
                 >
-                    <div className="flex items-start gap-4 sm:flex-1">
+                  <div className="flex items-start gap-4 md:flex-1">
                     <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
                       <ClipboardCheck className="h-5 w-5" />
                     </div>
@@ -771,7 +771,7 @@ export default function StaffDashboard() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex w-full items-center justify-end sm:w-auto">
+                  <div className="flex w-full items-center justify-end md:w-auto">
                     <ArrowRight className="h-4 w-4 flex-shrink-0 text-on-surface-variant" />
                   </div>
                 </button>
@@ -790,16 +790,16 @@ export default function StaffDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+        <div className="box-border w-full min-w-0 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:px-6 sm:py-6">
           <div className="mb-4 flex flex-col gap-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-on-surface">Submission Overview</h2>
                 <p className="mt-1 text-xs text-on-surface-variant">
                   {totalReportStudents} student{totalReportStudents === 1 ? '' : 's'}
                 </p>
               </div>
-              <div className="w-full sm:w-44">
+              <div className="w-full min-w-0 md:w-44">
                 <p className="mb-1 text-xs font-medium text-on-surface-variant">Group by</p>
                 <Select value={reportGroupBy} onValueChange={(value) => setReportGroupBy(value as ReportGroupKey)}>
                   <SelectTrigger className="h-9 text-sm">
@@ -818,16 +818,16 @@ export default function StaffDashboard() {
               value={reportRange}
               onValueChange={(value) => setReportRange(value as SubmissionRangeKey)}
             >
-              <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl p-2 sm:grid-cols-4 sm:gap-0 sm:p-[3px]">
-                <TabsTrigger value="today" className="min-h-9 px-3 text-xs sm:text-sm">Today</TabsTrigger>
-                <TabsTrigger value="week" className="min-h-9 px-3 text-xs sm:text-sm">This Week</TabsTrigger>
-                <TabsTrigger value="month" className="min-h-9 px-3 text-xs sm:text-sm">This Month</TabsTrigger>
-                <TabsTrigger value="academicYear" className="min-h-9 px-3 text-xs sm:text-sm">{academicYearLabel}</TabsTrigger>
+              <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl p-2 md:grid-cols-4 md:gap-0 md:p-[3px]">
+                <TabsTrigger value="today" className="min-h-9 px-3 text-xs md:text-sm">Today</TabsTrigger>
+                <TabsTrigger value="week" className="min-h-9 px-3 text-xs md:text-sm">This Week</TabsTrigger>
+                <TabsTrigger value="month" className="min-h-9 px-3 text-xs md:text-sm">This Month</TabsTrigger>
+                <TabsTrigger value="academicYear" className="min-h-9 px-3 text-xs md:text-sm">{academicYearLabel}</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
           <div className="space-y-4">
-            <div className="rounded-2xl border border-dashed border-outline-variant/30 bg-surface-container-low/40 p-4">
+            <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-dashed border-outline-variant/30 bg-surface-container-low/40 p-4">
               {reportSubmissionsLoading ? (
                 <div className="flex min-h-52 items-center justify-center text-sm text-on-surface-variant">
                   Loading submission breakdown...
@@ -840,8 +840,8 @@ export default function StaffDashboard() {
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <div className="h-64 min-w-full" style={{ width: `${reportChartMinWidth}px` }}>
+                <div className="w-full min-w-0 overflow-x-auto">
+                  <div className="h-64 w-full min-w-full" style={{ width: `${reportChartMinWidth}px` }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={reportChartData} margin={{ top: 16, right: 8, left: -16, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--outline-variant) / 0.3)" vertical={false} />

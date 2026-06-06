@@ -2126,7 +2126,7 @@ export default function StaffRecordReview() {
     backgroundReviewMutation.mutate({ prepared, action });
     toast.success(
       action === 'cleared'
-        ? 'Medical clearance is processing in the background. You can continue working while it finishes.'
+        ? 'Medical certificate is processing in the background. You can continue working while it finishes.'
         : action === 'pending'
           ? 'Decline update is processing in the background. You can continue working while it finishes.'
           : 'Review save is processing in the background. You can continue working while it finishes.',
@@ -2181,6 +2181,23 @@ export default function StaffRecordReview() {
   const previousReviewStep = currentReviewStepIndex > 0 ? REVIEW_STEPS[currentReviewStepIndex - 1] : null;
   const nextReviewStep =
     currentReviewStepIndex < REVIEW_STEPS.length - 1 ? REVIEW_STEPS[currentReviewStepIndex + 1] : null;
+
+  const scrollToPortalTop = () => {
+    if (typeof document === 'undefined') return;
+    const portalContent = document.getElementById('portal-content');
+    if (portalContent) {
+      portalContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const changeReviewStep = (nextStep: ReviewStep) => {
+    setActiveReviewStep(nextStep);
+    window.requestAnimationFrame(() => {
+      scrollToPortalTop();
+    });
+  };
   const medicalRecordDateBounds = getMedicalRecordDateBounds();
   const finalDecisionLabel = 'Clearance';
   const uploadedLabOcrTypes = getUploadedLabOcrTypes();
@@ -2317,7 +2334,7 @@ export default function StaffRecordReview() {
         </div>
       ) : null}
 
-      <Tabs value={activeReviewStep} onValueChange={(value) => setActiveReviewStep(value as ReviewStep)} className="space-y-6">
+      <Tabs value={activeReviewStep} onValueChange={(value) => changeReviewStep(value as ReviewStep)} className="space-y-6">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-border/60 bg-muted/40 p-1.5 md:grid-cols-4">
           <TabsTrigger value="record" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
             Student Record
@@ -3221,7 +3238,7 @@ export default function StaffRecordReview() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical clearance.</p>
+                  <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical certificate.</p>
                 </div>
                 ) : null}
 
@@ -3325,17 +3342,17 @@ export default function StaffRecordReview() {
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => previousReviewStep && setActiveReviewStep(previousReviewStep)}
-              disabled={!previousReviewStep}
-            >
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => previousReviewStep && changeReviewStep(previousReviewStep)}
+                disabled={!previousReviewStep}
+              >
               <ChevronLeft className="mr-2 h-4 w-4" />
               Previous
             </Button>
             {nextReviewStep ? (
-              <Button type="button" onClick={() => setActiveReviewStep(nextReviewStep)}>
+              <Button type="button" onClick={() => changeReviewStep(nextReviewStep)}>
                 Next
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
