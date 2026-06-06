@@ -59,13 +59,13 @@ export default function StaffLayout() {
     <PortalShell
       navItems={navItems}
       portalLabel="Clinic Operations Portal"
-      brandSubtitle="ClinicKa!"
+      brandTitle="ClinicKa!"
+      brandSubtitle="GC Health Services Unit"
       brandIcon={Stethoscope}
-      brandImageSrc="/gchsu.png"
+      brandImageSrc="/clinickalogo.png"
       displayName={displayName}
       profileSubtitle={position}
       initials={getInitials(displayName, 'CL')}
-      roleBadge="Gordon College Health Services"
       profileUploadId="clinic-profile-upload"
       profileUploadLabel="Upload clinic staff profile picture"
       topActions={topActions}

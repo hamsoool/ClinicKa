@@ -93,7 +93,7 @@ export function getInitials(name: string, fallback = 'GC') {
 export default function PortalShell({
   navItems,
   portalLabel,
-  brandTitle = 'Gordon College',
+  brandTitle = 'ClinicKa!',
   brandSubtitle,
   brandIcon: BrandIcon,
   brandImageSrc,
@@ -261,12 +261,12 @@ export default function PortalShell({
 
             <div className="rounded-lg border border-white/10 bg-white/5 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)] backdrop-blur">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-emerald-300/30 bg-emerald-50 text-primary">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-visible text-primary">
                   {brandImageSrc && !brandImageFailed ? (
                     <img
                       src={brandImageSrc}
                       alt={`${brandTitle} logo`}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain"
                       onError={() => setBrandImageFailed(true)}
                     />
                   ) : (
@@ -275,7 +275,7 @@ export default function PortalShell({
                 </div>
                 <div className="min-w-0">
                   <h2 className="truncate text-lg font-bold tracking-tight text-white">{brandTitle}</h2>
-                  <p className="truncate text-xs font-medium tracking-[0.18em] text-emerald-200/80">
+                  <p className="text-[10px] font-medium leading-tight tracking-[0.12em] text-emerald-200/80 whitespace-normal">
                     {brandSubtitle}
                   </p>
                 </div>
@@ -358,8 +358,7 @@ export default function PortalShell({
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
               <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
-                <span className="sm:hidden">{brandSubtitle}</span>
-                <span className="hidden uppercase sm:inline">Clinic Management System</span>
+                <span className="uppercase">Medical Clearance and Health Record Management System</span>
               </p>
             </div>
             <div className="flex min-w-0 items-center gap-2">
@@ -459,7 +458,7 @@ export default function PortalShell({
       </header>
 
       <main id="portal-content" className="pt-20 outline-none md:pl-72" tabIndex={-1}>
-        <div className="px-4 pb-28 md:px-8 md:pb-24">
+        <div className="px-4 pb-24 sm:pb-28 md:px-8 md:pb-24">
           <Outlet />
         </div>
       </main>
@@ -539,8 +538,8 @@ export default function PortalShell({
                   ? `${pendingUploadCount} uploads are still in progress. Please wait until they finish before logging out.`
                   : 'A file upload is still in progress. Please wait until it finishes before logging out.'
                 : pendingStaffClearanceCount > 1
-                  ? `${pendingStaffClearanceCount} medical clearances are still being processed in the background. Please wait until they finish before logging out.`
-                  : 'A medical clearance is still being processed in the background. Please wait until it finishes before logging out.'}
+                  ? `${pendingStaffClearanceCount} medical certificates are still being processed in the background. Please wait until they finish before logging out.`
+                  : 'A medical certificate is still being processed in the background. Please wait until it finishes before logging out.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

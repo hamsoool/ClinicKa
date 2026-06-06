@@ -1105,7 +1105,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                   Submissions by {submissionBreakdownView === 'department' ? 'Department' : 'Program'}
                 </CardTitle>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Total medical clearance forms for the current academic term.
+                  Total medical certificates for the current academic term.
                 </p>
                 <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
                   Current Term: {reportingTermRange.label}

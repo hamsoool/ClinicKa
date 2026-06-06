@@ -58,13 +58,13 @@ export default function AdminLayout() {
     <PortalShell
       navItems={navItems}
       portalLabel="Admin Control Center"
-      brandSubtitle="ClinicKa!"
+      brandTitle="ClinicKa!"
+      brandSubtitle="GC Health Services Unit"
       brandIcon={ShieldCheck}
-      brandImageSrc="/gchsu.png"
+      brandImageSrc="/clinickalogo.png"
       displayName={displayName}
       profileSubtitle={roleLabel}
       initials={getInitials(displayName, 'AD')}
-      roleBadge="Gordon College Health Services"
       profileUploadId="admin-profile-upload"
       profileUploadLabel="Upload admin profile picture"
       topActions={topActions}

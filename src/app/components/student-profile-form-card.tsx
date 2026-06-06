@@ -181,17 +181,17 @@ export function StudentProfileFormCard({
   const disabledFieldClass = readOnly ? 'cursor-not-allowed opacity-80' : '';
 
   return (
-    <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+    <Card className="box-border w-full min-w-0 overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
       <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
         <CardTitle className="text-xl font-semibold text-on-surface">{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
-      <CardContent className="grid gap-5 pt-6 md:grid-cols-2">
-        <div className="min-w-0">
+      <CardContent className="grid w-full min-w-0 gap-5 px-4 pt-6 sm:px-6 md:grid-cols-2">
+        <div className="w-full min-w-0">
           <Label htmlFor="studentId">Student ID</Label>
           <Input id="studentId" value={value.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
         </div>
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <Label htmlFor="firstName">First Name{readOnly ? '' : ' *'}</Label>
           <Input
             id="firstName"
@@ -203,7 +203,7 @@ export function StudentProfileFormCard({
             className={`${disabledFieldClass} ${requiredFieldClass(!value.firstName.trim())}`.trim()}
           />
         </div>
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <Label htmlFor="lastName">Last Name{readOnly ? '' : ' *'}</Label>
           <Input
             id="lastName"
@@ -215,7 +215,7 @@ export function StudentProfileFormCard({
             className={`${disabledFieldClass} ${requiredFieldClass(!value.lastName.trim())}`.trim()}
           />
         </div>
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <Label htmlFor="middleInitial">Middle Initial{readOnly ? '' : ' *'}</Label>
           <Input
             id="middleInitial"
@@ -228,7 +228,7 @@ export function StudentProfileFormCard({
             className={`${disabledFieldClass} ${requiredFieldClass(!value.middleInitial.trim())}`.trim()}
           />
         </div>
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <Label htmlFor="age">Age{readOnly ? '' : ' *'}</Label>
           <Input
             id="age"
@@ -240,7 +240,7 @@ export function StudentProfileFormCard({
             className={`cursor-not-allowed opacity-80 ${requiredFieldClass(!value.age.trim())}`}
           />
         </div>
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <Label htmlFor="sex">Sex at Birth{readOnly ? '' : ' *'}</Label>
           {readOnly ? (
             <Input id="sex" value={formatReadOnlySex(value.sex)} readOnly disabled className="cursor-not-allowed opacity-80" />
@@ -256,9 +256,9 @@ export function StudentProfileFormCard({
             </Select>
           )}
         </div>
-        <div className="min-w-0 md:col-span-2">
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="min-w-0">
+        <div className="w-full min-w-0 md:col-span-2">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-5 md:grid-cols-2">
+            <div className="w-full min-w-0">
               <Label htmlFor="department">Department{readOnly ? '' : ' *'}</Label>
               {readOnly ? (
                 <Input id="department" value={value.department} readOnly disabled className="cursor-not-allowed opacity-80" />
@@ -277,7 +277,7 @@ export function StudentProfileFormCard({
                 </Select>
               )}
             </div>
-            <div className="min-w-0">
+            <div className="w-full min-w-0">
               <Label htmlFor="course">Course / Program{readOnly ? '' : ' *'}</Label>
               {readOnly ? (
                 <Input id="course" value={value.course} readOnly disabled className="cursor-not-allowed opacity-80" />
@@ -302,7 +302,7 @@ export function StudentProfileFormCard({
             </div>
           </div>
         </div>
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <Label htmlFor="yearLevel">{yearLevelLabel}{readOnly ? '' : ' *'}</Label>
           {readOnly ? (
             <Input
@@ -328,12 +328,12 @@ export function StudentProfileFormCard({
           )}
         </div>
         {extraFields.map((field) => (
-          <div key={field.id} className="min-w-0">
+          <div key={field.id} className="w-full min-w-0">
             <Label htmlFor={field.id}>{field.label}</Label>
             <Input id={field.id} value={field.value} readOnly disabled className="cursor-not-allowed opacity-80" />
           </div>
         ))}
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <Label htmlFor="birthday">Birthday{readOnly ? '' : ' *'}</Label>
           {readOnly ? (
             <Input
@@ -364,7 +364,7 @@ export function StudentProfileFormCard({
                 </PopoverTrigger>
                 <PopoverContent className="w-[min(92vw,24rem)] rounded-2xl p-0 shadow-xl" align="start">
                   <div className="border-b border-border/60 px-3 py-3">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <Button
                         type="button"
                         variant="ghost"
@@ -375,7 +375,7 @@ export function StudentProfileFormCard({
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </Button>
-                      <div className="grid flex-1 grid-cols-[minmax(0,1fr)_6.5rem] gap-2">
+                      <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_6.5rem]">
                         <Select
                           value={String(birthdayPickerMonth.getMonth())}
                           onValueChange={(nextValue) =>
@@ -463,7 +463,7 @@ export function StudentProfileFormCard({
             </>
           )}
         </div>
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <Label htmlFor="civilStatus">Civil Status{readOnly ? '' : ' *'}</Label>
           {readOnly ? (
             <Input id="civilStatus" value={value.civilStatus} readOnly disabled className="cursor-not-allowed opacity-80" />
@@ -479,7 +479,7 @@ export function StudentProfileFormCard({
             </Select>
           )}
         </div>
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <Label htmlFor="contactNumber">Contact Number{readOnly ? '' : ' *'}</Label>
           <Input
             id="contactNumber"
@@ -497,7 +497,7 @@ export function StudentProfileFormCard({
             <p className="mt-1 text-sm text-red-600">Use exactly 11 digits starting with 09.</p>
           ) : null}
         </div>
-        <div className="md:col-span-2">
+        <div className="w-full min-w-0 md:col-span-2">
           <Label htmlFor="address">Street Address{readOnly ? '' : ' *'}</Label>
           <Input
             id="address"

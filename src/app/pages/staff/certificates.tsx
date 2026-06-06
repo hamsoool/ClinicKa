@@ -597,7 +597,7 @@ function StaffCertificatesWorkspace() {
                 </TabsTrigger>
                 <TabsTrigger value="medical-clearance" className="min-h-11 justify-center gap-2 px-3 text-center whitespace-normal">
                   <Award className="h-4 w-4" />
-                  Medical Clearance
+                  Medical Certificate
                 </TabsTrigger>
               </TabsList>
 
@@ -612,9 +612,9 @@ function StaffCertificatesWorkspace() {
                           <span className="mt-2 block text-xs text-muted-foreground">Refreshing selected student...</span>
                         ) : null}
                       </div>
-                      <Button onClick={downloadRecordPDF} className="w-full shrink-0 bg-primary text-white hover:bg-primary/90 sm:w-auto">
+                      <Button onClick={downloadRecordPDF} className="min-h-11 w-full shrink-0 px-5 bg-primary text-white hover:bg-primary/90 sm:w-auto">
                         <Download className="mr-2 h-4 w-4" />
-                        Print (Long Bond)
+                        Print
                       </Button>
                     </div>
                   </CardHeader>
@@ -671,18 +671,18 @@ function StaffCertificatesWorkspace() {
                     <CardHeader>
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
-                          <CardTitle className="leading-snug">Medical Clearance Certificate</CardTitle>
+                          <CardTitle className="leading-snug">Medical Certificate</CardTitle>
                           <p className="mt-1 text-sm text-muted-foreground">3 copies (Student, Coordinator, Registrar) | A4 bond paper</p>
                         </div>
-                        <Button onClick={downloadClearancePDF} className="w-full shrink-0 bg-primary text-white hover:bg-primary/90 sm:w-auto">
+                        <Button onClick={downloadClearancePDF} className="min-h-11 w-full shrink-0 px-5 bg-primary text-white hover:bg-primary/90 sm:w-auto">
                           <Download className="mr-2 h-4 w-4" />
-                          Print (A4)
+                          Print
                         </Button>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <p className="text-xs text-muted-foreground lg:hidden">
-                        Swipe sideways on mobile to view the full medical clearance.
+                        Swipe sideways on mobile to view the full medical certificate.
                       </p>
                       <div className="overflow-hidden rounded-lg border bg-white">
                         <div className="overflow-auto overscroll-contain px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh]">

@@ -48,7 +48,7 @@ function buildNotificationItem(record: SubmissionRecord): StudentNotificationSyn
       submissionId: record.id,
       status: 'approved',
       title: 'Medical clearance approved',
-      message: `Your ${yearLabel} medical clearance is approved and ready to view or download.`,
+      message: `Your ${yearLabel} medical certificate is approved and ready to view or download.`,
       actionLabel: 'Open clearance',
       actionPath: '/student/clearance',
       timestamp,

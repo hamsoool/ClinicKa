@@ -93,8 +93,8 @@ export default function SettingsLogoutCard({
                   ? `${pendingUploadCount} uploads are still in progress. Please wait until they finish before logging out.`
                   : 'A file upload is still in progress. Please wait until it finishes before logging out.'
                 : pendingStaffClearanceCount > 1
-                  ? `${pendingStaffClearanceCount} medical clearances are still being processed in the background. Please wait until they finish before logging out.`
-                  : 'A medical clearance is still being processed in the background. Please wait until it finishes before logging out.'}
+                  ? `${pendingStaffClearanceCount} medical certificates are still being processed in the background. Please wait until they finish before logging out.`
+                  : 'A medical certificate is still being processed in the background. Please wait until it finishes before logging out.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
