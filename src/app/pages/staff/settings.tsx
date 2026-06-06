@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Award, Check, ClipboardCheck, PenLine, User } from 'lucide-react';
+import { Award, ClipboardCheck, User } from 'lucide-react';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { toast } from 'sonner';
-import FilePickerButton from '../../components/file-picker-button';
 import PasswordChangeCard from '../../components/password-change-card';
 import SettingsLogoutCard from '../../components/settings-logout-card';
 import { Button } from '../../components/ui/button';
@@ -22,10 +21,7 @@ import { Switch } from '../../components/ui/switch';
 import { useAuth } from '../../lib/auth';
 import {
   getRoleLabel,
-  getStaffSignature,
   updateStaffProfile,
-  uploadStaffSignature,
-  type StaffSignatureAsset,
 } from '../../lib/api';
 import { formatPhilippinePhoneInput, isValidPhilippinePhoneNumber } from '../student/medical-form/constants';
 import {
@@ -41,36 +37,8 @@ type StaffProfileFormState = {
   phone: string;
 };
 
-const STAFF_SIGNATURE_ACCEPT_ATTRIBUTE = 'image/*,.png,.jpg,.jpeg,.heic,.heif,.webp';
-const STAFF_SIGNATURE_ALLOWED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'heic', 'heif', 'webp']);
-
 function normalizeProfileValue(value: string) {
   return value.trim();
-}
-
-function getFileExtension(file?: File | null) {
-  const fileName = String(file?.name || '');
-  return fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() || '' : '';
-}
-
-function isAllowedSignatureImage(file?: File | null) {
-  if (!file) return false;
-  const mimeType = String(file.type || '').toLowerCase();
-  return mimeType.startsWith('image/') || STAFF_SIGNATURE_ALLOWED_EXTENSIONS.has(getFileExtension(file));
-}
-
-function buildEmptyStaffSignature(): StaffSignatureAsset {
-  return {
-    signatureUrl: null,
-    signatureFileName: null,
-  };
-}
-
-function withCacheBust(url: string | null | undefined) {
-  const value = String(url || '').trim();
-  if (!value) return null;
-  const separator = value.includes('?') ? '&' : '?';
-  return `${value}${separator}t=${Date.now()}`;
 }
 
 function buildProfileFormState(me?: ReturnType<typeof useAuth>['me'] | null): StaffProfileFormState {
@@ -104,11 +72,6 @@ export default function StaffSettings() {
   const [profile, setProfile] = useState<StaffProfileFormState>(initialProfileData);
   const [savingProfile, setSavingProfile] = useState(false);
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
-  const [loadingSignature, setLoadingSignature] = useState(true);
-  const [staffSignature, setStaffSignature] = useState<StaffSignatureAsset>(buildEmptyStaffSignature);
-  const [signatureFile, setSignatureFile] = useState<File | null>(null);
-  const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string | null>(null);
-  const [uploadingSignature, setUploadingSignature] = useState(false);
   const [savedWorkspacePreferences, setSavedWorkspacePreferences] =
     useState<StaffWorkspacePreferences>(initialWorkspacePreferences);
   const [workspacePreferences, setWorkspacePreferences] =
@@ -118,51 +81,6 @@ export default function StaffSettings() {
   useEffect(() => {
     setProfile(initialProfileData);
   }, [initialProfileData]);
-
-  useEffect(() => {
-    if (!me?.profile?.id) {
-      setStaffSignature(buildEmptyStaffSignature());
-      setLoadingSignature(false);
-      return;
-    }
-
-    let active = true;
-    setLoadingSignature(true);
-
-    const loadSignature = async () => {
-      try {
-        const signature = await getStaffSignature();
-        if (active) {
-          setStaffSignature(signature);
-        }
-      } catch {
-        if (active) {
-          setStaffSignature(buildEmptyStaffSignature());
-        }
-      } finally {
-        if (active) {
-          setLoadingSignature(false);
-        }
-      }
-    };
-
-    void loadSignature();
-
-    return () => {
-      active = false;
-    };
-  }, [me?.profile?.id]);
-
-  useEffect(() => {
-    if (!signatureFile) {
-      setSignaturePreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(signatureFile);
-    setSignaturePreviewUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [signatureFile]);
 
   useEffect(() => {
     setSavedWorkspacePreferences(initialWorkspacePreferences);
@@ -185,7 +103,6 @@ export default function StaffSettings() {
     Boolean(profile.name.trim()) &&
     Boolean(profile.email.trim()) &&
     (!profile.phone.trim() || isValidPhilippinePhoneNumber(profile.phone));
-  const currentStaffSignatureUrl = signaturePreviewUrl || staffSignature.signatureUrl || null;
 
   const updateProfileField = <K extends keyof StaffProfileFormState>(field: K, value: StaffProfileFormState[K]) => {
     setProfile((prev) => ({
@@ -228,50 +145,6 @@ export default function StaffSettings() {
     } finally {
       setSavingProfile(false);
     }
-  };
-
-  const handleSignatureUpload = async (nextFile?: File | null) => {
-    const targetFile = nextFile || signatureFile;
-    if (!targetFile) {
-      toast.info('Choose a signature image first.');
-      return;
-    }
-
-    setUploadingSignature(true);
-    try {
-      const uploaded = await uploadStaffSignature(targetFile);
-      const refreshed = await getStaffSignature().catch(() => buildEmptyStaffSignature());
-      setStaffSignature({
-        signatureUrl: withCacheBust(uploaded.signatureUrl || refreshed.signatureUrl),
-        signatureFileName: targetFile.name || refreshed.signatureFileName || uploaded.signatureFileName || null,
-      });
-      setSignatureFile(null);
-      toast.success('Staff signature uploaded successfully.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to upload staff signature.');
-    } finally {
-      setUploadingSignature(false);
-    }
-  };
-
-  const handleSignatureChange = (file: File | null) => {
-    if (!file) {
-      setSignatureFile(null);
-      return;
-    }
-
-    if (!isAllowedSignatureImage(file)) {
-      toast.error('Please upload an image file.');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Staff signature must be 5 MB or smaller.');
-      return;
-    }
-
-    setSignatureFile(file);
-    void handleSignatureUpload(file);
   };
 
   const handleWorkspacePreferenceSave = () => {
@@ -532,63 +405,6 @@ export default function StaffSettings() {
         </div>
 
         <div className="space-y-6 xl:sticky xl:top-24">
-          <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <PenLine className="h-5 w-5 text-primary" />
-                <div>
-                  <CardTitle>Staff Signature</CardTitle>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FilePickerButton
-                accept={STAFF_SIGNATURE_ACCEPT_ATTRIBUTE}
-                ariaLabel="Choose staff signature image"
-                disabled={uploadingSignature}
-                loading={uploadingSignature}
-                onFileSelected={handleSignatureChange}
-                className="w-full gap-2"
-              >
-                <PenLine className="mr-2 h-4 w-4" />
-                Choose Signature
-              </FilePickerButton>
-
-              <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
-                <div className="flex h-28 w-full items-center justify-center overflow-hidden rounded-xl border bg-white px-4">
-                  {currentStaffSignatureUrl ? (
-                    <img
-                      src={currentStaffSignatureUrl}
-                      alt="Staff signature"
-                      className="max-h-full max-w-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {loadingSignature ? 'Loading signature...' : 'No saved signature'}
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0 text-sm">
-                  {signatureFile ? (
-                    <div className="flex items-center gap-2 text-green-700">
-                      <Check className="h-4 w-4" />
-                      <span className="block min-w-0 truncate" title={signatureFile.name}>
-                        {signatureFile.name}
-                      </span>
-                    </div>
-                  ) : staffSignature.signatureFileName ? (
-                    <p className="truncate text-on-surface-variant" title={staffSignature.signatureFileName}>
-                      {staffSignature.signatureFileName}
-                    </p>
-                  ) : (
-                    <p className="text-on-surface-variant">No saved signature</p>
-                  )}
-                </div>
-              </div>
-
-            </CardContent>
-          </Card>
-
           <PasswordChangeCard title="Change Password" />
 
           <SettingsLogoutCard className="flex justify-end" />

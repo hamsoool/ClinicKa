@@ -657,7 +657,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 <p className="font-medium">{formData.birthday}</p>
                 <p className="text-muted-foreground">Age / Sex:</p>
                 <p className="font-medium">
-                  {formData.age} / {formData.sex === 'female' ? 'F' : 'M'}
+                  {formData.age} / {formData.sex === 'female' ? 'F' : formData.sex === 'male' ? 'M' : '--'}
                 </p>
                 <p className="text-muted-foreground">Civil Status:</p>
                 <p className="font-medium">{formData.civilStatus}</p>

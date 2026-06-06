@@ -57,7 +57,7 @@ function verifyChestXrayParser(parsers) {
   `);
 
   assert.deepEqual(result, {
-    findings: 'The lungs are clear.\nHeart is not enlarged.\nNo active pulmonary disease.',
+    findings: 'No active pulmonary disease',
     result: 'normal',
   });
 
@@ -70,7 +70,7 @@ function verifyChestXrayParser(parsers) {
   `);
 
   assert.deepEqual(findingsPreferredResult, {
-    findings: 'Mild bilateral perihilar interstitial opacity.\nNo pleural effusion.',
+    findings: 'Consider mild bronchitic change',
     result: 'abnormal',
   });
 
@@ -84,7 +84,7 @@ function verifyChestXrayParser(parsers) {
   `);
 
   assert.deepEqual(observationsHeaderResult, {
-    findings: 'Cardiomediastinal silhouette is within normal limits.\nNo focal lung opacity.',
+    findings: 'No acute cardiopulmonary abnormality',
     result: 'normal',
   });
 }
@@ -92,7 +92,8 @@ function verifyChestXrayParser(parsers) {
 function verifyCbcParser(parsers) {
   const fields = parsers.extractCbcFields(`
     CBC RESULT
-    Date: 05/24/2026
+    DATE OF BIRTH: 03/13/2005
+    Released Date: 05/24/2026
     Hemoglobin 13.5 g/dL
     Hematocrit 42 %
     WBC 7.8 x10^9/L
@@ -108,12 +109,72 @@ function verifyCbcParser(parsers) {
     bloodType: 'O+',
     date: '2026-05-24',
   });
+
+  const convertedUnitFields = parsers.extractCbcFields(`
+    CBC RESULT
+    DATE OF BIRTH: 03/13/2005
+    RELEASED DATE & TIME: 06/10/2025 10:53:55 AM
+    HGB : 13.5 g/dL
+    HCT : 42 %
+    WBC : 7,800 /uL
+    PLATELET COUNT : 250,000 /uL
+    ABO/RH : O POSITIVE
+  `);
+
+  assert.deepEqual(convertedUnitFields, {
+    hemoglobin: '13.5',
+    hematocrit: '42',
+    wbc: '7.8',
+    plateletCount: '250',
+    bloodType: 'O+',
+    date: '2025-06-10',
+  });
+
+  const monthNameDateFields = parsers.extractCbcFields(`
+    CBC RESULT
+    DATE OF BIRTH: March 13, 2005
+    RELEASED DATE & TIME: Wednesday, February 28, 2026 10:53:55 AM
+    HGB : 13.5 g/dL
+    HCT : 42 %
+  `);
+
+  assert.deepEqual(monthNameDateFields, {
+    hemoglobin: '13.5',
+    hematocrit: '42',
+    date: '2026-02-28',
+  });
+
+  const leadingDecimalFields = parsers.extractCbcFields(`
+    CBC RESULT
+    RELEASED DATE: 05/24/2026
+    HCT .42 L/L
+    WBC .50 x10^9/L
+  `);
+
+  assert.deepEqual(leadingDecimalFields, {
+    hematocrit: '42',
+    wbc: '0.5',
+    date: '2026-05-24',
+  });
+
+  const strictFailureFields = parsers.extractCbcFields(`
+    CBC RESULT
+    RELEASED DATE: 05/24/2026
+    HGB 13..5
+    Hematocrit forty two
+    Platelet Count 250O
+    Blood Type 0+
+  `);
+
+  assert.deepEqual(strictFailureFields, {
+    date: '2026-05-24',
+  });
 }
 
 function verifyUrinalysisParser(parsers) {
   const fields = parsers.extractUrinalysisFields(`
     URINALYSIS
-    Date: 05/24/2026
+    Received Date: 05/24/2026
     Glucose Negative
     Protein Trace
   `);
@@ -159,60 +220,65 @@ function verifyUrinalysisParser(parsers) {
   `);
   assert.equal(splitLabelFields.date, '2026-05-24');
 
-  const resultDateFields = parsers.extractUrinalysisFields(`
-    LABORATORY RESULT
-    Collection Date: 05.20.2026
-    Result Date: 2026.05.24
-    Sugar Negative
-    Albumin Trace
-  `);
-  assert.equal(resultDateFields.date, '2026-05-24');
-
-  const specimenFallbackFields = parsers.extractUrinalysisFields(`
-    URINE TEST REPORT
-    Birthdate: 03/13/2005
-    Specimen Collected: 05/24/2026 9:00 AM
-    Protein Negative
-    Sugar Negative
-  `);
-  assert.equal(specimenFallbackFields.date, '2026-05-24');
-
-  const issuanceDateFields = parsers.extractUrinalysisFields(`
-    PATIENT: TEST STUDENT DOB: 03/13/2005 DATE OF ISSUANCE: 05/24/2026
+  const fullMonthNameDateFields = parsers.extractUrinalysisFields(`
+    BIOLINE DIAGNOSTIC LABORATORY
+    DATE OF BIRTH: January 13, 2005
+    RECEIVED DATE & TIME: Monday, March 03, 2025 8:49:53 AM
+    RELEASED DATE & TIME: March 04, 2025 10:53:55 AM
     URINALYSIS
-    Protein Negative
-    Sugar Negative
+    Protein NEGATIVE
+    Sugar NEGATIVE
   `);
-  assert.equal(issuanceDateFields.date, '2026-05-24');
+  assert.deepEqual(fullMonthNameDateFields, {
+    date: '2025-03-04',
+    glucose: 'Negative',
+    protein: 'Negative',
+  });
 
-  const examDateFields = parsers.extractUrinalysisFields(`
-    PATIENT NAME: TEST STUDENT
-    BIRTHDATE: 03/13/2005
-    Exam Date: 24-May-2026
-    Glucose Negative
-    Protein Negative
+  const realLayoutFields = parsers.extractUrinalysisFields(`
+    BIOLINE DIAGNOSTIC LABORATORY
+    PATIENT ID: 30H3TKZH8RY
+    PATIENT NAME: AUREO, SEAN ROMEO
+    DATE OF BIRTH: 03/13/2005
+    AGE & SEX: 20 YEAR/S OLD / MALE
+    RECEIVED DATE & TIME: 06/10/2025 8:49:53 AM
+    RELEASED DATE & TIME: 06/10/2025 10:53:55 AM
+    URINALYSIS
+    TEST RESULT REF. RANGE
+    PHYSICAL EXAMINATION
+    Color YELLOW
+    Transparency SLIGHTLY TURBID
+    CHEMICAL EXAMINATION
+    Protein NEGATIVE NEGATIVE
+    Sugar NEGATIVE NEGATIVE
+    Ketones NEGATIVE NEGATIVE
   `);
-  assert.equal(examDateFields.date, '2026-05-24');
+  assert.deepEqual(realLayoutFields, {
+    date: '2025-06-10',
+    glucose: 'Negative',
+    protein: 'Negative',
+  });
 
-  const studyDateFields = parsers.extractUrinalysisFields(`
-    PATIENT NAME: TEST STUDENT
-    DOB: 03/13/2005
-    Study Date
-    May 24, 2026
-    Protein Negative
-    Glucose Negative
+  const strictUrinalysisFields = parsers.extractUrinalysisFields(`
+    LABORATORY RESULT
+    Date: 05/24/2026
+    Birthdate: 03/13/2005
+    Sugar NIL
+    Albumin +/-
   `);
-  assert.equal(studyDateFields.date, '2026-05-24');
+  assert.deepEqual(strictUrinalysisFields, {});
 
-  const performedDateFields = parsers.extractUrinalysisFields(`
-    PATIENT NAME: TEST STUDENT
-    24-05-2026
-    Date Performed
-    DOB: 03/13/2005
-    Protein Negative
-    Glucose Negative
+  const plusValueFields = parsers.extractUrinalysisFields(`
+    URINALYSIS
+    RELEASED DATE: 05/24/2026
+    Glucose +1
+    Protein 2+
   `);
-  assert.equal(performedDateFields.date, '2026-05-24');
+  assert.deepEqual(plusValueFields, {
+    date: '2026-05-24',
+    glucose: '1+',
+    protein: '2+',
+  });
 }
 
 const parsers = loadParserModule();

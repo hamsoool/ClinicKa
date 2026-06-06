@@ -42,6 +42,20 @@ const styles = `
   }
 `;
 
+async function waitForImagesToLoad(root: HTMLElement) {
+  const images = Array.from(root.querySelectorAll('img'));
+  await Promise.all(
+    images.map((img) => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const finish = () => resolve();
+        img.addEventListener('load', finish, { once: true });
+        img.addEventListener('error', finish, { once: true });
+      });
+    }),
+  );
+}
+
 export default function StudentClearance() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
@@ -93,10 +107,13 @@ export default function StudentClearance() {
     () => (selectedYear === 'all' ? records : records.filter((entry) => String(entry.year || '') === selectedYear)),
     [records, selectedYear],
   );
+  const sortedFilteredRecords = [...filteredRecords].sort(
+    (a, b) => new Date(b.updatedAt || b.submittedAt).getTime() - new Date(a.updatedAt || a.submittedAt).getTime(),
+  );
   const record =
-    filteredRecords.find((entry) => entry.status === 'approved' && entry.clearanceInfo?.controlNo) ||
-    filteredRecords.find((entry) => entry.status === 'approved') ||
-    filteredRecords[0] ||
+    sortedFilteredRecords.find((entry) => entry.status === 'approved' && entry.clearanceInfo?.controlNo) ||
+    sortedFilteredRecords.find((entry) => entry.status === 'approved') ||
+    sortedFilteredRecords[0] ||
     null;
   const sortedRecords = [...records].sort(
     (a, b) => new Date(b.updatedAt || b.submittedAt).getTime() - new Date(a.updatedAt || a.submittedAt).getTime(),
@@ -140,6 +157,7 @@ export default function StudentClearance() {
 
       exportRoot.appendChild(clone);
       document.body.appendChild(exportRoot);
+      await waitForImagesToLoad(exportRoot);
 
       const canvas = await html2canvas(exportRoot, {
         scale: 2,
@@ -241,66 +259,34 @@ export default function StudentClearance() {
       exportRoot.appendChild(clone);
       document.body.appendChild(exportRoot);
 
-      const canvas = await html2canvas(clone, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        width: RECORD_PREVIEW_BASE_WIDTH,
-        windowWidth: RECORD_PREVIEW_BASE_WIDTH,
-      });
-      document.body.removeChild(exportRoot);
+      let canvas: HTMLCanvasElement;
+      try {
+        await waitForImagesToLoad(clone);
+        canvas = await html2canvas(clone, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          width: RECORD_PREVIEW_BASE_WIDTH,
+          windowWidth: RECORD_PREVIEW_BASE_WIDTH,
+        });
+      } finally {
+        document.body.removeChild(exportRoot);
+      }
 
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [330.2, 215.9],
-      });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 6;
+      const pageWidth = 215.9;
+      const margin = 4;
       const usableWidth = pageWidth - margin * 2;
-      const usableHeight = pageHeight - margin * 2;
       const imgWidth = usableWidth;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       const imgData = canvas.toDataURL('image/png');
+      const pageHeight = Math.max(330.2, imgHeight + margin * 2);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [pageHeight, pageWidth],
+      });
 
-      if (imgHeight <= usableHeight) {
-        pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
-      } else {
-        const pageSliceHeightPx = Math.floor((usableHeight * canvas.width) / usableWidth);
-        let renderedPx = 0;
-        let pageIndex = 0;
-
-        while (renderedPx < canvas.height) {
-          const sliceHeightPx = Math.min(pageSliceHeightPx, canvas.height - renderedPx);
-          const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = canvas.width;
-          pageCanvas.height = sliceHeightPx;
-          const ctx = pageCanvas.getContext('2d');
-          if (!ctx) break;
-
-          ctx.drawImage(canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
-
-          if (pageIndex > 0) {
-            pdf.addPage();
-          }
-
-          const sliceHeightMm = (sliceHeightPx * usableWidth) / canvas.width;
-          pdf.addImage(
-            pageCanvas.toDataURL('image/png'),
-            'PNG',
-            margin,
-            margin,
-            usableWidth,
-            sliceHeightMm,
-            undefined,
-            'FAST',
-          );
-
-          renderedPx += sliceHeightPx;
-          pageIndex += 1;
-        }
-      }
+      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
 
       pdf.save(`medical_record_${profileRecord.lastName}_${profileRecord.firstName}.pdf`);
       toast.success('Medical record PDF downloaded.');

@@ -651,7 +651,7 @@ async function loadLatestStaffSignature(profileId: string) {
 async function insertStaffSignatureMetadata(payload: Record<string, unknown>) {
   const { data: insertedFile, error: fileInsertError } = await insertFileMetadataWithFallback({
     ...payload,
-    type: "signature",
+    type: "staff_signature",
   });
 
   if (fileInsertError || !insertedFile) {
@@ -4026,11 +4026,17 @@ app.post("/issue-certificate", async (c) => {
       remarks,
       purpose,
       controlNo,
+      issuedDate,
       licenseNo,
       signatoryName,
     } = await c.req.json();
 
     if (!submissionId) return badRequest('submissionId is required');
+
+    const issuedDateText = String(issuedDate || '').trim();
+    const issuedTimestamp = issuedDateText
+      ? new Date(`${issuedDateText}T00:00:00`).toISOString()
+      : new Date().toISOString();
 
     const baseCertificatePayload = {
       submission_id: submissionId,
@@ -4041,7 +4047,8 @@ app.post("/issue-certificate", async (c) => {
       control_no: controlNo || null,
       license_no: licenseNo || null,
       issued_by: requester.staff?.id || null,
-      issued_at: new Date().toISOString(),
+      issued_date: issuedDateText || null,
+      issued_at: issuedTimestamp,
     };
     const normalizedSignatoryName = String(signatoryName || "").trim();
     const certificatePayload = normalizedSignatoryName
@@ -4062,7 +4069,32 @@ app.post("/issue-certificate", async (c) => {
         .upsert(baseCertificatePayload, { onConflict: 'submission_id' }));
     }
 
+    if (
+      error &&
+      String(error.message || "").toLowerCase().includes("issued_by")
+    ) {
+      const { issued_by, ...basePayloadWithoutIssuer } = baseCertificatePayload;
+      const fallbackCertificatePayload = normalizedSignatoryName
+        ? { ...basePayloadWithoutIssuer, signatory_name: normalizedSignatoryName }
+        : basePayloadWithoutIssuer;
+
+      ({ error } = await supabase
+        .from('certificates')
+        .upsert(fallbackCertificatePayload, { onConflict: 'submission_id' }));
+    }
+
     if (error) throw new Error(error.message);
+
+    const { data: submissionRow } = await supabase
+      .from('submissions')
+      .select('student_id')
+      .eq('id', submissionId)
+      .maybeSingle();
+
+    if (submissionRow?.student_id) {
+      invalidateStudentRecordsCache(String(submissionRow.student_id));
+    }
+    invalidateDashboardReadCaches();
 
     return c.json({ success: true });
   } catch (error) {

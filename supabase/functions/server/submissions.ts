@@ -42,7 +42,7 @@ const ACTIVE_STAFF_USER_SELECT_WITH_SIGNATURE =
 const ACTIVE_STAFF_USER_SELECT_LEGACY =
   "id,profile_id,first_name,last_name,middle_initial,position,name,is_active";
 const CERTIFICATE_SELECT_COLUMNS =
-  "submission_id,findings_normal,diagnosis,remarks,purpose,control_no,issued_date,issued_at,license_no,signatory_name,pdf_url,issued_by";
+  "submission_id,findings_normal,diagnosis,remarks,purpose,control_no,issued_date,issued_at,license_no,signatory_name,pdf_url";
 
 export const SUBMISSION_LIST_COLUMNS = [
   "id",
@@ -411,13 +411,8 @@ function resolveExaminerSignature(row: any, staffMeasurements: any, related: Rec
   }
 
   const examinerStaffId = staffMeasurements?.updated_by || row.reviewed_by || certificate?.issued_by || null;
-  const examinerStaff = examinerStaffId ? related.reviewers?.[examinerStaffId] : null;
-  const canUseStaffIdSignature =
-    !String(examinedBy || "").trim() ||
-    isClearanceSignatoryName(examinedBy) ||
-    staffNameMatchesExaminer(examinerStaff, examinedBy);
-  return canUseStaffIdSignature && examinerStaffId
-    ? related.staffSignaturesByStaffId?.[examinerStaffId]
+  return examinerStaffId
+    ? related.staffSignaturesByStaffId?.[examinerStaffId] || null
     : null;
 }
 

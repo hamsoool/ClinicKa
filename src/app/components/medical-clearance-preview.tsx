@@ -87,6 +87,21 @@ function matchClearanceSignatoryName(value?: string | null) {
   return CLEARANCE_SIGNATORY_NAMES.find((name) => normalizeSignatoryName(name) === normalized) || '';
 }
 
+function formatCertificateIssuedDate(value?: string | null) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const isoCandidate = raw.includes('T') ? raw : `${raw}T00:00:00`;
+  const parsed = new Date(isoCandidate);
+  if (Number.isNaN(parsed.getTime())) return raw;
+
+  return parsed.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 function GordonCollegeLogo({ size = 44 }: { size?: number }) {
   return (
     <img
@@ -263,8 +278,14 @@ function ClearanceCopy({
     .map((item) => item.trim().toLowerCase() === 'enrollment' ? 'enrolment' : item.trim().toLowerCase())
     .filter(Boolean);
 
+  const findingsNormal = cl.findingsNormal === true;
+  const diagnosis = String(cl.diagnosis || '').trim();
+  const remarks = String(cl.remarks || '').trim();
+  const issuedDateLabel = formatCertificateIssuedDate(cl.issuedDate);
+  const savedSignatoryName = String(cl.signatoryName || '').trim();
   const signatoryName =
     matchClearanceSignatoryName(cl.signatoryName) ||
+    savedSignatoryName ||
     matchClearanceSignatoryName(record.staffMeasurements?.examinedBy) ||
     CLEARANCE_SIGNATORY_NAMES[0];
   const signatoryTitle = 'College Physician';
@@ -380,16 +401,16 @@ function ClearanceCopy({
                 className="flex items-center gap-[5px] print:flex print:flex-row print:items-center"
                 style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}
               >
-                {renderCheckbox(cl.findingsNormal === true)}
+                {renderCheckbox(findingsNormal)}
                 <span>Essentially normal physical findings at the time of evaluation</span>
               </div>
               <div
                 className="flex items-center gap-[5px] print:flex print:flex-row print:items-center"
                 style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
               >
-                {renderCheckbox(!!cl.diagnosis)}
+                {renderCheckbox(!!diagnosis)}
                 <span>Diagnosis:</span>
-                <UnderlinedField minWidth="490px" width="490px" value={cl.diagnosis || ''} align="left" />
+                <UnderlinedField minWidth="490px" width="490px" value={diagnosis} align="left" />
               </div>
             </div>
           </div>
@@ -401,21 +422,13 @@ function ClearanceCopy({
           >
             <div>
               <span style={{ fontWeight: 'bold' }}>Remarks: </span>
-              <UnderlinedField minWidth="550px" width="550px" value={cl.remarks || ''} align="left" />
+              <UnderlinedField minWidth="550px" width="550px" value={remarks} align="left" />
             </div>
             <div>
               This was issued on{' '}
               <UnderlinedField
                 minWidth="100px"
-                value={
-                  cl.issuedDate
-                    ? new Date(cl.issuedDate).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })
-                    : ''
-                }
+                value={issuedDateLabel}
               />{' '}
               {remarksEnding}
             </div>
@@ -442,7 +455,7 @@ function ClearanceCopy({
           </div>
         </div>
 
-        {/* BOTTOM ROW: Control/Student No. LEFT, Signatory RIGHT */}
+        {/* BOTTOM ROW: Student No. LEFT, Signatory RIGHT */}
         <div
           className="flex items-end justify-between gap-2 print:flex print:flex-row print:items-end"
           style={{
@@ -454,16 +467,19 @@ function ClearanceCopy({
           }}
         >
           <div
-            className="flex min-w-[190px] flex-col gap-[5px] print:flex print:flex-col print:min-w-[190px]"
-            style={{ fontSize: '10.5px', display: 'flex', flexDirection: 'column', gap: '5px' }}
+            className="flex min-w-[240px] flex-1 flex-col justify-start gap-[5px] print:flex print:flex-col print:min-w-[240px]"
+            style={{
+              fontSize: '10.5px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'flex-start',
+              gap: '5px',
+              minHeight: '42px',
+            }}
           >
             <div>
-              <span style={{ fontWeight: 'bold' }}>Control No.: </span>
-              <UnderlinedField minWidth="120px" value={cl.controlNo || ''} />
-            </div>
-            <div>
               <span style={{ fontWeight: 'bold' }}>Student No.: </span>
-              <UnderlinedField minWidth="120px" value={record.studentId} />
+              <UnderlinedField minWidth="150px" width="150px" value={record.studentId} />
             </div>
           </div>
 

@@ -123,7 +123,7 @@ function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null):
     course: normalizeProgramForDepartment(department, me?.student?.course || me?.profile.course || ''),
     yearLevel: me?.student?.year_level ? String(me.student.year_level) : '',
     age: derivedAge !== null ? String(derivedAge) : (me?.student?.age ? String(me.student.age) : ''),
-    sex: me?.student?.sex || 'female',
+    sex: me?.student?.sex || '',
     birthday,
     civilStatus: me?.student?.civil_status || 'Single',
     contactNumber: formatPhilippinePhoneInput(me?.student?.contact_number || ''),

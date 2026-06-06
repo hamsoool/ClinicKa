@@ -22,6 +22,36 @@ function normalizeWhitespace(value: string) {
   return value.replace(/[ \t\f\v]+/g, " ").replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+type XrayResult = "normal" | "abnormal";
+type NumericToken = { index: number; raw: string; value: number };
+type DateCandidate = { date: string; index: number };
+type DateLabelKind = "birth" | "released" | "received";
+type DateLabelMatch = { index: number; end: number; score: number; kind: DateLabelKind };
+type CbcNumericFieldKey = "hemoglobin" | "hematocrit" | "wbc" | "plateletCount";
+type UrinalysisFieldKey = "glucose" | "protein";
+type BloodTypeValue = "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-";
+type UrinalysisDipstickValue = "Negative" | "Trace" | "1+" | "2+" | "3+" | "4+";
+
+export type ChestXrayParsedFields = {
+  findings: string;
+  result?: XrayResult;
+};
+
+export type CbcParsedFields = Partial<{
+  bloodType: BloodTypeValue;
+  date: string;
+  hematocrit: string;
+  hemoglobin: string;
+  plateletCount: string;
+  wbc: string;
+}>;
+
+export type UrinalysisParsedFields = Partial<{
+  date: string;
+  glucose: UrinalysisDipstickValue;
+  protein: UrinalysisDipstickValue;
+}>;
+
 function cleanOcrLine(value: string) {
   return String(value || "")
     .replace(/[|{}[\]~]/g, " ")
@@ -272,6 +302,7 @@ function inferXrayResult(text: string): "normal" | "abnormal" | undefined {
     /consolidation/i,
     /atelectasis/i,
     /pleural\s+thickening/i,
+    /bronchitic/i,
     /abnormal/i,
   ];
 
@@ -288,7 +319,72 @@ function inferXrayResult(text: string): "normal" | "abnormal" | undefined {
   return undefined;
 }
 
-export function extractChestXrayFields(rawText: string) {
+function splitClinicalSentences(value: string) {
+  return String(value || "")
+    .replace(/\r/g, "\n")
+    .split(/\.(?:\s+|$)|\n+/)
+    .map((sentence) => cleanOcrLine(sentence))
+    .map((sentence) => sentence.replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, "").trim())
+    .filter(Boolean);
+}
+
+function scoreConclusionSentence(sentence: string, source: "impression" | "conclusion" | "findings" | "fallback") {
+  const normalized = sentence.toLowerCase();
+  let score = 0;
+
+  if (source === "impression" || source === "conclusion") score += 8;
+  if (source === "findings") score += 4;
+  if (lineLooksAmbiguous(sentence)) score -= 10;
+  if (/(?:\bimpression\b|\bconclusion\b|\bfindings\b)/i.test(sentence)) score += 3;
+  if (/(?:normal|abnormal|abnormality|unremarkable|within normal|no active|no acute|clear lungs?|negative chest)/i.test(normalized)) score += 7;
+  if (/(?:opacity|opacit|effusion|pneumonia|ptb|tuberculosis|cardiomegaly|nodule|mass|fibrosis|consolidation|atelectasis|infiltrat|bronchitic)/i.test(normalized)) score += 5;
+  if (normalized.length >= 8 && normalized.length <= 180) score += 1;
+
+  return score;
+}
+
+function lineLooksAmbiguous(value: string) {
+  return /[?]|(?:\b(?:possible|possibly|probable|probably|suggest|suggestive|consider|correlate)\b)/i.test(String(value || ""));
+}
+
+function extractBestConclusionSentence(sectionText: string, source: "impression" | "conclusion" | "findings" | "fallback") {
+  const sentences = splitClinicalSentences(sectionText);
+  if (!sentences.length) return "";
+
+  const ranked = sentences
+    .map((sentence, index) => ({
+      sentence,
+      index,
+      score: scoreConclusionSentence(sentence, source),
+    }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score || b.index - a.index);
+
+  if (!ranked.length) return "";
+  if (ranked.length > 1 && ranked[0].score === ranked[1].score && ranked[0].sentence !== ranked[1].sentence) {
+    return "";
+  }
+
+  return ranked[0]?.sentence || "";
+}
+
+function extractXrayConclusion(findingsText: string, impressionText: string, conclusionText: string, cleanedText: string) {
+  const prioritizedSources: Array<{ source: "impression" | "conclusion" | "findings" | "fallback"; text: string }> = [
+    { source: "impression", text: impressionText },
+    { source: "conclusion", text: conclusionText },
+    { source: "findings", text: findingsText },
+    { source: "fallback", text: cleanedText },
+  ];
+
+  for (const source of prioritizedSources) {
+    const sentence = extractBestConclusionSentence(source.text, source.source);
+    if (sentence) return sentence;
+  }
+
+  return "";
+}
+
+export function extractChestXrayFields(rawText: string): ChestXrayParsedFields {
   const cleanedLines = normalizeWhitespace(rawText)
     .split(/\n+/)
     .map(cleanOcrLine)
@@ -296,15 +392,23 @@ export function extractChestXrayFields(rawText: string) {
   const cleanedText = cleanedLines.join("\n");
 
   const strictFindings = cleanupClinicalText(extractSectionText(cleanedText, XRAY_FINDINGS_LABEL_PATTERN));
+  const strictImpression = cleanupClinicalText(extractSectionText(cleanedText, XRAY_IMPRESSION_LABEL_PATTERN));
+  const strictConclusion = cleanupClinicalText(extractSectionText(cleanedText, XRAY_CONCLUSION_LABEL_PATTERN));
   const proximityFindings = strictFindings ? "" : extractXrayFindingsByProximity(cleanedLines);
-  const fallbackFindings = proximityFindings || strictFindings || getFallbackFindings(cleanedLines);
+  const fallbackNarrative = proximityFindings || strictFindings || strictImpression || strictConclusion || getFallbackFindings(cleanedLines);
+  const findings = extractXrayConclusion(
+    strictFindings || proximityFindings,
+    strictImpression,
+    strictConclusion,
+    fallbackNarrative || cleanedText,
+  );
+
   return {
-    findings: fallbackFindings,
-    result: inferXrayResult(fallbackFindings) || inferXrayResult(cleanedText),
+    findings,
+    result: inferXrayResult(findings) || inferXrayResult(strictImpression || strictConclusion || fallbackNarrative || cleanedText),
   };
 }
 
-type CbcNumericFieldKey = "hemoglobin" | "hematocrit" | "wbc" | "plateletCount";
 type CbcNumericNormalizer = (value: number, context: string, rawValue: string) => string;
 
 const CBC_NUMERIC_FIELDS: Array<{
@@ -329,12 +433,12 @@ const CBC_NUMERIC_FIELDS: Array<{
   },
   {
     key: "plateletCount",
-    pattern: /\b(?:platelets?|platelet\s*count|plt|plt\s*count|thrombocytes?|thrombocyte\s*count)\b/i,
+    pattern: /\b(?:platelet\s*count|platelets?|plt\s*count|plt|thrombocyte\s*count|thrombocytes?)\b/i,
     normalize: normalizePlateletValue,
   },
 ];
 
-const CBC_BLOOD_TYPE_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const CBC_BLOOD_TYPE_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 const MONTH_INDEX: Record<string, number> = {
   jan: 1,
   january: 1,
@@ -361,6 +465,8 @@ const MONTH_INDEX: Record<string, number> = {
   dec: 12,
   december: 12,
 };
+
+const WEEKDAY_PATTERN = /\b(?:monday|mon|tuesday|tue|tues|wednesday|wed|thursday|thu|thur|thurs|friday|fri|saturday|sat|sunday|sun)\b\.?,?\s*/gi;
 
 function getCbcLabelCount(line: string) {
   return CBC_NUMERIC_FIELDS.filter((field) => field.pattern.test(line)).length;
@@ -418,7 +524,6 @@ function hasCountTargetUnit(context: string) {
   const normalized = normalizeCbcUnitContext(context);
   return (
     /(?:x)?10(?:\^)?9\/?l\b/.test(normalized) ||
-    /g\/l/.test(normalized) ||
     /k\/?ul/.test(normalized) ||
     /10(?:\^)?3\/?ul\b/.test(normalized) ||
     /10(?:\^)?3\/?mm3\b/.test(normalized) ||
@@ -457,7 +562,18 @@ function isInRange(value: number, min: number, max: number) {
   return Number.isFinite(value) && value >= min && value <= max;
 }
 
-function normalizeHemoglobinValue(value: number, context: string) {
+function isStrictNumericLiteral(rawValue: string, allowThousands = false) {
+  const trimmed = String(rawValue || "").trim();
+  if (!trimmed) return false;
+  if (allowThousands) {
+    return /^(?:\d{1,3}(?:,\d{3})*|\d+(?:[.,]\d{1,2})?|\.\d{1,2})$/.test(trimmed);
+  }
+  return /^(?:\d+(?:[.,]\d{1,2})?|\.\d{1,2})$/.test(trimmed);
+}
+
+function normalizeHemoglobinValue(value: number, context: string, rawValue: string) {
+  const trimmedRawValue = String(rawValue || "").trim();
+  if (!isStrictNumericLiteral(trimmedRawValue)) return "";
   const unitContext = normalizeCbcUnitContext(context);
   const normalized = /mmol\/?l|mg\/?(?:dl|l)/.test(unitContext)
     ? Number.NaN
@@ -469,7 +585,9 @@ function normalizeHemoglobinValue(value: number, context: string) {
   return formatNumericValue(normalized, 1);
 }
 
-function normalizeHematocritValue(value: number, context: string) {
+function normalizeHematocritValue(value: number, context: string, rawValue: string) {
+  const trimmedRawValue = String(rawValue || "").trim();
+  if (!isStrictNumericLiteral(trimmedRawValue)) return "";
   let normalized = Number.NaN;
   const unitContext = normalizeCbcUnitContext(context);
 
@@ -485,7 +603,9 @@ function normalizeHematocritValue(value: number, context: string) {
   return formatNumericValue(normalized, 1);
 }
 
-function normalizeWbcValue(value: number, context: string) {
+function normalizeWbcValue(value: number, context: string, rawValue: string) {
+  const trimmedRawValue = String(rawValue || "").trim();
+  if (!isStrictNumericLiteral(trimmedRawValue, true)) return "";
   let normalized = Number.NaN;
   const unitContext = normalizeCbcUnitContext(context);
 
@@ -501,7 +621,9 @@ function normalizeWbcValue(value: number, context: string) {
   return formatNumericValue(normalized, 2);
 }
 
-function normalizePlateletValue(value: number, context: string) {
+function normalizePlateletValue(value: number, context: string, rawValue: string) {
+  const trimmedRawValue = String(rawValue || "").trim();
+  if (!isStrictNumericLiteral(trimmedRawValue, true)) return "";
   let normalized = Number.NaN;
   const unitContext = normalizeCbcUnitContext(context);
 
@@ -522,6 +644,9 @@ function parseOcrNumber(value: string) {
   if (!compact) return Number.NaN;
 
   let normalized = compact;
+  if (/^[+-]?\.\d+$/.test(normalized)) {
+    normalized = normalized.replace(/^([+-]?)\./, "$10.");
+  }
   if (normalized.includes(",") && normalized.includes(".")) {
     normalized = normalized.replace(/,/g, "");
   } else if (/^\d{1,3}(?:,\d{3})+$/.test(normalized)) {
@@ -534,16 +659,21 @@ function parseOcrNumber(value: string) {
 }
 
 function getNumericTokens(value: string) {
-  const tokens: Array<{ index: number; raw: string; value: number }> = [];
-  const pattern = /(?:<|>)?\s*(\d{1,3}(?:,\d{3})+|\d+(?:[.,]\d+)?)/g;
+  const tokens: NumericToken[] = [];
+  const pattern = /(?:<|>)?\s*(\d{1,3}(?:,\d{3})+|\d+(?:[.,]\d+)?|\.\d+)/g;
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(value))) {
     const raw = match[1] || "";
     const rawIndex = match.index + Math.max(0, match[0].indexOf(raw));
     const previousChar = rawIndex > 0 ? value[rawIndex - 1] : "";
+    const previousPair = value.slice(Math.max(0, rawIndex - 2), rawIndex);
+    const nextChar = value[rawIndex + raw.length] || "";
     const nextChars = value.slice(rawIndex + raw.length, rawIndex + raw.length + 2);
     if (/[xX^]/.test(previousChar) || /^\s*\^/.test(nextChars)) continue;
+    if (/[A-Za-z]/.test(previousChar) || /[A-Za-z]/.test(nextChar)) continue;
+    if (/[.,]{2}$/.test(previousPair.replace(/\s+/g, ""))) continue;
+    if (/^\s*[.,]/.test(nextChars)) continue;
 
     const parsedValue = parseOcrNumber(raw);
     if (Number.isFinite(parsedValue)) {
@@ -595,7 +725,7 @@ function extractCbcTableValues(lines: string[]) {
     const labels = CBC_NUMERIC_FIELDS
       .map((field) => {
         const match = field.pattern.exec(labelLine);
-        return match ? { ...field, index: match.index, labelContext: getLabelContext(labelLine, match.index, match[0].length) } : null;
+        return match ? { ...field, index: match.index } : null;
       })
       .filter(Boolean)
       .sort((a: any, b: any) => a.index - b.index);
@@ -609,7 +739,7 @@ function extractCbcTableValues(lines: string[]) {
       labels.forEach((field: any, fieldIndex: number) => {
         if (fields[field.key]) return;
         const token = tokens[fieldIndex];
-        const normalized = field.normalize(token.value, `${field.labelContext} ${getTokenContext(valueLine, token)}`, token.raw);
+        const normalized = field.normalize(token.value, `${labelLine} ${valueLine}`, token.raw);
         if (normalized) fields[field.key] = normalized;
       });
       break;
@@ -660,6 +790,11 @@ function normalizeAboValue(value: string) {
   return match ? match[1].toUpperCase() : "";
 }
 
+function normalizeBloodTypeToken(value: string): BloodTypeValue | "" {
+  const normalized = String(value || "").toUpperCase().replace(/\s+/g, "");
+  return (CBC_BLOOD_TYPE_OPTIONS as readonly string[]).includes(normalized) ? (normalized as BloodTypeValue) : "";
+}
+
 function extractCbcBloodType(lines: string[]) {
   const labelPattern = /\b(?:blood\s*(?:type|group)|abo(?:\/?rh)?|abo\s*group|rh(?:esus)?(?:\s*type)?)\b/i;
   const aboLabelPattern = /\b(?:abo|abo\s*group|blood\s*group)\b/i;
@@ -673,14 +808,14 @@ function extractCbcBloodType(lines: string[]) {
     const normalizedLine = line.replace(/\b(?:blood\s*(?:type|group)|abo(?:\/?rh)?|abo\s*group|rh(?:esus)?(?:\s*type)?)\b/gi, " ");
     const directMatch = /\b(AB|A|B|O)\s*(?:Rh(?:D|\(D\))?\s*)?([+-]|positive|negative|pos|neg|reactive|nonreactive)(?=\s|$|[.,;])/i.exec(normalizedLine);
     if (directMatch) {
-      const bloodType = `${directMatch[1].toUpperCase()}${normalizeBloodRh(directMatch[2])}`;
-      if (CBC_BLOOD_TYPE_OPTIONS.includes(bloodType)) return bloodType;
+      const bloodType = normalizeBloodTypeToken(`${directMatch[1]}${normalizeBloodRh(directMatch[2])}`);
+      if (bloodType) return bloodType;
     }
 
     const rhFirstMatch = /(?:^|\s)(?:Rh(?:D|\(D\))?\s*)?([+-]|positive|negative|pos|neg|reactive|nonreactive)\s*(AB|A|B|O)\b/i.exec(normalizedLine);
     if (rhFirstMatch) {
-      const bloodType = `${rhFirstMatch[2].toUpperCase()}${normalizeBloodRh(rhFirstMatch[1])}`;
-      if (CBC_BLOOD_TYPE_OPTIONS.includes(bloodType)) return bloodType;
+      const bloodType = normalizeBloodTypeToken(`${rhFirstMatch[2]}${normalizeBloodRh(rhFirstMatch[1])}`);
+      if (bloodType) return bloodType;
     }
 
     if (!detectedAbo && aboLabelPattern.test(line)) {
@@ -693,8 +828,8 @@ function extractCbcBloodType(lines: string[]) {
   }
 
   if (detectedAbo && detectedRh) {
-    const bloodType = `${detectedAbo}${detectedRh}`;
-    if (CBC_BLOOD_TYPE_OPTIONS.includes(bloodType)) return bloodType;
+    const bloodType = normalizeBloodTypeToken(`${detectedAbo}${detectedRh}`);
+    if (bloodType) return bloodType;
   }
 
   return "";
@@ -724,15 +859,15 @@ function formatIsoDate(year: number, month: number, day: number) {
 }
 
 function parseCbcDateValue(value: string) {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const text = String(value || "").replace(WEEKDAY_PATTERN, "").replace(/\s+/g, " ").trim();
   if (!text) return "";
 
   return extractDateCandidates(text)[0]?.date || "";
 }
 
 function extractDateCandidates(value: string) {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
-  const candidates: Array<{ date: string; index: number }> = [];
+  const text = String(value || "").replace(WEEKDAY_PATTERN, "").replace(/\s+/g, " ").trim();
+  const candidates: DateCandidate[] = [];
   if (!text) return candidates;
 
   function pushDate(match: RegExpExecArray | null, date: string) {
@@ -795,42 +930,37 @@ function hasBirthDateLabel(value: string) {
   );
 }
 
-const DATE_LABEL_PATTERNS = [
+function hasExcludedDateContext(value: string) {
+  return /\b(?:date\s*of\s*birth|birth\s*date|birthdate|birthday|d\.?\s*o\.?\s*b\.?|dob|age)\b/i.test(
+    String(value || "").toLowerCase(),
+  );
+}
+
+const DATE_LABEL_PATTERNS: Array<{
+  kind: DateLabelKind;
+  score: number;
+  pattern: RegExp;
+}> = [
   {
     kind: "birth",
     score: 0,
     pattern: /\b(?:date\s*of\s*birth|birth\s*date|birthdate|birthday|d\.?\s*o\.?\s*b\.?|dob)\b/gi,
   },
   {
-    kind: "issuance",
+    kind: "released",
+    score: 120,
+    pattern: /\b(?:(?:released?|date\s+released)\s*(?:date|time)?|(?:date|time)\s*(?:released?)|report\s*release(?:d)?\s*(?:date|time)?)\b/gi,
+  },
+  {
+    kind: "received",
     score: 100,
-    pattern: /\b(?:date\s*of\s*issuance|issuance\s*(?:date|time)|(?:released?|issued?|issuance|reported?|report(?:ed)?|result(?:s)?|validated|verified|approved|completed|finali[sz]ed|certified|posted)\s*(?:date|time)|(?:date|time)\s*(?:released?|issued?|issuance|reported?|report(?:ed)?|result(?:s)?|validated|verified|approved|completed|finali[sz]ed|certified|posted))\b/gi,
-  },
-  {
-    kind: "exam",
-    score: 90,
-    pattern: /\b(?:(?:exam(?:ination)?|study|x[-\s]?ray|performed|test(?:ed)?|service|procedure|run|analy[sz]ed|analysis)\s*(?:date|time)|(?:date|time)\s*(?:of\s*)?(?:exam(?:ination)?|study|x[-\s]?ray|performed|test(?:ed)?|service|procedure|run|analy[sz]ed|analysis))\b/gi,
-  },
-  {
-    kind: "printed",
-    score: 70,
-    pattern: /\b(?:(?:printed|print|generated|encoded|transcribed)\s*(?:date|time)?|(?:date|time)\s*(?:printed|print|generated|encoded|transcribed))\b/gi,
-  },
-  {
-    kind: "collection",
-    score: 60,
-    pattern: /\b(?:(?:received|collected|collection|specimen|sample|drawn|extracted|obtained|taken)\s*(?:date|time)?|(?:date|time)\s*(?:received|collected|collection|specimen|sample|drawn|extracted|obtained|taken))\b/gi,
-  },
-  {
-    kind: "request",
-    score: 40,
-    pattern: /\b(?:(?:requested|request|ordered|order|registered|transaction|visit|encounter)\s*(?:date|time)?|(?:date|time)\s*(?:requested|request|ordered|order|registered|transaction|visit|encounter))\b/gi,
+    pattern: /\b(?:(?:received?|date\s+received)\s*(?:date|time)?|(?:date|time)\s*(?:received?))\b/gi,
   },
 ] as const;
 
 function findNearestDateLabel(value: string, endIndex = String(value || "").length) {
   const text = String(value || "").slice(0, endIndex);
-  let bestMatch: { index: number; end: number; score: number; kind: string } | null = null;
+  let bestMatch: DateLabelMatch | null = null;
 
   for (const label of DATE_LABEL_PATTERNS) {
     const pattern = new RegExp(label.pattern.source, label.pattern.flags);
@@ -867,11 +997,11 @@ function getDateCandidateLabelScore(value: string, candidateIndex: number) {
     return nearestLabel.score;
   }
 
-  if (hasBirthDateLabel(prefix)) {
+  if (hasExcludedDateContext(prefix)) {
     return -1;
   }
 
-  return /\b(?:date|time)\b/i.test(prefix) ? 20 : 0;
+  return 0;
 }
 
 function getLabResultDateLabelScore(line: string) {
@@ -881,57 +1011,49 @@ function getLabResultDateLabelScore(line: string) {
   const nearestLabel = findNearestDateLabel(normalized);
   if (nearestLabel) return nearestLabel.kind === "birth" ? 0 : nearestLabel.score;
 
-  return /\b(?:date|time)\b/i.test(normalized) && parseCbcDateValue(normalized) ? 20 : 0;
+  return 0;
 }
 
-function getNearbyDateContextScore(lines: string[], index: number, candidateIndex: number) {
-  let bestScore = getDateCandidateLabelScore(lines[index], candidateIndex);
-  let foundBirthContext = bestScore < 0;
+function extractStrictDocumentDate(rawText: string) {
+  const flattenedText = normalizeWhitespace(rawText).replace(/\n+/g, " ");
+  if (!flattenedText) return "";
 
-  for (let offset = 1; offset <= 3; offset += 1) {
-    for (const nearbyIndex of [index - offset, index + offset]) {
-      if (nearbyIndex < 0 || nearbyIndex >= lines.length) continue;
-      const nearbyLine = lines[nearbyIndex];
-      const nearbyScore = getLabResultDateLabelScore(nearbyLine);
-      if (nearbyScore > 0) {
-        bestScore = Math.max(bestScore, nearbyScore - offset * 2);
-      } else if (hasBirthDateLabel(nearbyLine)) {
-        foundBirthContext = true;
-      }
-    }
-  }
+  const labelPatterns = [
+    { score: 2, pattern: /\b(?:released\s+date(?:\s*&\s*time)?|date\s+released(?:\s*&\s*time)?|released\s*&\s*time)\b/gi },
+    { score: 1, pattern: /\b(?:received\s+date(?:\s*&\s*time)?|date\s+received(?:\s*&\s*time)?|received\s*&\s*time)\b/gi },
+  ];
 
-  if (bestScore <= 0 && foundBirthContext) {
-    return -1;
-  }
-
-  return bestScore;
-}
-
-function extractDateByKeywordProximity(lines: string[]) {
   const candidates: Array<{ date: string; score: number; index: number }> = [];
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const dateCandidates = extractDateCandidates(line);
-    if (!dateCandidates.length) continue;
+  for (const label of labelPatterns) {
+    const pattern = new RegExp(label.pattern.source, label.pattern.flags);
+    let match: RegExpExecArray | null;
 
-    for (const dateCandidate of dateCandidates) {
-      const score = getNearbyDateContextScore(lines, index, dateCandidate.index);
-      if (score > 0) {
-        candidates.push({
-          date: dateCandidate.date,
-          score,
-          index,
-        });
+    while ((match = pattern.exec(flattenedText))) {
+      const tail = flattenedText.slice(match.index + match[0].length, match.index + match[0].length + 80);
+      const tailDate = extractDateCandidates(tail)[0]?.date || "";
+      if (tailDate) {
+        candidates.push({ date: tailDate, score: label.score, index: match.index });
+        continue;
+      }
+
+      const head = flattenedText.slice(Math.max(0, match.index - 24), match.index);
+      const headDates = extractDateCandidates(head);
+      const headDate = headDates.length ? headDates[headDates.length - 1]?.date || "" : "";
+      if (headDate && !hasExcludedDateContext(head)) {
+        candidates.push({ date: headDate, score: label.score - 1, index: match.index });
       }
     }
   }
 
-  return candidates;
+  candidates.sort((a, b) => b.score - a.score || a.index - b.index);
+  return candidates[0]?.date || "";
 }
 
-function extractCbcDate(lines: string[]) {
+function extractDocumentDate(lines: string[], rawText: string) {
+  const strictDate = extractStrictDocumentDate(rawText);
+  if (strictDate) return strictDate;
+
   const candidates: Array<{ date: string; score: number; index: number }> = [];
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -955,7 +1077,7 @@ function extractCbcDate(lines: string[]) {
     }
 
     for (const nearbyLine of lines.slice(index + 1, index + 3)) {
-      if (getLabResultDateLabelScore(nearbyLine) === 0 && /\b(?:birth|birthday|dob)\b/i.test(nearbyLine)) {
+      if (hasExcludedDateContext(nearbyLine)) {
         break;
       }
       const nearbyDate = parseCbcDateValue(nearbyLine);
@@ -966,15 +1088,11 @@ function extractCbcDate(lines: string[]) {
     }
   }
 
-  if (!candidates.length) {
-    candidates.push(...extractDateByKeywordProximity(lines));
-  }
-
   candidates.sort((a, b) => b.score - a.score || a.index - b.index);
   return candidates[0]?.date || "";
 }
 
-export function extractCbcFields(rawText: string) {
+export function extractCbcFields(rawText: string): CbcParsedFields {
   const lines = normalizeWhitespace(rawText)
     .split(/\n+/)
     .map(cleanOcrLine)
@@ -987,12 +1105,10 @@ export function extractCbcFields(rawText: string) {
   }
 
   fields.bloodType = extractCbcBloodType(lines);
-  fields.date = extractCbcDate(lines);
+  fields.date = extractDocumentDate(lines, rawText);
 
-  return Object.fromEntries(Object.entries(fields).filter(([, value]) => Boolean(value)));
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => Boolean(value))) as CbcParsedFields;
 }
-
-type UrinalysisFieldKey = "glucose" | "protein";
 
 const URINALYSIS_FIELDS: Array<{
   key: UrinalysisFieldKey;
@@ -1008,37 +1124,25 @@ const URINALYSIS_FIELDS: Array<{
   },
 ];
 
-function normalizeDipstickValue(value: string) {
-  const raw = String(value || "").trim();
-  const normalized = raw
-    .toLowerCase()
-    .replace(/[()]/g, " ")
-    .replace(/[±]/g, "+/-")
-    .replace(/\s+/g, " ")
-    .trim();
+const URINALYSIS_DIPSTICK_VALUES = ["Negative", "Trace", "1+", "2+", "3+", "4+"] as const;
 
+function normalizeDipstickValue(value: string): UrinalysisDipstickValue | "" {
+  const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
   if (!normalized) return "";
-  if (/^(?:negative|neg|nil|none|absent|not\s+detected|not\s+seen|normal)$/i.test(normalized)) return "Negative";
-  if (/^(?:trace|tr|traces|small\s+trace|\+\/-|plus\s*\/\s*minus)$/i.test(normalized)) return "Trace";
-  if (/^(?:1\s*\+|\+|one\s+plus|small)$/i.test(normalized)) return "1+";
-  if (/^(?:2\s*\+|\+\+|two\s+plus|moderate)$/i.test(normalized)) return "2+";
-  if (/^(?:3\s*\+|\+\+\+|three\s+plus|large)$/i.test(normalized)) return "3+";
-  if (/^(?:4\s*\+|\+\+\+\+|four\s+plus|very\s+large)$/i.test(normalized)) return "4+";
-
-  const explicitPlus = /\b([1-4])\s*\+\b/.exec(normalized);
-  if (explicitPlus) return `${explicitPlus[1]}+`;
-
-  const repeatedPlus = /(?<!\+)(\+{1,4})(?!\+)/.exec(raw);
-  if (repeatedPlus) return `${repeatedPlus[1].length}+`;
-
+  if (normalized === "negative") return "Negative";
+  if (normalized === "trace") return "Trace";
+  if (normalized === "1+" || normalized === "+1") return "1+";
+  if (normalized === "2+" || normalized === "+2") return "2+";
+  if (normalized === "3+" || normalized === "+3") return "3+";
+  if (normalized === "4+" || normalized === "+4") return "4+";
   return "";
 }
 
 function getDipstickTokens(value: string) {
-  const tokens: Array<{ index: number; raw: string; value: string }> = [];
+  const tokens: Array<{ index: number; raw: string; value: UrinalysisDipstickValue }> = [];
   const patterns = [
-    /\b(?:negative|neg|nil|none|absent|not\s+detected|not\s+seen|normal|trace|traces?|small\s+trace|plus\s*\/\s*minus|one\s+plus|two\s+plus|three\s+plus|four\s+plus|very\s+large|small|moderate|large)\b/gi,
-    /(?:\+\/-|[1-4]\s*\+|\+{1,4}|±)/g,
+    /\b(?:negative|trace)\b/gi,
+    /(?:[1-4]\s*\+|\+[1-4])/g,
   ];
 
   for (const pattern of patterns) {
@@ -1062,13 +1166,9 @@ function extractLabeledDipstickValue(line: string, labelPattern: RegExp) {
   const match = labelPattern.exec(line);
   if (!match) return "";
 
-  const head = line.slice(0, match.index);
   const tail = line.slice(match.index + match[0].length);
   const tailTokens = getDipstickTokens(tail);
-  if (tailTokens.length) return tailTokens[0].value;
-
-  const headTokens = getDipstickTokens(head);
-  return headTokens.length ? headTokens[headTokens.length - 1].value : "";
+  return tailTokens.length ? tailTokens[0].value : "";
 }
 
 function extractUrinalysisTableValues(lines: string[]) {
@@ -1115,15 +1215,15 @@ function extractUrinalysisDipstickField(lines: string[], pattern: RegExp) {
         break;
       }
 
-      const tokens = getDipstickTokens(nearbyLine);
-      if (tokens.length) return tokens[0].value;
+      const exactValue = normalizeDipstickValue(nearbyLine);
+      if (exactValue) return exactValue;
     }
   }
 
   return "";
 }
 
-export function extractUrinalysisFields(rawText: string) {
+export function extractUrinalysisFields(rawText: string): UrinalysisParsedFields {
   const lines = normalizeWhitespace(rawText)
     .split(/\n+/)
     .map(cleanOcrLine)
@@ -1135,9 +1235,9 @@ export function extractUrinalysisFields(rawText: string) {
     fields[field.key] = tableFields[field.key] || extractUrinalysisDipstickField(lines, field.pattern);
   }
 
-  fields.date = extractCbcDate(lines);
+  fields.date = extractDocumentDate(lines, rawText);
 
-  return Object.fromEntries(Object.entries(fields).filter(([, value]) => Boolean(value)));
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => Boolean(value))) as UrinalysisParsedFields;
 }
 
 function getOcrSpaceConfig() {
