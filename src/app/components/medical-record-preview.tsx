@@ -76,9 +76,8 @@ const S = {
     color: '#000',
     background: '#fff',
     width: '816px',
-    minHeight: '1344px',
     margin: '0 auto',
-    padding: '22px 26px 20px 26px',
+    padding: '18px 22px 16px 22px',
     display: 'flex',
     flexDirection: 'column' as const,
     boxSizing: 'border-box' as const,
@@ -104,12 +103,12 @@ const S = {
     fontSize: '10.5px',
   },
   line: {
-    borderBottom: '1.2px solid #000',
+    borderBottom: '1px solid #000',
     minWidth: '30px',
     height: '19px',
     display: 'inline-flex',
     alignItems: 'flex-end',
-    lineHeight: '1.3',
+    lineHeight: '1.15',
     padding: '0 2px 4px 2px',
     boxSizing: 'border-box' as const,
     overflow: 'hidden',
@@ -127,13 +126,13 @@ const S = {
     width: '100%',
     borderCollapse: 'collapse' as const,
     tableLayout: 'fixed' as const,
-    marginBottom: '8px',
+    marginBottom: '6px',
     fontSize: '10px',
-    border: '1.5px solid #000',
+    border: '1px solid #000',
   },
   th: {
-    border: '1.5px solid #000',
-    padding: '2px 5px 6px 5px',
+    border: '1px solid #000',
+    padding: '2px 4px 4px 4px',
     verticalAlign: 'middle' as const,
     fontWeight: 'bold' as const,
     background: '#fff',
@@ -141,8 +140,8 @@ const S = {
     lineHeight: '1.15',
   },
   td: {
-    border: '1.5px solid #000',
-    padding: '2px 5px 6px 5px',
+    border: '1px solid #000',
+    padding: '2px 4px 4px 4px',
     verticalAlign: 'middle' as const,
     lineHeight: '1.15',
   },
@@ -247,6 +246,7 @@ function getExamCompletenessScore(record: SubmissionRecord) {
     exam.extremities,
     exam.others,
     exam.examinedBy,
+    exam.examinedBySignatureUrl,
     record.bloodPressure,
     record.weight,
     record.height,
@@ -370,28 +370,53 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
 
     const renderExaminer = (slot: number) => {
       const examiner = getSlotExaminer(slot);
-      const displayName = isClearanceSignatoryName(examiner.name) ? '' : examiner.name;
+      const displayName = examiner.name;
       if (!examiner.signatureUrl && !displayName) return null;
 
       return (
-        <div className="flex min-h-[52px] flex-col items-start gap-1 text-left">
+        <div
+          className="relative flex min-h-[52px] w-full items-start justify-start text-left"
+          style={{
+            width: '100%',
+            minHeight: '52px',
+            overflow: 'hidden',
+          }}
+        >
           {examiner.signatureUrl ? (
             <img
               src={examiner.signatureUrl}
               alt="Examiner signature"
-              className="h-10 w-auto object-contain"
+              crossOrigin="anonymous"
               style={{
-                maxWidth: '112px',
-                maxHeight: '40px',
-                width: 'auto',
-                height: 'auto',
+                position: 'absolute',
+                left: '0',
+                top: '2px',
+                maxWidth: '100%',
+                width: '100%',
+                height: '30px',
                 objectFit: 'contain',
+                objectPosition: 'left center',
                 display: 'block',
+                pointerEvents: 'none',
+                zIndex: 2,
               }}
             />
           ) : null}
           {displayName ? (
-            <span style={{ fontSize: '7.5px', lineHeight: '1.05' }}>{displayName}</span>
+            <span
+              style={{
+                position: 'absolute',
+                left: '0',
+                right: '0',
+                bottom: '1px',
+                fontSize: '8.75px',
+                lineHeight: '1.15',
+                wordBreak: 'break-word',
+                zIndex: 1,
+              }}
+            >
+              {displayName}
+            </span>
           ) : null}
         </div>
       );
@@ -406,15 +431,15 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
             position: 'relative',
             display: 'inline-block',
             minWidth,
-            height: '15px',
+            height: '16px',
             lineHeight: '10px',
-            padding: '0 1px 4px 1px',
+            padding: '0 1px 5px 1px',
             verticalAlign: 'baseline',
             whiteSpace: 'nowrap',
             boxSizing: 'border-box',
           }}
         >
-          <span style={{ position: 'relative', zIndex: 1, display: 'inline-block', transform: 'translateY(-1px)' }}>
+          <span style={{ position: 'relative', zIndex: 1, display: 'inline-block', transform: 'translateY(-2px)' }}>
             {text || '\u00A0'}
           </span>
           <span
@@ -423,7 +448,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               left: 0,
               right: 0,
               bottom: -1,
-              borderBottom: '1.2px solid #000',
+              borderBottom: '1px solid #000',
               zIndex: 0,
             }}
           />
@@ -529,7 +554,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           {/* Photo box */}
           <div
             style={{
-              border: '1.5px solid #000',
+              border: '1px solid #000',
               width: '78px',
               height: '78px',
               display: 'flex',
@@ -565,7 +590,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
         >
           <div
             style={{
-              border: '1.5px solid #000',
+              border: '1px solid #000',
               padding: '4px 10px',
               fontWeight: 'bold',
               fontSize: '10.5px',
@@ -721,9 +746,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
         </div>
         <div
           style={{
-            border: '1.5px solid #000',
-            padding: '8px 10px',
-            marginBottom: '10px',
+            border: '1px solid #000',
+            padding: '7px 9px',
+            marginBottom: '8px',
           }}
         >
           {MEDICAL_HISTORY_ROWS.map((row, i) => (
@@ -850,7 +875,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <div
             style={{
               display: 'inline-block',
-              borderBottom: '1.2px solid #000',
+              borderBottom: '1px solid #000',
               minWidth: '180px',
               minHeight: '26px',
               textAlign: 'center',
@@ -904,18 +929,18 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <tbody>
             {EXAM_ROWS.map((row) => (
               <tr key={row}>
-                <td style={{ ...S.td, fontWeight: 'bold', height: '24px' }}>{row}</td>
+                <td style={{ ...S.td, fontWeight: 'bold', height: '22px' }}>{row}</td>
                 {slots.map((slot) => (
-                  <td key={slot} style={{ ...S.td, height: '24px' }}>
+                  <td key={slot} style={{ ...S.td, height: '22px' }}>
                     {getSlotExamValue(slot, row)}
                   </td>
                 ))}
               </tr>
             ))}
             <tr>
-              <td style={{ ...S.td, fontWeight: 'bold', height: '64px' }}>Examined by:</td>
+              <td style={{ ...S.td, fontWeight: 'bold', height: '56px' }}>Examined by:</td>
               {slots.map((slot) => (
-                <td key={slot} style={{ ...S.td, height: '64px', padding: '2px 4px' }}>
+                <td key={slot} style={{ ...S.td, height: '56px', padding: '2px 4px' }}>
                   {renderExaminer(slot)}
                 </td>
               ))}

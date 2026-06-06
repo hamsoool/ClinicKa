@@ -81,6 +81,8 @@ export function normalizeStaffSignatureRows(files: any[] | null | undefined) {
     .map((file) => {
       const rawType = String(file?.type || "").trim().toLowerCase();
       const bucket = String(file?.storage_bucket || "").trim().toLowerCase();
+      const uploadedBy = String(file?.uploaded_by || "").trim();
+      const isUnassignedSignature = rawType === "signature" && !String(file?.submission_id || "").trim();
       const haystack = [
         rawType,
         bucket,
@@ -94,6 +96,7 @@ export function normalizeStaffSignatureRows(files: any[] | null | undefined) {
       const isStaffSignature =
         rawType === "staff_signature" ||
         rawType === "staff-signature" ||
+        isUnassignedSignature ||
         bucket === "staff_signature" ||
         bucket === "staff_signatures" ||
         haystack.includes("staff_signature") ||
@@ -101,7 +104,7 @@ export function normalizeStaffSignatureRows(files: any[] | null | undefined) {
         haystack.includes("staff_signatures") ||
         haystack.includes("staff-signatures");
 
-      return isStaffSignature ? { ...file, type: "staff_signature" } : null;
+      return isStaffSignature && uploadedBy ? { ...file, type: "staff_signature" } : null;
     })
     .filter(Boolean);
 }

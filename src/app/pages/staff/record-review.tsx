@@ -101,6 +101,7 @@ function isClinicManagedLabSource(source?: string | null) {
 
 type XrayOcrState = {
   confidence?: number;
+  fieldsDetected?: number;
   message: string;
   source?: ChestXrayOcrExtraction['source'];
   status: 'idle' | 'processing' | 'success' | 'warning' | 'error';
@@ -128,6 +129,10 @@ type PreparedReviewSubmission = {
   reviewPayload: any;
   updatedSubmission: SubmissionDetails;
   studentId: string;
+};
+
+type PrepareReviewSubmissionOptions = {
+  issuedDateOverride?: string;
 };
 
 type RecordForm = {
@@ -198,7 +203,6 @@ type ClearanceForm = {
   diagnosis: string;
   remarks: string;
   purpose: ClearancePurpose[];
-  controlNo: string;
   issuedDate: string;
   licenseNo: string;
   signatoryName: string;
@@ -307,42 +311,69 @@ function LabUploadActions({
   onChooseFile,
   onOpenCamera,
 }: LabUploadActionsProps) {
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const isFileUploading = isUploading && uploadSource === 'file';
   const isCameraUploading = isUploading && uploadSource === 'camera';
 
   return (
-    <div className="rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-low px-4 py-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-on-surface">Add or replace {title} file</p>
+    <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+      <div className="rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-low px-4 py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-on-surface">Add or replace {title} file</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              disabled={isUploading}
+              onClick={() => setIsUploadDialogOpen(true)}
+            >
+              <FileUp className="mr-2 h-4 w-4" />
+              {isUploading ? 'Uploading...' : 'Upload'}
+            </Button>
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+      </div>
+
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Upload {title} file</DialogTitle>
+          <DialogDescription>Choose whether to upload an existing file or capture a new one with the camera.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FilePickerButton
             accept={LAB_RESULT_ACCEPT_ATTRIBUTE}
             ariaLabel={`Upload ${title} PDF or image`}
-            className="w-full sm:w-auto"
-            disabled={isFileUploading}
+            className="h-auto min-h-24 w-full flex-col gap-2 px-4 py-4 text-center"
+            disabled={isCameraUploading}
             loading={isFileUploading}
-            onFileSelected={onChooseFile}
+            onFileSelected={(file) => {
+              if (file) setIsUploadDialogOpen(false);
+              onChooseFile(file);
+            }}
           >
-            <FileUp className="mr-2 h-4 w-4" />
-            {isFileUploading ? 'Uploading...' : 'Upload PDF/Image'}
+            <FileUp className="h-5 w-5" />
+            <span>Existing File</span>
           </FilePickerButton>
           <FilePickerButton
             accept="image/*,.heic,.heif"
             ariaLabel={`Capture ${title} image`}
             capture="environment"
-            className="w-full sm:w-auto"
-            disabled={isCameraUploading}
+            className="h-auto min-h-24 w-full flex-col gap-2 px-4 py-4 text-center"
+            disabled={isFileUploading}
             loading={isCameraUploading}
-            onFileSelected={onOpenCamera}
+            onFileSelected={(file) => {
+              if (file) setIsUploadDialogOpen(false);
+              onOpenCamera(file);
+            }}
           >
-            <Camera className="mr-2 h-4 w-4" />
-            Use Camera
+            <Camera className="h-5 w-5" />
+            <span>Use Camera</span>
           </FilePickerButton>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -351,11 +382,6 @@ function getOcrStatusClass(status: XrayOcrState['status']) {
   if (status === 'warning') return 'border-amber-200 bg-amber-50 text-amber-900';
   if (status === 'error') return 'border-red-200 bg-red-50 text-red-800';
   return 'border-blue-200 bg-blue-50 text-blue-800';
-}
-
-function getOcrSourceLabel(source?: ChestXrayOcrExtraction['source'] | CbcOcrExtraction['source'] | UrinalysisOcrExtraction['source']) {
-  if (source === 'ocr-space') return 'OCR.space';
-  return 'OCR';
 }
 
 function buildEmptyStaffSignature(): StaffSignatureAsset {
@@ -623,13 +649,6 @@ function normalizeSexValue(value: string) {
   return sanitizeSexOther(trimmed);
 }
 
-function generateClearanceControlNo(submission?: SubmissionDetails | null) {
-  const yearTag = String(submission?.year || '').trim() || 'Y';
-  const studentTag = String(submission?.studentId || '').trim() || 'STUDENT';
-  const currentYear = new Date().getFullYear();
-  return `GC-${currentYear}-${yearTag}-${studentTag}`;
-}
-
 function normalizeClearancePurposes(value?: string | string[] | null): ClearancePurpose[] {
   const rawValues = Array.isArray(value)
     ? value
@@ -768,7 +787,6 @@ function createClearanceForm(submission?: SubmissionDetails | null): ClearanceFo
     diagnosis: sanitizeSafeText(submission?.clearanceInfo?.diagnosis || '', MAX_CLEARANCE_DIAGNOSIS_LENGTH),
     remarks: sanitizeSafeText(submission?.clearanceInfo?.remarks || '', MAX_CLEARANCE_REMARKS_LENGTH),
     purpose: normalizeClearancePurposes(submission?.clearanceInfo?.purpose),
-    controlNo: submission?.clearanceInfo?.controlNo || generateClearanceControlNo(submission),
     issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate) || fallbackIssuedDate,
     licenseNo: sanitizeLicenseNo(submission?.clearanceInfo?.licenseNo || DEFAULT_LICENSE_NO),
     signatoryName: savedSignatory || legacySignatory || CLEARANCE_DOCTORS[0],
@@ -956,7 +974,11 @@ export default function StaffRecordReview() {
     isError,
   } = useStaffSubmissionDetailQuery(submissionId);
 
-  const prepareReviewSubmission = (nextStatus?: ReviewStatus, customNotes?: string): PreparedReviewSubmission | null => {
+  const prepareReviewSubmission = (
+    nextStatus?: ReviewStatus,
+    customNotes?: string,
+    options: PrepareReviewSubmissionOptions = {},
+  ): PreparedReviewSubmission | null => {
     if (!submissionId || !submission) return null;
     if (!/^\d{2}$/.test(recordForm.age)) {
       toast.error('Age must be exactly 2 digits.');
@@ -981,6 +1003,8 @@ export default function StaffRecordReview() {
       return null;
     }
 
+    const resolvedIssuedDate = options.issuedDateOverride || clearanceForm.issuedDate;
+
     if (statusToSave !== 'returned') {
       const medicalRecordDateChecks: Array<[string, string]> = [
         ['Chest X-Ray date', assessmentForm.xrayDate],
@@ -989,7 +1013,7 @@ export default function StaffRecordReview() {
       ];
 
       if (canFinalizeClearance) {
-        medicalRecordDateChecks.push(['Issued date', clearanceForm.issuedDate]);
+        medicalRecordDateChecks.push(['Issued date', resolvedIssuedDate]);
       }
 
       for (const [label, value] of medicalRecordDateChecks) {
@@ -1041,6 +1065,7 @@ export default function StaffRecordReview() {
     };
     const clearanceInfoPayload = {
       ...clearanceForm,
+      issuedDate: resolvedIssuedDate,
       signatoryName: normalizeClearanceSignatoryName(clearanceForm.signatoryName),
       purpose: serializeClearancePurposes(clearanceForm.purpose),
     };
@@ -1328,6 +1353,10 @@ export default function StaffRecordReview() {
           : prev
       ));
       setSignatureFile(null);
+      await Promise.all([
+        invalidateStaffWorkflowQueries(queryClient, submissionId, submission?.studentId),
+        queryClient.invalidateQueries({ queryKey: ['studentRecords'] }),
+      ]);
       toast.success('Staff signature uploaded successfully.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to upload staff signature.');
@@ -1820,7 +1849,7 @@ export default function StaffRecordReview() {
     const runId = xrayOcrRunRef.current + 1;
     xrayOcrRunRef.current = runId;
     setXrayOcrState({
-      message: 'Sending Chest X-Ray result to OCR.space.',
+      message: 'Scanning result...',
       status: 'processing',
     });
 
@@ -1845,8 +1874,8 @@ export default function StaffRecordReview() {
         return 'warning';
       }
 
-      const wasShortened = rawFindings.length > findings.length;
       const isLowConfidence = typeof result.confidence === 'number' && result.confidence < 80;
+      const detectedFieldCount = (findings ? 1 : 0) + (result.result ? 1 : 0);
       const previousAssessmentForm = assessmentFormRef.current;
       commitAssessmentFormChange(previousAssessmentForm, {
         ...previousAssessmentForm,
@@ -1855,11 +1884,10 @@ export default function StaffRecordReview() {
       });
       setXrayOcrState({
         confidence: result.confidence,
-        message: wasShortened
-          ? `${getOcrSourceLabel(result.source)} filled Findings and shortened the text to fit the field.`
-          : isLowConfidence
-            ? 'OCR.space filled Findings with low confidence. Review before saving.'
-            : `${getOcrSourceLabel(result.source)} filled Findings. Review before saving.`,
+        fieldsDetected: detectedFieldCount,
+        message: isLowConfidence
+          ? `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'} with low confidence. Review before saving.`
+          : `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
         source: result.source,
         status: isLowConfidence ? 'warning' : 'success',
       });
@@ -1894,7 +1922,7 @@ export default function StaffRecordReview() {
     const runId = cbcOcrRunRef.current + 1;
     cbcOcrRunRef.current = runId;
     setCbcOcrState({
-      message: 'Sending CBC result to OCR.space.',
+      message: 'Scanning result',
       status: 'processing',
     });
 
@@ -1932,8 +1960,8 @@ export default function StaffRecordReview() {
       setCbcOcrState({
         fieldsDetected: detectedFieldCount,
         message: detectedDateOutOfRange
-          ? `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} CBC field${detectedFieldCount === 1 ? '' : 's'}, but the detected date is outside the allowed date window. Review before saving.`
-          : `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} CBC field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
+          ? `Filled ${detectedFieldCount} CBC field${detectedFieldCount === 1 ? '' : 's'} (detected date is outside allowed date window). Review before saving.`
+          : `Filled ${detectedFieldCount} CBC field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
         source: result.source,
         status: detectedDateOutOfRange ? 'warning' : 'success',
       });
@@ -1974,7 +2002,7 @@ export default function StaffRecordReview() {
     const runId = urinalysisOcrRunRef.current + 1;
     urinalysisOcrRunRef.current = runId;
     setUrinalysisOcrState({
-      message: 'Sending Urinalysis result to OCR.space.',
+      message: 'Scanning result',
       status: 'processing',
     });
 
@@ -2012,8 +2040,8 @@ export default function StaffRecordReview() {
       setUrinalysisOcrState({
         fieldsDetected: detectedFieldCount,
         message: detectedDateOutOfRange
-          ? `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} Urinalysis field${detectedFieldCount === 1 ? '' : 's'}, but the detected date is outside the allowed date window. Review before saving.`
-          : `${getOcrSourceLabel(result.source)} filled ${detectedFieldCount} Urinalysis field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
+          ? `Filled ${detectedFieldCount} Urinalysis field${detectedFieldCount === 1 ? '' : 's'} (detected date is outside allowed date window). Review before saving.`
+          : `Filled ${detectedFieldCount} Urinalysis field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
         source: result.source,
         status: detectedDateOutOfRange ? 'warning' : 'success',
       });
@@ -2119,7 +2147,15 @@ export default function StaffRecordReview() {
   }
 
   function queueBackgroundReview(action: ReviewAction, nextStatus?: ReviewStatus, customNotes?: string) {
-    const prepared = prepareReviewSubmission(nextStatus, customNotes);
+    const issuedDateOverride = action === 'cleared' ? getTodayDateInputValue() : undefined;
+    if (issuedDateOverride && clearanceForm.issuedDate !== issuedDateOverride) {
+      setClearanceForm((current) => ({
+        ...current,
+        issuedDate: issuedDateOverride,
+      }));
+    }
+
+    const prepared = prepareReviewSubmission(nextStatus, customNotes, { issuedDateOverride });
     if (!prepared) return;
 
     setSavingAction(action);
@@ -2512,7 +2548,7 @@ export default function StaffRecordReview() {
               variant="outline"
               onClick={() => void runLabResultsAutoFill()}
               disabled={!hasUploadedLabResultFile || isLabAutoFillProcessing || isUploadingAnyLabFile}
-              className="w-full sm:w-auto"
+              className="w-full sm:h-10 sm:w-auto sm:min-w-[10.5rem] sm:px-6"
             >
               {isLabAutoFillProcessing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -2572,14 +2608,14 @@ export default function StaffRecordReview() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                      {typeof xrayOcrState.fieldsDetected === 'number' ? (
+                        <Badge variant="outline" className="w-fit bg-white/70">
+                          {xrayOcrState.fieldsDetected} field{xrayOcrState.fieldsDetected === 1 ? '' : 's'}
+                        </Badge>
+                      ) : null}
                       {typeof xrayOcrState.confidence === 'number' ? (
                         <Badge variant="outline" className="w-fit bg-white/70">
                           Confidence {Math.round(xrayOcrState.confidence)}%
-                        </Badge>
-                      ) : null}
-                      {xrayOcrState.source ? (
-                        <Badge variant="outline" className="w-fit bg-white/70">
-                          {getOcrSourceLabel(xrayOcrState.source)}
                         </Badge>
                       ) : null}
                     </div>
@@ -2588,7 +2624,7 @@ export default function StaffRecordReview() {
               ) : null}
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <Label htmlFor="xrayDate">Date</Label>
+                  <Label htmlFor="xrayDate">Issuance Date</Label>
                   <Input
                     id="xrayDate"
                     type="date"
@@ -2686,18 +2722,13 @@ export default function StaffRecordReview() {
                           {cbcOcrState.fieldsDetected} field{cbcOcrState.fieldsDetected === 1 ? '' : 's'}
                         </Badge>
                       ) : null}
-                      {cbcOcrState.source ? (
-                        <Badge variant="outline" className="w-fit bg-white/70">
-                          {getOcrSourceLabel(cbcOcrState.source)}
-                        </Badge>
-                      ) : null}
                     </div>
                   </div>
                 </div>
               ) : null}
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div>
-                  <Label htmlFor="cbcDate">Date</Label>
+                  <Label htmlFor="cbcDate">Issuance Date</Label>
                   <Input
                     id="cbcDate"
                     type="date"
@@ -2832,18 +2863,13 @@ export default function StaffRecordReview() {
                           {urinalysisOcrState.fieldsDetected} field{urinalysisOcrState.fieldsDetected === 1 ? '' : 's'}
                         </Badge>
                       ) : null}
-                      {urinalysisOcrState.source ? (
-                        <Badge variant="outline" className="w-fit bg-white/70">
-                          {getOcrSourceLabel(urinalysisOcrState.source)}
-                        </Badge>
-                      ) : null}
                     </div>
                   </div>
                 </div>
               ) : null}
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
-                  <Label htmlFor="urinalysisDate">Date</Label>
+                  <Label htmlFor="urinalysisDate">Issuance Date</Label>
                   <Input
                     id="urinalysisDate"
                     type="date"
@@ -3167,168 +3193,150 @@ export default function StaffRecordReview() {
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">
-                {canFinalizeClearance ? (
-                <div className="md:col-span-2 xl:col-span-4">
-                  <Label>Purpose *</Label>
-                  <div
-                    className={`mt-2 grid gap-2 rounded-lg border px-3 py-3 sm:grid-cols-3 ${
-                      clearanceForm.purpose.length === 0 ? 'border-red-300 bg-red-50/50' : 'border-outline-variant/50'
-                    }`}
-                  >
-                    {CLEARANCE_PURPOSE_OPTIONS.map((option) => (
-                      <label key={option.value} className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={clearanceForm.purpose.includes(option.value)}
-                          onCheckedChange={(checked) => toggleClearancePurpose(option.value, checked === true)}
-                          className="size-4"
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {clearanceForm.purpose.length === 0 ? (
-                    <p className="mt-1 text-xs text-red-600">Select at least one purpose.</p>
-                  ) : null}
-                </div>
-                ) : null}
-
-                {canFinalizeClearance ? (
-                <div className="xl:col-span-4">
-                  <Label htmlFor="controlNo">Control Number</Label>
-                  <Input
-                    id="controlNo"
-                    value={clearanceForm.controlNo}
-                    readOnly
-                    className="mt-2 bg-muted/40"
-                  />
-                </div>
-                ) : null}
-
-                {canFinalizeClearance ? (
-                <div className="xl:col-span-4">
-                  <Label htmlFor="issuedDate">Issued Date</Label>
-                  <Input
-                    id="issuedDate"
-                    type="date"
-                    value={clearanceForm.issuedDate}
-                    onChange={(event) => updateClearanceField('issuedDate', event.target.value)}
-                    min={medicalRecordDateBounds.min}
-                    max={medicalRecordDateBounds.max}
-                    className="mt-2"
-                  />
-                </div>
-                ) : null}
-
-                {canFinalizeClearance ? (
-                <div className="md:col-span-2 xl:col-span-6">
-                  <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
-                  <Select
-                    value={clearanceForm.signatoryName || CLEARANCE_DOCTORS[0]}
-                    onValueChange={(value) => updateClearanceField('signatoryName', value)}
-                  >
-                    <SelectTrigger id="clearanceSignatory" className="mt-2">
-                      <SelectValue placeholder="Select doctor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CLEARANCE_DOCTORS.map((doctor) => (
-                        <SelectItem key={doctor} value={doctor}>
-                          {doctor}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical certificate.</p>
-                </div>
-                ) : null}
-
-                {canFinalizeClearance ? (
-                <div className="md:col-span-2 xl:col-span-6">
-                  <Label htmlFor="licenseNoSelect">License No.</Label>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-                    <Select
-                      value={CLEARANCE_LICENSE_OPTIONS.some((option) => option.value === clearanceForm.licenseNo)
-                        ? clearanceForm.licenseNo
-                        : 'manual'}
-                      onValueChange={(value) => {
-                        if (value !== 'manual') {
-                          updateClearanceField('licenseNo', value);
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="licenseNoSelect">
-                        <SelectValue placeholder="Select license no." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CLEARANCE_LICENSE_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
+              {canFinalizeClearance ? (
+                <div className="space-y-6">
+                  <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+                    <div>
+                      <Label>Purpose *</Label>
+                      <div
+                        className={`mt-2 grid gap-2 rounded-lg border px-3 py-3 sm:grid-cols-3 ${
+                          clearanceForm.purpose.length === 0 ? 'border-red-300 bg-red-50/50' : 'border-outline-variant/50'
+                        }`}
+                      >
+                        {CLEARANCE_PURPOSE_OPTIONS.map((option) => (
+                          <label key={option.value} className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                              checked={clearanceForm.purpose.includes(option.value)}
+                              onCheckedChange={(checked) => toggleClearancePurpose(option.value, checked === true)}
+                              className="size-4"
+                            />
+                            <span>{option.label}</span>
+                          </label>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      id="licenseNo"
-                      value={clearanceForm.licenseNo}
-                      onChange={(event) => updateClearanceField('licenseNo', event.target.value)}
-                      inputMode="numeric"
-                      maxLength={15}
-                      placeholder="License No."
+                      </div>
+                      {clearanceForm.purpose.length === 0 ? (
+                        <p className="mt-1 text-xs text-red-600">Select at least one purpose.</p>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="issuedDate">Issued Date</Label>
+                      <Input
+                        id="issuedDate"
+                        type="date"
+                        value={clearanceForm.issuedDate}
+                        onChange={(event) => updateClearanceField('issuedDate', event.target.value)}
+                        min={medicalRecordDateBounds.min}
+                        max={medicalRecordDateBounds.max}
+                        className="mt-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+                    <div>
+                      <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
+                      <Select
+                        value={clearanceForm.signatoryName || CLEARANCE_DOCTORS[0]}
+                        onValueChange={(value) => updateClearanceField('signatoryName', value)}
+                      >
+                        <SelectTrigger id="clearanceSignatory" className="mt-2">
+                          <SelectValue placeholder="Select doctor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CLEARANCE_DOCTORS.map((doctor) => (
+                            <SelectItem key={doctor} value={doctor}>
+                              {doctor}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical certificate.</p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="licenseNoSelect">License No.</Label>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                        <Select
+                          value={CLEARANCE_LICENSE_OPTIONS.some((option) => option.value === clearanceForm.licenseNo)
+                            ? clearanceForm.licenseNo
+                            : 'manual'}
+                          onValueChange={(value) => {
+                            if (value !== 'manual') {
+                              updateClearanceField('licenseNo', value);
+                            }
+                          }}
+                        >
+                          <SelectTrigger id="licenseNoSelect">
+                            <SelectValue placeholder="Select license no." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CLEARANCE_LICENSE_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          id="licenseNo"
+                          value={clearanceForm.licenseNo}
+                          onChange={(event) => updateClearanceField('licenseNo', event.target.value)}
+                          inputMode="numeric"
+                          maxLength={15}
+                          placeholder="License No."
+                        />
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">Numbers only, up to 15 digits.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+                    <div>
+                      <Label>General Findings</Label>
+                      <RadioGroup
+                        value={clearanceForm.findingsNormal ? 'normal' : 'with-findings'}
+                        onValueChange={(value) => updateClearanceField('findingsNormal', value === 'normal')}
+                        className="mt-3 grid gap-3 sm:grid-cols-2"
+                      >
+                        <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
+                          <RadioGroupItem value="normal" id="findingsNormal" />
+                          <span>Normal findings</span>
+                        </label>
+                        <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
+                          <RadioGroupItem value="with-findings" id="findingsAbnormal" />
+                          <span>With findings / restrictions</span>
+                        </label>
+                      </RadioGroup>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
+                      <Textarea
+                        id="diagnosis"
+                        value={clearanceForm.diagnosis}
+                        onChange={(event) => updateClearanceField('diagnosis', event.target.value)}
+                        className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                        maxLength={MAX_CLEARANCE_DIAGNOSIS_LENGTH}
+                        rows={4}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="remarks">Clearance Remarks</Label>
+                    <Textarea
+                      id="remarks"
+                      value={clearanceForm.remarks}
+                      onChange={(event) => updateClearanceField('remarks', event.target.value)}
+                      className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                      maxLength={MAX_CLEARANCE_REMARKS_LENGTH}
+                      rows={4}
+                      placeholder="State whether the student is fit, fit with recommendations, or needs follow-up."
                     />
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">Numbers only, up to 15 digits.</p>
                 </div>
-                ) : null}
-
-                {canFinalizeClearance ? (
-                <div className="md:col-span-2 xl:col-span-6">
-                  <Label>General Findings</Label>
-                  <RadioGroup
-                    value={clearanceForm.findingsNormal ? 'normal' : 'with-findings'}
-                    onValueChange={(value) => updateClearanceField('findingsNormal', value === 'normal')}
-                    className="mt-3 grid gap-3 sm:grid-cols-2"
-                  >
-                    <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
-                      <RadioGroupItem value="normal" id="findingsNormal" />
-                      <span>Normal findings</span>
-                    </label>
-                    <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
-                      <RadioGroupItem value="with-findings" id="findingsAbnormal" />
-                      <span>With findings / restrictions</span>
-                    </label>
-                  </RadioGroup>
-                </div>
-                ) : null}
-
-                {canFinalizeClearance ? (
-                <div className="md:col-span-2 xl:col-span-6">
-                  <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
-                  <Textarea
-                    id="diagnosis"
-                    value={clearanceForm.diagnosis}
-                    onChange={(event) => updateClearanceField('diagnosis', event.target.value)}
-                    className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
-                    maxLength={MAX_CLEARANCE_DIAGNOSIS_LENGTH}
-                    rows={4}
-                  />
-                </div>
-                ) : null}
-
-                {canFinalizeClearance ? (
-                <div className="md:col-span-2 xl:col-span-6">
-                  <Label htmlFor="remarks">Clearance Remarks</Label>
-                  <Textarea
-                    id="remarks"
-                    value={clearanceForm.remarks}
-                    onChange={(event) => updateClearanceField('remarks', event.target.value)}
-                    className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
-                    maxLength={MAX_CLEARANCE_REMARKS_LENGTH}
-                    rows={4}
-                    placeholder="State whether the student is fit, fit with recommendations, or needs follow-up."
-                  />
-                </div>
-                ) : null}
-              </div>
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>

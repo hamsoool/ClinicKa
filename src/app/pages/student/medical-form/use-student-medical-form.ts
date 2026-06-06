@@ -290,7 +290,7 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, init
     course: normalizeProgramForDepartment(department, student?.course || me?.profile.course || ''),
     yearLevel: resolveAcademicYearLevelValue(me),
     age: derivedAge !== null ? sanitizeDigits(String(derivedAge), 2) : student?.age ? sanitizeDigits(String(student.age), 2) : '',
-    sex: student?.sex || 'female',
+    sex: student?.sex || '',
     birthday,
     civilStatus: student?.civil_status || 'Single',
     contactNumber: formatPhilippinePhoneInput(student?.contact_number || ''),

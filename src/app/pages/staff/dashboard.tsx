@@ -672,7 +672,7 @@ export default function StaffDashboard() {
       </div>
 
       <div className="grid min-w-0 gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)]">
-        <div className="box-border w-full min-w-0 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:px-6 sm:py-6">
+        <div className="box-border flex w-full min-w-0 flex-col rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:px-6 sm:py-6">
           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Submission Queue</h2>
@@ -729,7 +729,7 @@ export default function StaffDashboard() {
           </Tabs>
 
           {visibleQueue.length === 0 ? (
-            <div className="flex min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-low px-6 text-center">
+            <div className="flex min-h-56 flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-low px-6 text-center">
               <CheckCircle2 className="h-10 w-10 text-primary" />
               <p className="mt-4 text-lg font-semibold text-on-surface">All caught up</p>
               <p className="mt-2 max-w-sm text-sm text-on-surface-variant">
@@ -739,53 +739,57 @@ export default function StaffDashboard() {
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {paginatedQueue.map((submission) => (
-                <button
-                  key={submission.id}
-                  onClick={() => navigate(`/staff/review/${submission.id}`)}
-                  className="box-border flex w-full min-w-0 flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low md:flex-row md:items-start md:gap-4"
-                >
-                  <div className="flex items-start gap-4 md:flex-1">
-                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
-                      <ClipboardCheck className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-on-surface">
-                          {submission.firstName} {submission.lastName}
-                        </p>
-                        {submission.status !== 'in_review' ? (
-                          <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getStatusStyles(submission.status)}`}
-                          >
-                            {getStatusLabel(submission.status)}
-                          </span>
-                        ) : null}
+            <div className="flex flex-1 flex-col">
+              <div className="space-y-3">
+                {paginatedQueue.map((submission) => (
+                  <button
+                    key={submission.id}
+                    onClick={() => navigate(`/staff/review/${submission.id}`)}
+                    className="box-border flex w-full min-w-0 flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low md:flex-row md:items-start md:gap-4"
+                  >
+                    <div className="flex items-start gap-4 md:flex-1">
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
+                        <ClipboardCheck className="h-5 w-5" />
                       </div>
-                      <p className="mt-1 break-words text-xs text-on-surface-variant">
-                        {submission.studentId} | {formatSubmittedYearLevel(submission.studentYearLevel)} | {submission.course}
-                      </p>
-                      <p className="mt-2 text-sm text-on-surface-variant">
-                        Submitted {formatDate(submission.submittedAt)}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-semibold text-on-surface">
+                            {submission.firstName} {submission.lastName}
+                          </p>
+                          {submission.status !== 'in_review' ? (
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getStatusStyles(submission.status)}`}
+                            >
+                              {getStatusLabel(submission.status)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 break-words text-xs text-on-surface-variant">
+                          {submission.studentId} | {formatSubmittedYearLevel(submission.studentYearLevel)} | {submission.course}
+                        </p>
+                        <p className="mt-2 text-sm text-on-surface-variant">
+                          Submitted {formatDate(submission.submittedAt)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex w-full items-center justify-end md:w-auto">
-                    <ArrowRight className="h-4 w-4 flex-shrink-0 text-on-surface-variant" />
-                  </div>
-                </button>
-              ))}
-              <ListPagination
-                currentPage={queuePage}
-                totalPages={queueTotalPages}
-                totalItems={visibleQueue.length}
-                pageSize={DASHBOARD_QUEUE_PAGE_SIZE}
-                pageSizeOptions={[DASHBOARD_QUEUE_PAGE_SIZE]}
-                itemLabel="submissions"
-                onPageChange={setQueuePage}
-                onPageSizeChange={() => undefined}
-              />
+                    <div className="flex w-full items-center justify-end md:w-auto">
+                      <ArrowRight className="h-4 w-4 flex-shrink-0 text-on-surface-variant" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-auto">
+                <ListPagination
+                  currentPage={queuePage}
+                  totalPages={queueTotalPages}
+                  totalItems={visibleQueue.length}
+                  pageSize={DASHBOARD_QUEUE_PAGE_SIZE}
+                  pageSizeOptions={[DASHBOARD_QUEUE_PAGE_SIZE]}
+                  itemLabel="submissions"
+                  onPageChange={setQueuePage}
+                  onPageSizeChange={() => undefined}
+                />
+              </div>
             </div>
           )}
         </div>

@@ -74,6 +74,20 @@ async function loadPdfDependencies() {
   return { html2canvas, jsPDF };
 }
 
+async function waitForImagesToLoad(root: HTMLElement) {
+  const images = Array.from(root.querySelectorAll('img'));
+  await Promise.all(
+    images.map((img) => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const finish = () => resolve();
+        img.addEventListener('load', finish, { once: true });
+        img.addEventListener('error', finish, { once: true });
+      });
+    }),
+  );
+}
+
 function ApprovedStudentsListSkeleton() {
   return (
     <div className="max-h-[500px] space-y-2 overflow-y-hidden" aria-hidden="true">
@@ -361,52 +375,34 @@ function StaffCertificatesWorkspace() {
       exportRoot.appendChild(clone);
       document.body.appendChild(exportRoot);
 
-      const canvas = await html2canvas(clone, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        width: RECORD_PREVIEW_BASE_WIDTH,
-        windowWidth: RECORD_PREVIEW_BASE_WIDTH,
-      });
-      document.body.removeChild(exportRoot);
+      let canvas: HTMLCanvasElement;
+      try {
+        await waitForImagesToLoad(clone);
+        canvas = await html2canvas(clone, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          width: RECORD_PREVIEW_BASE_WIDTH,
+          windowWidth: RECORD_PREVIEW_BASE_WIDTH,
+        });
+      } finally {
+        document.body.removeChild(exportRoot);
+      }
 
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [330.2, 215.9],
-      });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 6;
+      const pageWidth = 215.9;
+      const margin = 4;
       const usableWidth = pageWidth - margin * 2;
-      const usableHeight = pageHeight - margin * 2;
       const imgWidth = usableWidth;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       const imgData = canvas.toDataURL('image/png');
+      const pageHeight = Math.max(330.2, imgHeight + margin * 2);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [pageHeight, pageWidth],
+      });
 
-      if (imgHeight <= usableHeight) {
-        pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
-      } else {
-        const fullCanvas = canvas;
-        const pageSliceHeightPx = Math.floor((usableHeight * fullCanvas.width) / usableWidth);
-        let renderedPx = 0;
-        let pageIndex = 0;
-        while (renderedPx < fullCanvas.height) {
-          const sliceHeightPx = Math.min(pageSliceHeightPx, fullCanvas.height - renderedPx);
-          const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = fullCanvas.width;
-          pageCanvas.height = sliceHeightPx;
-          const ctx = pageCanvas.getContext('2d');
-          if (!ctx) break;
-          ctx.drawImage(fullCanvas, 0, renderedPx, fullCanvas.width, sliceHeightPx, 0, 0, fullCanvas.width, sliceHeightPx);
-          if (pageIndex > 0) pdf.addPage();
-          const sliceData = pageCanvas.toDataURL('image/png');
-          const sliceHeightMm = (sliceHeightPx * usableWidth) / fullCanvas.width;
-          pdf.addImage(sliceData, 'PNG', margin, margin, usableWidth, sliceHeightMm, undefined, 'FAST');
-          renderedPx += sliceHeightPx;
-          pageIndex += 1;
-        }
-      }
+      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
 
       pdf.save(`medical_record_${combinedRecord.lastName}_${combinedRecord.firstName}.pdf`);
       toast.success('Medical record PDF downloaded.');
@@ -440,6 +436,7 @@ function StaffCertificatesWorkspace() {
 
       exportRoot.appendChild(clone);
       document.body.appendChild(exportRoot);
+      await waitForImagesToLoad(exportRoot);
 
       const canvas = await html2canvas(exportRoot, {
         scale: 2,

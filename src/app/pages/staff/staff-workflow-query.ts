@@ -148,9 +148,9 @@ export function staffSubmissionDetailQueryOptions(submissionId?: string | null) 
     enabled: Boolean(normalizedSubmissionId),
     staleTime: STAFF_DETAIL_STALE_TIME_MS,
     gcTime: STAFF_QUERY_GC_TIME_MS,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 }
 

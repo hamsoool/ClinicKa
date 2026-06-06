@@ -111,7 +111,7 @@ const STAFF_MEASUREMENTS_SELECT_COLUMNS = 'submission_id,blood_pressure,cardiac_
 const LAB_CHEST_XRAY_SELECT_COLUMNS = 'submission_id,xray_date,xray_result,xray_findings,file_id,file_url,file_name,mime_type,media_updated_at';
 const LAB_CBC_SELECT_COLUMNS = 'submission_id,cbc_date,hemoglobin,hematocrit,wbc,platelet_count,blood_type,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at';
 const LAB_URINALYSIS_SELECT_COLUMNS = 'submission_id,urinalysis_date,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at';
-const CERTIFICATE_SELECT_COLUMNS = 'submission_id,findings_normal,diagnosis,remarks,purpose,control_no,issued_date,issued_at,license_no,signatory_name,pdf_url,issued_by';
+const CERTIFICATE_SELECT_COLUMNS = 'submission_id,findings_normal,diagnosis,remarks,purpose,control_no,issued_date,issued_at,license_no,signatory_name,pdf_url';
 const FILE_SELECT_COLUMNS = 'id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by';
 const ANNOUNCEMENT_SELECT_COLUMNS = 'id,title,description,date_posted,image_path,is_published,created_at,updated_at,created_by';
 let studentProfileAssetsRouteUnavailable = false;
@@ -1465,6 +1465,8 @@ function normalizeStaffSignatureRows(files: any[] | null | undefined) {
     .map((file) => {
       const rawType = String(file?.type || '').trim().toLowerCase();
       const bucket = String(file?.storage_bucket || '').trim().toLowerCase();
+      const uploadedBy = String(file?.uploaded_by || '').trim();
+      const isUnassignedSignature = rawType === 'signature' && !String(file?.submission_id || '').trim();
       const haystack = [
         rawType,
         bucket,
@@ -1478,6 +1480,7 @@ function normalizeStaffSignatureRows(files: any[] | null | undefined) {
       const isStaffSignature =
         rawType === 'staff_signature' ||
         rawType === 'staff-signature' ||
+        isUnassignedSignature ||
         bucket === 'staff_signature' ||
         bucket === 'staff_signatures' ||
         haystack.includes('staff_signature') ||
@@ -1485,7 +1488,7 @@ function normalizeStaffSignatureRows(files: any[] | null | undefined) {
         haystack.includes('staff_signatures') ||
         haystack.includes('staff-signatures');
 
-      return isStaffSignature ? { ...file, type: 'staff_signature' } : null;
+      return isStaffSignature && uploadedBy ? { ...file, type: 'staff_signature' } : null;
     })
     .filter(Boolean);
 }
@@ -1687,13 +1690,8 @@ function resolveExaminerSignature(row: any, staffMeasurements: any, related: Rec
   }
 
   const examinerStaffId = staffMeasurements?.updated_by || row.reviewed_by || certificate?.issued_by || null;
-  const examinerStaff = examinerStaffId ? related.reviewers?.[examinerStaffId] : null;
-  const canUseStaffIdSignature =
-    !String(examinedBy || '').trim() ||
-    isClearanceSignatoryName(examinedBy) ||
-    staffNameMatchesExaminer(examinerStaff, examinedBy);
-  return canUseStaffIdSignature && examinerStaffId
-    ? related.staffSignaturesByStaffId?.[examinerStaffId]
+  return examinerStaffId
+    ? related.staffSignaturesByStaffId?.[examinerStaffId] || null
     : null;
 }
 
@@ -3668,18 +3666,18 @@ export async function getStudentRecords(studentId?: string, options: GetStudentR
   };
 
   try {
-    const response = await apiRequest<{ records: SubmissionRecord[] }>(
-      `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
+    const records = await getMappedSubmissions(
+      `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
     );
-    const records = Array.isArray(response?.records) ? response.records : [];
-    return { records: await attachProfileAssetsFallback(records) };
-  } catch (routeError) {
+    return { records: await attachProfileAssetsFallback(records as SubmissionRecord[]) };
+  } catch (restError) {
     try {
-      const records = await getMappedSubmissions(
-        `student_id=eq.${encodeURIComponent(fallbackStudentId)}&order=submitted_at.desc`,
+      const response = await apiRequest<{ records: SubmissionRecord[] }>(
+        `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
       );
-      return { records: await attachProfileAssetsFallback(records as SubmissionRecord[]) };
-    } catch (restError) {
+      const records = Array.isArray(response?.records) ? response.records : [];
+      return { records: await attachProfileAssetsFallback(records) };
+    } catch (routeError) {
       if (!shouldFallbackToRest(routeError) && routeError instanceof Error) {
         throw routeError;
       }
@@ -4162,20 +4160,23 @@ export async function getStaffCertificateRecords(studentId?: string) {
   }
 
   try {
-    const response = await apiRequest<{ records: SubmissionRecord[] }>(
-      `/functions/v1/server/staff/certificate-records/${encodeURIComponent(targetStudentId)}`,
-    );
-    return {
-      records: Array.isArray(response?.records) ? response.records : [],
-    };
-  } catch (error) {
-    if (!shouldFallbackToRest(error)) {
-      throw error;
+    const records = await getMappedCertificatePreviewSubmissions(targetStudentId);
+    return { records };
+  } catch (restError) {
+    try {
+      const response = await apiRequest<{ records: SubmissionRecord[] }>(
+        `/functions/v1/server/staff/certificate-records/${encodeURIComponent(targetStudentId)}`,
+      );
+      return {
+        records: Array.isArray(response?.records) ? response.records : [],
+      };
+    } catch (routeError) {
+      if (!shouldFallbackToRest(routeError)) {
+        throw routeError;
+      }
+      throw restError;
     }
   }
-
-  const records = await getMappedCertificatePreviewSubmissions(targetStudentId);
-  return { records };
 }
 
 export async function getStudentNotificationState(studentId?: string) {
@@ -4568,6 +4569,7 @@ async function upsertCertificateRecord(submissionId: string, clearanceInfo: any)
     remarks: clearanceInfo.remarks || null,
     purpose: clearanceInfo.purpose || null,
     control_no: clearanceInfo.controlNo || null,
+    issued_date: clearanceInfo.issuedDate || null,
     issued_at: clearanceInfo.issuedDate || null,
     license_no: clearanceInfo.licenseNo || null,
   };
@@ -4609,6 +4611,54 @@ async function upsertCertificateRecord(submissionId: string, clearanceInfo: any)
   }
 }
 
+async function issueCertificateRecordViaServer(submissionId: string, clearanceInfo: any) {
+  return apiRequest<{ success: boolean }>('/functions/v1/server/issue-certificate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      submissionId,
+      findingsNormal: clearanceInfo.findingsNormal,
+      diagnosis: clearanceInfo.diagnosis || null,
+      remarks: clearanceInfo.remarks || null,
+      purpose: clearanceInfo.purpose || null,
+      controlNo: clearanceInfo.controlNo || null,
+      issuedDate: clearanceInfo.issuedDate || null,
+      licenseNo: clearanceInfo.licenseNo || null,
+      signatoryName: clearanceInfo.signatoryName || null,
+    }),
+  });
+}
+
+async function persistCertificateRecord(
+  submissionId: string,
+  clearanceInfo: any,
+  nextStatus?: string,
+  options: { allowServerIssue?: boolean } = {},
+) {
+  const hasClearanceValue = [
+    clearanceInfo?.diagnosis,
+    clearanceInfo?.remarks,
+    clearanceInfo?.purpose,
+    clearanceInfo?.issuedDate,
+    clearanceInfo?.licenseNo,
+    clearanceInfo?.signatoryName,
+  ].some((value) => String(value || '').trim().length > 0) || typeof clearanceInfo?.findingsNormal === 'boolean';
+
+  if (!hasClearanceValue) return { success: true as const };
+
+  if (options.allowServerIssue && String(nextStatus || '').trim().toLowerCase() === 'approved') {
+    try {
+      return await issueCertificateRecordViaServer(submissionId, clearanceInfo);
+    } catch {
+      return upsertCertificateRecord(submissionId, clearanceInfo);
+    }
+  }
+
+  return upsertCertificateRecord(submissionId, clearanceInfo);
+}
+
 export async function saveSubmissionReview(id: string, review: any) {
   const personalInfo = review.personalInfo || {};
   const emergencyContact = review.emergencyContact || {};
@@ -4632,7 +4682,13 @@ export async function saveSubmissionReview(id: string, review: any) {
 
   const me = await getMe();
   const reviewedBy = me.staff?.id || null;
+  const canIssueCertificateViaServer =
+    me.profile.role === 'admin' || isDoctorPosition(me.staff?.position);
   const requestedControlNo = String(clearanceInfo.controlNo || '').trim();
+  const resolvedSubmissionBloodPressure = staffMeasurements.bloodPressure || studentMeasurements.bloodPressure || null;
+  const resolvedSubmissionWeight = staffMeasurements.weight || studentMeasurements.weight || null;
+  const resolvedSubmissionHeight = staffMeasurements.height || studentMeasurements.height || null;
+  const resolvedSubmissionBmi = staffMeasurements.bmi || studentMeasurements.bmi || null;
 
   // Guard early against duplicate control numbers so we can return a clear error
   // instead of surfacing a generic DB unique-constraint failure from the certificates upsert.
@@ -4672,10 +4728,12 @@ export async function saveSubmissionReview(id: string, review: any) {
           allergy_details: review.allergyDetails || null,
           had_operation: review.hadOperation || null,
           operation_details: review.operationDetails || null,
-          blood_pressure: hasStudentBloodPressure ? (studentMeasurements.bloodPressure || null) : undefined,
-          weight: studentMeasurements.weight || null,
-          height: studentMeasurements.height || null,
-          bmi: studentMeasurements.bmi || null,
+          blood_pressure: hasStudentBloodPressure || resolvedSubmissionBloodPressure !== null
+            ? resolvedSubmissionBloodPressure
+            : undefined,
+          weight: resolvedSubmissionWeight,
+          height: resolvedSubmissionHeight,
+          bmi: resolvedSubmissionBmi,
           staff_notes: review.staffNotes || review.staff_notes || null,
           status: nextStatus || undefined,
           reviewed_by: reviewedBy,
@@ -4846,7 +4904,15 @@ export async function saveSubmissionReview(id: string, review: any) {
         }),
       },
     ),
-    upsertCertificateRecord(id, clearanceInfo),
+    persistCertificateRecord(
+      id,
+      {
+        ...clearanceInfo,
+        issuedBy: reviewedBy,
+      },
+      nextStatus,
+      { allowServerIssue: canIssueCertificateViaServer },
+    ),
   ]);
 
   // Trigger email notification if status is one of the target states

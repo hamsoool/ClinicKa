@@ -245,7 +245,7 @@ export function StudentProfileFormCard({
           {readOnly ? (
             <Input id="sex" value={formatReadOnlySex(value.sex)} readOnly disabled className="cursor-not-allowed opacity-80" />
           ) : (
-            <Select value={value.sex} onValueChange={(nextValue) => handleChange('sex', nextValue)}>
+            <Select value={value.sex || undefined} onValueChange={(nextValue) => handleChange('sex', nextValue)}>
               <SelectTrigger id="sex" className={requiredFieldClass(!value.sex.trim())}>
                 <SelectValue placeholder="Required: select sex at birth" />
               </SelectTrigger>
