@@ -1061,6 +1061,7 @@ export default function StaffRecordReview() {
       extremities: preserveDoctorField('extremities', assessmentForm.extremities),
       others: preserveDoctorField('others', assessmentForm.others),
       examinedBy: preserveDoctorField('examinedBy', assessmentForm.examinedBy),
+      examinedBySignatureUrl: currentStaffSignatureUrl || submission.staffMeasurements?.examinedBySignatureUrl || '',
       staff_notes: notesToSave,
     };
     const clearanceInfoPayload = {

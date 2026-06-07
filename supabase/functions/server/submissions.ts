@@ -43,6 +43,10 @@ const ACTIVE_STAFF_USER_SELECT_LEGACY =
   "id,profile_id,first_name,last_name,middle_initial,position,name,is_active";
 const CERTIFICATE_SELECT_COLUMNS =
   "submission_id,findings_normal,diagnosis,remarks,purpose,control_no,issued_date,issued_at,license_no,signatory_name,pdf_url";
+const STAFF_MEASUREMENTS_SELECT_WITH_SIGNATURE =
+  "submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by,updated_at,examined_by_signature_url";
+const STAFF_MEASUREMENTS_SELECT_LEGACY =
+  "submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by,updated_at";
 
 export const SUBMISSION_LIST_COLUMNS = [
   "id",
@@ -179,7 +183,7 @@ function mapStaffMeasurements(row: any, examinedBySignatureUrl?: string | null) 
     extremities: row.extremities,
     others: row.others,
     examinedBy: row.examined_by,
-    examinedBySignatureUrl: examinedBySignatureUrl || undefined,
+    examinedBySignatureUrl: normalizeStorageFileUrl(row.examined_by_signature_url || examinedBySignatureUrl || null) || undefined,
     updatedAt: row.updated_at || null,
   };
 }
@@ -247,7 +251,7 @@ function findGenericLabFile(files: any[]) {
 
 function buildStaffSignatureAssetFromRow(staff: any) {
   const signatureUrl = normalizeStorageFileUrl(staff?.signature_url || null);
-  if (!signatureUrl || !staff?.id || !staff?.profile_id) return null;
+  if (!signatureUrl || !staff?.id) return null;
 
   return {
     id: `staff-user-signature-${staff.id}`,
@@ -258,9 +262,20 @@ function buildStaffSignatureAssetFromRow(staff: any) {
     storage_path: null,
     mime_type: null,
     uploaded_at: null,
-    uploaded_by: staff.profile_id,
+    uploaded_by: staff.profile_id || null,
     url: signatureUrl,
   };
+}
+
+function resolveStaffSignatureById(staffId: unknown, related: Record<string, any>) {
+  const normalizedStaffId = String(staffId || "").trim();
+  if (!normalizedStaffId) return null;
+
+  return (
+    related.staffSignaturesByStaffId?.[normalizedStaffId]
+    || buildStaffSignatureAssetFromRow(related.reviewers?.[normalizedStaffId])
+    || null
+  );
 }
 
 function buildStudentProfileAssetFromRow(student: any, type: "photo" | "signature") {
@@ -306,6 +321,11 @@ function buildLabFileAssetFromRow(row: any, type: string) {
 function isMissingStaffSignatureUrlColumnError(error: any) {
   const message = String(error?.message || error || "").toLowerCase();
   return message.includes("signature_url") && message.includes("staff_users");
+}
+
+function isMissingExaminedBySignatureUrlColumnError(error: any) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return message.includes("examined_by_signature_url") && message.includes("staff_measurements");
 }
 
 function isMissingFilesTableError(error: any) {
@@ -356,6 +376,26 @@ async function fetchActiveStaffDirectory() {
     .limit(200);
 }
 
+async function fetchStaffMeasurementsBySubmissionIds(submissionIds: string[]) {
+  if (!submissionIds.length) {
+    return { data: [] as any[], error: null };
+  }
+
+  const primary = await supabase
+    .from("staff_measurements")
+    .select(STAFF_MEASUREMENTS_SELECT_WITH_SIGNATURE)
+    .in("submission_id", submissionIds);
+
+  if (!primary.error || !isMissingExaminedBySignatureUrlColumnError(primary.error)) {
+    return primary;
+  }
+
+  return supabase
+    .from("staff_measurements")
+    .select(STAFF_MEASUREMENTS_SELECT_LEGACY)
+    .in("submission_id", submissionIds);
+}
+
 const CLEARANCE_SIGNATORY_NAMES = ["GERALD S. BERNAL, MD", "ARMANDO TAMAYO, MD"] as const;
 
 function normalizeSignatureName(value?: string | null) {
@@ -400,20 +440,27 @@ function staffNameMatchesExaminer(staff: any, examinerName?: string | null) {
 }
 
 function resolveExaminerSignature(row: any, staffMeasurements: any, related: Record<string, any>) {
-  const examinedBy = staffMeasurements?.examined_by || "";
-  const certificate = related.certificates?.[row.id] || {};
-  const staffRows = related.staffRows || [];
-  const matchedStaff = staffRows.find(
-    (staff: any) => staffNameMatchesExaminer(staff, examinedBy) && related.staffSignaturesByStaffId?.[staff.id],
-  );
-  if (matchedStaff) {
-    return related.staffSignaturesByStaffId[matchedStaff.id];
+  const directSignature = [
+    staffMeasurements?.updated_by,
+    row.reviewed_by,
+  ]
+    .map((staffId) => resolveStaffSignatureById(staffId, related))
+    .find(Boolean);
+
+  if (directSignature) {
+    return directSignature;
   }
 
-  const examinerStaffId = staffMeasurements?.updated_by || row.reviewed_by || certificate?.issued_by || null;
-  return examinerStaffId
-    ? related.staffSignaturesByStaffId?.[examinerStaffId] || null
-    : null;
+  const examinedBy = staffMeasurements?.examined_by || "";
+  const staffRows = related.staffRows || [];
+  const matchedStaff = staffRows.find(
+    (staff: any) => staffNameMatchesExaminer(staff, examinedBy) && resolveStaffSignatureById(staff?.id, related),
+  );
+  if (matchedStaff) {
+    return resolveStaffSignatureById(matchedStaff.id, related);
+  }
+
+  return null;
 }
 
 function mapSubmission(row: any, related: Record<string, any>) {
@@ -583,12 +630,7 @@ async function loadRelatedData(rows: any[]) {
           .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
-      ? supabase
-          .from("staff_measurements")
-          .select(
-            "submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by,updated_at",
-          )
-          .in("submission_id", submissionIds)
+      ? fetchStaffMeasurementsBySubmissionIds(submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     reviewerIds.length
       ? fetchStaffUsersByIds(reviewerIds)
@@ -656,16 +698,7 @@ async function loadRelatedData(rows: any[]) {
         .filter(Boolean),
     ),
   ];
-  const certificateIssuerIds = [
-    ...new Set(
-      (certificatesRes.data || [])
-        .map((row) => String(row?.issued_by || "").trim())
-        .filter(Boolean),
-    ),
-  ];
-  const missingReviewerIds = [
-    ...new Set([...measurementUpdaterIds, ...certificateIssuerIds]),
-  ].filter((id) => !knownReviewerIds.has(id));
+  const missingReviewerIds = measurementUpdaterIds.filter((id) => !knownReviewerIds.has(id));
   const extraReviewersRes = missingReviewerIds.length
     ? await fetchStaffUsersByIds(missingReviewerIds)
     : { data: [] as any[], error: null };

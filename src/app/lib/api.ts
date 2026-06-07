@@ -107,7 +107,8 @@ const SUBMISSION_LIST_COLUMNS = [
 const SUBMISSION_SUMMARY_COLUMNS = 'id,student_id,first_name,last_name,middle_initial,course,department,year_level,academic_year,status,reviewed_by,submitted_at,updated_at';
 const EMERGENCY_CONTACT_SELECT_COLUMNS = 'submission_id,name,relationship,phone,address';
 const MEDICAL_HISTORY_SELECT_COLUMNS = 'submission_id,allergy,asthma,chicken_pox,diabetes,dysmenorrhea,epilepsy_seizure,heart_disorder,hepatitis,hypertension,measles,mumps,anxiety_disorder,panic_attack,pneumonia,ptb_primary_complex,typhoid_fever,covid19,uti';
-const STAFF_MEASUREMENTS_SELECT_COLUMNS = 'submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by,updated_at';
+const STAFF_MEASUREMENTS_SELECT_COLUMNS = 'submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by,updated_at,examined_by_signature_url';
+const STAFF_MEASUREMENTS_SELECT_COLUMNS_LEGACY = 'submission_id,blood_pressure,cardiac_rate,respiratory_rate,temperature,weight,height,bmi,visual_acuity,skin,heent,chest_lungs,heart,abdomen,extremities,others,examined_by,updated_by,updated_at';
 const LAB_CHEST_XRAY_SELECT_COLUMNS = 'submission_id,xray_date,xray_result,xray_findings,file_id,file_url,file_name,mime_type,media_updated_at';
 const LAB_CBC_SELECT_COLUMNS = 'submission_id,cbc_date,hemoglobin,hematocrit,wbc,platelet_count,blood_type,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at';
 const LAB_URINALYSIS_SELECT_COLUMNS = 'submission_id,urinalysis_date,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at';
@@ -1130,6 +1131,12 @@ function isMissingStaffSignatureUrlColumnError(error: unknown) {
   return message.includes('signature_url') && message.includes('staff_users');
 }
 
+function isMissingExaminedBySignatureUrlColumnError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('examined_by_signature_url') && message.includes('staff_measurements');
+}
+
 async function restRequestStaffUsers(queryWithSignature: string, queryLegacy?: string) {
   try {
     return await restRequest<any[]>('staff_users', queryWithSignature);
@@ -1140,6 +1147,23 @@ async function restRequestStaffUsers(queryWithSignature: string, queryLegacy?: s
 
     const fallbackQuery = queryLegacy || queryWithSignature.replace(/,signature_url/g, '').replace(/signature_url,?/g, '');
     return restRequest<any[]>('staff_users', fallbackQuery);
+  }
+}
+
+async function restRequestStaffMeasurements(queryWithSignature: string, queryLegacy?: string) {
+  try {
+    return await restRequest<any[]>('staff_measurements', queryWithSignature);
+  } catch (error) {
+    if (!isMissingExaminedBySignatureUrlColumnError(error)) {
+      throw error;
+    }
+
+    const fallbackQuery =
+      queryLegacy
+      || queryWithSignature
+        .replace(/,examined_by_signature_url/g, '')
+        .replace(/examined_by_signature_url,?/g, '');
+    return restRequest<any[]>('staff_measurements', fallbackQuery);
   }
 }
 
@@ -1384,7 +1408,7 @@ function mapStaffMeasurements(row: any, examinedBySignatureUrl?: string | null) 
     extremities: row.extremities,
     others: row.others,
     examinedBy: row.examined_by,
-    examinedBySignatureUrl: normalizeStorageFileUrl(examinedBySignatureUrl || null),
+    examinedBySignatureUrl: normalizeStorageFileUrl(row.examined_by_signature_url || examinedBySignatureUrl || null),
     updatedAt: row.updated_at || null,
   };
 }
@@ -1495,7 +1519,7 @@ function normalizeStaffSignatureRows(files: any[] | null | undefined) {
 
 function buildStaffSignatureAssetFromRow(staff: any) {
   const signatureUrl = normalizeStorageFileUrl(staff?.signature_url || null);
-  if (!signatureUrl || !staff?.id || !staff?.profile_id) return null;
+  if (!signatureUrl || !staff?.id) return null;
 
   return {
     id: `staff-user-signature-${staff.id}`,
@@ -1506,9 +1530,20 @@ function buildStaffSignatureAssetFromRow(staff: any) {
     storage_path: null,
     mime_type: null,
     uploaded_at: null,
-    uploaded_by: staff.profile_id,
+    uploaded_by: staff.profile_id || null,
     url: signatureUrl,
   };
+}
+
+function resolveStaffSignatureById(staffId: unknown, related: Record<string, any>) {
+  const normalizedStaffId = String(staffId || '').trim();
+  if (!normalizedStaffId) return null;
+
+  return (
+    related.staffSignaturesByStaffId?.[normalizedStaffId]
+    || buildStaffSignatureAssetFromRow(related.reviewers?.[normalizedStaffId])
+    || null
+  );
 }
 
 function buildStudentProfileAssetFromRow(student: any, type: 'photo' | 'signature') {
@@ -1679,20 +1714,27 @@ function staffNameMatchesExaminer(staff: any, examinerName?: string | null) {
 }
 
 function resolveExaminerSignature(row: any, staffMeasurements: any, related: Record<string, any>) {
-  const examinedBy = staffMeasurements?.examined_by || '';
-  const certificate = related.certificates?.[row.id] || {};
-  const staffRows = related.staffRows || [];
-  const matchedStaff = staffRows.find(
-    (staff: any) => staffNameMatchesExaminer(staff, examinedBy) && related.staffSignaturesByStaffId?.[staff.id],
-  );
-  if (matchedStaff) {
-    return related.staffSignaturesByStaffId[matchedStaff.id];
+  const directSignature = [
+    staffMeasurements?.updated_by,
+    row.reviewed_by,
+  ]
+    .map((staffId) => resolveStaffSignatureById(staffId, related))
+    .find(Boolean);
+
+  if (directSignature) {
+    return directSignature;
   }
 
-  const examinerStaffId = staffMeasurements?.updated_by || row.reviewed_by || certificate?.issued_by || null;
-  return examinerStaffId
-    ? related.staffSignaturesByStaffId?.[examinerStaffId] || null
-    : null;
+  const examinedBy = staffMeasurements?.examined_by || '';
+  const staffRows = related.staffRows || [];
+  const matchedStaff = staffRows.find(
+    (staff: any) => staffNameMatchesExaminer(staff, examinedBy) && resolveStaffSignatureById(staff?.id, related),
+  );
+  if (matchedStaff) {
+    return resolveStaffSignatureById(matchedStaff.id, related);
+  }
+
+  return null;
 }
 
 function mapSubmission(row: any, related: Record<string, any>) {
@@ -1841,7 +1883,10 @@ async function loadRelatedData(rows: any[]) {
       ? restRequest<any[]>('medical_history', `submission_id=in.(${idList})&select=${MEDICAL_HISTORY_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`)
+      ? restRequestStaffMeasurements(
+          `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`,
+          `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS_LEGACY}`,
+        )
       : Promise.resolve([]),
     reviewerIds.length
       ? restRequestStaffUsers(
@@ -1879,16 +1924,7 @@ async function loadRelatedData(rows: any[]) {
         .filter(Boolean),
     ),
   ];
-  const certificateIssuerIds = [
-    ...new Set(
-      (certificates || [])
-        .map((row) => String(row?.issued_by || '').trim())
-        .filter(Boolean),
-    ),
-  ];
-  const missingReviewerIds = [
-    ...new Set([...measurementUpdaterIds, ...certificateIssuerIds]),
-  ].filter((id) => !knownReviewerIds.has(id));
+  const missingReviewerIds = measurementUpdaterIds.filter((id) => !knownReviewerIds.has(id));
   const missingReviewerIdList = missingReviewerIds.map((id) => encodeURIComponent(id)).join(',');
   const extraReviewers = missingReviewerIds.length
     ? await restRequestStaffUsers(
@@ -2044,7 +2080,10 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
       ? restRequest<any[]>('medical_history', `submission_id=in.(${idList})&select=${MEDICAL_HISTORY_SELECT_COLUMNS}`)
       : Promise.resolve([]),
     submissionIds.length
-      ? restRequest<any[]>('staff_measurements', `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`)
+      ? restRequestStaffMeasurements(
+          `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`,
+          `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS_LEGACY}`,
+        )
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})&select=${LAB_CHEST_XRAY_SELECT_COLUMNS}`)
@@ -2084,16 +2123,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
         .filter(Boolean),
     ),
   ];
-  const certificateIssuerIds = [
-    ...new Set(
-      (certificates || [])
-        .map((row) => String(row?.issued_by || '').trim())
-        .filter(Boolean),
-    ),
-  ];
-  const missingReviewerIds = [
-    ...new Set([...measurementUpdaterIds, ...certificateIssuerIds]),
-  ].filter((id) => !knownReviewerIds.has(id));
+  const missingReviewerIds = measurementUpdaterIds.filter((id) => !knownReviewerIds.has(id));
   const missingReviewerIdList = missingReviewerIds
     .map((id) => encodeURIComponent(id))
     .join(',');
@@ -4659,6 +4689,72 @@ async function persistCertificateRecord(
   return upsertCertificateRecord(submissionId, clearanceInfo);
 }
 
+async function upsertStaffMeasurementsRecord(
+  submissionId: string,
+  staffMeasurements: any,
+  reviewedBy: string | null,
+  now: string,
+) {
+  const basePayload = {
+    submission_id: submissionId,
+    blood_pressure: staffMeasurements.bloodPressure || null,
+    cardiac_rate: staffMeasurements.cardiacRate || null,
+    respiratory_rate: staffMeasurements.respiratoryRate || null,
+    temperature: staffMeasurements.temperature || null,
+    weight: staffMeasurements.weight || null,
+    height: staffMeasurements.height || null,
+    bmi: staffMeasurements.bmi || null,
+    visual_acuity: staffMeasurements.visualAcuity || null,
+    skin: staffMeasurements.skin || null,
+    heent: staffMeasurements.heent || null,
+    chest_lungs: staffMeasurements.chestLungs || null,
+    heart: staffMeasurements.heart || null,
+    abdomen: staffMeasurements.abdomen || null,
+    extremities: staffMeasurements.extremities || null,
+    others: staffMeasurements.others || null,
+    examined_by: staffMeasurements.examinedBy || null,
+    updated_by: reviewedBy,
+    updated_at: now,
+  };
+
+  const payloadWithSignature = {
+    ...basePayload,
+    examined_by_signature_url: staffMeasurements.examinedBySignatureUrl || null,
+  };
+
+  try {
+    return await restRequest(
+      'staff_measurements',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(payloadWithSignature),
+      },
+    );
+  } catch (error) {
+    if (!isMissingExaminedBySignatureUrlColumnError(error)) {
+      throw error;
+    }
+
+    return restRequest(
+      'staff_measurements',
+      'on_conflict=submission_id',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(basePayload),
+      },
+    );
+  }
+}
+
 export async function saveSubmissionReview(id: string, review: any) {
   const personalInfo = review.personalInfo || {};
   const emergencyContact = review.emergencyContact || {};
@@ -4816,38 +4912,7 @@ export async function saveSubmissionReview(id: string, review: any) {
         }),
       },
     ),
-    restRequest(
-      'staff_measurements',
-      'on_conflict=submission_id',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({
-          submission_id: id,
-          blood_pressure: staffMeasurements.bloodPressure || null,
-          cardiac_rate: staffMeasurements.cardiacRate || null,
-          respiratory_rate: staffMeasurements.respiratoryRate || null,
-          temperature: staffMeasurements.temperature || null,
-          weight: staffMeasurements.weight || null,
-          height: staffMeasurements.height || null,
-          bmi: staffMeasurements.bmi || null,
-          visual_acuity: staffMeasurements.visualAcuity || null,
-          skin: staffMeasurements.skin || null,
-          heent: staffMeasurements.heent || null,
-          chest_lungs: staffMeasurements.chestLungs || null,
-          heart: staffMeasurements.heart || null,
-          abdomen: staffMeasurements.abdomen || null,
-          extremities: staffMeasurements.extremities || null,
-          others: staffMeasurements.others || null,
-          examined_by: staffMeasurements.examinedBy || null,
-          updated_by: reviewedBy,
-          updated_at: now,
-        }),
-      },
-    ),
+    upsertStaffMeasurementsRecord(id, staffMeasurements, reviewedBy, now),
     restRequest(
       'lab_chest_xray',
       'on_conflict=submission_id',
