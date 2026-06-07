@@ -1,5 +1,5 @@
 import { forwardRef, memo } from 'react';
-import type { ForwardedRef } from 'react';
+import type { CSSProperties, ForwardedRef } from 'react';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel, normalizeSubmissionSlot } from '../lib/academic-year';
 import type { SubmissionRecord } from '../lib/record-types';
 import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
@@ -102,17 +102,6 @@ const S = {
     whiteSpace: 'nowrap' as const,
     fontSize: '10.5px',
   },
-  line: {
-    borderBottom: '1px solid #000',
-    minWidth: '30px',
-    height: '19px',
-    display: 'inline-flex',
-    alignItems: 'flex-end',
-    lineHeight: '1.15',
-    padding: '0 2px 4px 2px',
-    boxSizing: 'border-box' as const,
-    overflow: 'hidden',
-  },
   checkbox: (checked: boolean) => ({
     display: 'inline-block',
     width: '10px',
@@ -146,6 +135,41 @@ const S = {
     lineHeight: '1.15',
   },
 };
+
+const PRINT_LINE_FIELD_CLASS =
+  'inline-flex min-h-[19px] items-end overflow-hidden border-b border-black px-0.5 pb-1 leading-tight print:pb-1 print:leading-tight';
+const PRINT_INLINE_FIELD_CLASS =
+  'inline-block whitespace-nowrap align-baseline border-b border-black px-0.5 pb-1 leading-tight print:pb-1 print:leading-tight print:align-baseline';
+
+function renderLineField(
+  value: unknown,
+  className = '',
+  style?: CSSProperties,
+) {
+  const text = String(value || '').trim();
+
+  return (
+    <div className={`${PRINT_LINE_FIELD_CLASS} ${className}`.trim()} style={style}>
+      {text || '\u00A0'}
+    </div>
+  );
+}
+
+function renderInlineField(value: unknown, minWidth = '44px') {
+  const text = String(value || '').trim();
+
+  return (
+    <span
+      className={PRINT_INLINE_FIELD_CLASS}
+      style={{
+        minWidth,
+        boxSizing: 'border-box',
+      }}
+    >
+      {text || '\u00A0'}
+    </span>
+  );
+}
 
 function GordonCollegeLogo({ size = 64 }: { size?: number }) {
   return (
@@ -374,85 +398,21 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
       if (!examiner.signatureUrl && !displayName) return null;
 
       return (
-        <div
-          className="relative flex min-h-[52px] w-full items-start justify-start text-left"
-          style={{
-            width: '100%',
-            minHeight: '52px',
-            overflow: 'hidden',
-          }}
-        >
+        <div className="flex min-h-[60px] w-full flex-col items-center justify-center p-2 text-center">
           {examiner.signatureUrl ? (
             <img
               src={examiner.signatureUrl}
               alt="Examiner signature"
               crossOrigin="anonymous"
-              style={{
-                position: 'absolute',
-                left: '0',
-                top: '2px',
-                maxWidth: '100%',
-                width: '100%',
-                height: '30px',
-                objectFit: 'contain',
-                objectPosition: 'left center',
-                display: 'block',
-                pointerEvents: 'none',
-                zIndex: 2,
-              }}
+              className="block h-8 w-auto max-h-10 max-w-full object-contain"
             />
           ) : null}
           {displayName ? (
-            <span
-              style={{
-                position: 'absolute',
-                left: '0',
-                right: '0',
-                bottom: '1px',
-                fontSize: '8.75px',
-                lineHeight: '1.15',
-                wordBreak: 'break-word',
-                zIndex: 1,
-              }}
-            >
+            <span className="mt-1 break-words text-[9.5px] leading-tight">
               {displayName}
             </span>
           ) : null}
         </div>
-      );
-    };
-
-    const inlineField = (value: unknown, minWidth = '44px') => {
-      const text = String(value || '').trim();
-      return (
-        <span
-          className="relative inline-block whitespace-nowrap align-baseline print:align-baseline"
-          style={{
-            position: 'relative',
-            display: 'inline-block',
-            minWidth,
-            height: '16px',
-            lineHeight: '10px',
-            padding: '0 1px 5px 1px',
-            verticalAlign: 'baseline',
-            whiteSpace: 'nowrap',
-            boxSizing: 'border-box',
-          }}
-        >
-          <span style={{ position: 'relative', zIndex: 1, display: 'inline-block', transform: 'translateY(-2px)' }}>
-            {text || '\u00A0'}
-          </span>
-          <span
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: -1,
-              borderBottom: '1px solid #000',
-              zIndex: 0,
-            }}
-          />
-        </span>
       );
     };
 
@@ -620,7 +580,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '20px' }}
             >
               <span style={S.fieldLabel}>Name:</span>
-              <div style={{ ...S.line, flex: 1 }}>{record.lastName || ''}</div>
+              {renderLineField(record.lastName, 'flex-1', { flex: 1 })}
             </div>
             <div style={{ fontWeight: 'bold', fontSize: '10.5px', marginTop: '2px' }}>
               Last Name
@@ -630,9 +590,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           {/* First Name */}
           <div className="ml-[6px] min-w-[220px] flex-[2] print:min-w-[220px]" style={{ flex: 2, marginLeft: '6px' }}>
             <div className="flex h-[20px] items-end print:flex print:flex-row print:items-end" style={{ height: '20px', display: 'flex', alignItems: 'flex-end' }}>
-              <div style={{ ...S.line, flex: 1, justifyContent: 'center' }}>
-                {record.firstName || ''}
-              </div>
+              {renderLineField(record.firstName, 'flex-1 justify-center', { flex: 1 })}
             </div>
             <div
               style={{
@@ -649,9 +607,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           {/* M.I. */}
           <div className="ml-[8px] w-[42px] min-w-[42px] shrink-0 print:min-w-[42px]" style={{ width: '42px', flexShrink: 0, marginLeft: '8px' }}>
             <div className="flex h-[20px] items-end print:flex print:flex-row print:items-end" style={{ height: '20px', display: 'flex', alignItems: 'flex-end' }}>
-              <div style={{ ...S.line, flex: 1, justifyContent: 'center' }}>
-                {record.middleInitial || ''}
-              </div>
+              {renderLineField(record.middleInitial, 'flex-1 justify-center', { flex: 1 })}
             </div>
             <div
               style={{
@@ -672,25 +628,17 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '20px' }}
             >
               <span style={S.fieldLabel}>Course/Dept.</span>
-              <div style={{ ...S.line, flex: 1 }}>
-                {abbreviateCourseDept(record.course || '')}
-              </div>
+              {renderLineField(abbreviateCourseDept(record.course || ''), 'flex-1', { flex: 1 })}
             </div>
             <div
               className="flex items-center gap-2 print:flex print:flex-row print:items-center"
               style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}
             >
               <span style={S.fieldLabel}>Age:</span>
-              <div
-                style={{
-                  ...S.line,
-                  width: '32px',
-                  flex: 'none',
-                  justifyContent: 'center',
-                }}
-              >
-                {record.age || ''}
-              </div>
+              {renderLineField(record.age, 'w-[32px] justify-center', {
+                width: '32px',
+                flex: 'none',
+              })}
               <span style={{ ...S.fieldLabel, marginLeft: '4px' }}>Sex: F</span>
               {renderCheckbox(record.sex === 'female')}
               <span style={S.fieldLabel}>M</span>
@@ -712,15 +660,15 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           }}
         >
           <span style={S.fieldLabel}>Birthday:</span>
-          <div style={{ ...S.line, minWidth: '140px' }}>{record.birthday || ''}</div>
+          {renderLineField(record.birthday, 'min-w-[140px]', { minWidth: '140px' })}
           <span style={{ ...S.fieldLabel, marginLeft: '10px' }}>Civil Status: Single</span>
           {renderCheckbox(civilStatusNormalized === 'single' || !civilStatusNormalized)}
           <span style={S.fieldLabel}>Married</span>
           {renderCheckbox(civilStatusNormalized === 'married')}
           <span style={{ ...S.fieldLabel, marginLeft: '14px' }}>Tel. /CPR:</span>
-          <div style={{ ...S.line, minWidth: '140px' }}>
-            {formatLocalPhone(record.contactNumber || '')}
-          </div>
+          {renderLineField(formatLocalPhone(record.contactNumber || ''), 'min-w-[140px]', {
+            minWidth: '140px',
+          })}
         </div>
 
         {/* ── PRESENT ADDRESS ── */}
@@ -735,9 +683,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           }}
         >
           <span style={S.fieldLabel}>Present Address:</span>
-          <div className="min-w-[620px] flex-1 print:min-w-[620px]" style={{ ...S.line, flex: 1 }}>
-            {record.address || ''}
-          </div>
+          {renderLineField(record.address, 'min-w-[620px] flex-1 print:min-w-[620px]', {
+            flex: 1,
+          })}
         </div>
 
         {/* ── MEDICAL HISTORY ── */}
@@ -813,9 +761,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <span style={S.fieldLabel}>
             • If yes, state the nature of the operation and date/year
           </span>
-          <div style={{ ...S.line, flex: 1 }}>
-            {record.hadOperation === 'yes' ? record.operationDetails || '' : ''}
-          </div>
+          {renderLineField(record.hadOperation === 'yes' ? record.operationDetails || '' : '', 'flex-1', {
+            flex: 1,
+          })}
         </div>
         <div style={{ height: '8px' }} />
 
@@ -830,13 +778,13 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           }}
         >
           <span style={S.fieldLabel}>• Emergency Contact Person Name:</span>
-          <div style={{ ...S.line, minWidth: '160px' }}>
-            {record.emergencyContact?.name || ''}
-          </div>
+          {renderLineField(record.emergencyContact?.name, 'min-w-[160px]', {
+            minWidth: '160px',
+          })}
           <span style={{ ...S.fieldLabel, marginLeft: '95px' }}>Relationship:</span>
-          <div style={{ ...S.line, minWidth: '140px' }}>
-            {record.emergencyContact?.relationship || ''}
-          </div>
+          {renderLineField(record.emergencyContact?.relationship, 'min-w-[140px]', {
+            minWidth: '140px',
+          })}
         </div>
         <div
           className="flex items-end gap-1 print:flex print:flex-row print:items-end"
@@ -848,13 +796,13 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           }}
         >
           <span style={S.fieldLabel}>Address:</span>
-          <div style={{ ...S.line, minWidth: '250px' }}>
-            {record.emergencyContact?.address || ''}
-          </div>
+          {renderLineField(record.emergencyContact?.address, 'min-w-[250px]', {
+            minWidth: '250px',
+          })}
           <span style={{ ...S.fieldLabel, marginLeft: '140px' }}>Tel. phone No. CP:</span>
-          <div style={{ ...S.line, minWidth: '160px' }}>
-            {formatLocalPhone(record.emergencyContact?.phone || '')}
-          </div>
+          {renderLineField(formatLocalPhone(record.emergencyContact?.phone || ''), 'min-w-[160px]', {
+            minWidth: '160px',
+          })}
         </div>
         <div style={{ height: '8px' }} />
 
@@ -938,9 +886,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               </tr>
             ))}
             <tr>
-              <td style={{ ...S.td, fontWeight: 'bold', height: '56px' }}>Examined by:</td>
+              <td style={{ ...S.td, fontWeight: 'bold' }}>Examined by:</td>
               {slots.map((slot) => (
-                <td key={slot} style={{ ...S.td, height: '56px', padding: '2px 4px' }}>
+                <td key={slot} style={{ ...S.td, padding: '0' }}>
                   {renderExaminer(slot)}
                 </td>
               ))}
@@ -989,7 +937,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                       padding: '5px 5px',
                     }}
                   >
-                    <div className="min-w-[164px] print:min-w-[164px]">Date: {inlineField(y.xrayDate, '52px')}</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">Date: {renderInlineField(y.xrayDate, '52px')}</div>
                     <div
                       className="flex items-baseline justify-between gap-1 print:flex print:flex-row print:items-baseline"
                       style={{
@@ -1000,7 +948,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                       }}
                     >
                       <span>Abnormal findings</span>
-                      <span>Result: {inlineField(formatXrayResult(y.xrayResult), '42px')}</span>
+                      <span>Result: {renderInlineField(formatXrayResult(y.xrayResult), '42px')}</span>
                     </div>
                     <div>{wrappedField(y.xrayFindings)}</div>
                   </td>
@@ -1029,14 +977,14 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                       padding: '5px 5px',
                     }}
                   >
-                    <div className="min-w-[164px] print:min-w-[164px]">Date: {inlineField(y.cbcDate, '52px')}</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">Date: {renderInlineField(y.cbcDate, '52px')}</div>
                     <div className="min-w-[164px] print:min-w-[164px]">
-                      Hgb. {inlineField(y.hemoglobin, '36px')} Hct.{' '}
-                      {inlineField(y.hematocrit, '36px')}
+                      Hgb. {renderInlineField(y.hemoglobin, '36px')} Hct.{' '}
+                      {renderInlineField(y.hematocrit, '36px')}
                     </div>
-                    <div className="min-w-[164px] print:min-w-[164px]">WBC {inlineField(y.wbc, '42px')} &lt;</div>
-                    <div className="min-w-[164px] print:min-w-[164px]">Plt. Ct. {inlineField(y.plateletCount, '42px')}</div>
-                    <div className="min-w-[164px] print:min-w-[164px]">Bld. Type {inlineField(y.bloodType, '42px')}</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">WBC {renderInlineField(y.wbc, '42px')} &lt;</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">Plt. Ct. {renderInlineField(y.plateletCount, '42px')}</div>
+                    <div className="min-w-[164px] print:min-w-[164px]">Bld. Type {renderInlineField(y.bloodType, '42px')}</div>
                   </td>
                 );
               })}
@@ -1063,9 +1011,9 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                       padding: '5px 5px',
                     }}
                   >
-                    <div>Date: {inlineField(y.urinalysisDate, '52px')}</div>
-                    <div>•Glucose/Sugar {inlineField(y.urinalysisGlucose, '56px')}</div>
-                    <div>•Protein {inlineField(y.urinalysisProtein, '56px')}</div>
+                    <div>Date: {renderInlineField(y.urinalysisDate, '52px')}</div>
+                    <div>•Glucose/Sugar {renderInlineField(y.urinalysisGlucose, '56px')}</div>
+                    <div>•Protein {renderInlineField(y.urinalysisProtein, '56px')}</div>
                   </td>
                 );
               })}
