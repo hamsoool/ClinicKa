@@ -247,7 +247,7 @@ export default function StaffSubmissions() {
             <button
               type="button"
               onClick={() => updateStatusFilter('pending')}
-              className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+              className={`rounded-[18px] border px-3 py-3 text-left transition-colors ${
                 statusFilter === 'pending' ? 'border-amber-300 bg-amber-50' : 'border-border hover:bg-accent/50'
               }`}
             >
@@ -257,7 +257,7 @@ export default function StaffSubmissions() {
             <button
               type="button"
               onClick={() => updateStatusFilter('returned')}
-              className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+              className={`rounded-[18px] border px-3 py-3 text-left transition-colors ${
                 statusFilter === 'returned' ? 'border-red-300 bg-red-50' : 'border-border hover:bg-accent/50'
               }`}
             >
@@ -267,7 +267,7 @@ export default function StaffSubmissions() {
             <button
               type="button"
               onClick={() => updateStatusFilter('resubmitted')}
-              className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+              className={`rounded-[18px] border px-3 py-3 text-left transition-colors ${
                 statusFilter === 'resubmitted' ? 'border-orange-300 bg-orange-50' : 'border-border hover:bg-accent/50'
               }`}
             >
@@ -414,7 +414,7 @@ export default function StaffSubmissions() {
               {submissions.map((submission) => (
                 <div
                   key={submission.id}
-                  className="flex flex-col justify-between gap-4 rounded-xl border p-4 transition-colors hover:bg-accent/50 sm:flex-row sm:items-center"
+                  className="flex flex-col justify-between gap-4 rounded-[18px] border p-4 transition-colors hover:bg-accent/50 sm:flex-row sm:items-center"
                 >
                   <div className="flex gap-4 items-start w-full sm:w-auto">
                     <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground text-lg font-bold flex-shrink-0">

@@ -105,9 +105,9 @@ function ApprovedStudentsListSkeleton() {
 function StaffCertificatePreviewSkeleton() {
   return (
     <div aria-busy="true" aria-live="polite" className="min-w-0">
-      <div className="mb-4 grid gap-1 rounded-xl bg-muted p-1 sm:grid-cols-2">
-        <Skeleton className="h-11 rounded-xl bg-white/90" />
-        <Skeleton className="h-11 rounded-xl bg-surface-container-high" />
+      <div className="mb-4 grid gap-1 rounded-[18px] bg-muted p-1 sm:grid-cols-2">
+        <Skeleton className="h-11 rounded-[18px] bg-white/90" />
+        <Skeleton className="h-11 rounded-[18px] bg-surface-container-high" />
       </div>
 
       <Card>
@@ -123,7 +123,7 @@ function StaffCertificatePreviewSkeleton() {
         <CardContent>
           <div className="overflow-hidden rounded-lg border bg-muted/30">
             <div className="px-2 py-2 sm:px-4 sm:py-4">
-              <div className="mx-auto w-full max-w-[816px] rounded-sm bg-white p-6 shadow-lg ring-1 ring-black/5">
+              <div className="mx-auto w-full max-w-[816px] rounded-sm bg-white p-6 shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5">
                 <div className="flex items-start justify-between gap-6">
                   <div className="flex gap-2">
                     {Array.from({ length: 3 }).map((_, index) => (
@@ -624,7 +624,7 @@ function StaffCertificatesWorkspace() {
                         <div className="overflow-x-auto overscroll-x-contain">
                           <div className="mx-auto w-max min-w-full print:w-full">
                             <div
-                              className="overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5 print:w-[816px]"
+                              className="overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
                               style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                             >
                               <MedicalRecordPreview

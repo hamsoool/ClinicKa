@@ -373,7 +373,7 @@ export default function StudentClearance() {
                   {sortedRecords.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex flex-col justify-between gap-3 rounded-xl border border-outline-variant/25 bg-white p-4 transition-shadow hover:shadow-sm sm:flex-row sm:items-start"
+                      className="flex flex-col justify-between gap-3 rounded-[18px] border border-outline-variant/25 bg-white p-4 transition-colors sm:flex-row sm:items-start"
                     >
                       <div className="flex min-w-0 items-start gap-3">
                         <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
@@ -499,7 +499,7 @@ export default function StudentClearance() {
                       <div className="overflow-x-auto overscroll-x-contain">
                         <div className="flex min-w-full justify-start print:w-full lg:justify-center">
                           <div
-                            className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5 print:w-[816px]"
+                            className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
                             style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                           >
                             <MedicalRecordPreview

@@ -254,7 +254,7 @@ export default function SuperAdminAdministrators() {
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <Card className="border-outline-variant/30 bg-surface-container-lowest">
           <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -263,7 +263,7 @@ export default function SuperAdminAdministrators() {
                 </p>
                 <p className="mt-3 text-3xl font-bold leading-none text-on-surface">{administrators.length}</p>
               </div>
-              <div className="rounded-2xl bg-surface-container p-3 text-primary">
+              <div className="rounded-[18px] bg-surface-container p-3 text-primary">
                 <Users className="h-5 w-5" />
               </div>
             </div>
@@ -271,7 +271,7 @@ export default function SuperAdminAdministrators() {
           </CardContent>
         </Card>
 
-        <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <Card className="border-outline-variant/30 bg-surface-container-lowest">
           <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -280,7 +280,7 @@ export default function SuperAdminAdministrators() {
                 </p>
                 <p className="mt-3 text-3xl font-bold leading-none text-on-surface">{archivedAdministrators.length}</p>
               </div>
-              <div className="rounded-2xl bg-surface-container p-3 text-amber-700">
+              <div className="rounded-[18px] bg-surface-container p-3 text-amber-700">
                 <Archive className="h-5 w-5" />
               </div>
             </div>
@@ -288,7 +288,7 @@ export default function SuperAdminAdministrators() {
           </CardContent>
         </Card>
 
-        <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <Card className="border-outline-variant/30 bg-surface-container-lowest">
           <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -299,7 +299,7 @@ export default function SuperAdminAdministrators() {
                   {recentlyAdded ? getDisplayName(recentlyAdded) : 'None yet'}
                 </p>
               </div>
-              <div className="rounded-2xl bg-surface-container p-3 text-emerald-700">
+              <div className="rounded-[18px] bg-surface-container p-3 text-emerald-700">
                 <CalendarClock className="h-5 w-5" />
               </div>
             </div>
@@ -311,7 +311,7 @@ export default function SuperAdminAdministrators() {
       </div>
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.45fr)_minmax(28rem,0.75fr)] 2xl:items-start">
-        <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <Card className="border-outline-variant/30 bg-surface-container-lowest">
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="text-xl font-semibold text-on-surface">System Administrators</CardTitle>

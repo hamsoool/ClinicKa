@@ -81,7 +81,7 @@ export default function StudentPrivacyWaiver() {
         title="Data Privacy Waiver"
       />
 
-      <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+      <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
         <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-2">
@@ -96,9 +96,9 @@ export default function StudentPrivacyWaiver() {
         <CardContent className="space-y-6 pt-6">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.9fr)]">
             <div className="space-y-4">
-              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5">
+              <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-5">
                 <div className="mb-4 flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-container-lowest text-primary">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-surface-container-lowest text-primary">
                     <ShieldCheck className="h-5 w-5" />
                   </span>
                   <div>
@@ -109,14 +109,14 @@ export default function StudentPrivacyWaiver() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 text-sm leading-7 text-on-surface">
+                <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-5 text-sm leading-7 text-on-surface">
                   <p>{DATA_PRIVACY_CONSENT_BODY}</p>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5">
+              <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-5">
                 <div className="mb-4 flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-container-lowest text-primary">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-surface-container-lowest text-primary">
                     <FileText className="h-5 w-5" />
                   </span>
                   <div>
@@ -127,16 +127,16 @@ export default function StudentPrivacyWaiver() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 text-sm leading-7 text-on-surface">
+                <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-5 text-sm leading-7 text-on-surface">
                   <p>{DATA_PRIVACY_RIGHTS_NOTICE}</p>
                 </div>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5">
+              <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-5">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-container-low text-primary">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-surface-container-low text-primary">
                     <ChevronRight className="h-5 w-5" />
                   </span>
                   <div>
@@ -146,19 +146,19 @@ export default function StudentPrivacyWaiver() {
                 </div>
 
                 <div className="mt-4 space-y-3">
-                  <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                  <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4">
                     <p className="text-sm font-medium text-on-surface">1. Review the consent details</p>
                     <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                       Read how Gordon College Clinic stores and uses your personal and medical information.
                     </p>
                   </div>
-                  <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                  <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4">
                     <p className="text-sm font-medium text-on-surface">2. Tick the acknowledgment box</p>
                     <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                       This unlocks the medical form for the active school year.
                     </p>
                   </div>
-                  <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                  <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4">
                     <p className="text-sm font-medium text-on-surface">3. Continue to the record form</p>
                     <p className="mt-1 text-sm leading-6 text-on-surface-variant">
                       Your progress in the next step is saved automatically while you complete it.
@@ -168,7 +168,7 @@ export default function StudentPrivacyWaiver() {
               </div>
 
               <div
-                className={`rounded-2xl border p-5 transition-colors ${
+                className={`rounded-[18px] border p-5 transition-colors ${
                   dataPrivacyConsent
                     ? 'border-primary/20 bg-primary-container/10'
                     : 'border-amber-200/80 bg-amber-50/60'

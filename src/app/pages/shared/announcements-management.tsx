@@ -81,8 +81,8 @@ function ConfirmationModal({
   const isDelete = action.type === 'delete';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40-sm">
+      <div className="w-full max-w-sm rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6">
         <div className="flex items-start gap-4">
           <div
             className={`flex h-12 w-12 items-center justify-center rounded-full ${
@@ -92,10 +92,10 @@ function ConfirmationModal({
             <span className="text-sm font-semibold">{isDelete ? 'DEL' : 'ASK'}</span>
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-lg font-semibold text-on-surface">
               {isDelete ? 'Delete Announcement?' : 'Discard Changes?'}
             </h3>
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-on-surface-variant">
               {isDelete
                 ? `This will permanently delete "${action.itemTitle}". This action cannot be undone.`
                 : 'You have unsaved changes. Are you sure you want to discard them?'}
@@ -108,7 +108,7 @@ function ConfirmationModal({
             type="button"
             onClick={onCancel}
             disabled={isPending}
-            className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60"
+            className="flex-1 rounded-full border border-outline-variant/55 px-4 py-2.5 text-sm font-normal text-on-surface transition-colors hover:bg-surface-container-low disabled:opacity-60"
           >
             Cancel
           </button>
@@ -116,7 +116,7 @@ function ConfirmationModal({
             type="button"
             onClick={onConfirm}
             disabled={isPending}
-            className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-all disabled:opacity-60 ${
+            className={`flex-1 rounded-full px-4 py-2.5 text-sm font-normal text-white transition-all disabled:opacity-60 ${
               isDelete
                 ? 'bg-rose-600 hover:bg-rose-700 active:scale-95'
                 : 'bg-amber-600 hover:bg-amber-700 active:scale-95'
@@ -308,7 +308,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
   const formHeading = form.id ? 'Edit Announcement' : 'Create Announcement';
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <div className="mx-auto w-full max-w-[100rem] px-4 py-8 sm:px-6">
         <PortalPageIntro
           className="mb-8"
@@ -319,88 +319,88 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
           {/* Form Section */}
           <form
             onSubmit={onSubmit}
-            className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm xl:sticky xl:top-24"
+            className="space-y-6 rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6 xl:sticky xl:top-24"
           >
             <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-green-700">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
                 Staff Composer
               </p>
-              <h2 className="text-xl font-semibold text-gray-900">{formHeading}</h2>
+              <h2 className="text-xl font-semibold text-on-surface">{formHeading}</h2>
             </div>
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-normal text-on-surface">
                 Title <span className="text-rose-500">*</span>
               </label>
               <input
                 value={form.title}
                 onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
                 placeholder="Enter announcement title"
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-green-600 focus:outline-none focus:ring-4 focus:ring-green-500/15"
+                className="w-full rounded-full border border-input bg-input-background px-4 py-3 text-sm text-on-surface placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-normal text-on-surface">
                 Description <span className="text-rose-500">*</span>
               </label>
               <textarea
                 value={form.description}
                 onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                 placeholder="Write your announcement content here..."
-                className="min-h-48 w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm leading-6 text-gray-900 placeholder:text-gray-400 focus:border-green-600 focus:outline-none focus:ring-4 focus:ring-green-500/15"
+                className="min-h-48 w-full resize-none rounded-[18px] border border-input bg-input-background px-4 py-3 text-sm leading-6 text-on-surface placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
                 required
               />
             </div>
 
-            <div className="space-y-4 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-4">
-              <span className="block text-sm font-medium text-gray-700">Attach Image</span>
+            <div className="space-y-4 rounded-[18px] border border-dashed border-outline-variant/70 bg-surface-container-low p-4">
+              <span className="block text-sm font-normal text-on-surface">Attach Image</span>
               <div className="space-y-3">
                 <FilePickerButton
                   accept="image/*"
                   ariaLabel="Upload announcement image"
                   disabled={uploading}
                   loading={uploading}
-                  className="w-full justify-center rounded-xl border border-green-200 bg-green-50 text-green-800 hover:bg-green-100 focus-within:border-green-500 focus-within:ring-green-500/20"
+                  className="w-full justify-center rounded-full border border-primary/25 bg-primary/8 text-primary hover:bg-primary/12 focus-within:border-ring focus-within:ring-ring/20"
                   onFileSelected={onUploadImage}
                 >
                   {uploading ? 'Uploading image...' : formPreviewUrl ? 'Replace image' : 'Upload image'}
                 </FilePickerButton>
                 {formPreviewUrl ? (
-                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <div className="overflow-hidden rounded-[18px] border border-outline-variant/55 bg-white">
                     <img
                       src={formPreviewUrl}
                       alt="Announcement preview"
                       className="h-56 max-h-56 w-full object-cover"
                     />
-                    <div className="border-t border-gray-100 px-4 py-3">
-                      <p className="text-sm font-medium text-gray-900">
+                    <div className="border-t border-outline-variant/35 px-4 py-3">
+                      <p className="text-sm font-semibold text-on-surface">
                         {localImagePreviewUrl.startsWith('blob:') ? 'Selected image preview' : 'Attached image'}
                       </p>
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-on-surface-variant">
                         This image will appear on the published announcement card.
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-8 text-center">
-                    <p className="text-sm font-medium text-gray-700">No image selected</p>
-                    <p className="mt-1 text-xs text-gray-500">
+                  <div className="rounded-[18px] border border-dashed border-outline-variant/55 bg-white px-4 py-8 text-center">
+                    <p className="text-sm font-semibold text-on-surface">No image selected</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
                       Uploaded images will preview here before you save the post.
                     </p>
                   </div>
                 )}
                 {form.imagePath && (
-                  <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2">
-                    <p className="text-sm font-medium text-green-800">Image ready for publishing</p>
+                  <div className="rounded-full border border-primary/20 bg-primary/8 px-3 py-2">
+                    <p className="text-sm font-normal text-primary">Image ready for publishing</p>
                   </div>
                 )}
               </div>
             </div>
 
             {errorMessage && (
-              <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
+              <div className="flex gap-3 rounded-[18px] border border-rose-200 bg-rose-50 p-3">
                 <span className="text-sm font-semibold text-rose-700">Error</span>
                 <p className="text-sm text-rose-700">{errorMessage}</p>
               </div>
@@ -410,7 +410,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
               <button
                 type="submit"
                 disabled={saveMutation.isPending || uploading}
-                className="flex-1 rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex-1 rounded-full bg-primary px-4 py-3 text-sm font-normal text-primary-foreground transition-all active:scale-95 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saveMutation.isPending ? (
                   <span className="flex items-center justify-center gap-2">
@@ -427,7 +427,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
                 type="button"
                 onClick={handleResetClick}
                 disabled={!isFormDirty}
-                className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-full border border-outline-variant/55 px-4 py-3 text-sm font-normal text-on-surface transition-colors hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Reset
               </button>
@@ -435,21 +435,21 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
           </form>
 
           {/* Posts Section */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm xl:min-h-[42rem]">
-            <div className="mb-6 flex flex-col gap-2 border-b border-gray-100 pb-6 sm:flex-row sm:items-end sm:justify-between">
+          <div className="rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6 xl:min-h-[42rem]">
+            <div className="mb-6 flex flex-col gap-2 border-b border-outline-variant/35 pb-6 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-green-700">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
                   Content Library
                 </p>
-                <h3 className="text-xl font-semibold text-gray-900">
+                <h3 className="text-xl font-semibold text-on-surface">
                   Posts
                   {announcements.length > 0 ? (
-                    <span className="ml-3 inline-flex rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+                    <span className="ml-3 inline-flex rounded-full bg-primary/8 px-2.5 py-1 text-xs font-normal text-primary">
                       {announcements.length}
                     </span>
                   ) : null}
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-on-surface-variant">
                   Browse announcements from clinic staff and doctors. You can edit the ones you created.
                 </p>
               </div>
@@ -459,30 +459,30 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
               <div className="flex items-center justify-center py-12">
                 <div className="space-y-3 text-center">
                   <div className="flex justify-center">
-                    <span className="h-8 w-8 animate-spin rounded-full border-[3px] border-green-200 border-t-green-700" />
+                    <span className="h-8 w-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
                   </div>
-                  <p className="text-sm text-gray-500">Loading announcements...</p>
+                  <p className="text-sm text-on-surface-variant">Loading announcements...</p>
                 </div>
               </div>
             ) : announcementsQuery.isError ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-8 text-center">
+              <div className="rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-8 text-center">
                 <p className="text-sm font-medium text-rose-700">Announcements could not be loaded.</p>
                 <p className="mt-1 text-xs text-rose-600">Please refresh the page and try again.</p>
               </div>
             ) : announcements.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-gray-50 py-12">
-                <p className="text-sm font-medium text-gray-700">No announcements yet</p>
-                <p className="mt-1 text-xs text-gray-500">Announcements from clinic staff and doctors will appear here.</p>
+              <div className="flex flex-col items-center justify-center rounded-[18px] border border-dashed border-outline-variant/70 bg-surface-container-low py-12">
+                <p className="text-sm font-semibold text-on-surface">No announcements yet</p>
+                <p className="mt-1 text-xs text-on-surface-variant">Announcements from clinic staff and doctors will appear here.</p>
               </div>
             ) : (
               <div className="space-y-4 max-h-[calc(100vh-260px)] overflow-y-auto pr-2">
                 {announcements.map((item) => (
                   <div
                     key={item.id}
-                    className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors hover:border-gray-300"
+                    className="overflow-hidden rounded-[18px] border border-outline-variant/55 bg-white transition-colors hover:border-primary/35"
                   >
                     {item.imageUrl ? (
-                      <div className="border-b border-gray-200 bg-slate-50">
+                      <div className="border-b border-outline-variant/35 bg-surface-container-low">
                         <img
                           src={item.imageUrl}
                           alt={item.title}
@@ -490,24 +490,24 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
                         />
                       </div>
                     ) : (
-                      <div className="h-3 w-full bg-green-700" />
+                      <div className="h-3 w-full bg-primary" />
                     )}
 
                     <div className="p-5">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap gap-2">
-                            <span className="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+                            <span className="inline-flex rounded-full bg-primary/8 px-2.5 py-1 text-xs font-normal text-primary">
                               {formatDateLabel(item.datePosted)}
                             </span>
                             {isOwner(item) ? (
-                              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                              <span className="inline-flex rounded-full bg-surface-container px-2.5 py-1 text-xs font-normal text-on-surface-variant">
                                 Your post
                               </span>
                             ) : null}
                           </div>
-                          <p className="mt-3 text-base font-semibold text-gray-900">{item.title}</p>
-                          <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-500">{item.description}</p>
+                          <p className="mt-3 text-base font-semibold text-on-surface">{item.title}</p>
+                          <p className="mt-2 line-clamp-3 text-sm leading-6 text-on-surface-variant">{item.description}</p>
                         </div>
                       </div>
 
@@ -516,7 +516,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
                           <button
                             type="button"
                             onClick={() => handleEditClick(item)}
-                            className="flex-1 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-800 transition-colors hover:bg-green-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-green-500/15"
+                            className="flex-1 rounded-full border border-primary/25 bg-primary/8 px-4 py-2.5 text-sm font-normal text-primary transition-colors hover:bg-primary/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
                           >
                             Edit
                           </button>
@@ -524,7 +524,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
                             type="button"
                             onClick={() => handleDeleteClick(item)}
                             disabled={deleteMutation.isPending}
-                            className="flex-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-500/15 disabled:opacity-60"
+                            className="flex-1 rounded-full border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-normal text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/20 disabled:opacity-60"
                           >
                             Delete
                           </button>

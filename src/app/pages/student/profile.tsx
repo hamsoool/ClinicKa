@@ -417,12 +417,12 @@ export default function StudentProfile() {
             hasValidContactNumber={hasValidContactNumber}
           />
 
-          <Card className="box-border w-full min-w-0 overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+          <Card className="box-border w-full min-w-0 overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
             <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
               <CardTitle className="text-xl font-semibold text-on-surface">Student Assets</CardTitle>
             </CardHeader>
             <CardContent className="grid w-full min-w-0 gap-4 px-4 pt-6 sm:gap-6 sm:px-6 lg:grid-cols-2">
-              <div className="box-border w-full min-w-0 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
+              <div className="box-border w-full min-w-0 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
                 <div className="mb-4 flex items-center gap-3">
                   <ImageIcon className="h-5 w-5 text-primary" />
                   <div>
@@ -439,7 +439,7 @@ export default function StudentProfile() {
                   Choose Photo
                 </FilePickerButton>
                 <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
-                  <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border bg-white">
+                  <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-[18px] border bg-white">
                     {currentPhotoUrl ? (
                       <img src={currentPhotoUrl} alt="Student profile" className="h-full w-full object-cover" />
                     ) : (
@@ -463,7 +463,7 @@ export default function StudentProfile() {
                 </div>
               </div>
 
-              <div className="box-border w-full min-w-0 rounded-2xl border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
+              <div className="box-border w-full min-w-0 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
                 <div className="mb-4 flex items-center gap-3">
                   <PenLine className="h-5 w-5 text-primary" />
                   <div>
@@ -480,7 +480,7 @@ export default function StudentProfile() {
                   Choose Signature
                 </FilePickerButton>
                 <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
-                  <div className="flex h-24 w-full max-w-[10rem] items-center justify-center overflow-hidden rounded-2xl border bg-white px-3">
+                  <div className="flex h-24 w-full max-w-[10rem] items-center justify-center overflow-hidden rounded-[18px] border bg-white px-3">
                     {currentSignatureUrl ? (
                       <img src={currentSignatureUrl} alt="Student signature" className="max-h-full max-w-full object-contain" />
                     ) : (

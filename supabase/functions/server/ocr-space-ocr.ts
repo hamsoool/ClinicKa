@@ -1257,8 +1257,9 @@ function getOcrSpaceConfig() {
 
   return {
     apiKey,
-    engine: ["1", "2", "3"].includes(engine) ? engine : "2",
+    engine: "2",
     language,
+    isTable: true,
   };
 }
 

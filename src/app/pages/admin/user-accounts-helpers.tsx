@@ -73,8 +73,8 @@ export function AccountSummaryButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'group flex min-h-[6.75rem] w-full items-center justify-between rounded-xl border bg-card p-5 text-left text-card-foreground transition-all hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary-container/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2',
-        active && 'border-primary/45 bg-primary-container/10 shadow-sm',
+        'group flex min-h-[6.75rem] w-full items-center justify-between rounded-[18px] border bg-card p-5 text-left text-card-foreground transition-all hover:border-primary/45 hover:bg-primary-container/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2',
+        active && 'border-primary/45 bg-primary-container/10',
       )}
     >
       <span>
@@ -97,14 +97,14 @@ export function roleTone(role: string) {
     return 'bg-indigo-100 text-indigo-700';
   }
   if (role === 'Clinic Staff') {
-    return 'bg-emerald-100 text-emerald-700';
+    return 'bg-primary/10 text-primary';
   }
-  return 'bg-slate-100 text-slate-700';
+  return 'bg-surface-container text-on-surface-variant';
 }
 
 export function statusTone(status: string) {
   if (status === 'Active') {
-    return 'bg-green-100 text-green-700';
+    return 'bg-primary/10 text-primary';
   }
   if (status === 'Archived') {
     return 'bg-amber-100 text-amber-700';

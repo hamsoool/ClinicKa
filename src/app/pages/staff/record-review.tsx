@@ -317,7 +317,7 @@ function LabUploadActions({
 
   return (
     <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
-      <div className="rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-low px-4 py-4">
+      <div className="rounded-[18px] border border-dashed border-outline-variant/50 bg-surface-container-low px-4 py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-on-surface">Add or replace {title} file</p>
@@ -871,7 +871,7 @@ function StaffRecordReviewSkeleton() {
         <CardContent className="space-y-6">
           <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
             <div className="space-y-4">
-              <Skeleton className="h-56 w-full rounded-xl bg-surface-container" />
+              <Skeleton className="h-56 w-full rounded-[18px] bg-surface-container" />
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, index) => (
                   <div key={index} className="space-y-2">
@@ -883,7 +883,7 @@ function StaffRecordReviewSkeleton() {
             </div>
             <div className="space-y-4">
               {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-32 w-full rounded-xl bg-surface-container" />
+                <Skeleton key={index} className="h-32 w-full rounded-[18px] bg-surface-container" />
               ))}
             </div>
           </div>
@@ -2362,7 +2362,7 @@ export default function StaffRecordReview() {
       ) : null}
 
       {isUploadingAnyLabFile ? (
-        <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <div className="flex items-start gap-3 rounded-[18px] border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
           <p>
             {uploadingLabTitles.join(', ')} {uploadingLabTitles.length === 1 ? 'file is' : 'files are'} uploading in the background.
@@ -2372,17 +2372,17 @@ export default function StaffRecordReview() {
       ) : null}
 
       <Tabs value={activeReviewStep} onValueChange={(value) => changeReviewStep(value as ReviewStep)} className="space-y-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-border/60 bg-muted/40 p-1.5 md:grid-cols-4">
-          <TabsTrigger value="record" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-[18px] border border-border/60 bg-muted/40 p-1.5 md:grid-cols-4">
+          <TabsTrigger value="record" className="min-h-10 w-full rounded-[18px] px-3 py-2 text-xs font-semibold sm:text-sm">
             Student Record
           </TabsTrigger>
-          <TabsTrigger value="labs" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+          <TabsTrigger value="labs" className="min-h-10 w-full rounded-[18px] px-3 py-2 text-xs font-semibold sm:text-sm">
             Lab Results
           </TabsTrigger>
-          <TabsTrigger value="assessment" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+          <TabsTrigger value="assessment" className="min-h-10 w-full rounded-[18px] px-3 py-2 text-xs font-semibold sm:text-sm">
             Assessment
           </TabsTrigger>
-          <TabsTrigger value="decision" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+          <TabsTrigger value="decision" className="min-h-10 w-full rounded-[18px] px-3 py-2 text-xs font-semibold sm:text-sm">
             {finalDecisionLabel}
           </TabsTrigger>
         </TabsList>
@@ -3128,7 +3128,7 @@ export default function StaffRecordReview() {
                     placeholder="e.g. Dr. Maria Santos"
                   />
                 </div>
-                <div className="rounded-xl border border-dashed border-outline-variant/60 bg-surface-container-low px-4 py-4">
+                <div className="rounded-[18px] border border-dashed border-outline-variant/60 bg-surface-container-low px-4 py-4">
                   <div className="space-y-4">
                     <div>
                       <p className="text-sm font-medium text-on-surface">Staff signature</p>

@@ -286,7 +286,7 @@ function ReportBreakdownTooltip({ active, payload }: TooltipProps<number, string
   }
 
   return (
-    <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 shadow-sm">
+    <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-3 py-2">
       <p className="text-sm font-semibold text-on-surface">{entry.label}</p>
       <p className="mt-1 text-xs text-on-surface-variant">
         {entry.count} submission{entry.count === 1 ? '' : 's'} • {entry.share.toFixed(0)}%
@@ -651,7 +651,7 @@ export default function StaffDashboard() {
               type="button"
               key={card.label}
               onClick={() => navigate(card.href)}
-              className="box-border flex min-h-[8.5rem] w-full flex-col justify-between rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest p-3.5 text-left shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] transition-colors hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:rounded-2xl sm:p-5"
+              className="box-border flex min-h-[8.5rem] w-full flex-col justify-between rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-3.5 text-left transition-colors hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:rounded-[18px] sm:p-5"
             >
               <div className="flex items-start justify-between gap-2 sm:gap-4">
                 <div>
@@ -662,7 +662,7 @@ export default function StaffDashboard() {
                     {card.value}
                   </p>
                 </div>
-                <div className={`rounded-[1rem] bg-surface-container p-2 sm:rounded-2xl sm:p-3 ${card.tone}`}>
+                <div className={`rounded-[1rem] bg-surface-container p-2 sm:rounded-[18px] sm:p-3 ${card.tone}`}>
                   <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
               </div>
@@ -672,7 +672,7 @@ export default function StaffDashboard() {
       </div>
 
       <div className="grid min-w-0 gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)]">
-        <div className="box-border flex w-full min-w-0 flex-col rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:px-6 sm:py-6">
+        <div className="box-border flex w-full min-w-0 flex-col rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6 sm:py-6">
           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Submission Queue</h2>
@@ -680,14 +680,14 @@ export default function StaffDashboard() {
             <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:justify-end">
               <button
                 onClick={() => setQueueSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface md:w-auto"
+                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-[18px] border border-outline-variant/50 bg-surface-container-low px-4 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface md:w-auto"
               >
                 <ArrowUpDown className="h-3.5 w-3.5" />
                 {queueSortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
               </button>
               <button
                 onClick={() => navigate('/staff/submissions')}
-                className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90 md:w-auto"
+                className="inline-flex min-h-10 w-full items-center justify-center rounded-[18px] bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 md:w-auto"
               >
                 Open Queue
               </button>
@@ -699,7 +699,7 @@ export default function StaffDashboard() {
                 disabled={overviewFetching}
                 aria-label="Refresh queue"
                 title="Refresh queue"
-                className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
+                className="inline-flex min-h-10 w-full items-center justify-center rounded-[18px] border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
               >
                 <RefreshCw className={`h-4 w-4 ${overviewFetching ? 'animate-spin' : ''}`} />
               </button>
@@ -711,7 +711,7 @@ export default function StaffDashboard() {
             className="mb-5"
           >
             <div className="pb-1">
-              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-2xl p-2 md:grid-cols-4">
+              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-[18px] p-2 md:grid-cols-4">
                 <TabsTrigger value="pending" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal md:text-sm">
                   Pending ({(overview.pendingRecords || 0) + (overview.inReviewRecords || 0)})
                 </TabsTrigger>
@@ -729,7 +729,7 @@ export default function StaffDashboard() {
           </Tabs>
 
           {visibleQueue.length === 0 ? (
-            <div className="flex min-h-56 flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-low px-6 text-center">
+            <div className="flex min-h-56 flex-1 flex-col items-center justify-center rounded-[18px] border border-dashed border-outline-variant/40 bg-surface-container-low px-6 text-center">
               <CheckCircle2 className="h-10 w-10 text-primary" />
               <p className="mt-4 text-lg font-semibold text-on-surface">All caught up</p>
               <p className="mt-2 max-w-sm text-sm text-on-surface-variant">
@@ -745,10 +745,10 @@ export default function StaffDashboard() {
                   <button
                     key={submission.id}
                     onClick={() => navigate(`/staff/review/${submission.id}`)}
-                    className="box-border flex w-full min-w-0 flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low md:flex-row md:items-start md:gap-4"
+                    className="box-border flex w-full min-w-0 flex-col gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low md:flex-row md:items-start md:gap-4"
                   >
                     <div className="flex items-start gap-4 md:flex-1">
-                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[18px] bg-surface-container text-primary sm:h-12 sm:w-12">
                         <ClipboardCheck className="h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -794,7 +794,7 @@ export default function StaffDashboard() {
           )}
         </div>
 
-        <div className="box-border w-full min-w-0 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:px-6 sm:py-6">
+        <div className="box-border w-full min-w-0 rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6 sm:py-6">
           <div className="mb-4 flex flex-col gap-3">
             <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -822,7 +822,7 @@ export default function StaffDashboard() {
               value={reportRange}
               onValueChange={(value) => setReportRange(value as SubmissionRangeKey)}
             >
-              <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl p-2 md:grid-cols-4 md:gap-0 md:p-[3px]">
+              <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-[18px] p-2 md:grid-cols-4 md:gap-0 md:p-[3px]">
                 <TabsTrigger value="today" className="min-h-9 px-3 text-xs md:text-sm">Today</TabsTrigger>
                 <TabsTrigger value="week" className="min-h-9 px-3 text-xs md:text-sm">This Week</TabsTrigger>
                 <TabsTrigger value="month" className="min-h-9 px-3 text-xs md:text-sm">This Month</TabsTrigger>
@@ -831,7 +831,7 @@ export default function StaffDashboard() {
             </Tabs>
           </div>
           <div className="space-y-4">
-            <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-dashed border-outline-variant/30 bg-surface-container-low/40 p-4">
+            <div className="w-full min-w-0 overflow-hidden rounded-[18px] border border-dashed border-outline-variant/30 bg-surface-container-low/40 p-4">
               {reportSubmissionsLoading ? (
                 <div className="flex min-h-52 items-center justify-center text-sm text-on-surface-variant">
                   Loading submission breakdown...
@@ -878,7 +878,7 @@ export default function StaffDashboard() {
             <button
               type="button"
               onClick={() => navigate('/staff/reports')}
-              className="w-full rounded-xl border border-outline-variant/40 bg-surface-container-low px-4 py-2 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container"
+              className="w-full rounded-[18px] border border-outline-variant/40 bg-surface-container-low px-4 py-2 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container"
             >
               Open full reports
             </button>

@@ -239,7 +239,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </p>
           </div>
 
-          <div className="space-y-3 rounded-xl border border-outline-variant/40 bg-surface-container-low p-4">
+          <div className="space-y-3 rounded-[18px] border border-outline-variant/40 bg-surface-container-low p-4">
             <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
               <div className="flex items-center gap-3">
                 <UserRound className={`h-5 w-5 ${hasRequiredProfileFields ? 'text-green-600' : 'text-muted-foreground'}`} />
@@ -346,7 +346,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <span className="font-semibold">*</span>.
             </div>
           ) : null}
-          <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-5">
+          <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-low p-5">
             <div className="space-y-4">
               <div>
                 <h4 className="font-semibold text-on-surface">Operation History</h4>
@@ -363,7 +363,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 >
                   <Label
                     htmlFor="op-yes"
-                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`flex cursor-pointer items-center gap-3 rounded-[18px] border px-4 py-3 text-sm font-medium transition-colors ${
                       formData.hadOperation === 'yes'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-outline-variant/40 bg-white/80 text-on-surface hover:border-primary/40'
@@ -374,7 +374,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   </Label>
                   <Label
                     htmlFor="op-no"
-                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`flex cursor-pointer items-center gap-3 rounded-[18px] border px-4 py-3 text-sm font-medium transition-colors ${
                       formData.hadOperation === 'no'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-outline-variant/40 bg-white/80 text-on-surface hover:border-primary/40'
@@ -388,7 +388,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
           </div>
           {formData.hadOperation === 'yes' && (
-            <div className="rounded-xl border border-outline-variant/40 bg-white/80 p-5">
+            <div className="rounded-[18px] border border-outline-variant/40 bg-white/80 p-5">
               <Label htmlFor="operationDetails">Nature of operation and date/year</Label>
               <Textarea
                 id="operationDetails"
@@ -401,7 +401,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               />
             </div>
           )}
-          <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-5">
+          <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-low p-5">
             <div className="border-b border-outline-variant/30 pb-4">
               <div>
                 <h4 className="font-semibold text-on-surface">Emergency Contact Person</h4>

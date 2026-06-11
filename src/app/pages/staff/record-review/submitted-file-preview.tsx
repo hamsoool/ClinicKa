@@ -73,7 +73,7 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
               data={pdfPreviewUrl}
               type="application/pdf"
               aria-label={previewTitle}
-              className="mx-auto h-[70vh] min-h-[720px] w-full max-w-[900px] rounded-md border bg-white"
+              className="mx-auto h-[70vh] min-h-[720px] w-full max-w-[900px] rounded-md border bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)]"
             >
               <iframe src={pdfPreviewUrl} title={previewTitle} className="h-[70vh] min-h-[720px] w-full rounded-md bg-white" />
             </object>
@@ -87,7 +87,7 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
               className="block w-full cursor-zoom-in bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               aria-label={`Open ${title} full image`}
             >
-              <img src={fileUrl} alt={previewAlt} className="max-h-[420px] w-full object-contain" />
+              <img src={fileUrl} alt={previewAlt} className="max-h-[420px] w-full object-contain drop-shadow-[3px_5px_30px_rgba(0,0,0,0.16)]" />
             </button>
           </DialogTrigger>
         );

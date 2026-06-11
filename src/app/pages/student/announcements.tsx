@@ -48,7 +48,7 @@ export default function StudentAnnouncements() {
     return (
       <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
         {pageIntro}
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-sm text-on-surface-variant">
+        <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-6 text-sm text-on-surface-variant">
           We could not load announcements right now. Please try again in a moment.
         </div>
       </div>
@@ -59,7 +59,7 @@ export default function StudentAnnouncements() {
     return (
       <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
         {pageIntro}
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-sm text-on-surface-variant">
+        <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-6 text-sm text-on-surface-variant">
           No announcements posted yet.
         </div>
       </div>
@@ -70,12 +70,12 @@ export default function StudentAnnouncements() {
     <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
       {pageIntro}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(24rem,0.75fr)] xl:items-start">
-        <article className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
+        <article className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
           {selectedAnnouncement?.imageUrl ? (
             <img
               src={selectedAnnouncement.imageUrl}
               alt={selectedAnnouncement.title}
-              className="mb-4 h-auto w-full rounded-xl border border-outline-variant/20 object-contain"
+              className="mb-4 h-auto w-full rounded-[18px] border border-outline-variant/20 object-contain"
             />
           ) : null}
           <h2 className="text-2xl font-bold text-on-surface">{selectedAnnouncement?.title}</h2>
@@ -95,7 +95,7 @@ export default function StudentAnnouncements() {
                 key={item.id}
                 type="button"
                 onClick={() => setSelectedId(item.id)}
-                className={`flex w-full items-start gap-3 rounded-2xl border bg-surface-container-lowest p-3 text-left transition-colors ${
+                className={`flex w-full items-start gap-3 rounded-[18px] border bg-surface-container-lowest p-3 text-left transition-colors ${
                   isActive
                     ? 'border-primary/40 ring-2 ring-primary/20'
                     : 'border-outline-variant/30 hover:bg-surface-container'

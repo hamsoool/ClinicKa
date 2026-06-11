@@ -73,8 +73,8 @@ export default function StudentNotificationMenu({
         <button
           type="button"
           className={cn(
-            'relative inline-flex h-9 w-9 items-center justify-center rounded-full border text-on-surface-variant transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:text-on-surface hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)] sm:h-10 sm:w-10',
-            open ? 'border-emerald-300 bg-white text-emerald-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)]' : 'border-transparent',
+            'relative inline-flex h-9 w-9 items-center justify-center rounded-full border text-on-surface-variant transition-all duration-200 active:scale-95 hover:bg-white hover:text-on-surface sm:h-10 sm:w-10',
+            open ? 'border-primary/35 bg-white text-primary' : 'border-transparent',
           )}
           aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
           title="Notifications"
@@ -93,14 +93,14 @@ export default function StudentNotificationMenu({
         align="end"
         sideOffset={12}
         collisionPadding={12}
-        className="mr-1 w-[calc(100vw-1.5rem)] max-w-[23.5rem] overflow-hidden rounded-[1.05rem] border border-emerald-100/90 bg-white p-0 text-slate-900 shadow-[0_22px_60px_rgba(15,23,42,0.18)] sm:mr-0 sm:w-[23.5rem]"
+        className="mr-1 w-[calc(100vw-1.5rem)] max-w-[23.5rem] overflow-hidden rounded-[18px] border border-outline-variant/55 bg-white p-0 text-on-surface sm:mr-0 sm:w-[23.5rem]"
       >
-        <div className="flex max-h-[min(42rem,calc(100vh-5.5rem))] min-h-[22rem] flex-col bg-[linear-gradient(180deg,#fbfffd_0%,#ffffff_42%)]">
-          <header className="shrink-0 border-b border-emerald-50 px-4 pb-3 pt-3">
+        <div className="flex max-h-[min(42rem,calc(100vh-5.5rem))] min-h-[22rem] flex-col bg-surface-container-lowest">
+          <header className="shrink-0 border-b border-outline-variant/35 px-4 pb-3 pt-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-[1.35rem] font-bold tracking-tight text-slate-950">Notifications</h2>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <h2 className="text-[1.35rem] font-semibold tracking-[-0.02em] text-on-surface">Notifications</h2>
+                <p className="mt-0.5 text-xs text-on-surface-variant">
                   {unreadCount > 0 ? `${unreadCount} unread clinic update${unreadCount > 1 ? 's' : ''}` : 'Clinic updates for your submissions'}
                 </p>
               </div>
@@ -108,16 +108,16 @@ export default function StudentNotificationMenu({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-700"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant transition hover:bg-surface-container-low hover:text-primary"
                     aria-label="Notification options"
                     title="Notification options"
                   >
                     <MoreHorizontal className="h-5 w-5" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52 border-emerald-100 bg-white p-1.5 shadow-lg">
+                <DropdownMenuContent align="end" className="w-52 border-outline-variant/55 bg-white p-1.5">
                   <DropdownMenuItem
-                    className="font-medium text-slate-700 focus:bg-emerald-50 focus:text-emerald-800"
+                    className="font-normal text-on-surface focus:bg-primary/8 focus:text-primary"
                     disabled={unreadCount === 0}
                     onSelect={onMarkAllAsRead}
                   >
@@ -143,8 +143,8 @@ export default function StudentNotificationMenu({
                 className={cn(
                   'inline-flex h-8 items-center rounded-full px-3 text-sm font-semibold transition',
                   filter === 'all'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface',
                 )}
                 onClick={() => setFilter('all')}
               >
@@ -155,8 +155,8 @@ export default function StudentNotificationMenu({
                 className={cn(
                   'inline-flex h-8 items-center rounded-full px-3 text-sm font-semibold transition',
                   filter === 'unread'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface',
                 )}
                 onClick={() => setFilter('unread')}
               >
@@ -165,16 +165,16 @@ export default function StudentNotificationMenu({
             </div>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin]">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 [scrollbar-color:#d8e4d7_transparent] [scrollbar-width:thin]">
             {visibleNotifications.length === 0 ? (
-              <div className="mx-2 my-6 rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-8 text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-100">
+              <div className="mx-2 my-6 rounded-[18px] border border-outline-variant/55 bg-surface-container-low px-4 py-8 text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-primary ring-1 ring-outline-variant/55">
                   <Bell className="h-6 w-6" />
                 </div>
-                <p className="mt-4 text-base font-semibold text-slate-950">
+                <p className="mt-4 text-base font-semibold text-on-surface">
                   {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
                 </p>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
+                <p className="mt-2 text-sm leading-6 text-on-surface-variant">
                   {filter === 'unread'
                     ? 'New clinic updates will stay here until you mark them as read.'
                     : 'Updates will appear here when your medical records move forward.'}
@@ -183,12 +183,12 @@ export default function StudentNotificationMenu({
             ) : (
               <>
                 <div className="flex items-center justify-between px-2 pb-1 pt-1">
-                  <p className="text-[0.94rem] font-semibold text-slate-950">Earlier</p>
+                  <p className="text-[0.94rem] font-semibold text-on-surface">Earlier</p>
                   <div className="flex items-center gap-1.5">
                     {unreadCount > 0 ? (
                       <button
                         type="button"
-                        className="rounded-md px-2 py-1 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50"
+                        className="rounded-full px-2 py-1 text-sm font-normal text-primary transition hover:bg-primary/8"
                         onClick={onMarkAllAsRead}
                       >
                         Mark all read
@@ -211,19 +211,19 @@ export default function StudentNotificationMenu({
                     <article
                       key={notification.id}
                       className={cn(
-                        'group relative rounded-xl px-2 py-2.5 transition hover:bg-emerald-50/70',
-                        !notification.read && 'bg-emerald-50/80',
+                        'group relative rounded-[18px] px-2 py-2.5 transition hover:bg-primary/6',
+                        !notification.read && 'bg-primary/8',
                       )}
                     >
                       <div className="flex items-start gap-3 pr-5">
                         <div className="relative shrink-0">
-                          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-emerald-800 shadow-sm ring-1 ring-emerald-100">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-primary ring-1 ring-outline-variant/55">
                             <Bell className="h-6 w-6" />
                           </div>
                           <span
                             className={cn(
-                              'absolute -bottom-0.5 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-white shadow-md',
-                              isApproved ? 'bg-emerald-600' : 'bg-amber-500',
+                              'absolute -bottom-0.5 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-white',
+                              isApproved ? 'bg-primary' : 'bg-amber-500',
                             )}
                             aria-hidden="true"
                           >
@@ -232,32 +232,32 @@ export default function StudentNotificationMenu({
                         </div>
 
                         <div className="min-w-0 flex-1 pt-0.5">
-                          <p className="text-[0.91rem] leading-5 text-slate-700">
-                            <span className="font-semibold text-slate-950">{notification.title}</span>
+                          <p className="text-[0.91rem] leading-5 text-on-surface-variant">
+                            <span className="font-semibold text-on-surface">{notification.title}</span>
                             <span> {notification.message}</span>
                           </p>
 
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-emerald-700">
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal text-primary">
                             <span>
                               {notification.yearLabel}
                             </span>
-                            <span className="text-slate-300">•</span>
+                            <span className="text-outline-variant">•</span>
                             <span>{formatNotificationTimestamp(notification.timestamp)}</span>
                           </div>
 
                           {notification.note ? (
-                            <div className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Staff Note</p>
-                              <p className="mt-1 text-sm leading-5 text-slate-700">{notification.note}</p>
+                            <div className="mt-2 rounded-[12px] border border-outline-variant/55 bg-white px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">Staff Note</p>
+                              <p className="mt-1 text-sm leading-5 text-on-surface-variant">{notification.note}</p>
                             </div>
                           ) : null}
 
                           <button
                             type="button"
                             className={cn(
-                              'mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-md border px-4 text-sm font-semibold transition hover:bg-white',
+                              'mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-full border px-4 text-sm font-normal transition hover:bg-white',
                               isApproved
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300'
+                                ? 'border-primary/25 bg-primary/8 text-primary hover:border-primary/35'
                                 : 'border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-300',
                             )}
                             onClick={() => {
@@ -278,16 +278,16 @@ export default function StudentNotificationMenu({
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
-                            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:bg-slate-100 focus-visible:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200"
+                            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full text-on-surface-variant transition hover:bg-surface-container-low hover:text-on-surface focus-visible:bg-surface-container-low focus-visible:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
                             aria-label={`Open actions for notification: ${notification.title}`}
                             title="Notification actions"
                           >
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56 border-slate-200 bg-white p-1.5 shadow-lg">
+                        <DropdownMenuContent align="end" className="w-56 border-outline-variant/55 bg-white p-1.5">
                           <DropdownMenuItem
-                            className="font-medium text-slate-700 focus:bg-emerald-50 focus:text-emerald-800"
+                            className="font-normal text-on-surface focus:bg-primary/8 focus:text-primary"
                             disabled={!notification.read}
                             onSelect={() => onMarkNotificationAsUnread(notification.id)}
                           >
@@ -307,7 +307,7 @@ export default function StudentNotificationMenu({
 
                       {!notification.read ? (
                         <span
-                          className="absolute right-4 top-12 h-3 w-3 rounded-full bg-emerald-500"
+                          className="absolute right-4 top-12 h-3 w-3 rounded-full bg-primary"
                           aria-hidden="true"
                         />
                       ) : null}

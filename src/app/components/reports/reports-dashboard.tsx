@@ -1,4 +1,4 @@
-  import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import PortalPageIntro from '../portal-page-intro';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -6,15 +6,15 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Skeleton } from '../ui/skeleton';
-import { Download, TrendingUp, Clock, Award, Users, SlidersHorizontal, RotateCcw } from 'lucide-react';
+import { Activity, Download, TrendingUp, Clock, Award, Users, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
 import {
   BarChart,
   Bar,
   LabelList,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   PieChart,
   Pie,
   Cell,
@@ -59,6 +59,21 @@ const DEPARTMENT_COLORS: Record<string, string> = {
   CHTM: '#ec4899',
   CAHS: '#ef4444',
 };
+const CHART_PRIMARY = '#006d3c';
+const CHART_PRIMARY_SOFT = '#12b76a';
+const CHART_GREEN_PALE = '#85f6ae';
+const CHART_GRID = '#d8e4d7';
+const CHART_TEXT = '#3d4a3f';
+const CERTIFICATE_COLORS: Record<string, string> = {
+  Issued: CHART_PRIMARY,
+  'Not Issued': '#d8e4d7',
+};
+const GENDER_COLORS: Record<string, string> = {
+  Male: CHART_PRIMARY,
+  Female: CHART_PRIMARY_SOFT,
+  Other: CHART_GREEN_PALE,
+  Unspecified: '#d8e4d7',
+};
 
 type ReportsSummary = {
   total: number;
@@ -79,6 +94,22 @@ type SubmissionBreakdownDatum = {
   label: string;
   count: number;
   fill: string;
+};
+type NamedCountDatum = {
+  name: string;
+  value: number;
+  fill: string;
+  percent?: number;
+};
+type TimelineDatum = {
+  key: string;
+  label: string;
+  count: number;
+};
+type RankedDatum = {
+  label: string;
+  count: number;
+  percent: number;
 };
 type ReportingTermRange = {
   label: string;
@@ -184,6 +215,45 @@ function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRa
         endMs: Date.UTC(endYear, 5, 1),
       };
   }
+}
+
+function formatConditionLabel(value: string) {
+  return value
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, (match) => match.toUpperCase());
+}
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getTimelineBucket(date: Date, mode: 'day' | 'week' | 'month') {
+  if (mode === 'month') {
+    const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+    return {
+      key: `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`,
+      label: monthStart.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+    };
+  }
+
+  if (mode === 'week') {
+    const day = startOfLocalDay(date);
+    const weekStart = new Date(day);
+    weekStart.setDate(day.getDate() - day.getDay());
+    return {
+      key: weekStart.toISOString().slice(0, 10),
+      label: `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+    };
+  }
+
+  const day = startOfLocalDay(date);
+  return {
+    key: day.toISOString().slice(0, 10),
+    label: day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+  };
 }
 
 async function imagePathToDataUrl(path: string, options?: { maxDimension?: number }) {
@@ -410,12 +480,18 @@ function StatCard({
   value,
   icon: Icon,
   accent,
+  helper,
+  progress,
 }: {
   label: string;
   value: string | number;
   icon: React.ElementType;
   accent: string;
+  helper?: string;
+  progress?: number;
 }) {
+  const normalizedProgress = typeof progress === 'number' ? Math.max(0, Math.min(100, progress)) : null;
+
   return (
     <Card className="border-outline-variant/30 overflow-hidden">
       <CardContent className="pt-5 pb-5 px-5">
@@ -423,11 +499,17 @@ function StatCard({
           <div className="min-w-0">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1 truncate">{label}</p>
             <p className={`text-3xl font-bold leading-none ${accent}`}>{value}</p>
+            {helper && <p className="mt-2 text-xs leading-5 text-on-surface-variant">{helper}</p>}
           </div>
           <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${accent.replace('text-', 'bg-').replace('600', '100').replace('foreground', '100')}`}>
             <Icon className={`w-4.5 h-4.5 ${accent}`} strokeWidth={2} />
           </div>
         </div>
+        {normalizedProgress !== null && (
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+            <div className="h-full rounded-full bg-primary" style={{ width: `${normalizedProgress}%` }} />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -474,17 +556,17 @@ function LabeledSelect({
 function CustomBarTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-outline-variant/30 bg-background px-3 py-2 text-sm shadow-sm">
+    <div className="rounded-[18px] border border-outline-variant/40 bg-white px-3 py-2 text-sm">
       <p className="font-medium">{label}</p>
       <p className="text-muted-foreground">{payload[0].value} submissions</p>
     </div>
   );
 }
 
-function CustomLineTooltip({ active, payload, label }: any) {
+function CustomTimelineTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-outline-variant/30 bg-background px-3 py-2 text-sm shadow-sm">
+    <div className="rounded-[18px] border border-outline-variant/40 bg-white px-3 py-2 text-sm">
       <p className="font-medium">{label}</p>
       <p className="text-muted-foreground">{payload[0].value} submissions</p>
     </div>
@@ -494,7 +576,7 @@ function CustomLineTooltip({ active, payload, label }: any) {
 function CustomDonutTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-outline-variant/30 bg-background px-3 py-2 text-sm shadow-sm">
+    <div className="rounded-[18px] border border-outline-variant/40 bg-white px-3 py-2 text-sm">
       <p className="font-medium">{payload[0].name}</p>
       <p className="text-muted-foreground">{payload[0].value} students</p>
     </div>
@@ -514,6 +596,63 @@ function DepartmentBarValueLabel(props: any) {
     >
       {value}
     </text>
+  );
+}
+
+function EmptyChartState({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-48 items-center justify-center rounded-[18px] border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-on-surface-variant">
+      {message}
+    </div>
+  );
+}
+
+function ProgressList({
+  items,
+  emptyMessage,
+}: {
+  items: RankedDatum[];
+  emptyMessage: string;
+}) {
+  if (!items.length) return <EmptyChartState message={emptyMessage} />;
+
+  return (
+    <div className="space-y-4">
+      {items.map((item) => (
+        <div key={item.label} className="space-y-2">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate font-semibold text-on-surface">{item.label}</span>
+            <span className="shrink-0 text-on-surface-variant">{item.count} • {item.percent}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-surface-container-high">
+            <div className="h-full rounded-full bg-primary" style={{ width: `${item.percent}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatusPipeline({ items }: { items: NamedCountDatum[] }) {
+  if (!items.length) return <EmptyChartState message="No status data available for the selected filters." />;
+
+  return (
+    <div className="space-y-4">
+      {items.map((item) => (
+        <div key={item.name} className="rounded-[18px] border border-outline-variant/35 bg-white px-4 py-3">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.fill }} />
+              <span className="truncate font-semibold text-on-surface">{item.name}</span>
+            </div>
+            <span className="shrink-0 text-on-surface-variant">{item.value} • {item.percent ?? 0}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-container-high">
+            <div className="h-full rounded-full" style={{ width: `${item.percent ?? 0}%`, backgroundColor: item.fill }} />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -783,27 +922,132 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       }))
     : programChartData;
 
-  const statusChartData = useMemo(
+  const statusChartData = useMemo<NamedCountDatum[]>(
     () => [
-      { name: 'Approved', value: summary.approved },
-      { name: 'Under Review', value: summary.pending },
-      { name: 'Returned', value: summary.returned },
-      { name: 'Exam Done', value: summary.physicalExamDone },
-    ].filter((d) => d.value > 0),
+      { name: 'Approved', value: summary.approved, fill: STATUS_COLORS.Approved },
+      { name: 'Under Review', value: summary.pending, fill: STATUS_COLORS['Under Review'] },
+      { name: 'Returned', value: summary.returned, fill: STATUS_COLORS.Returned },
+      { name: 'Exam Done', value: summary.physicalExamDone, fill: STATUS_COLORS['Exam Done'] },
+    ]
+      .filter((d) => d.value > 0)
+      .map((d) => ({
+        ...d,
+        percent: summary.total > 0 ? Math.round((d.value / summary.total) * 100) : 0,
+      })),
     [summary],
   );
 
-  const submissionsByDate = useMemo(() => {
-    const counts: Record<string, number> = {};
-    dedupedFilteredSubmissions.forEach((s) => {
-      if (!s.submittedAt) return;
-      const date = new Date(s.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      counts[date] = (counts[date] || 0) + 1;
+  const submissionsByDate = useMemo<TimelineDatum[]>(() => {
+    const dated = dedupedFilteredSubmissions
+      .map((s) => (s.submittedAt ? new Date(s.submittedAt) : null))
+      .filter((date): date is Date => date instanceof Date && Number.isFinite(date.getTime()))
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    if (!dated.length) return [];
+
+    const first = startOfLocalDay(dated[0]);
+    const last = startOfLocalDay(dated[dated.length - 1]);
+    const spanDays = Math.max(1, Math.round((last.getTime() - first.getTime()) / 86_400_000) + 1);
+    const bucketMode = spanDays > 180 ? 'month' : spanDays > 45 ? 'week' : 'day';
+    const buckets = new Map<string, TimelineDatum>();
+
+    dated.forEach((date) => {
+      const bucket = getTimelineBucket(date, bucketMode);
+      const existing = buckets.get(bucket.key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        buckets.set(bucket.key, { ...bucket, count: 1 });
+      }
     });
-    return Object.entries(counts)
-      .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
-      .map(([date, count]) => ({ date, count }));
+
+    return [...buckets.values()].sort((a, b) => a.key.localeCompare(b.key));
   }, [dedupedFilteredSubmissions]);
+
+  const yearLevelData = useMemo<NamedCountDatum[]>(
+    () =>
+      Object.entries(YEAR_LABELS).map(([year, label], index) => {
+        const value = dedupedFilteredSubmissions.filter((s) => String(s.year) === year).length;
+        return {
+          name: label,
+          value,
+          fill: [CHART_PRIMARY, CHART_PRIMARY_SOFT, CHART_GREEN_PALE, '#3b6d11'][index] || CHART_PRIMARY,
+          percent: summary.total > 0 ? Math.round((value / summary.total) * 100) : 0,
+        };
+      }),
+    [dedupedFilteredSubmissions, summary.total],
+  );
+
+  const certificateChartData = useMemo<NamedCountDatum[]>(
+    () => [
+      {
+        name: 'Issued',
+        value: summary.withCertificate,
+        fill: CERTIFICATE_COLORS.Issued,
+        percent: summary.total > 0 ? Math.round((summary.withCertificate / summary.total) * 100) : 0,
+      },
+      {
+        name: 'Not Issued',
+        value: Math.max(summary.total - summary.withCertificate, 0),
+        fill: CERTIFICATE_COLORS['Not Issued'],
+        percent: summary.total > 0 ? Math.round(((summary.total - summary.withCertificate) / summary.total) * 100) : 0,
+      },
+    ].filter((item) => item.value > 0),
+    [summary.total, summary.withCertificate],
+  );
+
+  const genderChartData = useMemo<NamedCountDatum[]>(() => {
+    const counts: Record<string, number> = {};
+    dedupedFilteredSubmissions.forEach((submission) => {
+      const normalized = String(submission.gender || submission.sex || '').trim().toLowerCase();
+      const label = normalized === 'male' ? 'Male' : normalized === 'female' ? 'Female' : normalized ? 'Other' : 'Unspecified';
+      counts[label] = (counts[label] || 0) + 1;
+    });
+
+    return Object.entries(counts)
+      .map(([name, value]) => ({
+        name,
+        value,
+        fill: GENDER_COLORS[name] || CHART_PRIMARY,
+        percent: summary.total > 0 ? Math.round((value / summary.total) * 100) : 0,
+      }))
+      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+  }, [dedupedFilteredSubmissions, summary.total]);
+
+  const conditionPrevalenceData = useMemo<RankedDatum[]>(() => {
+    const counts: Record<string, number> = {};
+    dedupedFilteredSubmissions.forEach((submission) => {
+      Object.entries(submission.medicalHistory || {}).forEach(([key, value]) => {
+        if (value) counts[key] = (counts[key] || 0) + 1;
+      });
+    });
+
+    return Object.entries(counts)
+      .map(([label, count]) => ({
+        label: formatConditionLabel(label),
+        count,
+        percent: summary.total > 0 ? Math.round((count / summary.total) * 100) : 0,
+      }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+      .slice(0, 8);
+  }, [dedupedFilteredSubmissions, summary.total]);
+
+  const topPrograms = useMemo<RankedDatum[]>(
+    () =>
+      Object.entries(summary.byCourse)
+        .map(([course, count]) => ({
+          label: abbreviateCourse(course),
+          count,
+          percent: summary.total > 0 ? Math.round((count / summary.total) * 100) : 0,
+        }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+        .slice(0, 5),
+    [summary.byCourse, summary.total],
+  );
+
+  const certificateRate = summary.total > 0 ? Math.round((summary.withCertificate / summary.total) * 100) : 0;
+  const actionNeededCount = summary.pending + summary.returned;
+  const actionNeededRate = summary.total > 0 ? Math.round((actionNeededCount / summary.total) * 100) : 0;
 
   // ── PDF download ────────────────────────────────────────────────────────
   const downloadPdf = async () => {
@@ -964,10 +1208,37 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Filtered Submissions" value={summary.total} icon={Users} accent="text-primary" />
-        <StatCard label="Approval Rate" value={`${summary.approvalRate}%`} icon={TrendingUp} accent="text-green-600" />
-        <StatCard label="1st Year Under Review" value={summary.firstYearUnderReview} icon={Clock} accent="text-amber-600" />
-        <StatCard label="Certificates Issued" value={summary.withCertificate} icon={Award} accent="text-blue-600" />
+        <StatCard
+          label="Filtered Submissions"
+          value={summary.total}
+          icon={Users}
+          accent="text-primary"
+          helper={`${currentTermSubmissions.length} in ${reportingTermRange.label}`}
+        />
+        <StatCard
+          label="Approval Rate"
+          value={`${summary.approvalRate}%`}
+          icon={TrendingUp}
+          accent="text-primary"
+          helper={`${summary.approved} approved of ${summary.total || 0}`}
+          progress={summary.approvalRate}
+        />
+        <StatCard
+          label="Needs Action"
+          value={actionNeededCount}
+          icon={Activity}
+          accent="text-amber-600"
+          helper={`${summary.pending} under review • ${summary.returned} returned`}
+          progress={actionNeededRate}
+        />
+        <StatCard
+          label="Certificates Issued"
+          value={summary.withCertificate}
+          icon={Award}
+          accent="text-primary"
+          helper={`${certificateRate}% certificate coverage`}
+          progress={certificateRate}
+        />
       </div>
 
       {/* ── Filters Card ──────────────────────────────────────────────── */}
@@ -1095,116 +1366,148 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
       {/* ── Charts ────────────────────────────────────────────────────── */}
       <div className="space-y-4">
-
-        {/* Bar chart: submissions by department */}
-        <Card className="border-outline-variant/30">
-          <CardHeader className="pb-0 pt-5 px-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle className="text-base font-semibold">
-                  Submissions by {submissionBreakdownView === 'department' ? 'Department' : 'Program'}
-                </CardTitle>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Total medical certificates for the current academic term.
-                </p>
-                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
-                  Current Term: {reportingTermRange.label}
-                </p>
-              </div>
-              <div className="w-full sm:w-44">
-                <p className="mb-1 text-xs font-medium text-muted-foreground">Sort by</p>
-                <Select
-                  value={submissionBreakdownView}
-                  onValueChange={(value) => setSubmissionBreakdownView(value as SubmissionBreakdownView)}
-                >
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Choose chart view" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="department">Department</SelectItem>
-                    <SelectItem value="program">Program</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="px-5 pb-5 pt-4">
-            {submissionBreakdownView === 'program' && submissionBreakdownData.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
-                No current-term program submissions are available for the selected filters.
-              </div>
-            ) : (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={submissionBreakdownData} margin={{ top: 16, right: 8, left: -16, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--outline-variant) / 0.3)" vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fontSize: 12 }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      allowDecimals={false}
-                      domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]}
-                    />
-                    <Tooltip content={<CustomBarTooltip />} cursor={false} />
-                    <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                      {submissionBreakdownData.map((entry) => (
-                        <Cell key={entry.label} fill={entry.fill} />
-                      ))}
-                      <LabelList dataKey="count" content={<DepartmentBarValueLabel />} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Donut + Line side-by-side */}
-        <div className="grid xl:grid-cols-2 gap-4">
-
-          {/* Donut chart: status breakdown */}
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,0.8fr)]">
           <Card className="border-outline-variant/30">
             <CardHeader className="pb-0 pt-5 px-5">
-              <CardTitle className="text-base font-semibold">Status Breakdown</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Distribution across approval stages</p>
+              <CardTitle className="text-base font-semibold">Submission Volume Trend</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">Auto-groups by day, week, or month based on the selected date range.</p>
             </CardHeader>
             <CardContent className="px-5 pb-5 pt-4">
-              {statusChartData.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
-                  No status data available for the selected filters.
-                </div>
+              {submissionsByDate.length === 0 ? (
+                <EmptyChartState message="No timeline data available for the selected filters." />
               ) : (
-                <div className="h-56">
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={submissionsByDate} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
+                      <CartesianGrid stroke={CHART_GRID} strokeOpacity={0.6} vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART_TEXT }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                      <YAxis tick={{ fontSize: 11, fill: CHART_TEXT }} tickLine={false} axisLine={false} allowDecimals={false} />
+                      <Tooltip content={<CustomTimelineTooltip />} cursor={{ stroke: CHART_GRID, strokeWidth: 1 }} />
+                      <Area
+                        type="monotone"
+                        dataKey="count"
+                        stroke={CHART_PRIMARY}
+                        strokeWidth={2.5}
+                        fill={CHART_PRIMARY_SOFT}
+                        fillOpacity={0.18}
+                        activeDot={{ r: 5, fill: CHART_PRIMARY, strokeWidth: 0 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-outline-variant/30">
+            <CardHeader className="pb-0 pt-5 px-5">
+              <CardTitle className="text-base font-semibold">Review Pipeline</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">Share of filtered submissions by current status.</p>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-4">
+              <StatusPipeline items={statusChartData} />
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(22rem,0.82fr)]">
+          <Card className="border-outline-variant/30">
+            <CardHeader className="pb-0 pt-5 px-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="text-base font-semibold">
+                    Current-Term Submissions by {submissionBreakdownView === 'department' ? 'Department' : 'Program'}
+                  </CardTitle>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Filtered records inside {reportingTermRange.label}.</p>
+                </div>
+                <div className="w-full sm:w-44">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Group by</p>
+                  <Select value={submissionBreakdownView} onValueChange={(value) => setSubmissionBreakdownView(value as SubmissionBreakdownView)}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Choose chart view" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="department">Department</SelectItem>
+                      <SelectItem value="program">Program</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-4">
+              {submissionBreakdownView === 'program' && submissionBreakdownData.length === 0 ? (
+                <EmptyChartState message="No current-term program submissions are available for the selected filters." />
+              ) : (
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={submissionBreakdownData} margin={{ top: 18, right: 8, left: -16, bottom: 0 }}>
+                      <CartesianGrid stroke={CHART_GRID} strokeOpacity={0.6} vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: CHART_TEXT }} tickLine={false} axisLine={false} interval={0} />
+                      <YAxis tick={{ fontSize: 11, fill: CHART_TEXT }} tickLine={false} axisLine={false} allowDecimals={false} domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]} />
+                      <Tooltip content={<CustomBarTooltip />} cursor={{ fill: 'rgba(0, 109, 60, 0.05)' }} />
+                      <Bar dataKey="count" radius={[8, 8, 0, 0]} maxBarSize={52}>
+                        {submissionBreakdownData.map((entry) => (
+                          <Cell key={entry.label} fill={entry.fill} />
+                        ))}
+                        <LabelList dataKey="count" content={<DepartmentBarValueLabel />} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-outline-variant/30">
+            <CardHeader className="pb-0 pt-5 px-5">
+              <CardTitle className="text-base font-semibold">Year-Level Distribution</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">Student record mix across academic levels.</p>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-4">
+              {summary.total === 0 ? (
+                <EmptyChartState message="No year-level data available for the selected filters." />
+              ) : (
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={yearLevelData} layout="vertical" margin={{ top: 4, right: 18, left: 12, bottom: 4 }}>
+                      <CartesianGrid stroke={CHART_GRID} strokeOpacity={0.55} horizontal={false} />
+                      <XAxis type="number" hide domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: CHART_TEXT }} tickLine={false} axisLine={false} width={72} />
+                      <Tooltip content={<CustomDonutTooltip />} cursor={{ fill: 'rgba(0, 109, 60, 0.05)' }} />
+                      <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={24}>
+                        {yearLevelData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
+                        ))}
+                        <LabelList dataKey="value" position="right" fill={CHART_TEXT} fontSize={12} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Card className="border-outline-variant/30">
+            <CardHeader className="pb-0 pt-5 px-5">
+              <CardTitle className="text-base font-semibold">Certificate Coverage</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">Issued certificates against filtered submissions.</p>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-4">
+              {certificateChartData.length === 0 ? (
+                <EmptyChartState message="No certificate data available for the selected filters." />
+              ) : (
+                <div className="h-60">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie
-                        data={statusChartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius="52%"
-                        outerRadius="72%"
-                        dataKey="value"
-                        paddingAngle={3}
-                        strokeWidth={0}
-                      >
-                        {statusChartData.map((entry) => (
-                          <Cell key={entry.name} fill={STATUS_COLORS[entry.name] ?? '#888'} />
+                      <Pie data={certificateChartData} cx="50%" cy="48%" innerRadius="58%" outerRadius="78%" dataKey="value" paddingAngle={2} strokeWidth={0}>
+                        {certificateChartData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
                         ))}
                       </Pie>
                       <Tooltip content={<CustomDonutTooltip />} />
-                      <Legend
-                        iconType="square"
-                        iconSize={10}
-                        formatter={(value) => (
-                          <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>{value}</span>
-                        )}
-                      />
+                      <Legend iconType="circle" iconSize={9} formatter={(value) => <span style={{ fontSize: 12, color: CHART_TEXT }}>{value}</span>} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -1212,52 +1515,52 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
             </CardContent>
           </Card>
 
-          {/* Line chart: submissions over time */}
           <Card className="border-outline-variant/30">
             <CardHeader className="pb-0 pt-5 px-5">
-              <CardTitle className="text-base font-semibold">Submissions Over Time</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Daily volume across the filtered date range</p>
+              <CardTitle className="text-base font-semibold">Gender Mix</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">Filtered submissions by recorded sex/gender.</p>
             </CardHeader>
             <CardContent className="px-5 pb-5 pt-4">
-              {submissionsByDate.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
-                  No timeline data available for the selected filters.
-                </div>
+              {genderChartData.length === 0 ? (
+                <EmptyChartState message="No gender data available for the selected filters." />
               ) : (
-                <div className="h-56">
+                <div className="h-60">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={submissionsByDate} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--outline-variant) / 0.3)" vertical={false} />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={false}
-                        interval="preserveStartEnd"
-                      />
-                      <YAxis
-                        tick={{ fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={false}
-                        allowDecimals={false}
-                      />
-                      <Tooltip content={<CustomLineTooltip />} cursor={{ stroke: 'hsl(var(--outline-variant) / 0.5)', strokeWidth: 1 }} />
-                      <Line
-                        type="monotone"
-                        dataKey="count"
-                        stroke="#0f6e56"
-                        strokeWidth={2}
-                        dot={{ r: 3, fill: '#0f6e56', strokeWidth: 0 }}
-                        activeDot={{ r: 5, strokeWidth: 0 }}
-                      />
-                    </LineChart>
+                    <PieChart>
+                      <Pie data={genderChartData} cx="50%" cy="48%" innerRadius="50%" outerRadius="76%" dataKey="value" paddingAngle={3} strokeWidth={0}>
+                        {genderChartData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomDonutTooltip />} />
+                      <Legend iconType="circle" iconSize={9} formatter={(value) => <span style={{ fontSize: 12, color: CHART_TEXT }}>{value}</span>} />
+                    </PieChart>
                   </ResponsiveContainer>
                 </div>
               )}
             </CardContent>
           </Card>
 
+          <Card className="border-outline-variant/30">
+            <CardHeader className="pb-0 pt-5 px-5">
+              <CardTitle className="text-base font-semibold">Top Programs</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">Highest-volume programs in the filtered set.</p>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-4">
+              <ProgressList items={topPrograms} emptyMessage="No program data available for the selected filters." />
+            </CardContent>
+          </Card>
         </div>
+
+        <Card className="border-outline-variant/30">
+          <CardHeader className="pb-0 pt-5 px-5">
+            <CardTitle className="text-base font-semibold">Medical History Prevalence</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">Most common declared conditions among filtered submissions.</p>
+          </CardHeader>
+          <CardContent className="px-5 pb-5 pt-4">
+            <ProgressList items={conditionPrevalenceData} emptyMessage="No declared medical-history conditions are present in the selected filters." />
+          </CardContent>
+        </Card>
       </div>
 
     </div>
