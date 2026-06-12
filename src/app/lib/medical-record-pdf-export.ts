@@ -53,7 +53,7 @@ function escapeHtml(value: string) {
 function waitForImagesToLoad(root: HTMLElement) {
   return Promise.all(
     Array.from(root.querySelectorAll('img')).map((img) => {
-      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      if (img.complete) return Promise.resolve();
       return new Promise<void>((resolve) => {
         const finish = () => resolve();
         img.addEventListener('load', finish, { once: true });
@@ -61,6 +61,20 @@ function waitForImagesToLoad(root: HTMLElement) {
       });
     }),
   );
+}
+
+function waitWithTimeout<T>(promise: Promise<T> | undefined, timeoutMs: number) {
+  if (!promise) return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    const timeoutId = window.setTimeout(resolve, timeoutMs);
+    promise
+      .catch(() => undefined)
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+        resolve();
+      });
+  });
 }
 
 function waitForNextPaint(targetWindow: Window) {
@@ -313,8 +327,8 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
   document.body.appendChild(measureRoot);
 
   try {
-    await waitForImagesToLoad(measureRoot);
-    await document.fonts?.ready;
+    await waitWithTimeout(waitForImagesToLoad(measureRoot), 3000);
+    await waitWithTimeout(document.fonts?.ready, 2000);
     await waitForNextPaint(window);
 
     const renderedBounds = clone.getBoundingClientRect();
@@ -337,6 +351,17 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
     const url = URL.createObjectURL(blob);
     printWindow.location.replace(url);
     window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (error) {
+    try {
+      printWindow.document.open();
+      printWindow.document.write(
+        '<!doctype html><html><head><title>PDF Export Failed</title></head><body style="font-family:Arial,sans-serif;padding:16px"><h1 style="font-size:18px">PDF export failed</h1><p>Please close this tab and try again.</p></body></html>',
+      );
+      printWindow.document.close();
+    } catch {
+      // Ignore secondary failures while reporting the original export error.
+    }
+    throw error;
   } finally {
     document.body.removeChild(measureRoot);
   }
