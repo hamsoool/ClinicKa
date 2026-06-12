@@ -181,7 +181,7 @@ export function StudentProfileFormCard({
   const disabledFieldClass = readOnly ? 'cursor-not-allowed opacity-80' : '';
 
   return (
-    <Card className="box-border w-full min-w-0 overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+    <Card className="box-border w-full min-w-0 overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
       <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
         <CardTitle className="text-xl font-semibold text-on-surface">{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
@@ -362,14 +362,14 @@ export function StudentProfileFormCard({
                     <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[min(92vw,24rem)] rounded-2xl p-0 shadow-xl" align="start">
+                <PopoverContent className="w-[min(92vw,24rem)] rounded-[18px] p-0" align="start">
                   <div className="border-b border-border/60 px-3 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 rounded-xl"
+                        className="h-9 w-9 rounded-[18px]"
                         onClick={() => canGoToPreviousBirthdayMonth && setBirthdayPickerMonth((prev) => shiftMonth(prev, -1))}
                         disabled={!canGoToPreviousBirthdayMonth}
                       >
@@ -390,7 +390,7 @@ export function StudentProfileFormCard({
                             )
                           }
                         >
-                          <SelectTrigger className="h-9 rounded-xl bg-input-background">
+                          <SelectTrigger className="h-9 rounded-[18px] bg-input-background">
                             <SelectValue placeholder="Month" />
                           </SelectTrigger>
                           <SelectContent>
@@ -415,7 +415,7 @@ export function StudentProfileFormCard({
                             )
                           }
                         >
-                          <SelectTrigger className="h-9 rounded-xl bg-input-background">
+                          <SelectTrigger className="h-9 rounded-[18px] bg-input-background">
                             <SelectValue placeholder="Year" />
                           </SelectTrigger>
                           <SelectContent>
@@ -431,7 +431,7 @@ export function StudentProfileFormCard({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 rounded-xl"
+                        className="h-9 w-9 rounded-[18px]"
                         onClick={() => canGoToNextBirthdayMonth && setBirthdayPickerMonth((prev) => shiftMonth(prev, 1))}
                         disabled={!canGoToNextBirthdayMonth}
                       >

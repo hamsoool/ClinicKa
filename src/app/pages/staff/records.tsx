@@ -291,7 +291,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
                 const approvedCount = student.records.length;
 
                 return (
-                  <div key={student.studentId} className="overflow-hidden rounded-xl border border-outline-variant/35 bg-white">
+                  <div key={student.studentId} className="overflow-hidden rounded-[18px] border border-outline-variant/35 bg-white">
                     <button
                       type="button"
                       className="flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-surface-container-lowest sm:flex-row sm:items-center sm:justify-between"

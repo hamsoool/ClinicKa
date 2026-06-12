@@ -17,6 +17,7 @@ import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useAuth } from '../../lib/auth';
 import { getRoleLabel } from '../../lib/api';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
+import { printMedicalRecordPreview } from '../../lib/medical-record-pdf-export';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import {
   useStaffApprovedStudentsQuery,
@@ -66,28 +67,6 @@ function clearRememberedCertificateStudent(staffId?: string | null) {
   window.localStorage.removeItem(getCertificateSelectionStorageKey(staffId));
 }
 
-async function loadPdfDependencies() {
-  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-    import('html2canvas'),
-    import('jspdf'),
-  ]);
-  return { html2canvas, jsPDF };
-}
-
-async function waitForImagesToLoad(root: HTMLElement) {
-  const images = Array.from(root.querySelectorAll('img'));
-  await Promise.all(
-    images.map((img) => {
-      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        const finish = () => resolve();
-        img.addEventListener('load', finish, { once: true });
-        img.addEventListener('error', finish, { once: true });
-      });
-    }),
-  );
-}
-
 function ApprovedStudentsListSkeleton() {
   return (
     <div className="max-h-[500px] space-y-2 overflow-y-hidden" aria-hidden="true">
@@ -105,9 +84,9 @@ function ApprovedStudentsListSkeleton() {
 function StaffCertificatePreviewSkeleton() {
   return (
     <div aria-busy="true" aria-live="polite" className="min-w-0">
-      <div className="mb-4 grid gap-1 rounded-xl bg-muted p-1 sm:grid-cols-2">
-        <Skeleton className="h-11 rounded-xl bg-white/90" />
-        <Skeleton className="h-11 rounded-xl bg-surface-container-high" />
+      <div className="mb-4 grid gap-1 rounded-[18px] bg-muted p-1 sm:grid-cols-2">
+        <Skeleton className="h-11 rounded-[18px] bg-white/90" />
+        <Skeleton className="h-11 rounded-[18px] bg-surface-container-high" />
       </div>
 
       <Card>
@@ -123,7 +102,7 @@ function StaffCertificatePreviewSkeleton() {
         <CardContent>
           <div className="overflow-hidden rounded-lg border bg-muted/30">
             <div className="px-2 py-2 sm:px-4 sm:py-4">
-              <div className="mx-auto w-full max-w-[816px] rounded-sm bg-white p-6 shadow-lg ring-1 ring-black/5">
+              <div className="mx-auto w-full max-w-[816px] rounded-sm bg-white p-6 shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5">
                 <div className="flex items-start justify-between gap-6">
                   <div className="flex gap-2">
                     {Array.from({ length: 3 }).map((_, index) => (
@@ -354,58 +333,8 @@ function StaffCertificatesWorkspace() {
   const downloadRecordPDF = async () => {
     if (!recordPreviewRef.current || !combinedRecord) return;
     try {
-      const { html2canvas, jsPDF } = await loadPdfDependencies();
-      const exportRoot = document.createElement('div');
-      exportRoot.style.position = 'fixed';
-      exportRoot.style.left = '-10000px';
-      exportRoot.style.top = '0';
-      exportRoot.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
-      exportRoot.style.background = '#fff';
-      exportRoot.style.padding = '0';
-      exportRoot.style.margin = '0';
-      exportRoot.style.overflow = 'hidden';
-
-      const clone = recordPreviewRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
-      clone.style.maxWidth = `${RECORD_PREVIEW_BASE_WIDTH}px`;
-      clone.style.margin = '0';
-      clone.style.padding = '0';
-      clone.style.transform = 'none';
-
-      exportRoot.appendChild(clone);
-      document.body.appendChild(exportRoot);
-
-      let canvas: HTMLCanvasElement;
-      try {
-        await waitForImagesToLoad(clone);
-        canvas = await html2canvas(clone, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          width: RECORD_PREVIEW_BASE_WIDTH,
-          windowWidth: RECORD_PREVIEW_BASE_WIDTH,
-        });
-      } finally {
-        document.body.removeChild(exportRoot);
-      }
-
-      const pageWidth = 215.9;
-      const margin = 4;
-      const usableWidth = pageWidth - margin * 2;
-      const imgWidth = usableWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const imgData = canvas.toDataURL('image/png');
-      const pageHeight = Math.max(330.2, imgHeight + margin * 2);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [pageHeight, pageWidth],
-      });
-
-      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
-
-      pdf.save(`medical_record_${combinedRecord.lastName}_${combinedRecord.firstName}.pdf`);
-      toast.success('Medical record PDF downloaded.');
+      await printMedicalRecordPreview(recordPreviewRef.current, RECORD_PREVIEW_BASE_WIDTH);
+      toast.success('Medical record opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate medical record PDF:', error);
       toast.error('Failed to download PDF. Please try again.');
@@ -415,60 +344,8 @@ function StaffCertificatesWorkspace() {
   const downloadClearancePDF = async () => {
     if (!clearancePreviewRef.current || !clearanceRecord) return;
     try {
-      const { html2canvas, jsPDF } = await loadPdfDependencies();
-      const exportRoot = document.createElement('div');
-      exportRoot.style.position = 'fixed';
-      exportRoot.style.left = '-10000px';
-      exportRoot.style.top = '0';
-      exportRoot.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
-      exportRoot.style.background = '#fff';
-      exportRoot.style.padding = '0';
-      exportRoot.style.margin = '0';
-      exportRoot.style.overflow = 'hidden';
-      exportRoot.style.paddingBottom = '10px';
-
-      const clone = clearancePreviewRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
-      clone.style.maxWidth = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
-      clone.style.margin = '0';
-      clone.style.padding = '0';
-      clone.style.transform = 'none';
-
-      exportRoot.appendChild(clone);
-      document.body.appendChild(exportRoot);
-      await waitForImagesToLoad(exportRoot);
-
-      const canvas = await html2canvas(exportRoot, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        width: CLEARANCE_PREVIEW_BASE_WIDTH,
-        height: exportRoot.scrollHeight,
-        windowWidth: CLEARANCE_PREVIEW_BASE_WIDTH,
-        windowHeight: exportRoot.scrollHeight,
-      });
-      document.body.removeChild(exportRoot);
-
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 5;
-      const usableWidth = pageWidth - margin * 2;
-      const usableHeight = pageHeight - margin * 2;
-      const canvasRatio = canvas.width / canvas.height;
-      const pageRatio = usableWidth / usableHeight;
-      let renderWidth = usableWidth;
-      let renderHeight = usableWidth / canvasRatio;
-      if (canvasRatio < pageRatio) {
-        renderHeight = usableHeight;
-        renderWidth = usableHeight * canvasRatio;
-      }
-      const x = (pageWidth - renderWidth) / 2;
-      const y = (pageHeight - renderHeight) / 2;
-
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
-      pdf.save(`medical_clearance_${clearanceRecord.lastName}_${clearanceRecord.firstName}.pdf`);
-      toast.success('Medical clearance PDF downloaded.');
+      await printMedicalRecordPreview(clearancePreviewRef.current, CLEARANCE_PREVIEW_BASE_WIDTH, 'Medical Certificate');
+      toast.success('Medical certificate opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate clearance PDF:', error);
       toast.error('Failed to download PDF. Please try again.');
@@ -622,9 +499,9 @@ function StaffCertificatesWorkspace() {
                     <div className="overflow-hidden rounded-lg border bg-muted/30">
                       <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
                         <div className="overflow-x-auto overscroll-x-contain">
-                          <div className="mx-auto w-max min-w-full print:w-full">
+                          <div className="flex w-max min-w-full justify-center print:w-full">
                             <div
-                              className="overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5 print:w-[816px]"
+                              className="overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
                               style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                             >
                               <MedicalRecordPreview

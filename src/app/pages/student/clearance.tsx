@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel } from '../../lib/academic-year';
 import { useAcademicYear } from '../../lib/academic-year-query';
+import { printMedicalRecordPreview } from '../../lib/medical-record-pdf-export';
 import { useStudentRecordsQuery } from './student-records-query';
 
 type StudentClearanceTab = 'history' | 'form' | 'medical-clearance';
@@ -41,20 +42,6 @@ const styles = `
     animation: fadeIn 0.4s ease-out forwards;
   }
 `;
-
-async function waitForImagesToLoad(root: HTMLElement) {
-  const images = Array.from(root.querySelectorAll('img'));
-  await Promise.all(
-    images.map((img) => {
-      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        const finish = () => resolve();
-        img.addEventListener('load', finish, { once: true });
-        img.addEventListener('error', finish, { once: true });
-      });
-    }),
-  );
-}
 
 export default function StudentClearance() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
@@ -134,97 +121,8 @@ export default function StudentClearance() {
   const downloadClearancePDF = async () => {
     if (!clearanceRef.current || !record) return;
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf'),
-      ]);
-      const exportRoot = document.createElement('div');
-      exportRoot.style.position = 'fixed';
-      exportRoot.style.left = '-10000px';
-      exportRoot.style.top = '0';
-      exportRoot.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
-      exportRoot.style.background = '#fff';
-      exportRoot.style.padding = '0';
-      exportRoot.style.margin = '0';
-      exportRoot.style.paddingBottom = '10px';
-
-      const clone = clearanceRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
-      clone.style.maxWidth = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
-      clone.style.margin = '0';
-      clone.style.padding = '0';
-      clone.style.transform = 'none';
-
-      exportRoot.appendChild(clone);
-      document.body.appendChild(exportRoot);
-      await waitForImagesToLoad(exportRoot);
-
-      const canvas = await html2canvas(exportRoot, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        width: CLEARANCE_PREVIEW_BASE_WIDTH,
-        height: exportRoot.scrollHeight,
-        windowWidth: CLEARANCE_PREVIEW_BASE_WIDTH,
-        windowHeight: exportRoot.scrollHeight,
-      });
-      document.body.removeChild(exportRoot);
-
-      // Trim trailing white rows from capture to avoid excess blank space in PDF.
-      const ctx = canvas.getContext('2d');
-      let cropHeight = canvas.height;
-      if (ctx) {
-        const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const rowHasInk = (row: number) => {
-          const start = row * width * 4;
-          const end = start + width * 4;
-          for (let i = start; i < end; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            if (r < 245 || g < 245 || b < 245) return true;
-          }
-          return false;
-        };
-        for (let row = height - 1; row >= 0; row -= 1) {
-          if (rowHasInk(row)) {
-            cropHeight = Math.min(height, row + 4);
-            break;
-          }
-        }
-      }
-      const renderCanvas = document.createElement('canvas');
-      renderCanvas.width = canvas.width;
-      renderCanvas.height = cropHeight;
-      const renderCtx = renderCanvas.getContext('2d');
-      if (renderCtx) {
-        renderCtx.fillStyle = '#ffffff';
-        renderCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
-        renderCtx.drawImage(canvas, 0, 0, canvas.width, cropHeight, 0, 0, canvas.width, cropHeight);
-      }
-
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 0;
-      const usableWidth = pageWidth - margin * 2;
-      const usableHeight = pageHeight - margin * 2;
-      const canvasRatio = renderCanvas.width / renderCanvas.height;
-      const pageRatio = usableWidth / usableHeight;
-
-      let renderWidth = usableWidth;
-      let renderHeight = usableWidth / canvasRatio;
-      if (canvasRatio < pageRatio) {
-        renderHeight = usableHeight;
-        renderWidth = usableHeight * canvasRatio;
-      }
-
-      const x = (pageWidth - renderWidth) / 2;
-      const y = margin;
-
-      pdf.addImage(renderCanvas.toDataURL('image/png'), 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
-      pdf.save(`medical_clearance_${record.lastName}_${record.firstName}.pdf`);
-      toast.success('Medical clearance PDF downloaded.');
+      await printMedicalRecordPreview(clearanceRef.current, CLEARANCE_PREVIEW_BASE_WIDTH, 'Medical Certificate');
+      toast.success('Medical certificate opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate clearance PDF:', error);
       toast.error('Failed to download PDF. Please try again.');
@@ -234,62 +132,8 @@ export default function StudentClearance() {
   const downloadRecordPDF = async () => {
     if (!recordPreviewRef.current || !profileRecord) return;
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf'),
-      ]);
-
-      const exportRoot = document.createElement('div');
-      exportRoot.style.position = 'fixed';
-      exportRoot.style.left = '-10000px';
-      exportRoot.style.top = '0';
-      exportRoot.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
-      exportRoot.style.background = '#fff';
-      exportRoot.style.padding = '0';
-      exportRoot.style.margin = '0';
-      exportRoot.style.overflow = 'hidden';
-
-      const clone = recordPreviewRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
-      clone.style.maxWidth = `${RECORD_PREVIEW_BASE_WIDTH}px`;
-      clone.style.margin = '0';
-      clone.style.padding = '0';
-      clone.style.transform = 'none';
-
-      exportRoot.appendChild(clone);
-      document.body.appendChild(exportRoot);
-
-      let canvas: HTMLCanvasElement;
-      try {
-        await waitForImagesToLoad(clone);
-        canvas = await html2canvas(clone, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          width: RECORD_PREVIEW_BASE_WIDTH,
-          windowWidth: RECORD_PREVIEW_BASE_WIDTH,
-        });
-      } finally {
-        document.body.removeChild(exportRoot);
-      }
-
-      const pageWidth = 215.9;
-      const margin = 4;
-      const usableWidth = pageWidth - margin * 2;
-      const imgWidth = usableWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const imgData = canvas.toDataURL('image/png');
-      const pageHeight = Math.max(330.2, imgHeight + margin * 2);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [pageHeight, pageWidth],
-      });
-
-      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
-
-      pdf.save(`medical_record_${profileRecord.lastName}_${profileRecord.firstName}.pdf`);
-      toast.success('Medical record PDF downloaded.');
+      await printMedicalRecordPreview(recordPreviewRef.current, RECORD_PREVIEW_BASE_WIDTH);
+      toast.success('Medical record opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate medical record PDF:', error);
       toast.error('Failed to download PDF. Please try again.');
@@ -373,7 +217,7 @@ export default function StudentClearance() {
                   {sortedRecords.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex flex-col justify-between gap-3 rounded-xl border border-outline-variant/25 bg-white p-4 transition-shadow hover:shadow-sm sm:flex-row sm:items-start"
+                      className="flex flex-col justify-between gap-3 rounded-[18px] border border-outline-variant/25 bg-white p-4 transition-colors sm:flex-row sm:items-start"
                     >
                       <div className="flex min-w-0 items-start gap-3">
                         <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
@@ -497,9 +341,9 @@ export default function StudentClearance() {
                   <div className="overflow-hidden rounded-lg border bg-muted/30">
                     <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
                       <div className="overflow-x-auto overscroll-x-contain">
-                        <div className="flex min-w-full justify-start print:w-full lg:justify-center">
+                        <div className="flex w-max min-w-full justify-center print:w-full">
                           <div
-                            className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-lg ring-1 ring-black/5 print:w-[816px]"
+                            className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
                             style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                           >
                             <MedicalRecordPreview

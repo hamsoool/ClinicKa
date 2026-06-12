@@ -61,7 +61,7 @@ type SettingRowProps = {
 
 function SettingSection({ icon: Icon, title, children }: SettingSectionProps) {
   return (
-    <Card className="overflow-hidden border-outline-variant/35 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+    <Card className="overflow-hidden border-outline-variant/35 bg-surface-container-lowest">
       <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
         <div className="flex items-start gap-3">
           <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-container/35 text-primary">
@@ -253,7 +253,7 @@ export default function AdminSystemSettings() {
           return (
             <div
               key={item.label}
-              className="rounded-xl border border-outline-variant/35 bg-surface-container-lowest p-5 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]"
+              className="rounded-[18px] border border-outline-variant/35 bg-surface-container-lowest p-5"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -267,11 +267,11 @@ export default function AdminSystemSettings() {
         })}
       </div>
 
-      <Card className="overflow-hidden border-outline-variant/35 bg-[linear-gradient(135deg,rgba(18,183,106,0.12),rgba(255,255,255,0.98)_46%,rgba(133,246,174,0.16))] shadow-[0px_18px_48px_-24px_rgba(16,24,40,0.28)]">
-        <CardHeader className="border-b border-outline-variant/20 bg-white/65 backdrop-blur">
+      <Card className="overflow-hidden border-outline-variant/55 bg-surface-container-lowest">
+        <CardHeader className="border-b border-outline-variant/20 bg-white/65">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+              <span className="mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] bg-primary text-primary-foreground">
                 <CalendarRange className="h-5 w-5" />
               </span>
               <div>
@@ -281,13 +281,13 @@ export default function AdminSystemSettings() {
                 </p>
               </div>
             </div>
-            <Badge className="w-fit rounded-full bg-white/90 px-3 py-1 text-on-surface shadow-sm">
+            <Badge className="w-fit rounded-full bg-white/90 px-3 py-1 text-on-surface">
               Future years only
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.9fr)]">
-          <div className="rounded-[1.5rem] border border-white/70 bg-white/88 p-5 shadow-[0_12px_30px_-24px_rgba(16,24,40,0.35)]">
+          <div className="rounded-[18px] border border-outline-variant/55 bg-white/88 p-5">
             <div className="space-y-2">
               <Label htmlFor="currentAcademicYear" className="text-sm font-semibold text-on-surface">
                 School Year
@@ -295,7 +295,7 @@ export default function AdminSystemSettings() {
               <Select value={academicYearInput} onValueChange={setAcademicYearInput}>
                 <SelectTrigger
                   id="currentAcademicYear"
-                  className="h-12 rounded-xl border-outline-variant/50 bg-surface-container-lowest text-base font-semibold shadow-none"
+                  className="h-12 rounded-[18px] border-outline-variant/50 bg-surface-container-lowest text-base font-semibold shadow-none"
                 >
                   <SelectValue placeholder="Select school year" />
                 </SelectTrigger>
@@ -323,17 +323,17 @@ export default function AdminSystemSettings() {
             </p>
           </div>
 
-          <div className="flex flex-col justify-between rounded-[1.5rem] border border-primary/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(238,246,236,0.94))] p-5 shadow-[0_12px_30px_-24px_rgba(0,109,60,0.4)]">
+          <div className="flex flex-col justify-between rounded-[18px] border border-primary/12 bg-surface-container-low p-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">Current Value</p>
               <p className="mt-3 text-3xl font-bold tracking-tight text-on-surface">{academicYearLabel}</p>
               <p className="mt-2 text-sm text-muted-foreground">{academicYearSettingValue}</p>
-              <div className="mt-5 rounded-2xl border border-outline-variant/20 bg-white/80 px-4 py-3 text-sm leading-6 text-on-surface-variant">
+              <div className="mt-5 rounded-[18px] border border-outline-variant/20 bg-white/80 px-4 py-3 text-sm leading-6 text-on-surface-variant">
                 This update takes effect everywhere the active academic year is shown.
               </div>
             </div>
             <Button
-              className="mt-5 h-11 rounded-xl bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+              className="mt-5 h-11 rounded-[18px] bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={academicYearMutation.isPending || !hasAcademicYearChanges}
               onClick={() => void handleAcademicYearSave()}
             >
@@ -478,7 +478,7 @@ export default function AdminSystemSettings() {
         <div className="space-y-6 xl:sticky xl:top-24">
           <PasswordChangeCard title="Administrator Password" />
 
-          <Card className="border-outline-variant/35 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+          <Card className="border-outline-variant/35 bg-surface-container-lowest">
         <CardHeader>
           <div className="flex items-center gap-3">
             <MailCheck className="h-5 w-5 text-primary" />

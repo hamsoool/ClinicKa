@@ -430,7 +430,7 @@ export default function AdminUserAccounts() {
           active={tab === 'active' && roleFilter === CLINIC_STAFF_ROLE_FILTER}
           onClick={() => showAccounts('active', CLINIC_STAFF_ROLE_FILTER)}
         >
-          <UserCog className="h-8 w-8 text-emerald-700 transition-transform group-hover:scale-110" />
+          <UserCog className="h-8 w-8 text-primary transition-transform group-hover:scale-110" />
         </AccountSummaryButton>
         <AccountSummaryButton
           label="Archived Accounts"
@@ -804,7 +804,7 @@ export default function AdminUserAccounts() {
                               else next.delete(user.userId);
                               setSelectedUserIds(next);
                             }}
-                            className="mt-0.5 rounded border-gray-300"
+                            className="mt-0.5 rounded border-outline-variant"
                           />
                         ) : null}
                       </div>
@@ -858,7 +858,7 @@ export default function AdminUserAccounts() {
                               setSelectedUserIds(new Set());
                             }
                           }}
-                          className="translate-y-[2px] rounded border-gray-300"
+                          className="translate-y-[2px] rounded border-outline-variant"
                         />
                       </TableHead>
                       <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('id')}>
@@ -896,7 +896,7 @@ export default function AdminUserAccounts() {
                                 else next.delete(user.userId);
                                 setSelectedUserIds(next);
                               }}
-                              className="rounded border-gray-300"
+                              className="rounded border-outline-variant"
                             />
                           ) : null}
                         </TableCell>
@@ -964,7 +964,7 @@ export default function AdminUserAccounts() {
                             else next.delete(user.archiveId);
                             setSelectedUserIds(next);
                           }}
-                          className="mt-0.5 rounded border-gray-300"
+                          className="mt-0.5 rounded border-outline-variant"
                         />
                       </div>
 
@@ -1013,7 +1013,7 @@ export default function AdminUserAccounts() {
                               setSelectedUserIds(new Set());
                             }
                           }}
-                          className="translate-y-[2px] rounded border-gray-300"
+                          className="translate-y-[2px] rounded border-outline-variant"
                         />
                       </TableHead>
                       <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => requestSort('id')}>
@@ -1048,7 +1048,7 @@ export default function AdminUserAccounts() {
                               else next.delete(user.archiveId);
                               setSelectedUserIds(next);
                             }}
-                            className="rounded border-gray-300"
+                            className="rounded border-outline-variant"
                           />
                         </TableCell>
                         <TableCell className="font-medium">{user.id}</TableCell>

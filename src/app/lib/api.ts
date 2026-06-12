@@ -5193,10 +5193,11 @@ export async function updateMeasurements(id: string, measurements: any) {
 
 export type ChestXrayOcrExtraction = {
   confidence?: number;
-  findings: string;
+  date?: string | null;
+  findings: string | null;
   pageCount: number;
   rawText: string;
-  result?: 'normal' | 'abnormal';
+  result?: 'normal' | 'abnormal' | null;
   source: 'ocr-space';
   success: true;
 };
@@ -5218,9 +5219,9 @@ export type CbcOcrExtraction = {
 
 export type UrinalysisOcrExtraction = {
   fields: {
-    date?: string;
-    glucose?: string;
-    protein?: string;
+    date?: string | null;
+    glucose?: string | null;
+    protein?: string | null;
   };
   pageCount: number;
   rawText: string;

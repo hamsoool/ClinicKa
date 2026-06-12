@@ -1,7 +1,9 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-size: 16px;
+  --font-size: 17px;
+  --clinic-font-text: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --clinic-font-display: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --background: #f4fcf2;
   --foreground: #161d18;
   --card: #ffffff;
@@ -12,25 +14,25 @@
   --primary-foreground: #ffffff;
   --secondary: #006d3d;
   --secondary-foreground: #ffffff;
-  --muted: #e8f0e6;
+  --muted: #eef6ec;
   --muted-foreground: #3d4a3f;
   --accent: #eef6ec;
   --accent-foreground: #161d18;
   --destructive: #ba1a1a;
   --destructive-foreground: #ffffff;
-  --border: #bccabc;
-  --input: #bccabc;
+  --border: #d8e4d7;
+  --input: #d8e4d7;
   --input-background: #ffffff;
   --switch-background: #dde5db;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #006d3c;
+  --ring: #00864d;
   --chart-1: #006d3c;
   --chart-2: #12b76a;
   --chart-3: #51df8e;
   --chart-4: #85f6ae;
   --chart-5: #c3ecd2;
-  --radius: 0.5rem;
+  --radius: 1.125rem;
   --sidebar: #0b4d34;
   --sidebar-foreground: #f4fcf2;
   --sidebar-primary: #0f6b43;
@@ -44,15 +46,15 @@
   --surface-bright: #f4fcf2;
   --surface-container-lowest: #ffffff;
   --surface-container-low: #eef6ec;
-  --surface-container: #e8f0e6;
-  --surface-container-high: #e2eae1;
-  --surface-container-highest: #dde5db;
+  --surface-container: #edf5ea;
+  --surface-container-high: #e6efe3;
+  --surface-container-highest: #dfe9dc;
   --on-surface: #161d18;
   --on-surface-variant: #3d4a3f;
   --inverse-surface: #2b322c;
   --inverse-on-surface: #ebf3e9;
   --outline: #6d7b6e;
-  --outline-variant: #bccabc;
+  --outline-variant: #d8e4d7;
   --surface-tint: #006d3c;
   --primary-container: #12b76a;
   --on-primary-container: #004021;
@@ -105,6 +107,9 @@
 }
 
 @theme inline {
+  --font-sans: var(--clinic-font-text);
+  --font-text: var(--clinic-font-text);
+  --font-display: var(--clinic-font-display);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -178,7 +183,14 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "Inter", "Segoe UI", sans-serif;
+    font-family: var(--clinic-font-text);
+    font-size: 17px;
+    line-height: 1.47;
+    letter-spacing: 0;
+    font-optical-sizing: auto;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /**
@@ -193,45 +205,57 @@
   }
 
   h1 {
+    font-family: var(--clinic-font-display);
     font-size: var(--font-size-2xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-weight: 600;
+    line-height: 1.08;
+    letter-spacing: 0;
   }
 
   h2 {
+    font-family: var(--clinic-font-display);
     font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-weight: 600;
+    line-height: 1.12;
+    letter-spacing: 0;
   }
 
   h3 {
+    font-family: var(--clinic-font-display);
     font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0;
   }
 
   h4 {
+    font-family: var(--clinic-font-display);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
   }
 
   label {
+    font-family: var(--clinic-font-text);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
   }
 
   button {
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  input {
+    font-family: var(--clinic-font-text);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-normal);
-    line-height: 1.5;
+    line-height: 1.2;
+  }
+
+  input,
+  select,
+  textarea {
+    font-family: var(--clinic-font-text);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.47;
   }
 }
 

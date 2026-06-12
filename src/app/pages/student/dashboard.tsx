@@ -293,7 +293,7 @@ export default function StudentDashboard() {
 
       <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.8fr)] xl:items-start">
         <div className="space-y-4 sm:space-y-6 lg:space-y-8">
-      <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:rounded-[1.75rem] sm:p-6 lg:p-8">
+      <div className="rounded-[18px] border border-white/70 bg-white/80 p-4 sm:rounded-[18px] sm:p-6 lg:p-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
@@ -316,7 +316,7 @@ export default function StudentDashboard() {
                 key={`${item.title}-${item.actionPath}`}
                 type="button"
                 onClick={() => navigate(item.actionPath)}
-                className="flex min-h-[5.25rem] w-full items-start gap-3 rounded-xl border border-amber-200/70 bg-amber-50/80 p-3 text-left transition-colors hover:bg-amber-100/80"
+                className="flex min-h-[5.25rem] w-full items-start gap-3 rounded-[18px] border border-amber-200/70 bg-amber-50/80 p-3 text-left transition-colors hover:bg-amber-100/80"
               >
                 <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
                   <AlertCircle className="h-4 w-4" />
@@ -337,7 +337,7 @@ export default function StudentDashboard() {
             {[0, 1].map((item) => (
               <div
                 key={item}
-                className="flex min-h-[5.25rem] items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3"
+                className="flex min-h-[5.25rem] items-start gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-3"
               >
                 <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-surface-container" />
                 <div className="min-w-0 flex-1 space-y-2">
@@ -349,7 +349,7 @@ export default function StudentDashboard() {
             ))}
           </div>
         ) : (
-          <div className="mt-4 flex items-start gap-3 rounded-xl border border-primary/15 bg-primary-container/10 p-3">
+          <div className="mt-4 flex items-start gap-3 rounded-[18px] border border-primary/15 bg-primary-container/10 p-3">
             <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-container/30 text-primary">
               <CheckCircle2 className="h-4 w-4" />
             </span>
@@ -364,9 +364,9 @@ export default function StudentDashboard() {
       </div>
       
       {latestRecord?.status === 'returned' && (
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+        <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
           <div className="flex flex-col gap-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[18px] bg-amber-100 text-amber-700">
               <AlertCircle className="h-5 w-5" />
             </div>
             <div className="flex-1 space-y-4">
@@ -378,7 +378,7 @@ export default function StudentDashboard() {
               </div>
               
               {latestRecord.staffNotes && (
-                <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-4">
+                <div className="rounded-[18px] border border-amber-200/80 bg-amber-50/70 p-4">
                   <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-900">Note from Clinic Staff:</p>
                   <p className="text-sm italic leading-relaxed text-amber-800">"{latestRecord.staffNotes}"</p>
                 </div>
@@ -393,7 +393,7 @@ export default function StudentDashboard() {
                       )}`,
                     )
                   }
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-700 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-800 sm:w-auto"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-[18px] bg-amber-700 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-800 sm:w-auto"
                 >
                   Update and Resubmit
                   <ArrowRight className="h-4 w-4" />
@@ -404,7 +404,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+      <div className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
         <div className="border-b border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6">
           <h3 className="text-lg font-semibold text-on-surface">Record Cycle Overview</h3>
         </div>
@@ -496,7 +496,7 @@ export default function StudentDashboard() {
         </div>
 
         <div className="grid gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-1">
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+        <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
           <div className="mb-4 flex items-center justify-between gap-3 sm:mb-6">
             <h3 className="text-lg font-semibold text-on-surface">Current Submission</h3>
             {records.length > 0 ? (
@@ -519,7 +519,7 @@ export default function StudentDashboard() {
                 You do not have any medical documents currently under review.
               </p>
               <button
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary shadow-sm transition-colors hover:bg-primary/90"
+                className="mt-6 inline-flex items-center gap-2 rounded-[18px] bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition-colors hover:bg-primary/90"
                 onClick={() => navigate('/student/year-selection')}
               >
                 <Plus className="h-4 w-4" />
@@ -528,7 +528,7 @@ export default function StudentDashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 sm:p-5">
+              <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="text-sm text-on-surface-variant">Latest submission</p>
@@ -553,7 +553,7 @@ export default function StudentDashboard() {
               </div>
 
               <button
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-[18px] border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container sm:w-auto"
                 onClick={() => navigate('/student/year-selection')}
               >
                 <Plus className="h-4 w-4" />
@@ -563,7 +563,7 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+        <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
           <div className="mb-4 flex items-center justify-between gap-3 sm:mb-6">
             <h3 className="text-lg font-semibold text-on-surface">Announcements</h3>
             <button
@@ -579,7 +579,7 @@ export default function StudentDashboard() {
               {[0, 1].map((item) => (
                 <div
                   key={item}
-                  className="flex items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3"
+                  className="flex items-start gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-3"
                 >
                   <div className="h-12 w-12 shrink-0 animate-pulse rounded-lg bg-surface-container" />
                   <div className="min-w-0 flex-1 space-y-2">
@@ -591,14 +591,14 @@ export default function StudentDashboard() {
               ))}
             </div>
           ) : announcementsError ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-10 text-center">
+            <div className="flex flex-col items-center justify-center rounded-[18px] border border-outline-variant/20 bg-surface-container-low px-4 py-10 text-center">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-container text-outline">
                 <Megaphone className="h-5 w-5" />
               </div>
               <p className="text-sm text-on-surface-variant">Announcements could not be loaded right now.</p>
             </div>
           ) : featuredAnnouncements.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-10 text-center">
+            <div className="flex flex-col items-center justify-center rounded-[18px] border border-outline-variant/20 bg-surface-container-low px-4 py-10 text-center">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-container text-outline">
                 <Megaphone className="h-5 w-5" />
               </div>
@@ -611,7 +611,7 @@ export default function StudentDashboard() {
                   key={announcement.id}
                   type="button"
                   onClick={() => navigate('/student/announcements')}
-                  className="flex w-full items-start gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 text-left transition-colors hover:bg-surface-container-low sm:gap-4"
+                  className="flex w-full items-start gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-3 text-left transition-colors hover:bg-surface-container-low sm:gap-4"
                 >
                   {announcement.imageUrl ? (
                     <img

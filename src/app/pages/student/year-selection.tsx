@@ -85,7 +85,7 @@ export default function StudentYearSelection() {
       ? `Begin your clinic submission for ${academicYearLabel}. This will be filed under ${selectedSlotLabel}.`
       : `You have already used all ${MAX_SUBMISSION_CYCLE} record cycles.`;
   const cardStyles = isActionable
-    ? 'cursor-pointer border-outline-variant/30 bg-surface-container-lowest hover:bg-surface-container-low hover:shadow-[0_22px_60px_rgba(16,24,40,0.10)]'
+    ? 'cursor-pointer border-outline-variant/30 bg-surface-container-lowest hover:bg-surface-container-low'
     : 'cursor-not-allowed border-outline-variant/30 bg-surface-container-lowest/80';
   const actionButtonStyles = isActionable
     ? 'bg-primary text-on-primary'
@@ -119,7 +119,7 @@ export default function StudentYearSelection() {
           type="button"
           disabled={!canOpen || isPending}
           onClick={() => canOpen && !isPending && navigate(destination)}
-          className={`group block w-full rounded-[1.75rem] border p-5 text-left shadow-[0_18px_60px_rgba(16,24,40,0.08)] transition-all duration-200 sm:p-8 ${cardStyles}`}
+          className={`group block w-full rounded-[18px] border p-5 text-left transition-all duration-200 sm:p-8 ${cardStyles}`}
         >
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.8fr)] lg:items-center">
             <div className="min-w-0">
@@ -133,7 +133,7 @@ export default function StudentYearSelection() {
               </div>
 
               <div className="mt-5 flex items-start gap-4">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] bg-primary/10 text-primary">
                   <CalendarDays className="h-6 w-6" />
                 </span>
                 <div className="min-w-0">
@@ -156,13 +156,13 @@ export default function StudentYearSelection() {
                 {introCopy}
               </p>
 
-              <span className={`mt-7 inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold shadow-sm transition-colors duration-200 sm:px-5 ${actionButtonStyles}`}>
+              <span className={`mt-7 inline-flex items-center gap-2 rounded-[18px] px-4 py-3 text-sm font-semibold transition-colors duration-200 sm:px-5 ${actionButtonStyles}`}>
                 {isPending ? <Lock className="h-4 w-4" /> : isApproved ? <CheckCircle2 className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
                 {actionLabel}
               </span>
             </div>
 
-            <div className={`rounded-2xl border p-5 sm:p-6 ${summaryCardStyles}`}>
+            <div className={`rounded-[18px] border p-5 sm:p-6 ${summaryCardStyles}`}>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
                 Submission Details
               </p>
@@ -183,7 +183,7 @@ export default function StudentYearSelection() {
                 </div>
               </dl>
 
-              <div className="mt-6 rounded-xl bg-surface-container-low px-4 py-3 text-sm leading-6 text-on-surface-variant">
+              <div className="mt-6 rounded-[18px] bg-surface-container-low px-4 py-3 text-sm leading-6 text-on-surface-variant">
                 {nextSlot ? 'You can submit relevant requirements again next year.' : 'No additional record cycles are available.'}
               </div>
             </div>

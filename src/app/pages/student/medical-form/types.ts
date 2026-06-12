@@ -31,6 +31,10 @@ export type MedicalFormData = {
   otherMedicalHistory: string;
   allergyDetails: string;
   hadOperation: 'yes' | 'no';
+  operationProcedure: string;
+  operationDate: string;
+  operationFacility: string;
+  operationNotes: string;
   operationDetails: string;
   emergencyContact: EmergencyContact;
   dataPrivacyConsent: boolean;

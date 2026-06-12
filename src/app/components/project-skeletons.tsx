@@ -25,14 +25,8 @@ export function PublicPageSkeleton({ variant }: { variant: PublicSkeletonVariant
     <div
       aria-busy="true"
       aria-live="polite"
-      className="min-h-screen overflow-hidden bg-[linear-gradient(180deg,#f8f9ff_0%,#eff4ff_46%,#edf7f1_100%)] px-5 py-8 text-[#0b1c30] sm:px-8 lg:py-10"
-      style={{ fontFamily: '"Plus Jakarta Sans", "Segoe UI", sans-serif' }}
+      className="min-h-screen overflow-hidden bg-[#f4fcf2] px-5 py-8 text-[#161d18] sm:px-8 lg:py-10"
     >
-      <div className="absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute left-[-8rem] top-20 h-80 w-80 rounded-full bg-[#d9e8ff] blur-3xl" />
-        <div className="absolute right-[-10rem] top-12 h-[28rem] w-[28rem] rounded-full bg-[#d4f0e2] blur-3xl" />
-      </div>
-
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col">
         <PublicTopBarSkeleton />
 
@@ -51,7 +45,7 @@ export function PublicPageSkeleton({ variant }: { variant: PublicSkeletonVariant
               {Array.from({ length: isMarketing ? 3 : 2 }).map((_, index) => (
                 <div
                   key={index}
-                  className="rounded-[24px] border border-white/70 bg-white/70 p-5 shadow-[0_18px_45px_rgba(11,28,48,0.05)] backdrop-blur"
+                  className="rounded-[18px] border border-[#d8e4d7] bg-white p-5"
                 >
                   <Skeleton className="h-3 w-16 bg-[#d9e8ff]" />
                   <Skeleton className="mt-4 h-4 w-28 bg-[#dfe9f4]" />
@@ -61,12 +55,12 @@ export function PublicPageSkeleton({ variant }: { variant: PublicSkeletonVariant
               ))}
             </div>
 
-            <div className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/76 p-4 shadow-[0_30px_80px_rgba(11,28,48,0.1)] backdrop-blur">
+            <div className="overflow-hidden rounded-[18px] border border-[#d8e4d7] bg-white p-4">
               <Skeleton className={`w-full rounded-[1.4rem] bg-[#dfe9f4] ${isMarketing ? 'h-[24rem]' : 'h-[20rem]'}`} />
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/80 bg-white/84 p-5 shadow-[0_30px_80px_rgba(11,28,48,0.12)] backdrop-blur sm:min-h-[38rem] sm:p-8">
+          <div className="rounded-[18px] border border-[#d8e4d7] bg-white p-5 sm:min-h-[38rem] sm:p-8">
             <div className="flex flex-col gap-4 border-b border-[#dfebea] pb-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-3">
                 <Skeleton className="h-3 w-28 bg-[#dfe9f4]" />
@@ -101,14 +95,14 @@ export function PortalShellSkeleton() {
     <div
       aria-busy="true"
       aria-live="polite"
-      className="min-h-screen bg-[radial-gradient(circle_at_top,#ffffff_0%,#f4fcf2_45%,#eef6ec_100%)]"
+      className="min-h-screen bg-background"
     >
       <div className="fixed left-4 top-4 z-50 md:hidden">
         <Skeleton className="h-10 w-10 rounded-md bg-primary/20" />
       </div>
 
-      <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-emerald-950/30 bg-sidebar px-4 py-6 text-sidebar-foreground shadow-2xl md:block">
-        <div className="rounded-lg border border-white/10 bg-white/5 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)] backdrop-blur">
+      <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-emerald-950/25 bg-sidebar px-4 py-6 text-sidebar-foreground md:block">
+        <div className="rounded-[18px] border border-white/10 bg-white/[0.06] p-4">
           <div className="flex items-center gap-3">
             <Skeleton className="h-11 w-11 rounded-full bg-white/20" />
             <div className="space-y-2">
@@ -146,7 +140,7 @@ export function PortalShellSkeleton() {
         </div>
       </aside>
 
-      <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/40 bg-white/90 backdrop-blur md:left-72 md:h-16">
+      <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/55 bg-background/85 backdrop-blur-xl md:left-72 md:h-16">
         <div className="flex h-full items-center justify-between gap-3 px-3 pl-16 md:px-8 md:pl-8">
           <div className="space-y-2">
             <Skeleton className="h-3 w-28 bg-surface-container-high" />
@@ -167,7 +161,7 @@ export function PortalShellSkeleton() {
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/40 bg-surface-container-lowest/95 px-1.5 py-2 backdrop-blur md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/55 bg-surface-container-lowest/90 px-1.5 py-2 backdrop-blur-xl md:hidden">
         <div className="grid grid-cols-5 gap-1">
           {Array.from({ length: 5 }).map((_, index) => (
             <div key={index} className="flex flex-col items-center gap-1 rounded-md px-1 py-1.5">
@@ -185,7 +179,7 @@ export function PortalShellSkeleton() {
 
 function DashboardCardSkeleton() {
   return (
-    <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+    <div className="rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-3">
           <Skeleton className="h-3 w-24 bg-surface-container-high" />
@@ -201,7 +195,7 @@ function DashboardCardSkeleton() {
 function YearSelectionCardSkeleton({ highlighted = false }: { highlighted?: boolean }) {
   return (
     <div
-      className={`rounded-2xl border p-5 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6 ${
+      className={`rounded-[18px] border p-5 sm:p-6 ${
         highlighted
           ? 'border-primary/40 bg-primary/15'
           : 'border-primary/10 bg-primary/5'
@@ -251,7 +245,7 @@ export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVar
           <Skeleton className="h-4 w-72 bg-white/70" />
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <div className="rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6">
           <div className="space-y-2">
             <Skeleton className="h-6 w-52 bg-surface-container-high" />
             <Skeleton className="h-4 w-64 bg-surface-container" />
@@ -287,7 +281,7 @@ export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVar
           <Skeleton className="h-4 w-80 bg-white/70" />
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <div className="rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6">
           <div className="flex items-start gap-4">
             <Skeleton className="h-10 w-10 rounded-full bg-surface-container-high" />
             <div className="min-w-0 flex-1 space-y-3">
@@ -298,7 +292,7 @@ export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVar
           </div>
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <div className="rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-2">
               <Skeleton className="h-6 w-56 bg-surface-container-high" />
@@ -314,7 +308,7 @@ export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVar
 
   return (
     <div aria-busy="true" aria-live="polite" className="mx-auto w-full max-w-[100rem] space-y-8 pt-2">
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_rgba(16,24,40,0.08)] backdrop-blur sm:p-8">
+      <div className="rounded-[18px] border border-outline-variant/55 bg-white p-6 sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-4">
             <Skeleton className="h-8 w-40 rounded-full bg-[#d9f3e4]" />
@@ -340,7 +334,7 @@ export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVar
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.9fr]">
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <div className="rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6">
           <div className="mb-6 space-y-2">
             <Skeleton className="h-6 w-44 bg-surface-container-high" />
             <Skeleton className="h-4 w-72 bg-surface-container" />
@@ -359,7 +353,7 @@ export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVar
           </div>
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+        <div className="rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6">
           <div className="mb-6 space-y-2">
             <Skeleton className="h-6 w-48 bg-surface-container-high" />
             <Skeleton className="h-4 w-56 bg-surface-container" />
@@ -382,7 +376,7 @@ export function PortalPageSkeleton({ variant }: { variant: PortalPageSkeletonVar
         {Array.from({ length: 2 }).map((_, index) => (
           <div
             key={index}
-            className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]"
+            className="rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6"
           >
             <div className="mb-6 space-y-2">
               <Skeleton className="h-6 w-44 bg-surface-container-high" />

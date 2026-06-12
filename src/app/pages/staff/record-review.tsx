@@ -26,7 +26,6 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import FilePickerButton from '../../components/file-picker-button';
 import { StudentProfileFormCard } from '../../components/student-profile-form-card';
-import { Checkbox } from '../../components/ui/checkbox';
 
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -198,6 +197,15 @@ type AssessmentForm = {
   urinalysisProtein: string;
 };
 
+type PhysicalExamRequiredField =
+  | 'skin'
+  | 'heent'
+  | 'chestLungs'
+  | 'heart'
+  | 'abdomen'
+  | 'extremities';
+type AssessmentValidationErrors = Partial<Record<keyof AssessmentForm, string>>;
+
 type ClearanceForm = {
   findingsNormal: boolean;
   diagnosis: string;
@@ -215,6 +223,11 @@ const CLEARANCE_PURPOSE_OPTIONS: Array<{ value: ClearancePurpose; label: string 
   { value: 'ojt', label: 'OJT' },
   { value: 'rle', label: 'RLE' },
 ];
+
+function isClearancePurpose(value: string): value is ClearancePurpose {
+  return CLEARANCE_PURPOSE_OPTIONS.some((option) => option.value === value);
+}
+
 const DEFAULT_LICENSE_NO = '0084558';
 const CLEARANCE_LICENSE_OPTIONS = [
   { value: DEFAULT_LICENSE_NO, label: `Current License No. ${DEFAULT_LICENSE_NO}` },
@@ -251,6 +264,19 @@ const STAFF_SIGNATURE_ACCEPT_ATTRIBUTE = 'image/*,.png,.jpg,.jpeg,.heic,.heif,.w
 const STAFF_SIGNATURE_ALLOWED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'heic', 'heif', 'webp']);
 const BLOOD_TYPE_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const URINALYSIS_DIPSTICK_OPTIONS = ['Negative', 'Trace', '1+', '2+', '3+', '4+'] as const;
+const VISUAL_ACUITY_OPTIONS = [
+  '20/20',
+  '20/25',
+  '20/30',
+  '20/40',
+  '20/50',
+  '20/70',
+  '20/100',
+  '20/200',
+  '20/400',
+  'Other / Blind',
+] as const;
+type VisualAcuityOption = (typeof VISUAL_ACUITY_OPTIONS)[number];
 const BLOOD_PRESSURE_PATTERN = /^\d{2,3}\/\d{2,3}$/;
 const MIN_SYSTOLIC_BLOOD_PRESSURE = 20;
 const MAX_SYSTOLIC_BLOOD_PRESSURE = 300;
@@ -278,6 +304,23 @@ const SEX_BASE_OPTIONS = ['male', 'female'] as const;
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married'] as const;
 const MEDICAL_RECORD_DATE_RANGE_MONTHS = 6;
 const UPDATED_FIELD_CLASS = 'border-green-300 bg-green-50 text-green-950 focus-visible:border-green-500 focus-visible:ring-green-500/20';
+const INVALID_FIELD_CLASS = 'border-red-300 bg-red-50/50 focus-visible:border-red-500 focus-visible:ring-red-500/20';
+const PHYSICAL_EXAM_REQUIRED_FIELDS: PhysicalExamRequiredField[] = [
+  'skin',
+  'heent',
+  'chestLungs',
+  'heart',
+  'abdomen',
+  'extremities',
+];
+const PHYSICAL_EXAM_FIELD_LABELS: Record<PhysicalExamRequiredField, string> = {
+  skin: 'Skin',
+  heent: 'HEENT',
+  chestLungs: 'Chest / Lungs',
+  heart: 'Heart',
+  abdomen: 'Abdomen',
+  extremities: 'Extremities',
+};
 const HIGHLIGHTED_ASSESSMENT_FIELDS: Array<keyof AssessmentForm> = [
   'xrayDate',
   'xrayResult',
@@ -317,7 +360,7 @@ function LabUploadActions({
 
   return (
     <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
-      <div className="rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-low px-4 py-4">
+      <div className="rounded-[18px] border border-dashed border-outline-variant/50 bg-surface-container-low px-4 py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-on-surface">Add or replace {title} file</p>
@@ -503,8 +546,22 @@ function isValidBloodPressure(value: string) {
 function isValidVisualAcuity(value: string) {
   const trimmedValue = value.trim();
   if (!trimmedValue) return true;
+  if (VISUAL_ACUITY_OPTIONS.includes(trimmedValue as VisualAcuityOption)) return true;
   if (VISUAL_ACUITY_PATTERN.test(trimmedValue)) return true;
   return /^(OD|OS)\s\d{1,2}\/\d{1,3}$/i.test(trimmedValue);
+}
+
+function normalizeVisualAcuitySelectValue(value?: string | null): '' | VisualAcuityOption {
+  const sanitizedValue = sanitizeVisualAcuityText(value || '').trim();
+  if (!sanitizedValue) return '';
+  if (VISUAL_ACUITY_OPTIONS.includes(sanitizedValue as VisualAcuityOption)) {
+    return sanitizedValue as VisualAcuityOption;
+  }
+  return 'Other / Blind';
+}
+
+function isVisualAcuitySelectValue(value: string): value is '' | VisualAcuityOption {
+  return value === '' || VISUAL_ACUITY_OPTIONS.includes(value as VisualAcuityOption);
 }
 
 function formatDateInputValue(date: Date) {
@@ -625,6 +682,24 @@ function sanitizeSafeText(value: string, maxLength: number) {
     .slice(0, maxLength);
 }
 
+function isPhysicalExamRequiredField(field: keyof AssessmentForm): field is PhysicalExamRequiredField {
+  return PHYSICAL_EXAM_REQUIRED_FIELDS.includes(field as PhysicalExamRequiredField);
+}
+
+function getPhysicalExamFieldValidationError(field: PhysicalExamRequiredField, value: string) {
+  const normalizedValue = sanitizeSafeText(value, MAX_PHYSICAL_EXAM_FIELD_LENGTH).trim();
+  if (!normalizedValue) return `${PHYSICAL_EXAM_FIELD_LABELS[field]} is required.`;
+  return '';
+}
+
+function validatePhysicalExamFields(form: AssessmentForm): AssessmentValidationErrors {
+  return PHYSICAL_EXAM_REQUIRED_FIELDS.reduce<AssessmentValidationErrors>((errors, field) => {
+    const message = getPhysicalExamFieldValidationError(field, form[field]);
+    if (message) errors[field] = message;
+    return errors;
+  }, {});
+}
+
 function sanitizeVisualAcuityText(value: string) {
   return String(value)
     .replace(/[^A-Za-z0-9/\s]/g, '')
@@ -663,6 +738,10 @@ function normalizeClearancePurposes(value?: string | string[] | null): Clearance
     );
 
   return [...new Set(normalized)];
+}
+
+function normalizeSingleClearancePurpose(value?: string | string[] | null): ClearancePurpose[] {
+  return normalizeClearancePurposes(value).slice(0, 1);
 }
 
 function serializeClearancePurposes(value: ClearancePurpose[]) {
@@ -752,7 +831,7 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
         submission?.staffMeasurements?.weight || submission?.weight || '',
         submission?.staffMeasurements?.height || submission?.height || '',
       ),
-    visualAcuity: submission?.staffMeasurements?.visualAcuity || '',
+    visualAcuity: normalizeVisualAcuitySelectValue(submission?.staffMeasurements?.visualAcuity),
     skin: submission?.staffMeasurements?.skin || '',
     heent: submission?.staffMeasurements?.heent || '',
     chestLungs: submission?.staffMeasurements?.chestLungs || '',
@@ -786,7 +865,7 @@ function createClearanceForm(submission?: SubmissionDetails | null): ClearanceFo
     findingsNormal: submission?.clearanceInfo?.findingsNormal ?? true,
     diagnosis: sanitizeSafeText(submission?.clearanceInfo?.diagnosis || '', MAX_CLEARANCE_DIAGNOSIS_LENGTH),
     remarks: sanitizeSafeText(submission?.clearanceInfo?.remarks || '', MAX_CLEARANCE_REMARKS_LENGTH),
-    purpose: normalizeClearancePurposes(submission?.clearanceInfo?.purpose),
+    purpose: normalizeSingleClearancePurpose(submission?.clearanceInfo?.purpose),
     issuedDate: normalizeDateInputValue(submission?.clearanceInfo?.issuedDate) || fallbackIssuedDate,
     licenseNo: sanitizeLicenseNo(submission?.clearanceInfo?.licenseNo || DEFAULT_LICENSE_NO),
     signatoryName: savedSignatory || legacySignatory || CLEARANCE_DOCTORS[0],
@@ -871,7 +950,7 @@ function StaffRecordReviewSkeleton() {
         <CardContent className="space-y-6">
           <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
             <div className="space-y-4">
-              <Skeleton className="h-56 w-full rounded-xl bg-surface-container" />
+              <Skeleton className="h-56 w-full rounded-[18px] bg-surface-container" />
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, index) => (
                   <div key={index} className="space-y-2">
@@ -883,7 +962,7 @@ function StaffRecordReviewSkeleton() {
             </div>
             <div className="space-y-4">
               {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-32 w-full rounded-xl bg-surface-container" />
+                <Skeleton key={index} className="h-32 w-full rounded-[18px] bg-surface-container" />
               ))}
             </div>
           </div>
@@ -945,6 +1024,7 @@ export default function StaffRecordReview() {
     status: 'idle',
   });
   const [updatedAssessmentFields, setUpdatedAssessmentFields] = useState<UpdatedAssessmentFields>({});
+  const [assessmentValidationErrors, setAssessmentValidationErrors] = useState<AssessmentValidationErrors>({});
   const [savingAction, setSavingAction] = useState<ReviewAction | null>(null);
   const [loadingSignature, setLoadingSignature] = useState(true);
   const [staffSignature, setStaffSignature] = useState<StaffSignatureAsset>(buildEmptyStaffSignature);
@@ -994,8 +1074,18 @@ export default function StaffRecordReview() {
     }
 
     const statusToSave = nextStatus || reviewStatus;
+    if (statusToSave !== 'returned') {
+      const nextAssessmentValidationErrors = validatePhysicalExamFields(assessmentForm);
+      if (Object.keys(nextAssessmentValidationErrors).length > 0) {
+        setAssessmentValidationErrors(nextAssessmentValidationErrors);
+        setActiveReviewStep('assessment');
+        toast.error('Complete the required physical examination fields.');
+        return null;
+      }
+      setAssessmentValidationErrors({});
+    }
     if (canFinalizeClearance && statusToSave === 'approved' && clearanceForm.purpose.length === 0) {
-      toast.error('Select at least one clearance purpose.');
+      toast.error('Select a clearance purpose.');
       return null;
     }
     if (canFinalizeClearance && statusToSave === 'approved' && !clearanceForm.licenseNo.trim()) {
@@ -1200,7 +1290,7 @@ export default function StaffRecordReview() {
       toast.success('Review saved as draft.');
     },
     onError: (error, variables) => {
-      console.error('Error saving review in background:', error);
+      console.error('Error saving review:', error);
       toast.error(
         variables.action === 'cleared'
           ? 'Failed to clear this medical record.'
@@ -1266,12 +1356,14 @@ export default function StaffRecordReview() {
       hydratedSubmissionIdRef.current = null;
       setSubmission(null);
       setUpdatedAssessmentFields({});
+      setAssessmentValidationErrors({});
       return;
     }
 
     const isSameSubmissionRefresh = hydratedSubmissionIdRef.current === loadedSubmission.id;
     if (!isSameSubmissionRefresh) {
       setUpdatedAssessmentFields({});
+      setAssessmentValidationErrors({});
     }
     setSubmission(loadedSubmission);
     setRecordForm(createRecordForm(loadedSubmission));
@@ -1636,6 +1728,24 @@ export default function StaffRecordReview() {
     }
 
     commitAssessmentFormChange(prev, next);
+
+    if (isPhysicalExamRequiredField(field)) {
+      const validationMessage = getPhysicalExamFieldValidationError(field, String(normalizedValue));
+      setAssessmentValidationErrors((currentErrors) => {
+        const nextErrors = { ...currentErrors };
+        if (validationMessage) {
+          nextErrors[field] = validationMessage;
+        } else {
+          delete nextErrors[field];
+        }
+        return nextErrors;
+      });
+    }
+  }
+
+  function handleVisualAcuityChange(value: string) {
+    if (!isVisualAcuitySelectValue(value)) return;
+    updateAssessmentField('visualAcuity', value);
   }
 
   function updateClearanceField<K extends keyof ClearanceForm>(field: K, value: ClearanceForm[K]) {
@@ -1649,7 +1759,7 @@ export default function StaffRecordReview() {
           : field === 'remarks'
           ? sanitizeSafeText(String(value), MAX_CLEARANCE_REMARKS_LENGTH)
           : field === 'purpose'
-          ? normalizeClearancePurposes(value as ClearanceForm['purpose'])
+          ? normalizeSingleClearancePurpose(value as ClearanceForm['purpose'])
           : field === 'licenseNo'
           ? sanitizeLicenseNo(String(value))
           : field === 'signatoryName'
@@ -1658,15 +1768,11 @@ export default function StaffRecordReview() {
     }));
   }
 
-  function toggleClearancePurpose(purpose: ClearancePurpose, checked: boolean) {
+  function selectClearancePurpose(purpose: ClearancePurpose) {
     setClearanceForm((prev) => {
-      const nextPurpose = checked
-        ? [...new Set([...prev.purpose, purpose])]
-        : prev.purpose.filter((item) => item !== purpose);
-
       return {
         ...prev,
-        purpose: nextPurpose,
+        purpose: [purpose],
       };
     });
   }
@@ -1859,41 +1965,55 @@ export default function StaffRecordReview() {
 
       if (xrayOcrRunRef.current !== runId) return 'skipped';
 
-      const rawFindings = result.findings.trim();
+      const rawFindings = String(result.findings || '').trim();
       const findings = sanitizeSafeText(rawFindings, MAX_FINDINGS_LENGTH).trim();
-      if (!findings) {
+      const detectedXrayDate = normalizeDateInputValue(result.date);
+      const detectedDateOutOfRange = Boolean(
+        detectedXrayDate && !isMedicalRecordDateInRange(detectedXrayDate),
+      );
+      const detectedFieldCount = (detectedXrayDate ? 1 : 0) + (findings ? 1 : 0) + (result.result ? 1 : 0);
+
+      if (!detectedFieldCount) {
         setXrayOcrState({
           message: result.rawText.trim()
-            ? 'Scan finished, but no findings or impression line was detected.'
+            ? 'Scan finished, but no X-Ray date, findings, or impression line was detected.'
             : 'No readable text was found in the Chest X-Ray file.',
           source: result.source,
           status: 'warning',
         });
         if (manualRun) {
-          toast.warning('No Chest X-Ray findings were detected in the uploaded file.');
+          toast.warning('No Chest X-Ray fields were detected in the uploaded file.');
         }
         return 'warning';
       }
 
       const isLowConfidence = typeof result.confidence === 'number' && result.confidence < 80;
-      const detectedFieldCount = (findings ? 1 : 0) + (result.result ? 1 : 0);
       const previousAssessmentForm = assessmentFormRef.current;
       commitAssessmentFormChange(previousAssessmentForm, {
         ...previousAssessmentForm,
-        xrayFindings: findings,
+        xrayDate: detectedXrayDate || previousAssessmentForm.xrayDate,
+        xrayFindings: findings || previousAssessmentForm.xrayFindings,
         xrayResult: result.result || previousAssessmentForm.xrayResult,
       });
       setXrayOcrState({
         confidence: result.confidence,
         fieldsDetected: detectedFieldCount,
-        message: isLowConfidence
+        message: detectedDateOutOfRange
+          ? `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'} (detected date is outside allowed date window). Review before saving.`
+          : isLowConfidence
           ? `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'} with low confidence. Review before saving.`
           : `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
         source: result.source,
-        status: isLowConfidence ? 'warning' : 'success',
+        status: isLowConfidence || detectedDateOutOfRange ? 'warning' : 'success',
       });
-      if (manualRun) toast.success('Chest X-Ray findings were filled from the uploaded file.');
-      return isLowConfidence ? 'filled_with_warning' : 'filled';
+      if (manualRun) {
+        if (detectedDateOutOfRange) {
+          toast.warning('Chest X-Ray fields were filled, but the detected date is outside the allowed date window.');
+        } else {
+          toast.success('Chest X-Ray fields were filled from the uploaded file.');
+        }
+      }
+      return isLowConfidence || detectedDateOutOfRange ? 'filled_with_warning' : 'filled';
     } catch (error) {
       if (xrayOcrRunRef.current !== runId) return 'skipped';
       const message = error instanceof Error ? error.message : 'Failed to read the Chest X-Ray result file.';
@@ -2163,10 +2283,10 @@ export default function StaffRecordReview() {
     backgroundReviewMutation.mutate({ prepared, action });
     toast.success(
       action === 'cleared'
-        ? 'Medical certificate is processing in the background. You can continue working while it finishes.'
+        ? 'Medical certificate is being processed.'
         : action === 'pending'
-          ? 'Decline update is processing in the background. You can continue working while it finishes.'
-          : 'Review save is processing in the background. You can continue working while it finishes.',
+          ? 'Decline update is being processed.'
+          : 'Review save is being processed.',
     );
   }
 
@@ -2362,27 +2482,27 @@ export default function StaffRecordReview() {
       ) : null}
 
       {isUploadingAnyLabFile ? (
-        <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <div className="flex items-start gap-3 rounded-[18px] border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
           <p>
-            {uploadingLabTitles.join(', ')} {uploadingLabTitles.length === 1 ? 'file is' : 'files are'} uploading in the background.
+            {uploadingLabTitles.join(', ')} {uploadingLabTitles.length === 1 ? 'file is' : 'files are'} still uploading.
             You can continue to other review steps while this finishes.
           </p>
         </div>
       ) : null}
 
       <Tabs value={activeReviewStep} onValueChange={(value) => changeReviewStep(value as ReviewStep)} className="space-y-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-2xl border border-border/60 bg-muted/40 p-1.5 md:grid-cols-4">
-          <TabsTrigger value="record" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-[18px] border border-border/60 bg-muted/40 p-1.5 md:grid-cols-4">
+          <TabsTrigger value="record" className="min-h-10 w-full rounded-[18px] px-3 py-2 text-xs font-semibold sm:text-sm">
             Student Record
           </TabsTrigger>
-          <TabsTrigger value="labs" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+          <TabsTrigger value="labs" className="min-h-10 w-full rounded-[18px] px-3 py-2 text-xs font-semibold sm:text-sm">
             Lab Results
           </TabsTrigger>
-          <TabsTrigger value="assessment" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+          <TabsTrigger value="assessment" className="min-h-10 w-full rounded-[18px] px-3 py-2 text-xs font-semibold sm:text-sm">
             Assessment
           </TabsTrigger>
-          <TabsTrigger value="decision" className="min-h-10 w-full rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm">
+          <TabsTrigger value="decision" className="min-h-10 w-full rounded-[18px] px-3 py-2 text-xs font-semibold sm:text-sm">
             {finalDecisionLabel}
           </TabsTrigger>
         </TabsList>
@@ -3012,16 +3132,18 @@ export default function StaffRecordReview() {
                 </div>
                 <div>
                   <Label htmlFor="visualAcuity">Visual Acuity</Label>
-                  <Input
-                    id="visualAcuity"
-                    type="text"
-                    value={assessmentForm.visualAcuity}
-                    onChange={(event) => updateAssessmentField('visualAcuity', event.target.value)}
-                    inputMode="text"
-                    placeholder="e.g. 20/20"
-                    maxLength={20}
-                    className="mt-2"
-                  />
+                  <Select value={assessmentForm.visualAcuity} onValueChange={handleVisualAcuityChange}>
+                    <SelectTrigger id="visualAcuity" className="mt-2">
+                      <SelectValue placeholder="Select visual acuity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VISUAL_ACUITY_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
@@ -3038,11 +3160,19 @@ export default function StaffRecordReview() {
                   id="skin"
                   value={assessmentForm.skin}
                   onChange={(event) => updateAssessmentField('skin', event.target.value)}
-                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  aria-describedby={assessmentValidationErrors.skin ? 'skin-error' : undefined}
+                  aria-invalid={Boolean(assessmentValidationErrors.skin)}
+                  className={cn(
+                    'mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap',
+                    assessmentValidationErrors.skin && INVALID_FIELD_CLASS,
+                  )}
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
                   placeholder="e.g. Normal / With rashes"
                   rows={3}
                 />
+                {assessmentValidationErrors.skin ? (
+                  <p id="skin-error" className="mt-1 text-xs text-red-600">{assessmentValidationErrors.skin}</p>
+                ) : null}
               </div>
               <div>
                 <Label htmlFor="heent">HEENT</Label>
@@ -3050,11 +3180,19 @@ export default function StaffRecordReview() {
                   id="heent"
                   value={assessmentForm.heent}
                   onChange={(event) => updateAssessmentField('heent', event.target.value)}
-                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  aria-describedby={assessmentValidationErrors.heent ? 'heent-error' : undefined}
+                  aria-invalid={Boolean(assessmentValidationErrors.heent)}
+                  className={cn(
+                    'mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap',
+                    assessmentValidationErrors.heent && INVALID_FIELD_CLASS,
+                  )}
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
                   placeholder="e.g. Normal HEENT"
                   rows={3}
                 />
+                {assessmentValidationErrors.heent ? (
+                  <p id="heent-error" className="mt-1 text-xs text-red-600">{assessmentValidationErrors.heent}</p>
+                ) : null}
               </div>
               <div>
                 <Label htmlFor="chestLungs">Chest / Lungs</Label>
@@ -3062,11 +3200,19 @@ export default function StaffRecordReview() {
                   id="chestLungs"
                   value={assessmentForm.chestLungs}
                   onChange={(event) => updateAssessmentField('chestLungs', event.target.value)}
-                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  aria-describedby={assessmentValidationErrors.chestLungs ? 'chestLungs-error' : undefined}
+                  aria-invalid={Boolean(assessmentValidationErrors.chestLungs)}
+                  className={cn(
+                    'mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap',
+                    assessmentValidationErrors.chestLungs && INVALID_FIELD_CLASS,
+                  )}
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
                   placeholder="e.g. Clear breath sounds"
                   rows={3}
                 />
+                {assessmentValidationErrors.chestLungs ? (
+                  <p id="chestLungs-error" className="mt-1 text-xs text-red-600">{assessmentValidationErrors.chestLungs}</p>
+                ) : null}
               </div>
               <div>
                 <Label htmlFor="heart">Heart</Label>
@@ -3074,11 +3220,19 @@ export default function StaffRecordReview() {
                   id="heart"
                   value={assessmentForm.heart}
                   onChange={(event) => updateAssessmentField('heart', event.target.value)}
-                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  aria-describedby={assessmentValidationErrors.heart ? 'heart-error' : undefined}
+                  aria-invalid={Boolean(assessmentValidationErrors.heart)}
+                  className={cn(
+                    'mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap',
+                    assessmentValidationErrors.heart && INVALID_FIELD_CLASS,
+                  )}
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
                   placeholder="e.g. Regular rate and rhythm"
                   rows={3}
                 />
+                {assessmentValidationErrors.heart ? (
+                  <p id="heart-error" className="mt-1 text-xs text-red-600">{assessmentValidationErrors.heart}</p>
+                ) : null}
               </div>
               <div>
                 <Label htmlFor="abdomen">Abdomen</Label>
@@ -3086,11 +3240,19 @@ export default function StaffRecordReview() {
                   id="abdomen"
                   value={assessmentForm.abdomen}
                   onChange={(event) => updateAssessmentField('abdomen', event.target.value)}
-                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  aria-describedby={assessmentValidationErrors.abdomen ? 'abdomen-error' : undefined}
+                  aria-invalid={Boolean(assessmentValidationErrors.abdomen)}
+                  className={cn(
+                    'mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap',
+                    assessmentValidationErrors.abdomen && INVALID_FIELD_CLASS,
+                  )}
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
                   placeholder="e.g. Soft, non-tender"
                   rows={3}
                 />
+                {assessmentValidationErrors.abdomen ? (
+                  <p id="abdomen-error" className="mt-1 text-xs text-red-600">{assessmentValidationErrors.abdomen}</p>
+                ) : null}
               </div>
               <div>
                 <Label htmlFor="extremities">Extremities</Label>
@@ -3098,11 +3260,19 @@ export default function StaffRecordReview() {
                   id="extremities"
                   value={assessmentForm.extremities}
                   onChange={(event) => updateAssessmentField('extremities', event.target.value)}
-                  className="mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                  aria-describedby={assessmentValidationErrors.extremities ? 'extremities-error' : undefined}
+                  aria-invalid={Boolean(assessmentValidationErrors.extremities)}
+                  className={cn(
+                    'mt-2 h-20 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap',
+                    assessmentValidationErrors.extremities && INVALID_FIELD_CLASS,
+                  )}
                   maxLength={MAX_PHYSICAL_EXAM_FIELD_LENGTH}
                   placeholder="e.g. No edema"
                   rows={3}
                 />
+                {assessmentValidationErrors.extremities ? (
+                  <p id="extremities-error" className="mt-1 text-xs text-red-600">{assessmentValidationErrors.extremities}</p>
+                ) : null}
               </div>
               <div className="md:col-span-2">
                 <Label htmlFor="otherFindings">Other Findings / Assessment Notes</Label>
@@ -3128,7 +3298,7 @@ export default function StaffRecordReview() {
                     placeholder="e.g. Dr. Maria Santos"
                   />
                 </div>
-                <div className="rounded-xl border border-dashed border-outline-variant/60 bg-surface-container-low px-4 py-4">
+                <div className="rounded-[18px] border border-dashed border-outline-variant/60 bg-surface-container-low px-4 py-4">
                   <div className="space-y-4">
                     <div>
                       <p className="text-sm font-medium text-on-surface">Staff signature</p>
@@ -3178,159 +3348,171 @@ export default function StaffRecordReview() {
         <TabsContent value="decision" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Clinic Notes and Medical Assessment</CardTitle>
+              <CardTitle>Medical Assessment</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div>
-                <Label htmlFor="staffNotes">Clinic Notes</Label>
-                <Textarea
-                  id="staffNotes"
-                  value={staffNotes}
-                  onChange={(event) => setStaffNotes(sanitizeSafeText(event.target.value, MAX_CLINIC_NOTES_LENGTH))}
-                  className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
-                  maxLength={MAX_CLINIC_NOTES_LENGTH}
-                  rows={6}
-                  placeholder="Add review notes, feedback to the student, follow-up instructions, or clinic observations."
-                />
-              </div>
-
               {canFinalizeClearance ? (
-                <div className="space-y-6">
-                  <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
-                    <div>
-                      <Label>Purpose *</Label>
-                      <div
-                        className={`mt-2 grid gap-2 rounded-lg border px-3 py-3 sm:grid-cols-3 ${
-                          clearanceForm.purpose.length === 0 ? 'border-red-300 bg-red-50/50' : 'border-outline-variant/50'
-                        }`}
-                      >
-                        {CLEARANCE_PURPOSE_OPTIONS.map((option) => (
-                          <label key={option.value} className="flex items-center gap-2 text-sm">
-                            <Checkbox
-                              checked={clearanceForm.purpose.includes(option.value)}
-                              onCheckedChange={(checked) => toggleClearancePurpose(option.value, checked === true)}
-                              className="size-4"
-                            />
+                <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-12">
+                  <div className="lg:col-span-2 xl:col-span-8">
+                    <Label>Purpose *</Label>
+                    <RadioGroup
+                      value={clearanceForm.purpose[0] || ''}
+                      onValueChange={(value) => {
+                        if (isClearancePurpose(value)) {
+                          selectClearancePurpose(value);
+                        }
+                      }}
+                      className={cn(
+                        'mt-2 grid gap-3 rounded-[18px] border p-2 sm:grid-cols-3',
+                        clearanceForm.purpose.length === 0
+                          ? 'border-red-300 bg-red-50/50'
+                          : 'border-outline-variant/50 bg-surface-container-low/30',
+                      )}
+                    >
+                      {CLEARANCE_PURPOSE_OPTIONS.map((option) => {
+                        const isSelected = clearanceForm.purpose[0] === option.value;
+
+                        return (
+                          <label
+                            key={option.value}
+                            className={cn(
+                              'flex h-11 items-center gap-3 rounded-full border px-4 text-sm font-medium transition-colors',
+                              isSelected
+                                ? 'border-primary/55 bg-primary/5 text-on-surface'
+                                : 'border-outline-variant/45 bg-input-background text-on-surface',
+                            )}
+                          >
+                            <RadioGroupItem value={option.value} id={`clearancePurpose-${option.value}`} />
                             <span>{option.label}</span>
                           </label>
-                        ))}
-                      </div>
-                      {clearanceForm.purpose.length === 0 ? (
-                        <p className="mt-1 text-xs text-red-600">Select at least one purpose.</p>
-                      ) : null}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="issuedDate">Issued Date</Label>
-                      <Input
-                        id="issuedDate"
-                        type="date"
-                        value={clearanceForm.issuedDate}
-                        onChange={(event) => updateClearanceField('issuedDate', event.target.value)}
-                        min={medicalRecordDateBounds.min}
-                        max={medicalRecordDateBounds.max}
-                        className="mt-2"
-                      />
-                    </div>
+                        );
+                      })}
+                    </RadioGroup>
+                    {clearanceForm.purpose.length === 0 ? (
+                      <p className="mt-1 text-xs text-red-600">Select a clearance purpose.</p>
+                    ) : null}
                   </div>
 
-                  <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
-                    <div>
-                      <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
+                  <div className="xl:col-span-4">
+                    <Label htmlFor="issuedDate">Issued Date</Label>
+                    <Input
+                      id="issuedDate"
+                      type="date"
+                      value={clearanceForm.issuedDate}
+                      onChange={(event) => updateClearanceField('issuedDate', event.target.value)}
+                      min={medicalRecordDateBounds.min}
+                      max={medicalRecordDateBounds.max}
+                      className="mt-2"
+                    />
+                  </div>
+
+                  <div className="xl:col-span-6">
+                    <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
+                    <Select
+                      value={clearanceForm.signatoryName || CLEARANCE_DOCTORS[0]}
+                      onValueChange={(value) => updateClearanceField('signatoryName', value)}
+                    >
+                      <SelectTrigger id="clearanceSignatory" className="mt-2">
+                        <SelectValue placeholder="Select doctor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CLEARANCE_DOCTORS.map((doctor) => (
+                          <SelectItem key={doctor} value={doctor}>
+                            {doctor}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical certificate.</p>
+                  </div>
+
+                  <div className="xl:col-span-6">
+                    <Label htmlFor="licenseNoSelect">License No.</Label>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
                       <Select
-                        value={clearanceForm.signatoryName || CLEARANCE_DOCTORS[0]}
-                        onValueChange={(value) => updateClearanceField('signatoryName', value)}
+                        value={CLEARANCE_LICENSE_OPTIONS.some((option) => option.value === clearanceForm.licenseNo)
+                          ? clearanceForm.licenseNo
+                          : 'manual'}
+                        onValueChange={(value) => {
+                          if (value !== 'manual') {
+                            updateClearanceField('licenseNo', value);
+                          }
+                        }}
                       >
-                        <SelectTrigger id="clearanceSignatory" className="mt-2">
-                          <SelectValue placeholder="Select doctor" />
+                        <SelectTrigger id="licenseNoSelect">
+                          <SelectValue placeholder="Select license no." />
                         </SelectTrigger>
                         <SelectContent>
-                          {CLEARANCE_DOCTORS.map((doctor) => (
-                            <SelectItem key={doctor} value={doctor}>
-                              {doctor}
+                          {CLEARANCE_LICENSE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical certificate.</p>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="licenseNoSelect">License No.</Label>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-                        <Select
-                          value={CLEARANCE_LICENSE_OPTIONS.some((option) => option.value === clearanceForm.licenseNo)
-                            ? clearanceForm.licenseNo
-                            : 'manual'}
-                          onValueChange={(value) => {
-                            if (value !== 'manual') {
-                              updateClearanceField('licenseNo', value);
-                            }
-                          }}
-                        >
-                          <SelectTrigger id="licenseNoSelect">
-                            <SelectValue placeholder="Select license no." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {CLEARANCE_LICENSE_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          id="licenseNo"
-                          value={clearanceForm.licenseNo}
-                          onChange={(event) => updateClearanceField('licenseNo', event.target.value)}
-                          inputMode="numeric"
-                          maxLength={15}
-                          placeholder="License No."
-                        />
-                      </div>
-                      <p className="mt-2 text-xs text-muted-foreground">Numbers only, up to 15 digits.</p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
-                    <div>
-                      <Label>General Findings</Label>
-                      <RadioGroup
-                        value={clearanceForm.findingsNormal ? 'normal' : 'with-findings'}
-                        onValueChange={(value) => updateClearanceField('findingsNormal', value === 'normal')}
-                        className="mt-3 grid gap-3 sm:grid-cols-2"
-                      >
-                        <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
-                          <RadioGroupItem value="normal" id="findingsNormal" />
-                          <span>Normal findings</span>
-                        </label>
-                        <label className="flex items-center gap-3 rounded-lg border px-4 py-3 text-sm">
-                          <RadioGroupItem value="with-findings" id="findingsAbnormal" />
-                          <span>With findings / restrictions</span>
-                        </label>
-                      </RadioGroup>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
-                      <Textarea
-                        id="diagnosis"
-                        value={clearanceForm.diagnosis}
-                        onChange={(event) => updateClearanceField('diagnosis', event.target.value)}
-                        className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
-                        maxLength={MAX_CLEARANCE_DIAGNOSIS_LENGTH}
-                        rows={4}
+                      <Input
+                        id="licenseNo"
+                        value={clearanceForm.licenseNo}
+                        onChange={(event) => updateClearanceField('licenseNo', event.target.value)}
+                        inputMode="numeric"
+                        maxLength={15}
+                        placeholder="License No."
                       />
                     </div>
+                    <p className="mt-2 text-xs text-muted-foreground">Numbers only, up to 15 digits.</p>
                   </div>
 
-                  <div>
+                  <div className="lg:col-span-2 xl:col-span-12">
+                    <Label>General Findings</Label>
+                    <RadioGroup
+                      value={clearanceForm.findingsNormal ? 'normal' : 'with-findings'}
+                      onValueChange={(value) => updateClearanceField('findingsNormal', value === 'normal')}
+                      className="mt-2 grid gap-3 md:grid-cols-2"
+                    >
+                      <label
+                        className={cn(
+                          'flex h-11 items-center gap-3 rounded-full border px-4 text-sm font-medium transition-colors',
+                          clearanceForm.findingsNormal
+                            ? 'border-primary/55 bg-primary/5 text-on-surface'
+                            : 'border-outline-variant/45 bg-input-background text-on-surface',
+                        )}
+                      >
+                        <RadioGroupItem value="normal" id="findingsNormal" />
+                        <span>Normal findings</span>
+                      </label>
+                      <label
+                        className={cn(
+                          'flex h-11 items-center gap-3 rounded-full border px-4 text-sm font-medium transition-colors',
+                          !clearanceForm.findingsNormal
+                            ? 'border-primary/55 bg-primary/5 text-on-surface'
+                            : 'border-outline-variant/45 bg-input-background text-on-surface',
+                        )}
+                      >
+                        <RadioGroupItem value="with-findings" id="findingsAbnormal" />
+                        <span>With findings / restrictions</span>
+                      </label>
+                    </RadioGroup>
+                  </div>
+
+                  <div className="xl:col-span-6">
+                    <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
+                    <Textarea
+                      id="diagnosis"
+                      value={clearanceForm.diagnosis}
+                      onChange={(event) => updateClearanceField('diagnosis', event.target.value)}
+                      className="mt-2 h-28 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                      maxLength={MAX_CLEARANCE_DIAGNOSIS_LENGTH}
+                      rows={4}
+                    />
+                  </div>
+
+                  <div className="xl:col-span-6">
                     <Label htmlFor="remarks">Clearance Remarks</Label>
                     <Textarea
                       id="remarks"
                       value={clearanceForm.remarks}
                       onChange={(event) => updateClearanceField('remarks', event.target.value)}
-                      className="mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
+                      className="mt-2 h-28 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap"
                       maxLength={MAX_CLEARANCE_REMARKS_LENGTH}
                       rows={4}
                       placeholder="State whether the student is fit, fit with recommendations, or needs follow-up."
@@ -3387,7 +3569,7 @@ export default function StaffRecordReview() {
               loading={backgroundReviewMutation.isPending && savingAction === 'save'}
             >
               <Save className="mr-2 h-4 w-4" />
-              {backgroundReviewMutation.isPending && savingAction === 'save' ? 'Saving in background...' : 'Save Review'}
+              {backgroundReviewMutation.isPending && savingAction === 'save' ? 'Saving...' : 'Save Review'}
             </Button>
             {!isArchiveEditMode ? (
             <Button variant="destructive" onClick={() => {
@@ -3405,7 +3587,7 @@ export default function StaffRecordReview() {
                 className="bg-green-600 text-white hover:bg-green-700"
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                {backgroundReviewMutation.isPending && savingAction === 'cleared' ? 'Clearing in background...' : 'Cleared'}
+                {backgroundReviewMutation.isPending && savingAction === 'cleared' ? 'Clearing...' : 'Cleared'}
               </Button>
             ) : null}
           </div>
@@ -3428,8 +3610,9 @@ export default function StaffRecordReview() {
             <Textarea
               id="returnReason"
               value={returnReason}
-              onChange={(e) => setReturnReason(e.target.value)}
+              onChange={(event) => setReturnReason(sanitizeSafeText(event.target.value, MAX_CLINIC_NOTES_LENGTH))}
               placeholder="e.g. Please re-upload a clearer copy of your X-Ray result or complete the missing fields."
+              maxLength={MAX_CLINIC_NOTES_LENGTH}
               rows={4}
               className="resize-none"
             />
@@ -3439,14 +3622,15 @@ export default function StaffRecordReview() {
             <Button
               variant="destructive"
               onClick={() => {
-                setStaffNotes(returnReason);
-                queueBackgroundReview('pending', 'returned', returnReason);
+                const sanitizedReturnReason = sanitizeSafeText(returnReason, MAX_CLINIC_NOTES_LENGTH).trim();
+                setStaffNotes(sanitizedReturnReason);
+                queueBackgroundReview('pending', 'returned', sanitizedReturnReason);
                 setShowReturnDialog(false);
               }}
               disabled={!returnReason.trim() || backgroundReviewMutation.isPending}
               loading={backgroundReviewMutation.isPending && savingAction === 'pending'}
             >
-              {backgroundReviewMutation.isPending && savingAction === 'pending' ? 'Declining in background...' : 'Confirm Decline'}
+              {backgroundReviewMutation.isPending && savingAction === 'pending' ? 'Declining...' : 'Confirm Decline'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -229,7 +229,7 @@ export default function AdminDashboard() {
           <div className="grid gap-3 min-[440px]:grid-cols-2 lg:min-w-[24rem]">
             <button
               onClick={() => navigate('/admin/users')}
-              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
+              className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left transition-colors hover:bg-surface-container"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 User Accounts
@@ -244,7 +244,7 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => navigate('/admin/settings')}
-              className="rounded-[1.35rem] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left shadow-sm transition-colors hover:bg-surface-container"
+              className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 text-left transition-colors hover:bg-surface-container"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
                 System Settings
@@ -276,7 +276,7 @@ export default function AdminDashboard() {
           return (
             <div
               key={card.label}
-              className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-5"
+              className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-5"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -285,7 +285,7 @@ export default function AdminDashboard() {
                   </p>
                   <p className="mt-3 text-[2rem] font-bold leading-none text-on-surface sm:text-3xl">{card.value}</p>
                 </div>
-                <div className={`rounded-2xl bg-surface-container p-2.5 sm:p-3 ${card.tone}`}>
+                <div className={`rounded-[18px] bg-surface-container p-2.5 sm:p-3 ${card.tone}`}>
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
@@ -295,7 +295,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)]">
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+        <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Admin Action Queue</h2>
@@ -309,7 +309,7 @@ export default function AdminDashboard() {
           </div>
 
           {submissionsNeedingAttention.length === 0 ? (
-            <div className="flex min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-low px-6 text-center">
+            <div className="flex min-h-56 flex-col items-center justify-center rounded-[18px] border border-dashed border-outline-variant/40 bg-surface-container-low px-6 text-center">
               <CheckCircle2 className="h-10 w-10 text-primary" />
               <p className="mt-4 text-lg font-semibold text-on-surface">No escalations right now</p>
               <p className="mt-2 max-w-sm text-sm text-on-surface-variant">
@@ -321,9 +321,9 @@ export default function AdminDashboard() {
               {submissionsNeedingAttention.map((submission) => (
                 <div
                   key={submission.id}
-                  className="flex flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4 sm:flex-row sm:items-start sm:gap-4"
+                  className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-4 sm:flex-row sm:items-start sm:gap-4"
                 >
-                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-surface-container text-primary sm:h-12 sm:w-12">
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[18px] bg-surface-container text-primary sm:h-12 sm:w-12">
                     <ShieldAlert className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -350,7 +350,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+        <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-on-surface">Role Distribution</h2>
           </div>
@@ -374,7 +374,7 @@ export default function AdminDashboard() {
           <div className="mt-8 grid gap-3 min-[440px]:grid-cols-2">
             <button
               onClick={() => navigate('/admin/users?role=clinic-staff')}
-              className="flex items-center justify-between rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-4 text-left transition-colors hover:bg-surface-container"
+              className="flex items-center justify-between rounded-[18px] border border-outline-variant/30 bg-surface-container-low px-4 py-4 text-left transition-colors hover:bg-surface-container"
             >
               <div>
                 <p className="text-sm font-semibold text-on-surface">Clinic Staff Accounts</p>
@@ -383,7 +383,7 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => navigate('/admin/users')}
-              className="flex items-center justify-between rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-4 text-left transition-colors hover:bg-surface-container"
+              className="flex items-center justify-between rounded-[18px] border border-outline-variant/30 bg-surface-container-low px-4 py-4 text-left transition-colors hover:bg-surface-container"
             >
               <div>
                 <p className="text-sm font-semibold text-on-surface">Review Accounts</p>
@@ -395,7 +395,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+        <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">Recent Account Activity</h2>
@@ -417,7 +417,7 @@ export default function AdminDashboard() {
               {recentAccounts.map((user) => (
                 <div
                   key={user.id}
-                  className="flex flex-col gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 transition-colors hover:bg-surface-container-low sm:flex-row sm:items-center sm:gap-4"
+                  className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-3 transition-colors hover:bg-surface-container-low sm:flex-row sm:items-center sm:gap-4"
                 >
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-container text-primary">
                     <Users className="h-5 w-5" />
@@ -437,7 +437,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)] sm:p-6">
+        <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-lg font-semibold text-on-surface">System Health Snapshot</h2>
@@ -451,21 +451,21 @@ export default function AdminDashboard() {
           </div>
 
           <div className="space-y-4">
-            <div className="flex flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium text-on-surface">Platform Health</p>
                 <p className="text-sm text-on-surface-variant">Core services responding normally</p>
               </div>
               <Activity className="h-5 w-5 text-emerald-600" />
             </div>
-            <div className="flex flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium text-on-surface">Clinic Staff Coverage</p>
                 <p className="text-sm text-on-surface-variant">{activeStaffCount} active staff available</p>
               </div>
               <span className="text-sm font-semibold text-primary">{staffUsers.length} total</span>
             </div>
-            <div className="flex flex-col gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium text-on-surface">Approval Completion</p>
                 <p className="text-sm text-on-surface-variant">

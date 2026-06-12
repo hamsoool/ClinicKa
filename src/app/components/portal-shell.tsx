@@ -230,7 +230,7 @@ export default function PortalShell({
   );
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-[radial-gradient(circle_at_top,#ffffff_0%,#f4fcf2_45%,#eef6ec_100%)]">
+    <div className="min-h-screen overflow-x-clip bg-background print:bg-white">
       <a
         href="#portal-content"
         className="sr-only fixed left-4 top-4 z-[60] rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus:not-sr-only"
@@ -241,7 +241,7 @@ export default function PortalShell({
       <aside
         id="portal-sidebar"
         className={cn(
-          'fixed inset-y-0 left-0 z-40 w-72 border-r border-emerald-950/40 bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-200',
+          'fixed inset-y-0 left-0 z-40 w-72 border-r border-emerald-950/25 bg-sidebar text-sidebar-foreground transition-transform duration-200 print:hidden',
           menuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
         aria-label={`${portalLabel} navigation`}
@@ -259,7 +259,7 @@ export default function PortalShell({
               </button>
             </div>
 
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4 shadow-[0_12px_24px_rgba(0,0,0,0.16)] backdrop-blur">
+            <div className="rounded-[18px] border border-white/10 bg-white/[0.06] p-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-visible text-primary">
                   {brandImageSrc && !brandImageFailed ? (
@@ -274,14 +274,14 @@ export default function PortalShell({
                   )}
                 </div>
                 <div className="min-w-0">
-                  <h2 className="truncate text-lg font-bold tracking-tight text-white">{brandTitle}</h2>
+                  <h2 className="truncate text-lg font-semibold tracking-[-0.02em] text-white">{brandTitle}</h2>
                   <p className="text-[10px] font-medium leading-tight tracking-[0.12em] text-emerald-200/80 whitespace-normal">
                     {brandSubtitle}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-lg bg-black/10 p-3">
+              <div className="mt-4 rounded-[14px] bg-black/10 p-3">
                 <p className="truncate text-sm font-semibold text-white">{displayName}</p>
                 <p className="mt-1 truncate text-xs text-emerald-100/80">{profileSubtitle}</p>
                 {email ? <p className="mt-1 truncate text-xs text-emerald-100/60">{email}</p> : null}
@@ -302,9 +302,9 @@ export default function PortalShell({
                       onClick={() => goTo(item.path)}
                       aria-current={active ? 'page' : undefined}
                       className={cn(
-                        "relative flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium tracking-tight outline-none transition-all focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset",
+                        "relative flex min-h-12 w-full items-center gap-3 rounded-full px-4 py-3 text-sm font-normal tracking-[-0.01em] outline-none transition-all active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset",
                         active
-                          ? "bg-emerald-800 text-white shadow-[0_10px_24px_rgba(0,0,0,0.12)] before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-r-full before:bg-emerald-300 before:content-['']"
+                          ? "bg-white/14 text-white before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-r-full before:bg-emerald-200 before:content-['']"
                           : 'text-emerald-100/70 hover:bg-emerald-800/50 hover:text-white',
                       )}
                     >
@@ -333,7 +333,7 @@ export default function PortalShell({
             <div className="space-y-1.5 border-t border-white/10 pt-4">
               <button
                 type="button"
-                className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-emerald-100/70 outline-none transition-colors hover:bg-emerald-800/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset"
+                className="flex min-h-12 w-full items-center gap-3 rounded-full px-4 py-3 text-sm font-normal text-emerald-100/70 outline-none transition-all active:scale-[0.98] hover:bg-emerald-800/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset"
                 onClick={() => setConfirmSignOutOpen(true)}
               >
                 <LogOut className="h-5 w-5 shrink-0" />
@@ -353,7 +353,7 @@ export default function PortalShell({
         />
       ) : null}
 
-      <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/40 bg-white/90 backdrop-blur md:left-72 md:h-16">
+      <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/55 bg-background/85 backdrop-blur-xl md:left-72 md:h-16 print:hidden">
         <div className="flex h-full items-center justify-between gap-2 px-4 md:gap-3 md:px-8">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
@@ -378,7 +378,7 @@ export default function PortalShell({
                 <button
                   key={action.label}
                   type="button"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface sm:h-10 sm:w-10"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant transition-all active:scale-95 hover:bg-surface-container-low hover:text-on-surface sm:h-10 sm:w-10"
                   onClick={() => {
                     if (action.path) navigate(action.path);
                     action.onClick?.();
@@ -397,7 +397,7 @@ export default function PortalShell({
               <button
                 type="button"
                 onClick={() => setProfileOpen((prev) => !prev)}
-                className="ml-0.5 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-outline-variant/70 bg-surface-container-lowest shadow-sm sm:ml-1 sm:h-10 sm:w-10"
+                className="ml-0.5 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-outline-variant/70 bg-surface-container-lowest sm:ml-1 sm:h-10 sm:w-10"
                 aria-haspopup="dialog"
                 aria-expanded={profileOpen}
                 aria-label="Open profile menu"
@@ -407,7 +407,7 @@ export default function PortalShell({
 
               {profileOpen ? (
                 <div
-                  className="absolute right-0 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-4 shadow-xl"
+                  className="absolute right-0 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-4"
                   role="dialog"
                   aria-label="Profile menu"
                 >
@@ -438,7 +438,7 @@ export default function PortalShell({
                       setProfileOpen(false);
                       navigate(getPasswordSettingsPath());
                     }}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-outline-variant/40 px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-container-low"
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-outline-variant/40 px-3 py-2 text-sm font-normal transition-colors hover:bg-surface-container-low"
                   >
                     <KeyRound className="h-4 w-4" />
                     Change Password
@@ -446,7 +446,7 @@ export default function PortalShell({
                   <button
                     type="button"
                     onClick={() => setConfirmSignOutOpen(true)}
-                    className="mt-2 w-full rounded-md border border-outline-variant/40 px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-container-low"
+                    className="mt-2 w-full rounded-full border border-outline-variant/40 px-3 py-2 text-sm font-normal transition-colors hover:bg-surface-container-low"
                   >
                     Sign out
                   </button>
@@ -457,14 +457,14 @@ export default function PortalShell({
         </div>
       </header>
 
-      <main id="portal-content" className="pt-20 outline-none md:pl-72" tabIndex={-1}>
-        <div className="px-4 pb-24 sm:pb-28 md:px-8 md:pb-24">
+      <main id="portal-content" className="pt-20 outline-none md:pl-72 print:p-0" tabIndex={-1}>
+        <div className="px-4 pb-24 sm:pb-28 md:px-8 md:pb-24 print:p-0">
           <Outlet />
         </div>
       </main>
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/40 bg-surface-container-lowest/95 backdrop-blur md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/55 bg-surface-container-lowest/90 backdrop-blur-xl md:hidden print:hidden"
         aria-label="Mobile navigation"
       >
         <div
@@ -486,9 +486,9 @@ export default function PortalShell({
                 onClick={() => goTo(item.path)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] leading-tight transition-colors sm:text-xs',
+                  'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-[10px] leading-tight transition-all active:scale-95 sm:text-xs',
                   emphasized
-                    ? 'bg-primary text-white shadow-sm hover:bg-primary/90'
+                    ? 'bg-primary text-white hover:bg-primary/90'
                     : active
                       ? 'bg-primary-container/25 text-primary'
                       : 'text-on-surface-variant hover:bg-surface-container-low',

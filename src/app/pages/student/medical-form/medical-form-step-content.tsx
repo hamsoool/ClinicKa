@@ -70,10 +70,16 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   onGoToProfile,
   onLabFileChange,
 }: Props) {
+  const todayDateInput = new Date().toISOString().split('T')[0];
+  const requiresOperationDetails = formData.hadOperation === 'yes';
+  const operationDateInvalid = Boolean(formData.operationDate && formData.operationDate > todayDateInput);
   const stepOneReady = hasRequiredProfileFields && hasProfilePhoto && hasProfileSignature;
   const stepFourReady = (!requiresCbcFile || hasCbcFile) && (!requiresUrinalysisFile || hasUrinalysisFile) && (!requiresXrayFile || hasXrayFile);
   const stepThreeMissingRequired = [
     !formData.hadOperation,
+    requiresOperationDetails && !formData.operationProcedure.trim(),
+    requiresOperationDetails && !formData.operationDate.trim(),
+    requiresOperationDetails && operationDateInvalid,
     !formData.emergencyContact.name?.trim(),
     !formData.emergencyContact.relationship?.trim(),
     !formData.emergencyContact.phone?.trim(),
@@ -239,7 +245,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </p>
           </div>
 
-          <div className="space-y-3 rounded-xl border border-outline-variant/40 bg-surface-container-low p-4">
+          <div className="space-y-3 rounded-[18px] border border-outline-variant/40 bg-surface-container-low p-4">
             <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
               <div className="flex items-center gap-3">
                 <UserRound className={`h-5 w-5 ${hasRequiredProfileFields ? 'text-green-600' : 'text-muted-foreground'}`} />
@@ -346,7 +352,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <span className="font-semibold">*</span>.
             </div>
           ) : null}
-          <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-5">
+          <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-low p-5">
             <div className="space-y-4">
               <div>
                 <h4 className="font-semibold text-on-surface">Operation History</h4>
@@ -363,7 +369,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 >
                   <Label
                     htmlFor="op-yes"
-                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`flex cursor-pointer items-center gap-3 rounded-[18px] border px-4 py-3 text-sm font-medium transition-colors ${
                       formData.hadOperation === 'yes'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-outline-variant/40 bg-white/80 text-on-surface hover:border-primary/40'
@@ -374,7 +380,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   </Label>
                   <Label
                     htmlFor="op-no"
-                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`flex cursor-pointer items-center gap-3 rounded-[18px] border px-4 py-3 text-sm font-medium transition-colors ${
                       formData.hadOperation === 'no'
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-outline-variant/40 bg-white/80 text-on-surface hover:border-primary/40'
@@ -388,20 +394,63 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
           </div>
           {formData.hadOperation === 'yes' && (
-            <div className="rounded-xl border border-outline-variant/40 bg-white/80 p-5">
-              <Label htmlFor="operationDetails">Nature of operation and date/year</Label>
-              <Textarea
-                id="operationDetails"
-                value={formData.operationDetails}
-                onChange={(event) => onFieldChange('operationDetails', event.target.value)}
-                placeholder="Please describe the operation..."
-                maxLength={120}
-                rows={3}
-                className="mt-2 min-h-[96px] resize-none"
-              />
+            <div className="rounded-[18px] border border-outline-variant/40 bg-white/80 p-5">
+              <div className="space-y-1">
+                <h4 className="font-semibold text-on-surface">Surgical History Details</h4>
+                <p className="text-sm text-muted-foreground">
+                  Enter the procedure and date as they would appear in a clinical surgical history.
+                </p>
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="operationProcedure">Procedure / surgery performed *</Label>
+                  <Input
+                    id="operationProcedure"
+                    value={formData.operationProcedure}
+                    onChange={(event) => onFieldChange('operationProcedure', event.target.value)}
+                    placeholder="e.g. Appendectomy, tonsillectomy"
+                    maxLength={80}
+                    className={requiredFieldClass(!formData.operationProcedure.trim())}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="operationDate">Date of operation *</Label>
+                  <Input
+                    id="operationDate"
+                    type="date"
+                    value={formData.operationDate}
+                    onChange={(event) => onFieldChange('operationDate', event.target.value)}
+                    max={todayDateInput}
+                    className={requiredFieldClass(!formData.operationDate.trim() || operationDateInvalid)}
+                  />
+                  {operationDateInvalid ? (
+                    <p className="text-xs text-red-600">Operation date cannot be in the future.</p>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="operationFacility">Hospital / clinic</Label>
+                  <Input
+                    id="operationFacility"
+                    value={formData.operationFacility}
+                    onChange={(event) => onFieldChange('operationFacility', event.target.value)}
+                    placeholder="e.g. James L. Gordon Memorial Hospital"
+                    maxLength={60}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="operationNotes">Additional notes</Label>
+                  <Input
+                    id="operationNotes"
+                    value={formData.operationNotes}
+                    onChange={(event) => onFieldChange('operationNotes', event.target.value)}
+                    placeholder="e.g. No complications, fully recovered"
+                    maxLength={120}
+                  />
+                </div>
+              </div>
             </div>
           )}
-          <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-5">
+          <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-low p-5">
             <div className="border-b border-outline-variant/30 pb-4">
               <div>
                 <h4 className="font-semibold text-on-surface">Emergency Contact Person</h4>

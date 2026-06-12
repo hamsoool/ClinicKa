@@ -174,7 +174,7 @@ export default function StaffSettings() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
         <div className="space-y-6">
-          <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+          <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
           <CardHeader>
             <div className="flex items-center gap-3">
               <User className="h-5 w-5 text-primary" />
@@ -231,7 +231,7 @@ export default function StaffSettings() {
                 ) : null}
               </div>
             </div>
-            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground sm:max-w-md">
                 {hasProfileChanges
                   ? 'You have unsaved profile updates.'
@@ -248,7 +248,7 @@ export default function StaffSettings() {
           </CardContent>
         </Card>
 
-          <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+          <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
           <CardHeader>
             <div className="flex items-center gap-3">
               <ClipboardCheck className="h-5 w-5 text-primary" />
@@ -315,7 +315,7 @@ export default function StaffSettings() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col justify-end rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+              <div className="flex flex-col justify-end rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <p className="font-medium text-on-surface">Show advanced filters on open</p>
@@ -331,7 +331,7 @@ export default function StaffSettings() {
           </CardContent>
         </Card>
 
-          <Card className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-[0px_4px_6px_-2px_rgba(16,24,40,0.03)]">
+          <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
           <CardHeader>
             <div className="flex items-center gap-3">
               <Award className="h-5 w-5 text-primary" />
@@ -359,7 +359,7 @@ export default function StaffSettings() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col justify-end rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+              <div className="flex flex-col justify-end rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <p className="font-medium text-on-surface">Remember last selected student</p>
@@ -373,7 +373,7 @@ export default function StaffSettings() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-muted-foreground sm:max-w-xl">
                 {hasWorkspacePreferenceChanges
                   ? 'You have unsaved workspace preference changes.'
