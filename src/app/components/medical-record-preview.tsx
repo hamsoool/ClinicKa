@@ -398,17 +398,48 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
       if (!examiner.signatureUrl && !displayName) return null;
 
       return (
-        <div className="flex min-h-[60px] w-full flex-col items-center justify-center p-2 text-center">
+        <div
+          className="flex min-h-[60px] w-full flex-col items-center justify-center p-2 text-center"
+          style={{
+            boxSizing: 'border-box',
+            minHeight: '60px',
+            padding: '8px',
+            textAlign: 'center',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
           {examiner.signatureUrl ? (
             <img
               src={examiner.signatureUrl}
               alt="Examiner signature"
               crossOrigin="anonymous"
               className="block h-8 w-auto max-h-10 max-w-full object-contain"
+              style={{
+                display: 'block',
+                width: 'auto',
+                height: '32px',
+                maxWidth: '96px',
+                maxHeight: '36px',
+                objectFit: 'contain',
+              }}
             />
           ) : null}
           {displayName ? (
-            <span className="mt-1 break-words text-[9.5px] leading-tight">
+            <span
+              className="mt-1 break-words text-[9.5px] leading-tight"
+              style={{
+                display: 'block',
+                marginTop: '4px',
+                maxWidth: '100%',
+                overflowWrap: 'anywhere',
+                fontSize: '9.5px',
+                lineHeight: '1.1',
+              }}
+            >
               {displayName}
             </span>
           ) : null}

@@ -17,6 +17,15 @@ export function prepareMedicalRecordPdfClone(clone: HTMLElement, width: number) 
       box-shadow: none !important;
       border-radius: 0 !important;
     }
+
+    .${MEDICAL_RECORD_PDF_EXPORT_CLASS} img[alt="Examiner signature"] {
+      display: block !important;
+      height: 32px !important;
+      max-height: 36px !important;
+      max-width: 96px !important;
+      object-fit: contain !important;
+      width: auto !important;
+    }
   `;
   clone.prepend(style);
 }
@@ -139,6 +148,10 @@ function buildPrintDocumentHtml({
       padding: 9px 12px;
     }
 
+    .medical-record-print-actions .medical-record-print-close {
+      background: #475569;
+    }
+
     .medical-record-print-actions span {
       color: #334155;
       font: 13px Arial, Helvetica, sans-serif;
@@ -160,6 +173,15 @@ function buildPrintDocumentHtml({
       position: absolute !important;
       top: 0 !important;
       transform-origin: top left !important;
+    }
+
+    .medical-record-print-page img[alt="Examiner signature"] {
+      display: block !important;
+      height: 32px !important;
+      max-height: 36px !important;
+      max-width: 96px !important;
+      object-fit: contain !important;
+      width: auto !important;
     }
 
     @media print {
@@ -200,6 +222,7 @@ function buildPrintDocumentHtml({
 <body>
   <div class="medical-record-print-actions">
     <button type="button" onclick="window.print()">Save as PDF / Print</button>
+    <button type="button" class="medical-record-print-close" onclick="window.close()">Close</button>
     <span>Use this button if the print dialog does not open automatically.</span>
   </div>
   <div class="medical-record-print-page">${contentHtml}</div>
@@ -245,6 +268,12 @@ function buildPrintDocumentHtml({
       window.addEventListener('beforeprint', fitToPageWidth);
       fitToPageWidth();
     })();
+
+    window.addEventListener('afterprint', function () {
+      setTimeout(function () {
+        window.close();
+      }, 250);
+    });
 
     window.addEventListener('load', function () {
       setTimeout(function () {
