@@ -254,6 +254,26 @@ function buildPrintDocumentHtml({
       }, 250);
     });
 
+    var printRequested = false;
+
+    function requestPrint(waitForAssets) {
+      if (printRequested) return;
+      printRequested = true;
+
+      var runPrint = function () {
+        window.dispatchEvent(new Event('beforeprint'));
+        window.focus();
+        window.print();
+      };
+
+      if (waitForAssets) {
+        waitForPrintAssets(runPrint);
+        return;
+      }
+
+      runPrint();
+    }
+
     function waitForPrintAssets(callback) {
       var done = false;
       var finish = function () {
@@ -281,12 +301,11 @@ function buildPrintDocumentHtml({
       setTimeout(finish, 2500);
     }
 
+    window.medicalRecordRequestPrint = requestPrint;
+
     window.addEventListener('load', function () {
       setTimeout(function () {
-        waitForPrintAssets(function () {
-          window.dispatchEvent(new Event('beforeprint'));
-          window.print();
-        });
+        requestPrint(true);
       }, 150);
     });
   </script>
@@ -324,4 +343,18 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
+
+  try {
+    printWindow.focus();
+    const requestPrint = (printWindow as Window & { medicalRecordRequestPrint?: (waitForAssets: boolean) => void })
+      .medicalRecordRequestPrint;
+    if (requestPrint) {
+      requestPrint(false);
+    } else {
+      printWindow.dispatchEvent(new Event('beforeprint'));
+      printWindow.print();
+    }
+  } catch {
+    printWindow.print();
+  }
 }
