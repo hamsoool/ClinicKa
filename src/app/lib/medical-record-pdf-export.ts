@@ -200,8 +200,8 @@ function buildPrintDocumentHtml({
 </head>
 <body>
   <div class="medical-record-print-actions">
-    <button type="button" onclick="window.print()">Save as PDF / Print</button>
-    <button type="button" class="medical-record-print-close" onclick="window.close()">Close</button>
+    <button type="button" id="medical-record-print-button">Save as PDF / Print</button>
+    <button type="button" id="medical-record-close-button" class="medical-record-print-close">Close</button>
     <span>Use this button if the print dialog does not open automatically.</span>
   </div>
   <div class="medical-record-print-page">${contentHtml}</div>
@@ -248,22 +248,62 @@ function buildPrintDocumentHtml({
       fitToPageWidth();
     })();
 
-    window.addEventListener('afterprint', function () {
+    var printDialogOpened = false;
+    var closeRequested = false;
+    var lastPrintAttemptAt = 0;
+
+    function closePrintWindow() {
+      if (closeRequested) return;
+      closeRequested = true;
+
       setTimeout(function () {
-        window.close();
-      }, 250);
+        try {
+          window.open('', '_self');
+        } catch (error) {}
+        try {
+          window.close();
+        } catch (error) {}
+      }, 350);
+    }
+
+    window.addEventListener('afterprint', closePrintWindow);
+
+    if (window.matchMedia) {
+      var printMedia = window.matchMedia('print');
+      var handlePrintMediaChange = function (event) {
+        if (event.matches) {
+          printDialogOpened = true;
+          return;
+        }
+        if (printDialogOpened) closePrintWindow();
+      };
+      if (printMedia.addEventListener) {
+        printMedia.addEventListener('change', handlePrintMediaChange);
+      } else if (printMedia.addListener) {
+        printMedia.addListener(handlePrintMediaChange);
+      }
+    }
+
+    window.addEventListener('focus', function () {
+      if (printDialogOpened && Date.now() - lastPrintAttemptAt > 750) closePrintWindow();
     });
 
     var printRequested = false;
 
-    function requestPrint(waitForAssets) {
-      if (printRequested) return;
+    function requestPrint(waitForAssets, force) {
+      if (printRequested && !force) return;
       printRequested = true;
+      closeRequested = false;
 
       var runPrint = function () {
+        lastPrintAttemptAt = Date.now();
+        printDialogOpened = true;
         window.dispatchEvent(new Event('beforeprint'));
         window.focus();
         window.print();
+        setTimeout(function () {
+          printRequested = false;
+        }, 1200);
       };
 
       if (waitForAssets) {
@@ -272,6 +312,14 @@ function buildPrintDocumentHtml({
       }
 
       runPrint();
+    }
+
+    function requestClose() {
+      closeRequested = false;
+      setTimeout(function () {
+        window.close();
+        if (!window.closed) closePrintWindow();
+      }, 0);
     }
 
     function waitForPrintAssets(callback) {
@@ -301,11 +349,23 @@ function buildPrintDocumentHtml({
       setTimeout(finish, 2500);
     }
 
+    var printButton = document.getElementById('medical-record-print-button');
+    if (printButton) {
+      printButton.addEventListener('click', function () {
+        requestPrint(false, true);
+      });
+    }
+
+    var closeButton = document.getElementById('medical-record-close-button');
+    if (closeButton) {
+      closeButton.addEventListener('click', requestClose);
+    }
+
     window.medicalRecordRequestPrint = requestPrint;
 
     window.addEventListener('load', function () {
       setTimeout(function () {
-        requestPrint(true);
+        requestPrint(true, false);
       }, 150);
     });
   </script>
@@ -346,10 +406,10 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
 
   try {
     printWindow.focus();
-    const requestPrint = (printWindow as Window & { medicalRecordRequestPrint?: (waitForAssets: boolean) => void })
+    const requestPrint = (printWindow as Window & { medicalRecordRequestPrint?: (waitForAssets: boolean, force?: boolean) => void })
       .medicalRecordRequestPrint;
     if (requestPrint) {
-      requestPrint(false);
+      requestPrint(false, false);
     } else {
       printWindow.dispatchEvent(new Event('beforeprint'));
       printWindow.print();
