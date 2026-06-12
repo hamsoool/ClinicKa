@@ -50,41 +50,6 @@ function escapeHtml(value: string) {
     .replace(/"/g, '&quot;');
 }
 
-function waitForImagesToLoad(root: HTMLElement) {
-  return Promise.all(
-    Array.from(root.querySelectorAll('img')).map((img) => {
-      if (img.complete) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        const finish = () => resolve();
-        img.addEventListener('load', finish, { once: true });
-        img.addEventListener('error', finish, { once: true });
-      });
-    }),
-  );
-}
-
-function waitWithTimeout<T>(promise: Promise<T> | undefined, timeoutMs: number) {
-  if (!promise) return Promise.resolve();
-
-  return new Promise<void>((resolve) => {
-    const timeoutId = window.setTimeout(resolve, timeoutMs);
-    promise
-      .catch(() => undefined)
-      .finally(() => {
-        window.clearTimeout(timeoutId);
-        resolve();
-      });
-  });
-}
-
-function waitForNextPaint(targetWindow: Window) {
-  return new Promise<void>((resolve) => {
-    targetWindow.requestAnimationFrame(() => {
-      targetWindow.requestAnimationFrame(() => resolve());
-    });
-  });
-}
-
 function buildPrintDocumentHtml({
   title,
   pageWidth,
@@ -289,11 +254,40 @@ function buildPrintDocumentHtml({
       }, 250);
     });
 
+    function waitForPrintAssets(callback) {
+      var done = false;
+      var finish = function () {
+        if (done) return;
+        done = true;
+        callback();
+      };
+      var images = Array.prototype.slice.call(document.images || []);
+      var pending = images.filter(function (img) { return !img.complete; }).length;
+      var markLoaded = function () {
+        pending -= 1;
+        if (pending <= 0) finish();
+      };
+
+      if (pending <= 0) {
+        finish();
+        return;
+      }
+
+      images.forEach(function (img) {
+        if (img.complete) return;
+        img.addEventListener('load', markLoaded, { once: true });
+        img.addEventListener('error', markLoaded, { once: true });
+      });
+      setTimeout(finish, 2500);
+    }
+
     window.addEventListener('load', function () {
       setTimeout(function () {
-        window.dispatchEvent(new Event('beforeprint'));
-        window.print();
-      }, 350);
+        waitForPrintAssets(function () {
+          window.dispatchEvent(new Event('beforeprint'));
+          window.print();
+        });
+      }, 150);
     });
   </script>
 </body>
@@ -302,67 +296,32 @@ function buildPrintDocumentHtml({
 
 export async function printMedicalRecordPreview(source: HTMLElement, width: number, title = 'Medical Record') {
   const pageWidth = Math.max(width, PRINT_PAGE_WIDTH_PX);
+  const clone = source.cloneNode(true) as HTMLElement;
+  prepareMedicalRecordPdfClone(clone, width);
+
+  const renderedBounds = source.getBoundingClientRect();
+  const renderedHeight = Math.ceil(Math.max(source.scrollHeight, source.offsetHeight, renderedBounds.height));
+  const renderedWidth = Math.ceil(Math.max(source.scrollWidth, source.offsetWidth, renderedBounds.width, width));
+  const scale = pageWidth / renderedWidth;
+  const pageHeight = Math.ceil(renderedHeight * scale);
+
+  clone.style.transform = 'none';
+
+  const html = buildPrintDocumentHtml({
+    title,
+    pageWidth,
+    pageHeight,
+    naturalWidth: renderedWidth,
+    naturalHeight: renderedHeight,
+    contentHtml: clone.outerHTML,
+  });
+
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
     throw new Error('The print page was blocked. Please allow pop-ups for this site and try again.');
   }
 
   printWindow.document.open();
-  printWindow.document.write('<!doctype html><html><head><title>Preparing PDF...</title></head><body style="font-family:Arial,sans-serif;padding:16px">Preparing PDF...</body></html>');
+  printWindow.document.write(html);
   printWindow.document.close();
-
-  const measureRoot = document.createElement('div');
-  measureRoot.style.position = 'fixed';
-  measureRoot.style.left = '-10000px';
-  measureRoot.style.top = '0';
-  measureRoot.style.width = `${pageWidth}px`;
-  measureRoot.style.background = '#fff';
-  measureRoot.style.margin = '0';
-  measureRoot.style.padding = '0';
-  measureRoot.style.overflow = 'hidden';
-
-  const clone = source.cloneNode(true) as HTMLElement;
-  prepareMedicalRecordPdfClone(clone, width);
-  measureRoot.appendChild(clone);
-  document.body.appendChild(measureRoot);
-
-  try {
-    await waitWithTimeout(waitForImagesToLoad(measureRoot), 3000);
-    await waitWithTimeout(document.fonts?.ready, 2000);
-    await waitForNextPaint(window);
-
-    const renderedBounds = clone.getBoundingClientRect();
-    const renderedHeight = Math.ceil(Math.max(clone.scrollHeight, renderedBounds.height));
-    const renderedWidth = Math.ceil(Math.max(clone.scrollWidth, renderedBounds.width, width));
-    const scale = pageWidth / renderedWidth;
-    const pageHeight = Math.ceil(renderedHeight * scale);
-
-    clone.style.transform = 'none';
-
-    const html = buildPrintDocumentHtml({
-      title,
-      pageWidth,
-      pageHeight,
-      naturalWidth: renderedWidth,
-      naturalHeight: renderedHeight,
-      contentHtml: clone.outerHTML,
-    });
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    printWindow.location.replace(url);
-    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch (error) {
-    try {
-      printWindow.document.open();
-      printWindow.document.write(
-        '<!doctype html><html><head><title>PDF Export Failed</title></head><body style="font-family:Arial,sans-serif;padding:16px"><h1 style="font-size:18px">PDF export failed</h1><p>Please close this tab and try again.</p></body></html>',
-      );
-      printWindow.document.close();
-    } catch {
-      // Ignore secondary failures while reporting the original export error.
-    }
-    throw error;
-  } finally {
-    document.body.removeChild(measureRoot);
-  }
 }
