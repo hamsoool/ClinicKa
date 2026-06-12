@@ -17,7 +17,7 @@ import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useAuth } from '../../lib/auth';
 import { getRoleLabel } from '../../lib/api';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
-import { prepareMedicalRecordPdfClone } from '../../lib/medical-record-pdf-export';
+import { printMedicalRecordPreview } from '../../lib/medical-record-pdf-export';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import {
   useStaffApprovedStudentsQuery,
@@ -65,28 +65,6 @@ function persistRememberedCertificateStudent(staffId: string, studentId: string)
 function clearRememberedCertificateStudent(staffId?: string | null) {
   if (typeof window === 'undefined' || !staffId) return;
   window.localStorage.removeItem(getCertificateSelectionStorageKey(staffId));
-}
-
-async function loadPdfDependencies() {
-  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-    import('html2canvas'),
-    import('jspdf'),
-  ]);
-  return { html2canvas, jsPDF };
-}
-
-async function waitForImagesToLoad(root: HTMLElement) {
-  const images = Array.from(root.querySelectorAll('img'));
-  await Promise.all(
-    images.map((img) => {
-      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        const finish = () => resolve();
-        img.addEventListener('load', finish, { once: true });
-        img.addEventListener('error', finish, { once: true });
-      });
-    }),
-  );
 }
 
 function ApprovedStudentsListSkeleton() {
@@ -355,52 +333,8 @@ function StaffCertificatesWorkspace() {
   const downloadRecordPDF = async () => {
     if (!recordPreviewRef.current || !combinedRecord) return;
     try {
-      const { html2canvas, jsPDF } = await loadPdfDependencies();
-      const exportRoot = document.createElement('div');
-      exportRoot.style.position = 'fixed';
-      exportRoot.style.left = '-10000px';
-      exportRoot.style.top = '0';
-      exportRoot.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
-      exportRoot.style.background = '#fff';
-      exportRoot.style.padding = '0';
-      exportRoot.style.margin = '0';
-      exportRoot.style.overflow = 'hidden';
-
-      const clone = recordPreviewRef.current.cloneNode(true) as HTMLDivElement;
-      prepareMedicalRecordPdfClone(clone, RECORD_PREVIEW_BASE_WIDTH);
-
-      exportRoot.appendChild(clone);
-      document.body.appendChild(exportRoot);
-
-      let canvas: HTMLCanvasElement;
-      try {
-        await waitForImagesToLoad(clone);
-        canvas = await html2canvas(clone, {
-          scale: 3,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          width: RECORD_PREVIEW_BASE_WIDTH,
-          windowWidth: RECORD_PREVIEW_BASE_WIDTH,
-        });
-      } finally {
-        document.body.removeChild(exportRoot);
-      }
-
-      const pageWidth = 215.9;
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const imgData = canvas.toDataURL('image/png');
-      const pageHeight = imgHeight;
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [pageHeight, pageWidth],
-      });
-
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight, undefined, 'SLOW');
-
-      pdf.save(`medical_record_${combinedRecord.lastName}_${combinedRecord.firstName}.pdf`);
-      toast.success('Medical record PDF downloaded.');
+      await printMedicalRecordPreview(recordPreviewRef.current, RECORD_PREVIEW_BASE_WIDTH);
+      toast.success('Medical record opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate medical record PDF:', error);
       toast.error('Failed to download PDF. Please try again.');
@@ -410,60 +344,8 @@ function StaffCertificatesWorkspace() {
   const downloadClearancePDF = async () => {
     if (!clearancePreviewRef.current || !clearanceRecord) return;
     try {
-      const { html2canvas, jsPDF } = await loadPdfDependencies();
-      const exportRoot = document.createElement('div');
-      exportRoot.style.position = 'fixed';
-      exportRoot.style.left = '-10000px';
-      exportRoot.style.top = '0';
-      exportRoot.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
-      exportRoot.style.background = '#fff';
-      exportRoot.style.padding = '0';
-      exportRoot.style.margin = '0';
-      exportRoot.style.overflow = 'hidden';
-      exportRoot.style.paddingBottom = '10px';
-
-      const clone = clearancePreviewRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.width = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
-      clone.style.maxWidth = `${CLEARANCE_PREVIEW_BASE_WIDTH}px`;
-      clone.style.margin = '0';
-      clone.style.padding = '0';
-      clone.style.transform = 'none';
-
-      exportRoot.appendChild(clone);
-      document.body.appendChild(exportRoot);
-      await waitForImagesToLoad(exportRoot);
-
-      const canvas = await html2canvas(exportRoot, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        width: CLEARANCE_PREVIEW_BASE_WIDTH,
-        height: exportRoot.scrollHeight,
-        windowWidth: CLEARANCE_PREVIEW_BASE_WIDTH,
-        windowHeight: exportRoot.scrollHeight,
-      });
-      document.body.removeChild(exportRoot);
-
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 5;
-      const usableWidth = pageWidth - margin * 2;
-      const usableHeight = pageHeight - margin * 2;
-      const canvasRatio = canvas.width / canvas.height;
-      const pageRatio = usableWidth / usableHeight;
-      let renderWidth = usableWidth;
-      let renderHeight = usableWidth / canvasRatio;
-      if (canvasRatio < pageRatio) {
-        renderHeight = usableHeight;
-        renderWidth = usableHeight * canvasRatio;
-      }
-      const x = (pageWidth - renderWidth) / 2;
-      const y = (pageHeight - renderHeight) / 2;
-
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, renderWidth, renderHeight, undefined, 'FAST');
-      pdf.save(`medical_clearance_${clearanceRecord.lastName}_${clearanceRecord.firstName}.pdf`);
-      toast.success('Medical clearance PDF downloaded.');
+      await printMedicalRecordPreview(clearancePreviewRef.current, CLEARANCE_PREVIEW_BASE_WIDTH, 'Medical Certificate');
+      toast.success('Medical certificate opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate clearance PDF:', error);
       toast.error('Failed to download PDF. Please try again.');

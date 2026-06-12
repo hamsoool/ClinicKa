@@ -230,7 +230,7 @@ export default function PortalShell({
   );
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-background">
+    <div className="min-h-screen overflow-x-clip bg-background print:bg-white">
       <a
         href="#portal-content"
         className="sr-only fixed left-4 top-4 z-[60] rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus:not-sr-only"
@@ -241,7 +241,7 @@ export default function PortalShell({
       <aside
         id="portal-sidebar"
         className={cn(
-          'fixed inset-y-0 left-0 z-40 w-72 border-r border-emerald-950/25 bg-sidebar text-sidebar-foreground transition-transform duration-200',
+          'fixed inset-y-0 left-0 z-40 w-72 border-r border-emerald-950/25 bg-sidebar text-sidebar-foreground transition-transform duration-200 print:hidden',
           menuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
         aria-label={`${portalLabel} navigation`}
@@ -353,7 +353,7 @@ export default function PortalShell({
         />
       ) : null}
 
-      <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/55 bg-background/85 backdrop-blur-xl md:left-72 md:h-16">
+      <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/55 bg-background/85 backdrop-blur-xl md:left-72 md:h-16 print:hidden">
         <div className="flex h-full items-center justify-between gap-2 px-4 md:gap-3 md:px-8">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
@@ -457,14 +457,14 @@ export default function PortalShell({
         </div>
       </header>
 
-      <main id="portal-content" className="pt-20 outline-none md:pl-72" tabIndex={-1}>
-        <div className="px-4 pb-24 sm:pb-28 md:px-8 md:pb-24">
+      <main id="portal-content" className="pt-20 outline-none md:pl-72 print:p-0" tabIndex={-1}>
+        <div className="px-4 pb-24 sm:pb-28 md:px-8 md:pb-24 print:p-0">
           <Outlet />
         </div>
       </main>
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/55 bg-surface-container-lowest/90 backdrop-blur-xl md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/55 bg-surface-container-lowest/90 backdrop-blur-xl md:hidden print:hidden"
         aria-label="Mobile navigation"
       >
         <div

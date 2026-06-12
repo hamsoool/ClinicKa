@@ -6,9 +6,21 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Skeleton } from '../ui/skeleton';
-import { Activity, Download, TrendingUp, Clock, Award, Users, SlidersHorizontal, RotateCcw } from 'lucide-react';
+import {
+  Activity,
+  Award,
+  ClipboardCheck,
+  FileSpreadsheet,
+  Printer,
+  RotateCcw,
+  SlidersHorizontal,
+  Stethoscope,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
+import type { SubmissionRecord } from '../../lib/record-types';
 import {
   BarChart,
   Bar,
@@ -38,7 +50,7 @@ const REPORTING_TERM_REFRESH_INTERVAL_MS = 180_000;
 const REPORTS_QUERY_GC_TIME_MS = 10 * 60_000;
 const YEAR_LABELS: Record<string, string> = { '1': '1st Year', '2': '2nd Year', '3': '3rd Year', '4': '4th Year' };
 const STATUS_LABELS: Record<string, string> = {
-  pending: 'Under Review',
+  pending: 'Pending',
   in_review: 'In Review',
   approved: 'Approved',
   returned: 'Returned',
@@ -47,7 +59,7 @@ const STATUS_LABELS: Record<string, string> = {
 const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', issued: 'Issued Only', not_issued: 'Not Issued' };
 const STATUS_COLORS: Record<string, string> = {
   Approved: '#3b6d11',
-  'Under Review': '#ba7517',
+  Pending: '#ba7517',
   'In Review': '#2f6fa3',
   Returned: '#a32d2d',
   'Exam Done': '#185fa5',
@@ -79,6 +91,7 @@ type ReportsSummary = {
   total: number;
   approved: number;
   pending: number;
+  inReview: number;
   returned: number;
   physicalExamDone: number;
   firstYears: number;
@@ -115,6 +128,27 @@ type ReportingTermRange = {
   label: string;
   startMs: number;
   endMs: number;
+};
+type ReportSubmission = SubmissionRecord & {
+  gender?: string;
+  certificatePdfUrl?: string;
+};
+type ClinicalSummary = {
+  clearanceIssued: number;
+  pendingPhysicalExams: number;
+  medicalCertificatesIssued: number;
+  abnormalXray: number;
+  anemiaTrend: number;
+  abnormalUrinalysis: number;
+};
+type ReportTableRow = {
+  studentId: string;
+  fullName: string;
+  courseDept: string;
+  submissionDate: string;
+  labStatus: string;
+  physicalExamStatus: string;
+  issuedCertificates: string;
 };
 
 function normalizeCourseValue(value: unknown) {
@@ -256,222 +290,389 @@ function getTimelineBucket(date: Date, mode: 'day' | 'week' | 'month') {
   };
 }
 
-async function imagePathToDataUrl(path: string, options?: { maxDimension?: number }) {
-  const maxDimension = options?.maxDimension ?? 480;
-  return new Promise<string>((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const srcW = img.naturalWidth || img.width;
-      const srcH = img.naturalHeight || img.height;
-      const scale = Math.min(1, maxDimension / Math.max(srcW, srcH));
-      canvas.width = Math.max(1, Math.round(srcW * scale));
-      canvas.height = Math.max(1, Math.round(srcH * scale));
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('Failed to prepare image canvas'));
-        return;
-      }
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => reject(new Error(`Failed to load image: ${path}`));
-    img.src = path;
+function formatReportDate(value?: string | null) {
+  if (!value) return '-';
+
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '-';
+
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
   });
 }
 
-async function buildPdfWithAutoTable(
-  jsPDFModule: any,
-  autoTableModule: any,
-  summaryRows: Array<{ label: string; value: string }>,
-  studentRows: Array<{ fullName: string; studentId: string; course: string; year: string; status: string; submitted: string; certificate: string }>,
-  reportTitle: string,
-  filters: Array<{ label: string; value: string }>,
-) {
-  const { jsPDF } = jsPDFModule;
-  const autoTable = autoTableModule.default;
-
-  // Initialize PDF
-  const doc = new jsPDF({
-    unit: 'mm',
-    format: 'a4',
-    orientation: 'portrait',
+function formatReportDateTime(value = new Date()) {
+  return value.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
   });
+}
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 15;
-  let currentY = margin;
+function getFullName(submission: Pick<ReportSubmission, 'firstName' | 'middleInitial' | 'lastName'>) {
+  const middle = submission.middleInitial ? ` ${String(submission.middleInitial).charAt(0)}.` : '';
+  const firstName = String(submission.firstName || '').trim();
+  const lastName = String(submission.lastName || '').trim();
 
-  // Set colors and fonts
-  doc.setTextColor(0, 0, 0);
-  doc.setFillColor(255, 255, 255);
+  if (!firstName && !lastName) return '-';
+  return `${lastName || '-'}, ${firstName || '-'}${middle}`;
+}
 
-  // ── Header with logos ──
-  try {
-    const [gcLogo, acadLogo, hsuLogo] = await Promise.all([
-      imagePathToDataUrl('/gordon-college-logo.png', { maxDimension: 256 }),
-      imagePathToDataUrl('/gordon_college_academicaffairs.png', { maxDimension: 256 }),
-      imagePathToDataUrl('/gordonhsc.png', { maxDimension: 256 }),
-    ]);
+function hasPhysicalExam(submission: ReportSubmission) {
+  if (submission.status === 'physical_exam_done' || submission.status === 'approved') return true;
 
-    const logoSize = 12;
-    doc.addImage(gcLogo, 'PNG', margin, currentY, logoSize, logoSize);
-    doc.addImage(acadLogo, 'PNG', margin + 15, currentY, logoSize, logoSize);
-    doc.addImage(hsuLogo, 'PNG', margin + 30, currentY, logoSize, logoSize);
-  } catch (err) {
-    console.warn('Failed to load logos:', err);
+  const measurements = submission.staffMeasurements;
+  if (!measurements) return false;
+
+  return [
+    measurements.examinedBy,
+    measurements.updatedAt,
+    measurements.bloodPressure,
+    measurements.cardiacRate,
+    measurements.respiratoryRate,
+    measurements.temperature,
+    measurements.visualAcuity,
+    measurements.skin,
+    measurements.heent,
+    measurements.chestLungs,
+    measurements.heart,
+    measurements.abdomen,
+    measurements.extremities,
+  ].some((value) => String(value || '').trim().length > 0);
+}
+
+function parseLabNumber(value?: string | null) {
+  const match = String(value || '').match(/-?\d+(?:\.\d+)?/);
+  return match ? Number.parseFloat(match[0]) : null;
+}
+
+function isNegativeLabValue(value?: string | null) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return true;
+
+  return [
+    '0',
+    'none',
+    'nil',
+    'negative',
+    'normal',
+    'not detected',
+    'trace negative',
+  ].includes(normalized);
+}
+
+function hasAnemiaFlag(submission: ReportSubmission) {
+  const hemoglobin = parseLabNumber(submission.labResults?.hemoglobin);
+  if (hemoglobin === null) return false;
+
+  const sex = String(submission.sex || submission.gender || '').trim().toLowerCase();
+  const threshold = sex === 'male' ? 13 : sex === 'female' ? 12 : 12.5;
+  return hemoglobin < threshold;
+}
+
+function hasAbnormalXray(submission: ReportSubmission) {
+  const result = String(submission.labResults?.xrayResult || '').trim().toLowerCase();
+  if (result === 'abnormal') return true;
+
+  const findings = String(submission.labResults?.xrayFindings || '').trim().toLowerCase();
+  if (!findings || findings === 'normal' || findings.includes('no active') || findings.includes('unremarkable')) {
+    return false;
   }
 
-  // Title
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text(reportTitle, margin + 50, currentY + 5);
+  return true;
+}
 
-  // Subtitle
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 100, 100);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, margin + 50, currentY + 12);
+function hasAbnormalUrinalysis(submission: ReportSubmission) {
+  const glucose = submission.labResults?.urinalysisGlucose;
+  const protein = submission.labResults?.urinalysisProtein;
 
-  currentY = 45;
+  return !isNegativeLabValue(glucose) || !isNegativeLabValue(protein);
+}
 
-  // ── Applied Filters Section ──
-  doc.setTextColor(0, 0, 0);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('Applied Filters', margin, currentY);
-  currentY += 5;
+function formatLabStatus(submission: ReportSubmission) {
+  const labResults = submission.labResults;
+  const xray = hasAbnormalXray(submission)
+    ? 'X-Ray: Abnormal'
+    : labResults?.xrayDate || submission.xrayFileUrl || labResults?.xrayResult
+      ? 'X-Ray: Done'
+      : 'X-Ray: Pending';
+  const cbc = hasAnemiaFlag(submission)
+    ? 'CBC: Low Hgb'
+    : labResults?.cbcDate || submission.cbcFileUrl || labResults?.hemoglobin
+      ? 'CBC: Done'
+      : 'CBC: Pending';
+  const urinalysis = hasAbnormalUrinalysis(submission)
+    ? 'Urinalysis: Abnormal'
+    : labResults?.urinalysisDate || submission.urinalysisFileUrl
+      ? 'Urinalysis: Done'
+      : 'Urinalysis: Pending';
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  const filterTableData: string[][] = [];
-  for (let i = 0; i < filters.length; i += 2) {
-    const row: string[] = [];
-    if (filters[i]) row.push(`${filters[i].label}: ${filters[i].value}`);
-    else row.push('');
-    if (filters[i + 1]) row.push(`${filters[i + 1].label}: ${filters[i + 1].value}`);
-    else row.push('');
-    filterTableData.push(row);
+  return `${xray} / ${cbc} / ${urinalysis}`;
+}
+
+function formatPhysicalExamStatus(submission: ReportSubmission) {
+  if (hasPhysicalExam(submission)) return 'Completed';
+  if (submission.status === 'returned') return 'Returned';
+  return 'Pending';
+}
+
+function formatCertificateStatus(submission: ReportSubmission) {
+  const issuedDate = submission.clearanceInfo?.issuedDate;
+  if (!issuedDate) return 'None';
+
+  const controlNo = String(submission.clearanceInfo?.controlNo || '').trim();
+  return controlNo ? `Issued ${formatReportDate(issuedDate)} (${controlNo})` : `Issued ${formatReportDate(issuedDate)}`;
+}
+
+function escapeXml(value: unknown) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function columnName(index: number) {
+  let column = '';
+  let value = index + 1;
+
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    column = String.fromCharCode(65 + remainder) + column;
+    value = Math.floor((value - 1) / 26);
   }
 
-  autoTable(doc, {
-    startY: currentY,
-    head: [],
-    body: filterTableData,
-    margin: { left: margin, right: margin },
-    theme: 'plain',
-    styles: {
-      fontSize: 8,
-      cellPadding: 1.5,
-      textColor: [0, 0, 0],
-      lineColor: [0, 0, 0],
-      lineWidth: 0.2,
-    },
-    columnStyles: {
-      0: { halign: 'left' },
-      1: { halign: 'left' },
-    },
+  return column;
+}
+
+function buildSheetRow(rowIndex: number, values: string[], styleIndex: number) {
+  const cells = values.map((value, columnIndex) => {
+    const reference = `${columnName(columnIndex)}${rowIndex}`;
+    return `<c r="${reference}" t="inlineStr" s="${styleIndex}"><is><t>${escapeXml(value)}</t></is></c>`;
   });
 
-  currentY = doc.lastAutoTable.finalY + 5;
+  return `<row r="${rowIndex}">${cells.join('')}</row>`;
+}
 
-  // ── Summary Section ──
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('Summary', margin, currentY);
-  currentY += 5;
+function crc32(bytes: Uint8Array) {
+  let crc = 0xffffffff;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  const summaryTableData = summaryRows.map((row) => [row.label, row.value]);
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
 
-  autoTable(doc, {
-    startY: currentY,
-    head: [],
-    body: summaryTableData,
-    margin: { left: margin, right: margin },
-    theme: 'plain',
-    styles: {
-      fontSize: 8,
-      cellPadding: 1.5,
-      textColor: [0, 0, 0],
-      lineColor: [0, 0, 0],
-      lineWidth: 0.2,
-    },
-    columnStyles: {
-      0: { halign: 'left', fontStyle: 'bold', cellWidth: 70 },
-      1: { halign: 'right' },
-    },
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeUint16(target: Uint8Array, offset: number, value: number) {
+  target[offset] = value & 0xff;
+  target[offset + 1] = (value >>> 8) & 0xff;
+}
+
+function writeUint32(target: Uint8Array, offset: number, value: number) {
+  target[offset] = value & 0xff;
+  target[offset + 1] = (value >>> 8) & 0xff;
+  target[offset + 2] = (value >>> 16) & 0xff;
+  target[offset + 3] = (value >>> 24) & 0xff;
+}
+
+function concatBytes(chunks: Uint8Array[]) {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+
+  chunks.forEach((chunk) => {
+    output.set(chunk, offset);
+    offset += chunk.length;
   });
 
-  currentY = doc.lastAutoTable.finalY + 5;
+  return output;
+}
 
-  // ── Students Table ──
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(`Students Included (${studentRows.length})`, margin, currentY);
-  currentY += 5;
+function createZipBlob(files: Array<{ path: string; content: string }>) {
+  const encoder = new TextEncoder();
+  const localChunks: Uint8Array[] = [];
+  const centralChunks: Uint8Array[] = [];
+  let offset = 0;
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
 
-  const tableHead = [['Full Name', 'Student ID', 'Course', 'Year', 'Status', 'Submitted', 'Cert']];
-  const tableBody = studentRows.map((row) => [
-    row.fullName,
-    row.studentId,
-    row.course,
-    row.year,
-    row.status,
-    row.submitted,
-    row.certificate,
+  files.forEach((file) => {
+    const nameBytes = encoder.encode(file.path);
+    const contentBytes = encoder.encode(file.content);
+    const checksum = crc32(contentBytes);
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    writeUint32(localHeader, 0, 0x04034b50);
+    writeUint16(localHeader, 4, 20);
+    writeUint16(localHeader, 6, 0);
+    writeUint16(localHeader, 8, 0);
+    writeUint16(localHeader, 10, dosTime);
+    writeUint16(localHeader, 12, dosDate);
+    writeUint32(localHeader, 14, checksum);
+    writeUint32(localHeader, 18, contentBytes.length);
+    writeUint32(localHeader, 22, contentBytes.length);
+    writeUint16(localHeader, 26, nameBytes.length);
+    writeUint16(localHeader, 28, 0);
+    localHeader.set(nameBytes, 30);
+
+    localChunks.push(localHeader, contentBytes);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    writeUint32(centralHeader, 0, 0x02014b50);
+    writeUint16(centralHeader, 4, 20);
+    writeUint16(centralHeader, 6, 20);
+    writeUint16(centralHeader, 8, 0);
+    writeUint16(centralHeader, 10, 0);
+    writeUint16(centralHeader, 12, dosTime);
+    writeUint16(centralHeader, 14, dosDate);
+    writeUint32(centralHeader, 16, checksum);
+    writeUint32(centralHeader, 20, contentBytes.length);
+    writeUint32(centralHeader, 24, contentBytes.length);
+    writeUint16(centralHeader, 28, nameBytes.length);
+    writeUint16(centralHeader, 30, 0);
+    writeUint16(centralHeader, 32, 0);
+    writeUint16(centralHeader, 34, 0);
+    writeUint16(centralHeader, 36, 0);
+    writeUint32(centralHeader, 38, 0);
+    writeUint32(centralHeader, 42, offset);
+    centralHeader.set(nameBytes, 46);
+    centralChunks.push(centralHeader);
+
+    offset += localHeader.length + contentBytes.length;
+  });
+
+  const centralDirectory = concatBytes(centralChunks);
+  const endRecord = new Uint8Array(22);
+  writeUint32(endRecord, 0, 0x06054b50);
+  writeUint16(endRecord, 8, files.length);
+  writeUint16(endRecord, 10, files.length);
+  writeUint32(endRecord, 12, centralDirectory.length);
+  writeUint32(endRecord, 16, offset);
+
+  return new Blob([concatBytes([...localChunks, centralDirectory, endRecord])], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+}
+
+function buildXlsxBlob(rows: string[][]) {
+  const rowXml = rows
+    .map((row, index) => {
+      const rowIndex = index + 1;
+      const styleIndex = rowIndex === 1 ? 1 : rowIndex <= 5 ? 2 : rowIndex === 7 ? 3 : 4;
+      return buildSheetRow(rowIndex, row, styleIndex);
+    })
+    .join('');
+
+  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <cols>
+    <col min="1" max="1" width="18" customWidth="1"/>
+    <col min="2" max="2" width="28" customWidth="1"/>
+    <col min="3" max="3" width="26" customWidth="1"/>
+    <col min="4" max="4" width="18" customWidth="1"/>
+    <col min="5" max="5" width="46" customWidth="1"/>
+    <col min="6" max="6" width="22" customWidth="1"/>
+    <col min="7" max="7" width="34" customWidth="1"/>
+  </cols>
+  <sheetData>${rowXml}</sheetData>
+  <mergeCells count="1"><mergeCell ref="A1:G1"/></mergeCells>
+</worksheet>`;
+
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="4">
+    <font><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="14"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+  </fonts>
+  <fills count="3">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF1F5133"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="5">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFill="1"/>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+  return createZipBlob([
+    {
+      path: '[Content_Types].xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`,
+    },
+    {
+      path: '_rels/.rels',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`,
+    },
+    {
+      path: 'xl/workbook.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Medical Report" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`,
+    },
+    {
+      path: 'xl/_rels/workbook.xml.rels',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`,
+    },
+    { path: 'xl/worksheets/sheet1.xml', content: sheetXml },
+    { path: 'xl/styles.xml', content: stylesXml },
+    {
+      path: 'docProps/core.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>Gordon College HSU Medical Report</dc:title>
+  <dc:creator>ClinicKa</dc:creator>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created>
+</cp:coreProperties>`,
+    },
+    {
+      path: 'docProps/app.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
+  <Application>ClinicKa</Application>
+</Properties>`,
+    },
   ]);
-
-  autoTable(doc, {
-    startY: currentY,
-    head: tableHead,
-    body: tableBody,
-    margin: { left: margin, right: margin },
-    theme: 'grid',
-    headerStyles: {
-      fillColor: [255, 255, 255],
-      textColor: [0, 0, 0],
-      fontStyle: 'bold',
-      fontSize: 8.5,
-      cellPadding: 2.5,
-      halign: 'center',
-      valign: 'middle',
-      lineColor: [0, 0, 0],
-      lineWidth: 0.2,
-    },
-    bodyStyles: {
-      fontSize: 7.5,
-      cellPadding: 2,
-      textColor: [0, 0, 0],
-      lineColor: [0, 0, 0],
-      lineWidth: 0.2,
-    },
-    columnStyles: {
-      0: { halign: 'left' },
-      1: { halign: 'center' },
-      2: { halign: 'center' },
-      3: { halign: 'center' },
-      4: { halign: 'center' },
-      5: { halign: 'center' },
-      6: { halign: 'center' },
-    },
-    didDrawPage: (data: any) => {
-      // Footer
-      const footerY = doc.internal.pageSize.getHeight() - 8;
-      doc.setFontSize(7);
-      doc.setTextColor(150, 150, 150);
-      doc.text(`Page ${data.pageNumber}`, pageWidth / 2, footerY, { align: 'center' });
-    },
-  });
-
-  return doc.output('blob');
 }
 
 // ── Stat Card ──────────────────────────────────────────────────────────────
@@ -493,20 +694,20 @@ function StatCard({
   const normalizedProgress = typeof progress === 'number' ? Math.max(0, Math.min(100, progress)) : null;
 
   return (
-    <Card className="border-outline-variant/30 overflow-hidden">
+    <Card className="overflow-hidden border-outline-variant/30 print:break-inside-avoid print:border print:border-black print:bg-white print:shadow-none">
       <CardContent className="pt-5 pb-5 px-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1 truncate">{label}</p>
-            <p className={`text-3xl font-bold leading-none ${accent}`}>{value}</p>
-            {helper && <p className="mt-2 text-xs leading-5 text-on-surface-variant">{helper}</p>}
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1 truncate print:text-black">{label}</p>
+            <p className={`text-3xl font-bold leading-none print:text-black ${accent}`}>{value}</p>
+            {helper && <p className="mt-2 text-xs leading-5 text-on-surface-variant print:text-black">{helper}</p>}
           </div>
-          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${accent.replace('text-', 'bg-').replace('600', '100').replace('foreground', '100')}`}>
-            <Icon className={`w-4.5 h-4.5 ${accent}`} strokeWidth={2} />
+          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center print:bg-white ${accent.replace('text-', 'bg-').replace('600', '100').replace('foreground', '100')}`}>
+            <Icon className={`w-4.5 h-4.5 print:text-black ${accent}`} strokeWidth={2} />
           </div>
         </div>
         {normalizedProgress !== null && (
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high print:hidden">
             <div className="h-full rounded-full bg-primary" style={{ width: `${normalizedProgress}%` }} />
           </div>
         )}
@@ -722,11 +923,11 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     refetchOnMount: true,
   });
   const normalizedSubmissions = useMemo(
-    () =>
+    (): ReportSubmission[] =>
       Array.isArray(submissions)
-        ? submissions
+        ? (submissions as ReportSubmission[])
         : Array.isArray((submissions as { submissions?: unknown[] } | undefined)?.submissions)
-          ? (submissions as { submissions: any[] }).submissions
+          ? ((submissions as { submissions: ReportSubmission[] }).submissions)
           : [],
     [submissions],
   );
@@ -769,7 +970,10 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         if (yearFilter !== 'all' && String(sub.year) !== yearFilter) return false;
         if (statusFilter !== 'all' && sub.status !== statusFilter) return false;
         if (courseFilter !== 'all' && normalizeCourseValue(sub.course) !== normalizeCourseValue(courseFilter)) return false;
-        if (conditionFilter !== 'all' && !sub.medicalHistory?.[conditionFilter]) return false;
+        if (
+          conditionFilter !== 'all'
+          && !sub.medicalHistory?.[conditionFilter as keyof NonNullable<ReportSubmission['medicalHistory']>]
+        ) return false;
         if (certificateFilter === 'issued' && !sub.clearanceInfo?.issuedDate) return false;
         if (certificateFilter === 'not_issued' && sub.clearanceInfo?.issuedDate) return false;
         if (genderFilter !== 'all') {
@@ -790,7 +994,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
   const dedupedFilteredSubmissions = useMemo(() => {
     const seen = new Set<string>();
-    const out: any[] = [];
+    const out: ReportSubmission[] = [];
     for (const s of filteredSubmissions) {
       const signature = [
         s.studentId || '',
@@ -844,7 +1048,8 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const summary = useMemo<ReportsSummary>(() => {
     const total = dedupedFilteredSubmissions.length;
     const approved = dedupedFilteredSubmissions.filter((s) => s.status === 'approved').length;
-    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending' || s.status === 'in_review').length;
+    const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending').length;
+    const inReview = dedupedFilteredSubmissions.filter((s) => s.status === 'in_review').length;
     const returned = dedupedFilteredSubmissions.filter((s) => s.status === 'returned').length;
     const physicalExamDone = dedupedFilteredSubmissions.filter((s) => s.status === 'physical_exam_done').length;
     const firstYears = dedupedFilteredSubmissions.filter((s) => String(s.year) === '1');
@@ -860,7 +1065,20 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       },
       {} as Record<string, number>,
     );
-    return { total, approved, pending, returned, physicalExamDone, firstYears: firstYears.length, firstYearUnderReview, firstYearNotUnderReview, withCertificate, approvalRate, byCourse };
+    return {
+      total,
+      approved,
+      pending,
+      inReview,
+      returned,
+      physicalExamDone,
+      firstYears: firstYears.length,
+      firstYearUnderReview,
+      firstYearNotUnderReview,
+      withCertificate,
+      approvalRate,
+      byCourse,
+    };
   }, [dedupedFilteredSubmissions]);
   const reportingTermRange = useMemo(
     () => buildReportingTermRange(reportingTermSettings),
@@ -925,7 +1143,8 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const statusChartData = useMemo<NamedCountDatum[]>(
     () => [
       { name: 'Approved', value: summary.approved, fill: STATUS_COLORS.Approved },
-      { name: 'Under Review', value: summary.pending, fill: STATUS_COLORS['Under Review'] },
+      { name: 'Pending', value: summary.pending, fill: STATUS_COLORS.Pending },
+      { name: 'In Review', value: summary.inReview, fill: STATUS_COLORS['In Review'] },
       { name: 'Returned', value: summary.returned, fill: STATUS_COLORS.Returned },
       { name: 'Exam Done', value: summary.physicalExamDone, fill: STATUS_COLORS['Exam Done'] },
     ]
@@ -1045,23 +1264,46 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     [summary.byCourse, summary.total],
   );
 
-  const certificateRate = summary.total > 0 ? Math.round((summary.withCertificate / summary.total) * 100) : 0;
-  const actionNeededCount = summary.pending + summary.returned;
-  const actionNeededRate = summary.total > 0 ? Math.round((actionNeededCount / summary.total) * 100) : 0;
+  const clinicalSummary = useMemo<ClinicalSummary>(() => {
+    const clearanceIssued = dedupedFilteredSubmissions.filter((submission) => Boolean(submission.clearanceInfo?.issuedDate)).length;
+    const completedPhysicalExams = dedupedFilteredSubmissions.filter(hasPhysicalExam).length;
+    const abnormalXray = dedupedFilteredSubmissions.filter(hasAbnormalXray).length;
+    const anemiaTrend = dedupedFilteredSubmissions.filter(hasAnemiaFlag).length;
+    const abnormalUrinalysis = dedupedFilteredSubmissions.filter(hasAbnormalUrinalysis).length;
 
-  // ── PDF download ────────────────────────────────────────────────────────
-  const downloadPdf = async () => {
-    try {
-      const jsPDFModule = await import('jspdf');
-      const autoTableModule = await import('jspdf-autotable');
+    return {
+      clearanceIssued,
+      pendingPhysicalExams: Math.max(dedupedFilteredSubmissions.length - completedPhysicalExams, 0),
+      medicalCertificatesIssued: clearanceIssued,
+      abnormalXray,
+      anemiaTrend,
+      abnormalUrinalysis,
+    };
+  }, [dedupedFilteredSubmissions]);
 
+  const reportTableRows = useMemo<ReportTableRow[]>(
+    () =>
+      dedupedFilteredSubmissions.map((submission) => ({
+        studentId: submission.studentId || '-',
+        fullName: getFullName(submission),
+        courseDept: [abbreviateCourse(submission.course), resolveDepartmentValue(submission.department, submission.course)]
+          .filter((value) => value && value !== '-')
+          .join(' / ') || '-',
+        submissionDate: formatReportDate(submission.submittedAt),
+        labStatus: formatLabStatus(submission),
+        physicalExamStatus: formatPhysicalExamStatus(submission),
+        issuedCertificates: formatCertificateStatus(submission),
+      })),
+    [dedupedFilteredSubmissions],
+  );
+
+  const friendlyFilters = useMemo(
+    () => {
       const friendlyDepartment = departmentFilter === 'all' ? 'All Departments' : departmentFilter;
       const friendlyYear = yearFilter === 'all' ? 'All Years' : (YEAR_LABELS[yearFilter] || `Year ${yearFilter}`);
       const friendlyStatus = statusFilter === 'all' ? 'All Statuses' : (STATUS_LABELS[statusFilter] || statusFilter);
       const friendlyCourse = courseFilter === 'all' ? 'All Courses' : courseFilter;
-      const friendlyCondition = conditionFilter === 'all'
-        ? 'All Conditions'
-        : conditionFilter.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase());
+      const friendlyCondition = conditionFilter === 'all' ? 'All Conditions' : formatConditionLabel(conditionFilter);
       const friendlyCertificate = CERTIFICATE_LABELS[certificateFilter] || certificateFilter;
       const friendlyGender = genderFilter === 'all'
         ? 'All Genders'
@@ -1072,46 +1314,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
             : 'Other';
       const friendlyBatch = studentBatchFilter === 'all' ? 'All Batches' : `${studentBatchFilter} Batch`;
 
-      const summaryRows = [
-        { label: 'Total submissions', value: String(summary.total) },
-        { label: 'Approved', value: String(summary.approved) },
-        { label: 'Under review', value: String(summary.pending) },
-        { label: 'Approval rate', value: `${summary.approvalRate}%` },
-        { label: 'With medical certificate', value: String(summary.withCertificate) },
-        {
-          label: 'Top course totals',
-          value:
-            Object.entries(summary.byCourse)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 2)
-              .map(([course, count]) => `${abbreviateCourse(course)}: ${count}`)
-              .join(' | ') || '-',
-        },
-      ];
-
-      if (yearFilter === '1' || summary.firstYears > 0) {
-        summaryRows.splice(5, 0,
-          { label: '1st year submitted', value: String(summary.firstYears) },
-          { label: '1st year under review', value: String(summary.firstYearUnderReview) },
-          { label: '1st year not under review', value: String(summary.firstYearNotUnderReview) },
-        );
-      }
-
-      const studentRows = dedupedFilteredSubmissions.map((s) => {
-        const middle = s.middleInitial ? ` ${String(s.middleInitial).charAt(0)}.` : '';
-        const fullName = `${s.lastName || '-'}, ${s.firstName || '-'}${middle}`;
-        return {
-          fullName,
-          studentId: s.studentId || '-',
-          course: abbreviateCourse(s.course),
-          year: YEAR_LABELS[String(s.year)] || `Year ${s.year || '-'}`,
-          status: STATUS_LABELS[s.status] || s.status || '-',
-          submitted: s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : '-',
-          certificate: s.clearanceInfo?.issuedDate ? 'Issued' : 'Not Issued',
-        };
-      });
-
-      const filterList = [
+      return [
+        { label: 'Academic Year', value: `SY ${reportingTermSettings.academicYear || '2026-2027'}` },
+        { label: 'Reporting Term', value: reportingTermRange.label },
         { label: 'Department', value: friendlyDepartment },
         { label: 'Year', value: friendlyYear },
         { label: 'Status', value: friendlyStatus },
@@ -1123,28 +1328,75 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         { label: 'Submitted From', value: fromDate || '-' },
         { label: 'Submitted To', value: toDate || '-' },
       ];
+    },
+    [
+      certificateFilter,
+      conditionFilter,
+      courseFilter,
+      departmentFilter,
+      fromDate,
+      genderFilter,
+      reportingTermRange.label,
+      reportingTermSettings.academicYear,
+      statusFilter,
+      studentBatchFilter,
+      toDate,
+      yearFilter,
+    ],
+  );
 
-      const blob = await buildPdfWithAutoTable(
-        jsPDFModule,
-        autoTableModule,
-        summaryRows,
-        studentRows,
-        `${mode === 'admin' ? 'ADMIN' : 'STAFF'} CLINIC REPORT`,
-        filterList,
-      );
+  const certificateRate = summary.total > 0 ? Math.round((summary.withCertificate / summary.total) * 100) : 0;
+  const actionNeededCount = summary.pending + summary.inReview + summary.returned;
+  const actionNeededRate = summary.total > 0 ? Math.round((actionNeededCount / summary.total) * 100) : 0;
 
+  // ── Print and spreadsheet export ────────────────────────────────────────
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const exportXlsx = () => {
+    try {
+      const generatedOn = formatReportDateTime();
+      const academicYear = `SY ${reportingTermSettings.academicYear || '2026-2027'}`;
+      const workbookRows = [
+        ['GORDON COLLEGE HEALTH SERVICES UNIT - MEDICAL REPORT'],
+        [`Academic Year: ${academicYear}`],
+        [`Reporting Term: ${reportingTermRange.label}`],
+        [`Generated On: ${generatedOn}`],
+        [`Filtered Records: ${reportTableRows.length}`],
+        [],
+        [
+          'Student ID',
+          'Full Name',
+          'Course/Dept',
+          'Submission Date',
+          'Lab Status (X-Ray/CBC/Urinalysis)',
+          'Physical Exam Status',
+          'Issued Certificates',
+        ],
+        ...reportTableRows.map((row) => [
+          row.studentId,
+          row.fullName,
+          row.courseDept,
+          row.submissionDate,
+          row.labStatus,
+          row.physicalExamStatus,
+          row.issuedCertificates,
+        ]),
+      ];
+      const blob = buildXlsxBlob(workbookRows);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${mode}_clinic_report_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.download = `${mode}_medical_report_${new Date().toISOString().split('T')[0]}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      toast.success('PDF report downloaded');
+      toast.success('Excel report exported');
     } catch (error) {
-      console.error('PDF generation error:', error);
-      toast.error('Failed to generate PDF report');
+      console.error('XLSX export error:', error);
+      toast.error('Failed to export Excel report');
     }
   };
 
@@ -1198,22 +1450,67 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 print:space-y-4 print:bg-white print:text-black">
       {/* ── Page Header ───────────────────────────────────────────────── */}
       <PortalPageIntro
         title={`${mode === 'admin' ? 'Admin' : 'Staff'} Reports & Analytics`}
-        description="Filter submissions and export professional PDF summaries."
-        className="mb-8"
+        description="Review student clinical aggregates, print clean summaries, and export structured Excel reports."
+        className="mb-8 print:hidden"
       />
 
+      <div className="hidden print:block">
+        <div className="text-center">
+          <p className="text-base font-bold uppercase text-black">Gordon College Health Services Unit - Medical Report</p>
+          <p className="mt-1 text-sm text-black">Academic Year: SY {reportingTermSettings.academicYear || '2026-2027'}</p>
+          <p className="text-sm text-black">Generated On: {formatReportDateTime()}</p>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-black">
+          {friendlyFilters.slice(2).map((filter) => (
+            <p key={filter.label}>
+              <span className="font-semibold">{filter.label}:</span> {filter.value}
+            </p>
+          ))}
+        </div>
+      </div>
+
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4 print:gap-2">
         <StatCard
-          label="Filtered Submissions"
+          label="Student Medical Submissions"
           value={summary.total}
           icon={Users}
           accent="text-primary"
-          helper={`${currentTermSubmissions.length} in ${reportingTermRange.label}`}
+          helper={`Pending ${summary.pending} • In Review ${summary.inReview} • Returned ${summary.returned} • Approved ${summary.approved}`}
+        />
+        <StatCard
+          label="Clearances Issued"
+          value={clinicalSummary.clearanceIssued}
+          icon={ClipboardCheck}
+          accent="text-primary"
+          helper={`${clinicalSummary.pendingPhysicalExams} pending physical exams`}
+          progress={summary.total > 0 ? Math.round((clinicalSummary.clearanceIssued / summary.total) * 100) : 0}
+        />
+        <StatCard
+          label="Medical Certificates Issued"
+          value={clinicalSummary.medicalCertificatesIssued}
+          icon={Award}
+          accent="text-primary"
+          helper={`${certificateRate}% certificate coverage`}
+          progress={certificateRate}
+        />
+        <StatCard
+          label="Key Clinical Flags"
+          value={clinicalSummary.abnormalXray + clinicalSummary.anemiaTrend + clinicalSummary.abnormalUrinalysis}
+          icon={Stethoscope}
+          accent="text-rose-700"
+          helper={`X-Ray ${clinicalSummary.abnormalXray} • Anemia ${clinicalSummary.anemiaTrend} • Urinalysis ${clinicalSummary.abnormalUrinalysis}`}
+        />
+        <StatCard
+          label="Current-Term Records"
+          value={currentTermSubmissions.length}
+          icon={Activity}
+          accent="text-primary"
+          helper={reportingTermRange.label}
         />
         <StatCard
           label="Approval Rate"
@@ -1228,21 +1525,20 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           value={actionNeededCount}
           icon={Activity}
           accent="text-amber-600"
-          helper={`${summary.pending} under review • ${summary.returned} returned`}
+          helper={`${summary.pending} pending • ${summary.inReview} in review • ${summary.returned} returned`}
           progress={actionNeededRate}
         />
         <StatCard
-          label="Certificates Issued"
-          value={summary.withCertificate}
-          icon={Award}
-          accent="text-primary"
-          helper={`${certificateRate}% certificate coverage`}
-          progress={certificateRate}
+          label="Physical Exams Pending"
+          value={clinicalSummary.pendingPhysicalExams}
+          icon={ClipboardCheck}
+          accent="text-amber-600"
+          helper={`${Math.max(summary.total - clinicalSummary.pendingPhysicalExams, 0)} completed physical exams`}
         />
       </div>
 
       {/* ── Filters Card ──────────────────────────────────────────────── */}
-      <Card className="border-outline-variant/30">
+      <Card className="border-outline-variant/30 print:hidden">
         <CardHeader className="pb-0 pt-5 px-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
@@ -1264,9 +1560,13 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                   Reset all
                 </button>
               )}
-              <Button onClick={downloadPdf} size="sm" className="w-full gap-2 bg-primary text-white hover:bg-primary/90 sm:w-auto sm:shrink-0">
-                <Download className="w-4 h-4" />
+              <Button onClick={handlePrint} size="sm" variant="outline" className="w-full gap-2 sm:w-auto sm:shrink-0">
+                <Printer className="w-4 h-4" />
                 Print
+              </Button>
+              <Button onClick={exportXlsx} size="sm" className="w-full gap-2 bg-primary text-white hover:bg-primary/90 sm:w-auto sm:shrink-0">
+                <FileSpreadsheet className="w-4 h-4" />
+                Export Excel
               </Button>
             </div>
           </div>
@@ -1303,7 +1603,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <LabeledSelect label="Status" value={statusFilter} onValueChange={setStatusFilter} placeholder="Status">
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Under Review</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="in_review">In Review</SelectItem>
                 <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
@@ -1364,8 +1664,69 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         </CardContent>
       </Card>
 
+      {/* ── Master Records Table ──────────────────────────────────────── */}
+      <Card className="border-outline-variant/30 print:border-0 print:bg-white print:shadow-none">
+        <CardHeader className="pb-0 pt-5 px-5 print:px-0 print:pt-2">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <CardTitle className="text-base font-semibold print:text-sm print:text-black">Filtered Clinical Records</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground print:text-black">
+                {reportTableRows.length} student records matched the current report filters.
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground print:hidden">
+              Lab status summarizes X-Ray, CBC, and urinalysis results from the mapped submission record.
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent className="px-5 pb-5 pt-4 print:px-0 print:pb-0">
+          <div className="overflow-x-auto rounded-lg border border-outline-variant/40 print:overflow-visible print:rounded-none print:border-black">
+            <table className="min-w-[66rem] w-full border-collapse text-left text-sm print:min-w-0 print:text-[10px]">
+              <thead className="bg-surface-container-low text-xs uppercase tracking-wide text-on-surface-variant print:bg-white print:text-black">
+                <tr>
+                  {[
+                    'Student ID',
+                    'Full Name',
+                    'Course/Dept',
+                    'Submission Date',
+                    'Lab Status (X-Ray/CBC/Urinalysis)',
+                    'Physical Exam Status',
+                    'Issued Certificates',
+                  ].map((heading) => (
+                    <th key={heading} scope="col" className="border-b border-outline-variant/50 px-3 py-3 font-semibold print:border print:border-black print:px-1.5 print:py-1">
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/30 print:divide-y-0">
+                {reportTableRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-muted-foreground print:border print:border-black print:text-black">
+                      No records matched the selected filters.
+                    </td>
+                  </tr>
+                ) : (
+                  reportTableRows.map((row) => (
+                    <tr key={`${row.studentId}-${row.submissionDate}-${row.fullName}`} className="bg-white/60 print:bg-white">
+                      <td className="whitespace-nowrap px-3 py-3 font-medium text-on-surface print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.studentId}</td>
+                      <td className="min-w-48 px-3 py-3 text-on-surface print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.fullName}</td>
+                      <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.courseDept}</td>
+                      <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.submissionDate}</td>
+                      <td className="min-w-72 px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.labStatus}</td>
+                      <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.physicalExamStatus}</td>
+                      <td className="min-w-44 px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.issuedCertificates}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* ── Charts ────────────────────────────────────────────────────── */}
-      <div className="space-y-4">
+      <div className="space-y-4 print:hidden">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,0.8fr)]">
           <Card className="border-outline-variant/30">
             <CardHeader className="pb-0 pt-5 px-5">
