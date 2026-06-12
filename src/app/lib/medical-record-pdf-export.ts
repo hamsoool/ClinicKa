@@ -1,5 +1,5 @@
 const MEDICAL_RECORD_PDF_EXPORT_CLASS = 'medical-record-pdf-export';
-const LETTER_PAGE_WIDTH_PX = 816;
+const PRINT_PAGE_WIDTH_PX = 816;
 const CSS_PX_PER_INCH = 96;
 
 export function prepareMedicalRecordPdfClone(clone: HTMLElement, width: number) {
@@ -21,62 +21,37 @@ export function prepareMedicalRecordPdfClone(clone: HTMLElement, width: number) 
   clone.prepend(style);
 }
 
-function copyDocumentStyles(targetDocument: Document) {
-  document.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style').forEach((node) => {
-    targetDocument.head.appendChild(node.cloneNode(true));
-  });
+function getDocumentStyleMarkup() {
+  return Array.from(document.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style'))
+    .map((node) => {
+      if (node instanceof HTMLLinkElement) {
+        const href = new URL(node.getAttribute('href') || node.href, document.baseURI).href;
+        return `<link rel="stylesheet" href="${href}">`;
+      }
+      return `<style>${node.textContent || ''}</style>`;
+    })
+    .join('\n');
 }
 
-function createFallbackPrintFrame(pageWidth: number) {
-  const frame = document.createElement('iframe');
-  frame.style.position = 'fixed';
-  frame.style.left = '-10000px';
-  frame.style.top = '0';
-  frame.style.width = `${pageWidth}px`;
-  frame.style.height = '1800px';
-  frame.style.border = '0';
-  frame.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(frame);
-
-  const frameWindow = frame.contentWindow;
-  const frameDocument = frame.contentDocument;
-  if (!frameWindow || !frameDocument) {
-    document.body.removeChild(frame);
-    throw new Error('Unable to prepare the print frame.');
-  }
-
-  return {
-    printWindow: frameWindow,
-    printDocument: frameDocument,
-    setHeight: (height: number) => {
-      frame.style.height = `${height}px`;
-    },
-    cleanup: () => {
-      window.setTimeout(() => {
-        if (frame.parentNode) frame.parentNode.removeChild(frame);
-      }, 1000);
-    },
-    isPopup: false,
-  };
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
-function createPrintTarget(pageWidth: number) {
-  const popup = window.open('', '_blank');
-  if (!popup) return createFallbackPrintFrame(pageWidth);
-
-  try {
-    popup.resizeTo?.(Math.min(window.screen.availWidth || pageWidth, pageWidth), window.screen.availHeight || 1800);
-  } catch {
-    // Some mobile browsers disallow resizing auxiliary windows.
-  }
-
-  return {
-    printWindow: popup,
-    printDocument: popup.document,
-    setHeight: (_height: number) => undefined,
-    cleanup: () => undefined,
-    isPopup: true,
-  };
+function waitForImagesToLoad(root: HTMLElement) {
+  return Promise.all(
+    Array.from(root.querySelectorAll('img')).map((img) => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const finish = () => resolve();
+        img.addEventListener('load', finish, { once: true });
+        img.addEventListener('error', finish, { once: true });
+      });
+    }),
+  );
 }
 
 function waitForNextPaint(targetWindow: Window) {
@@ -87,55 +62,56 @@ function waitForNextPaint(targetWindow: Window) {
   });
 }
 
-export async function printMedicalRecordPreview(source: HTMLElement, width: number, title = 'Medical Record') {
-  const pageWidth = Math.max(width, LETTER_PAGE_WIDTH_PX);
-  const { printWindow, printDocument, setHeight, cleanup, isPopup } = createPrintTarget(pageWidth);
+function buildPrintDocumentHtml({
+  title,
+  pageWidth,
+  pageHeight,
+  naturalWidth,
+  naturalHeight,
+  contentHtml,
+}: {
+  title: string;
+  pageWidth: number;
+  pageHeight: number;
+  naturalWidth: number;
+  naturalHeight: number;
+  contentHtml: string;
+}) {
+  const pageWidthIn = pageWidth / CSS_PX_PER_INCH;
+  const pageHeightIn = pageHeight / CSS_PX_PER_INCH;
+  const safeTitle = escapeHtml(title);
 
-  printDocument.open();
-  printDocument.write('<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title></title></head><body></body></html>');
-  printDocument.close();
-  printDocument.title = title;
-  const base = printDocument.createElement('base');
-  base.href = document.baseURI;
-  printDocument.head.prepend(base);
-  copyDocumentStyles(printDocument);
-
-  const printStyle = printDocument.createElement('style');
-  printStyle.textContent = `
+  return `<!doctype html>
+<html>
+<head>
+  <base href="${escapeHtml(document.baseURI)}">
+  <meta name="viewport" content="width=${pageWidth}, initial-scale=1">
+  <title>${safeTitle}</title>
+  ${getDocumentStyleMarkup()}
+  <style>
     @page {
-      size: auto;
+      size: ${pageWidthIn}in ${pageHeightIn}in;
       margin: 0;
     }
 
-    html,
-    body {
+    html {
       background: #fff !important;
       margin: 0 !important;
       padding: 0 !important;
-      width: ${pageWidth}px !important;
+      width: 100% !important;
+      height: ${pageHeight}px !important;
       overflow: hidden !important;
     }
 
     body {
+      background: #fff !important;
       -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-
-    .medical-record-print-page {
-      background: #fff !important;
       margin: 0 !important;
-      overflow: hidden !important;
       padding: 0 !important;
-      position: relative !important;
-      width: ${pageWidth}px !important;
-    }
-
-    .medical-record-print-page > .${MEDICAL_RECORD_PDF_EXPORT_CLASS} {
-      left: 0 !important;
-      margin: 0 !important;
-      position: absolute !important;
-      top: 0 !important;
-      transform-origin: top left !important;
+      print-color-adjust: exact !important;
+      width: 100% !important;
+      min-height: ${pageHeight}px !important;
+      overflow: hidden !important;
     }
 
     .medical-record-print-actions {
@@ -143,7 +119,7 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
       background: #f8fafc;
       border-bottom: 1px solid #cbd5e1;
       box-sizing: border-box;
-      display: ${isPopup ? 'flex' : 'none'};
+      display: flex;
       font-family: Arial, Helvetica, sans-serif;
       gap: 8px;
       left: 0;
@@ -168,72 +144,171 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
       font: 13px Arial, Helvetica, sans-serif;
     }
 
+    .medical-record-print-page {
+      background: #fff !important;
+      height: ${pageHeight}px !important;
+      margin: 0 !important;
+      overflow: hidden !important;
+      padding: 0 !important;
+      position: relative !important;
+      width: ${pageWidth}px !important;
+    }
+
+    .medical-record-print-page > .${MEDICAL_RECORD_PDF_EXPORT_CLASS} {
+      left: 0 !important;
+      margin: 0 !important;
+      position: absolute !important;
+      top: 0 !important;
+      transform-origin: top left !important;
+    }
+
     @media print {
+      @page {
+        margin: 0;
+      }
+
+      html,
+      body {
+        background: #fff !important;
+        height: auto !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        width: 100% !important;
+      }
+
+      body > *:not(.medical-record-print-page) {
+        display: none !important;
+      }
+
       .medical-record-print-actions {
         display: none !important;
       }
+
+      .medical-record-print-page {
+        display: block !important;
+        left: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        position: relative !important;
+        top: 0 !important;
+      }
     }
-  `;
-  printDocument.head.appendChild(printStyle);
+  </style>
+</head>
+<body>
+  <div class="medical-record-print-actions">
+    <button type="button" onclick="window.print()">Save as PDF / Print</button>
+    <span>Use this button if the print dialog does not open automatically.</span>
+  </div>
+  <div class="medical-record-print-page">${contentHtml}</div>
+  <script>
+    (function () {
+      var naturalWidth = ${naturalWidth};
+      var naturalHeight = ${naturalHeight};
+      var defaultPageWidth = ${pageWidth};
+      var page = document.querySelector('.medical-record-print-page');
+      var form = page ? page.querySelector('.${MEDICAL_RECORD_PDF_EXPORT_CLASS}') : null;
 
-  const actionBar = printDocument.createElement('div');
-  actionBar.className = 'medical-record-print-actions';
-  const actionButton = printDocument.createElement('button');
-  actionButton.type = 'button';
-  actionButton.textContent = 'Save as PDF / Print';
-  actionButton.addEventListener('click', () => printWindow.print());
-  const actionHint = printDocument.createElement('span');
-  actionHint.textContent = 'Use this button if the print dialog does not open automatically.';
-  actionBar.append(actionButton, actionHint);
-  printDocument.body.appendChild(actionBar);
+      function getTargetWidth() {
+        var widths = [
+          document.documentElement ? document.documentElement.clientWidth : 0,
+          document.body ? document.body.clientWidth : 0,
+          window.innerWidth || 0,
+          window.visualViewport ? window.visualViewport.width : 0
+        ].filter(function (value) { return value && value > 0; });
+        var width = widths.length ? Math.max.apply(Math, widths) : defaultPageWidth;
+        if (!window.matchMedia || !window.matchMedia('print').matches) {
+          width = Math.min(width, defaultPageWidth);
+        }
+        return Math.max(1, Math.round(width));
+      }
 
-  const wrapper = printDocument.createElement('div');
-  wrapper.className = 'medical-record-print-page';
+      function fitToPageWidth() {
+        if (!page || !form) return;
+        var targetWidth = getTargetWidth();
+        var scale = targetWidth / naturalWidth;
+        var targetHeight = Math.ceil(naturalHeight * scale);
+        document.documentElement.style.width = targetWidth + 'px';
+        document.body.style.width = targetWidth + 'px';
+        page.style.width = targetWidth + 'px';
+        page.style.height = targetHeight + 'px';
+        form.style.transformOrigin = 'top left';
+        form.style.transform = 'scale(' + scale + ')';
+      }
+
+      window.addEventListener('resize', fitToPageWidth);
+      window.addEventListener('orientationchange', function () {
+        setTimeout(fitToPageWidth, 150);
+      });
+      window.addEventListener('beforeprint', fitToPageWidth);
+      fitToPageWidth();
+    })();
+
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        window.dispatchEvent(new Event('beforeprint'));
+        window.print();
+      }, 350);
+    });
+  </script>
+</body>
+</html>`;
+}
+
+export async function printMedicalRecordPreview(source: HTMLElement, width: number, title = 'Medical Record') {
+  const pageWidth = Math.max(width, PRINT_PAGE_WIDTH_PX);
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    throw new Error('The print page was blocked. Please allow pop-ups for this site and try again.');
+  }
+
+  printWindow.document.open();
+  printWindow.document.write('<!doctype html><html><head><title>Preparing PDF...</title></head><body style="font-family:Arial,sans-serif;padding:16px">Preparing PDF...</body></html>');
+  printWindow.document.close();
+
+  const measureRoot = document.createElement('div');
+  measureRoot.style.position = 'fixed';
+  measureRoot.style.left = '-10000px';
+  measureRoot.style.top = '0';
+  measureRoot.style.width = `${pageWidth}px`;
+  measureRoot.style.background = '#fff';
+  measureRoot.style.margin = '0';
+  measureRoot.style.padding = '0';
+  measureRoot.style.overflow = 'hidden';
 
   const clone = source.cloneNode(true) as HTMLElement;
   prepareMedicalRecordPdfClone(clone, width);
-  wrapper.appendChild(clone);
-  printDocument.body.appendChild(wrapper);
+  measureRoot.appendChild(clone);
+  document.body.appendChild(measureRoot);
 
-  await Promise.all(
-    Array.from(printDocument.images).map((img) => {
-      if (img.complete) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        img.addEventListener('load', () => resolve(), { once: true });
-        img.addEventListener('error', () => resolve(), { once: true });
-      });
-    }),
-  );
-  await printDocument.fonts?.ready;
-  await waitForNextPaint(printWindow);
+  try {
+    await waitForImagesToLoad(measureRoot);
+    await document.fonts?.ready;
+    await waitForNextPaint(window);
 
-  const renderedBounds = clone.getBoundingClientRect();
-  const renderedHeight = Math.ceil(Math.max(clone.scrollHeight, renderedBounds.height));
-  const renderedWidth = Math.ceil(Math.max(clone.scrollWidth, renderedBounds.width, width));
-  const scale = pageWidth / renderedWidth;
-  const pageHeight = Math.ceil(renderedHeight * scale);
-  const pageWidthIn = pageWidth / CSS_PX_PER_INCH;
-  const pageHeightIn = pageHeight / CSS_PX_PER_INCH;
+    const renderedBounds = clone.getBoundingClientRect();
+    const renderedHeight = Math.ceil(Math.max(clone.scrollHeight, renderedBounds.height));
+    const renderedWidth = Math.ceil(Math.max(clone.scrollWidth, renderedBounds.width, width));
+    const scale = pageWidth / renderedWidth;
+    const pageHeight = Math.ceil(renderedHeight * scale);
 
-  setHeight(pageHeight);
-  wrapper.style.height = `${pageHeight}px`;
-  printDocument.documentElement.style.height = `${pageHeight}px`;
-  printDocument.body.style.height = `${pageHeight}px`;
-  clone.style.transform = `scale(${scale})`;
+    clone.style.transform = 'none';
 
-  const pageSizeStyle = printDocument.createElement('style');
-  pageSizeStyle.textContent = `
-    @page {
-      size: ${pageWidthIn}in ${pageHeightIn}in;
-      margin: 0;
-    }
-  `;
-  printDocument.head.appendChild(pageSizeStyle);
-
-  await waitForNextPaint(printWindow);
-  printWindow.focus();
-  window.setTimeout(() => {
-    printWindow.print();
-    cleanup();
-  }, 100);
+    const html = buildPrintDocumentHtml({
+      title,
+      pageWidth,
+      pageHeight,
+      naturalWidth: renderedWidth,
+      naturalHeight: renderedHeight,
+      contentHtml: clone.outerHTML,
+    });
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    printWindow.location.replace(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } finally {
+    document.body.removeChild(measureRoot);
+  }
 }
