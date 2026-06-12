@@ -57,6 +57,7 @@ function verifyChestXrayParser(parsers) {
   `);
 
   assert.deepEqual(result, {
+    date: null,
     findings: 'No active pulmonary disease',
     result: 'normal',
   });
@@ -70,8 +71,9 @@ function verifyChestXrayParser(parsers) {
   `);
 
   assert.deepEqual(findingsPreferredResult, {
-    findings: 'Consider mild bronchitic change',
-    result: 'abnormal',
+    date: null,
+    findings: null,
+    result: null,
   });
 
   const observationsHeaderResult = parsers.extractChestXrayFields(`
@@ -84,7 +86,39 @@ function verifyChestXrayParser(parsers) {
   `);
 
   assert.deepEqual(observationsHeaderResult, {
+    date: null,
     findings: 'No acute cardiopulmonary abnormality',
+    result: 'normal',
+  });
+
+  const xrayDateResult = parsers.extractChestXrayFields(`
+    CHEST X-RAY
+    JUN 10, 2025
+    Impression:
+    Normal chest.
+  `);
+
+  assert.deepEqual(xrayDateResult, {
+    date: '2025-06-10',
+    findings: 'Normal chest',
+    result: 'normal',
+  });
+
+  const biolineGenericDateResult = parsers.extractChestXrayFields(`
+    BIOLINE DIAGNOSTIC LABORATORY & MEDICAL CLINIC
+    Case# O-210150 Date: JUNE 10, 2025
+    Name: AUREO, SEAN ROMEO AGE/SEX: 20M
+    Examination: CHEST PA History: PE
+    Lungfields are clear.
+    Heart is unenlarged.
+    BT and sinuses are negative.
+    No other remarkable findings.
+    IMPRESSION: ESSENTIALLY NORMAL CHEST FINDINGS.
+  `);
+
+  assert.deepEqual(biolineGenericDateResult, {
+    date: '2025-06-10',
+    findings: 'ESSENTIALLY NORMAL CHEST FINDINGS',
     result: 'normal',
   });
 }
@@ -144,6 +178,29 @@ function verifyCbcParser(parsers) {
     date: '2026-02-28',
   });
 
+  const fullMonthDateFields = parsers.extractCbcFields(`
+    CBC RESULT
+    BIRTHDATE: June 10, 2005
+    Date Released: June 10, 2026
+    Hemoglobin 13.5 g/dL
+  `);
+
+  assert.deepEqual(fullMonthDateFields, {
+    date: '2026-06-10',
+    hemoglobin: '13.5',
+  });
+
+  const incompleteNamedDateFields = parsers.extractCbcFields(`
+    CBC RESULT
+    BIRTHDATE: June 10, 2005
+    Released Date: Aug 12
+    Hemoglobin 13.5 g/dL
+  `);
+
+  assert.deepEqual(incompleteNamedDateFields, {
+    hemoglobin: '13.5',
+  });
+
   const leadingDecimalFields = parsers.extractCbcFields(`
     CBC RESULT
     RELEASED DATE: 05/24/2026
@@ -168,6 +225,43 @@ function verifyCbcParser(parsers) {
 
   assert.deepEqual(strictFailureFields, {
     date: '2026-05-24',
+  });
+
+  const biolineBloodTypingFields = parsers.extractCbcFields(`
+    HEMATOLOGY
+    Hemoglobin 155.00 g/L
+    Hematocrit 0.47
+    WBC COUNT 9.63 x10^9/L
+    Platelet Count 335.00 x10^9/L
+    Blood Typing
+    Blood Typing with RH        O+
+    End of Report
+  `);
+
+  assert.equal(biolineBloodTypingFields.bloodType, 'O+');
+
+  const splitBloodTypingFields = parsers.extractCbcFields(`
+    HEMATOLOGY
+    Blood Typing
+    Blood Typing with RH
+    O+
+    End of Report
+  `);
+
+  assert.deepEqual(splitBloodTypingFields, {
+    bloodType: 'O+',
+  });
+
+  const reorderedBloodTypingFields = parsers.extractCbcFields(`
+    HEMATOLOGY
+    Blood Typing
+    Blood Typing with RH
+    End of Report
+    O+
+  `);
+
+  assert.deepEqual(reorderedBloodTypingFields, {
+    bloodType: 'O+',
   });
 }
 
@@ -266,7 +360,23 @@ function verifyUrinalysisParser(parsers) {
     Sugar NIL
     Albumin +/-
   `);
-  assert.deepEqual(strictUrinalysisFields, {});
+  assert.deepEqual(strictUrinalysisFields, {
+    date: null,
+    glucose: null,
+    protein: null,
+  });
+
+  const conflictingUrinalysisFields = parsers.extractUrinalysisFields(`
+    URINALYSIS
+    Released Date: January 2026
+    Glucose Negative Trace
+    Protein Negative
+  `);
+  assert.deepEqual(conflictingUrinalysisFields, {
+    date: null,
+    glucose: null,
+    protein: 'Negative',
+  });
 
   const plusValueFields = parsers.extractUrinalysisFields(`
     URINALYSIS

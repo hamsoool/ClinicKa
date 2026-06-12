@@ -246,7 +246,7 @@ export default function RoleSelection() {
               </p>
               <div className="space-y-4">
                 <h1 className="max-w-3xl text-[2.5rem] font-semibold leading-[1.07] tracking-[-0.025em] text-[#161d18] sm:text-5xl lg:text-[3.5rem]">
-                  ClinicKa! Student Health Record Portal
+                  ClinicKa! <br/>A Student Health <br/>Record Portal
                 </h1>
                 <p className="max-w-2xl text-[17px] leading-7 tracking-[-0.01em] text-[#3d4a3f] sm:text-xl sm:leading-8">
                   A focused medical clearance and student health record system for submissions, clinic review, and

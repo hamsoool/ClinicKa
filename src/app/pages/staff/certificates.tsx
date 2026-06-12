@@ -17,6 +17,7 @@ import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useAuth } from '../../lib/auth';
 import { getRoleLabel } from '../../lib/api';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
+import { prepareMedicalRecordPdfClone } from '../../lib/medical-record-pdf-export';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import {
   useStaffApprovedStudentsQuery,
@@ -366,11 +367,7 @@ function StaffCertificatesWorkspace() {
       exportRoot.style.overflow = 'hidden';
 
       const clone = recordPreviewRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.width = `${RECORD_PREVIEW_BASE_WIDTH}px`;
-      clone.style.maxWidth = `${RECORD_PREVIEW_BASE_WIDTH}px`;
-      clone.style.margin = '0';
-      clone.style.padding = '0';
-      clone.style.transform = 'none';
+      prepareMedicalRecordPdfClone(clone, RECORD_PREVIEW_BASE_WIDTH);
 
       exportRoot.appendChild(clone);
       document.body.appendChild(exportRoot);
@@ -379,7 +376,7 @@ function StaffCertificatesWorkspace() {
       try {
         await waitForImagesToLoad(clone);
         canvas = await html2canvas(clone, {
-          scale: 2,
+          scale: 3,
           useCORS: true,
           backgroundColor: '#ffffff',
           width: RECORD_PREVIEW_BASE_WIDTH,
@@ -390,19 +387,17 @@ function StaffCertificatesWorkspace() {
       }
 
       const pageWidth = 215.9;
-      const margin = 4;
-      const usableWidth = pageWidth - margin * 2;
-      const imgWidth = usableWidth;
+      const imgWidth = pageWidth;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       const imgData = canvas.toDataURL('image/png');
-      const pageHeight = Math.max(330.2, imgHeight + margin * 2);
+      const pageHeight = imgHeight;
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: [pageHeight, pageWidth],
       });
 
-      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight, undefined, 'SLOW');
 
       pdf.save(`medical_record_${combinedRecord.lastName}_${combinedRecord.firstName}.pdf`);
       toast.success('Medical record PDF downloaded.');
@@ -622,7 +617,7 @@ function StaffCertificatesWorkspace() {
                     <div className="overflow-hidden rounded-lg border bg-muted/30">
                       <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
                         <div className="overflow-x-auto overscroll-x-contain">
-                          <div className="mx-auto w-max min-w-full print:w-full">
+                          <div className="flex w-max min-w-full justify-center print:w-full">
                             <div
                               className="overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
                               style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}

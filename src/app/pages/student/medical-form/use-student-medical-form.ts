@@ -47,6 +47,10 @@ const MAX_ADDRESS_LENGTH = 180;
 const MAX_CLINIC_NAME_LENGTH = 60;
 const MAX_TEST_SITE_OTHER_LENGTH = 50;
 const MAX_OTHER_MEDICAL_HISTORY_LENGTH = 20;
+const MAX_OPERATION_PROCEDURE_LENGTH = 80;
+const MAX_OPERATION_FACILITY_LENGTH = 60;
+const MAX_OPERATION_NOTES_LENGTH = 120;
+const MAX_OPERATION_DETAILS_LENGTH = 300;
 const MIN_AGE = 15;
 const LAB_RESULT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const LAB_RESULT_MAX_FILE_SIZE_LABEL = '5 MB';
@@ -137,6 +141,93 @@ function addressesMatch(studentAddress: string, emergencyAddress: string) {
 
 function sanitizeOtherMedicalHistory(value: string) {
   return String(value).replace(/[^A-Za-z\s]/g, '').slice(0, MAX_OTHER_MEDICAL_HISTORY_LENGTH);
+}
+
+function sanitizeOperationText(value: string, maxLength: number) {
+  return sanitizeSafeText(String(value || ''), maxLength).replace(/\s+/g, ' ');
+}
+
+function normalizeDateInputValue(value?: string | null) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return '';
+
+  const [year, month, day] = raw.split('-').map((part) => Number(part));
+  if (!year || !month || !day) return '';
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const isSameDate =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() + 1 === month &&
+    date.getUTCDate() === day;
+
+  return isSameDate ? raw : '';
+}
+
+function getTodayDateInputValue() {
+  const today = new Date();
+  const year = String(today.getFullYear());
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function isValidPastOrTodayDate(value: string) {
+  const normalizedValue = normalizeDateInputValue(value);
+  return Boolean(normalizedValue && normalizedValue <= getTodayDateInputValue());
+}
+
+function buildOperationDetails(data: Pick<MedicalFormData, 'operationProcedure' | 'operationDate' | 'operationFacility' | 'operationNotes'>) {
+  const parts = [
+    data.operationProcedure.trim() ? `Procedure: ${data.operationProcedure.trim()}` : '',
+    data.operationDate.trim() ? `Date: ${data.operationDate.trim()}` : '',
+    data.operationFacility.trim() ? `Facility: ${data.operationFacility.trim()}` : '',
+    data.operationNotes.trim() ? `Notes: ${data.operationNotes.trim()}` : '',
+  ].filter(Boolean);
+
+  return sanitizeSafeText(parts.join(' | '), MAX_OPERATION_DETAILS_LENGTH);
+}
+
+function parseOperationDetails(value?: string | null) {
+  const rawValue = sanitizeSafeText(String(value || ''), MAX_OPERATION_DETAILS_LENGTH).trim();
+  const parsed = {
+    operationProcedure: '',
+    operationDate: '',
+    operationFacility: '',
+    operationNotes: '',
+    operationDetails: rawValue,
+  };
+
+  if (!rawValue) return parsed;
+
+  const segments = rawValue.split('|').map((segment) => segment.trim()).filter(Boolean);
+  segments.forEach((segment) => {
+    const [rawLabel = '', ...rest] = segment.split(':');
+    const label = rawLabel.trim().toLowerCase();
+    const text = rest.join(':').trim();
+    if (!text) return;
+
+    if (label === 'procedure' || label === 'surgery' || label === 'operation') {
+      parsed.operationProcedure = sanitizeOperationText(text, MAX_OPERATION_PROCEDURE_LENGTH);
+    } else if (label === 'date' || label === 'operation date' || label === 'surgery date') {
+      parsed.operationDate = normalizeDateInputValue(text);
+    } else if (label === 'facility' || label === 'hospital' || label === 'clinic') {
+      parsed.operationFacility = sanitizeOperationText(text, MAX_OPERATION_FACILITY_LENGTH);
+    } else if (label === 'notes' || label === 'details') {
+      parsed.operationNotes = sanitizeOperationText(text, MAX_OPERATION_NOTES_LENGTH);
+    }
+  });
+
+  if (!parsed.operationProcedure && !parsed.operationDate && !parsed.operationFacility && !parsed.operationNotes) {
+    parsed.operationProcedure = sanitizeOperationText(rawValue, MAX_OPERATION_PROCEDURE_LENGTH);
+  }
+
+  parsed.operationDetails = buildOperationDetails(parsed) || rawValue;
+  return parsed;
+}
+
+function hasCompleteOperationHistory(form: Pick<MedicalFormData, 'hadOperation' | 'operationProcedure' | 'operationDate'>) {
+  if (form.hadOperation !== 'yes') return true;
+  return Boolean(form.operationProcedure.trim() && isValidPastOrTodayDate(form.operationDate));
 }
 
 function sanitizeDigits(value: string, maxLen?: number) {
@@ -299,6 +390,10 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, init
     otherMedicalHistory: '',
     allergyDetails: '',
     hadOperation: 'no',
+    operationProcedure: '',
+    operationDate: '',
+    operationFacility: '',
+    operationNotes: '',
     operationDetails: '',
     emergencyContact: {
       name: '',
@@ -446,7 +541,10 @@ export function useStudentMedicalForm({
         setIsEmergencyAddressSameAsStudent(
           addressesMatch(submission.address || '', submission.emergencyContact?.address || ''),
         );
-        setFormData((prev) => ({
+        setFormData((prev) => {
+          const parsedOperation = parseOperationDetails(submission.operationDetails || prev.operationDetails);
+
+          return {
           ...syncLegacyLabSourceFields({
             ...prev,
           studentId: normalizeStudentId(prev.studentId || submission.studentId),
@@ -479,7 +577,7 @@ export function useStudentMedicalForm({
           otherMedicalHistory: sanitizeOtherMedicalHistory((submission as any).otherMedicalHistory || ''),
           allergyDetails: sanitizeSafeText(submission.allergyDetails || prev.allergyDetails, 120),
           hadOperation: submission.hadOperation || prev.hadOperation,
-          operationDetails: sanitizeSafeText(submission.operationDetails || prev.operationDetails, 120),
+          ...parsedOperation,
           emergencyContact: {
             ...prev.emergencyContact,
             ...(submission.emergencyContact || {}),
@@ -505,7 +603,8 @@ export function useStudentMedicalForm({
           existingXrayFileUrl: submission.xrayFileUrl || '',
           submissionConfirmed: false,
           }),
-        }));
+        };
+        });
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to load returned record for editing');
       }
@@ -540,7 +639,10 @@ export function useStudentMedicalForm({
         setIsEmergencyAddressSameAsStudent(
           addressesMatch(latest.address || '', latest.emergencyContact?.address || ''),
         );
-        setFormData((prev) => ({
+        setFormData((prev) => {
+          const parsedOperation = parseOperationDetails(latest.operationDetails || prev.operationDetails || '');
+
+          return {
           ...syncLegacyLabSourceFields({
             ...prev,
           medicalHistory: {
@@ -550,7 +652,7 @@ export function useStudentMedicalForm({
           otherMedicalHistory: sanitizeOtherMedicalHistory((latest as any).otherMedicalHistory || prev.otherMedicalHistory || ''),
           allergyDetails: sanitizeSafeText(latest.allergyDetails || prev.allergyDetails || '', 120),
           hadOperation: (latest.hadOperation as 'yes' | 'no') || prev.hadOperation,
-          operationDetails: sanitizeSafeText(latest.operationDetails || prev.operationDetails || '', 120),
+          ...parsedOperation,
           emergencyContact: {
             ...prev.emergencyContact,
             ...(latest.emergencyContact || {}),
@@ -566,7 +668,8 @@ export function useStudentMedicalForm({
           urinalysisTestSiteOther: resolveLabTestSiteFields((latest as any).urinalysisTestClinic || prev.urinalysisTestSiteOther || '').other,
           xrayTestSiteOther: resolveLabTestSiteFields((latest as any).xrayTestClinic || prev.xrayTestSiteOther || '').other,
           }),
-        }));
+        };
+        });
       } catch {
         if (!active) return;
       }
@@ -703,10 +806,53 @@ export function useStudentMedicalForm({
     if (field === 'xrayTestSiteOther') {
       return setFormData((prev) => syncLegacyLabSourceFields({ ...prev, xrayTestSiteOther: sanitizeTestSiteOther(String(value)) }));
     }
-    if (field === 'operationDetails') {
-      const safe = sanitizeSafeText(String(value), 120);
+    if (field === 'hadOperation') {
+      return setFormData((prev) => {
+        if (value === 'no') {
+          return {
+            ...prev,
+            hadOperation: 'no',
+            operationProcedure: '',
+            operationDate: '',
+            operationFacility: '',
+            operationNotes: '',
+            operationDetails: '',
+          };
+        }
+        return { ...prev, hadOperation: 'yes' };
+      });
+    }
+    if (field === 'operationProcedure' || field === 'operationFacility' || field === 'operationNotes') {
+      const maxLength =
+        field === 'operationProcedure'
+          ? MAX_OPERATION_PROCEDURE_LENGTH
+          : field === 'operationFacility'
+          ? MAX_OPERATION_FACILITY_LENGTH
+          : MAX_OPERATION_NOTES_LENGTH;
+      const safe = sanitizeOperationText(String(value), maxLength);
       if (SQL_INJECTION_REGEX.test(safe)) return;
-      return setFormData((prev) => ({ ...prev, operationDetails: safe }));
+      return setFormData((prev) => {
+        const next = { ...prev, [field]: safe };
+        return {
+          ...next,
+          operationDetails: buildOperationDetails(next),
+        };
+      });
+    }
+    if (field === 'operationDate') {
+      const safe = normalizeDateInputValue(String(value));
+      return setFormData((prev) => {
+        const next = { ...prev, operationDate: safe };
+        return {
+          ...next,
+          operationDetails: buildOperationDetails(next),
+        };
+      });
+    }
+    if (field === 'operationDetails') {
+      const parsedOperation = parseOperationDetails(String(value));
+      if (SQL_INJECTION_REGEX.test(parsedOperation.operationDetails)) return;
+      return setFormData((prev) => ({ ...prev, ...parsedOperation }));
     }
     if (field === 'yearLevel') return setFormData((prev) => ({ ...prev, yearLevel: String(value) }));
 
@@ -894,6 +1040,7 @@ export function useStudentMedicalForm({
       case 3:
         return (
           formData.hadOperation &&
+          hasCompleteOperationHistory(formData) &&
           formData.emergencyContact.name &&
           formData.emergencyContact.relationship &&
           formData.emergencyContact.phone &&
@@ -928,6 +1075,7 @@ export function useStudentMedicalForm({
           formData.yearLevel &&
           formData.sex &&
         formData.hadOperation &&
+        hasCompleteOperationHistory(formData) &&
         formData.emergencyContact.name &&
         formData.emergencyContact.relationship &&
         formData.emergencyContact.phone &&
@@ -962,6 +1110,15 @@ export function useStudentMedicalForm({
     if (!formData.year) blockers.push('Submission slot could not be determined.');
     if (!formData.sex) blockers.push('Select your sex.');
     if (!formData.hadOperation) blockers.push('Answer the operation history question.');
+    if (formData.hadOperation === 'yes' && !formData.operationProcedure.trim()) {
+      blockers.push('Enter the procedure or surgery performed.');
+    }
+    if (formData.hadOperation === 'yes' && !formData.operationDate.trim()) {
+      blockers.push('Enter the operation date.');
+    }
+    if (formData.hadOperation === 'yes' && formData.operationDate.trim() && !isValidPastOrTodayDate(formData.operationDate)) {
+      blockers.push('Operation date must be a valid date and cannot be in the future.');
+    }
     if (!formData.emergencyContact.name?.trim()) blockers.push('Enter your emergency contact name.');
     if (!formData.emergencyContact.relationship?.trim()) blockers.push('Select your emergency contact relationship.');
     if (!formData.emergencyContact.phone?.trim()) blockers.push('Enter your emergency contact phone number.');

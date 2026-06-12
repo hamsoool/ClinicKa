@@ -137,9 +137,9 @@ const S = {
 };
 
 const PRINT_LINE_FIELD_CLASS =
-  'inline-flex min-h-[19px] items-end overflow-hidden border-b border-black px-0.5 pb-1 leading-tight print:pb-1 print:leading-tight';
+  'medical-record-line-field inline-flex min-h-[19px] items-end overflow-hidden border-b border-black px-0.5 pb-1 leading-tight print:pb-1 print:leading-tight';
 const PRINT_INLINE_FIELD_CLASS =
-  'inline-block whitespace-nowrap align-baseline border-b border-black px-0.5 pb-1 leading-tight print:pb-1 print:leading-tight print:align-baseline';
+  'medical-record-inline-field inline-block whitespace-nowrap align-baseline border-b border-black px-0.5 pb-1 leading-tight print:pb-1 print:leading-tight print:align-baseline';
 
 function renderLineField(
   value: unknown,
@@ -551,9 +551,10 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <div
             style={{
               border: '1px solid #000',
-              padding: '4px 10px',
+              padding: '2px 10px',
               fontWeight: 'bold',
               fontSize: '10.5px',
+              lineHeight: '1.2',
               minWidth: '150px',
             }}
           >
@@ -866,10 +867,8 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                   key={slot}
                   style={{ ...S.th, width: EXAM_YEAR_COLUMN_WIDTH, minWidth: EXAM_YEAR_COLUMN_WIDTH }}
                 >
-                  <div className="flex flex-col gap-[2px] print:flex print:flex-col" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <span>{`${getSlotHeaderLabel(slot)} / Date:`}</span>
-                    <span style={{ fontWeight: 'normal' }}>{getSlotExamDate(slot)}</span>
-                  </div>
+                  {`${getSlotHeaderLabel(slot)} / Date: `}
+                  <span style={{ fontWeight: 'normal' }}>{getSlotExamDate(slot)}</span>
                 </th>
               ))}
             </tr>
