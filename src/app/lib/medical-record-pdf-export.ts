@@ -27,8 +27,7 @@ function copyDocumentStyles(targetDocument: Document) {
   });
 }
 
-export async function printMedicalRecordPreview(source: HTMLElement, width: number, title = 'Medical Record') {
-  const pageWidth = Math.max(width, LETTER_PAGE_WIDTH_PX);
+function createFallbackPrintFrame(pageWidth: number) {
   const frame = document.createElement('iframe');
   frame.style.position = 'fixed';
   frame.style.left = '-10000px';
@@ -37,7 +36,6 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
   frame.style.height = '1800px';
   frame.style.border = '0';
   frame.setAttribute('aria-hidden', 'true');
-
   document.body.appendChild(frame);
 
   const frameWindow = frame.contentWindow;
@@ -47,13 +45,62 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
     throw new Error('Unable to prepare the print frame.');
   }
 
-  frameDocument.open();
-  frameDocument.write('<!doctype html><html><head><title></title></head><body></body></html>');
-  frameDocument.close();
-  frameDocument.title = title;
-  copyDocumentStyles(frameDocument);
+  return {
+    printWindow: frameWindow,
+    printDocument: frameDocument,
+    setHeight: (height: number) => {
+      frame.style.height = `${height}px`;
+    },
+    cleanup: () => {
+      window.setTimeout(() => {
+        if (frame.parentNode) frame.parentNode.removeChild(frame);
+      }, 1000);
+    },
+    isPopup: false,
+  };
+}
 
-  const printStyle = frameDocument.createElement('style');
+function createPrintTarget(pageWidth: number) {
+  const popup = window.open('', '_blank');
+  if (!popup) return createFallbackPrintFrame(pageWidth);
+
+  try {
+    popup.resizeTo?.(Math.min(window.screen.availWidth || pageWidth, pageWidth), window.screen.availHeight || 1800);
+  } catch {
+    // Some mobile browsers disallow resizing auxiliary windows.
+  }
+
+  return {
+    printWindow: popup,
+    printDocument: popup.document,
+    setHeight: (_height: number) => undefined,
+    cleanup: () => undefined,
+    isPopup: true,
+  };
+}
+
+function waitForNextPaint(targetWindow: Window) {
+  return new Promise<void>((resolve) => {
+    targetWindow.requestAnimationFrame(() => {
+      targetWindow.requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+export async function printMedicalRecordPreview(source: HTMLElement, width: number, title = 'Medical Record') {
+  const pageWidth = Math.max(width, LETTER_PAGE_WIDTH_PX);
+  const { printWindow, printDocument, setHeight, cleanup, isPopup } = createPrintTarget(pageWidth);
+
+  printDocument.open();
+  printDocument.write('<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title></title></head><body></body></html>');
+  printDocument.close();
+  printDocument.title = title;
+  const base = printDocument.createElement('base');
+  base.href = document.baseURI;
+  printDocument.head.prepend(base);
+  copyDocumentStyles(printDocument);
+
+  const printStyle = printDocument.createElement('style');
   printStyle.textContent = `
     @page {
       size: auto;
@@ -90,19 +137,66 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
       top: 0 !important;
       transform-origin: top left !important;
     }
-  `;
-  frameDocument.head.appendChild(printStyle);
 
-  const wrapper = frameDocument.createElement('div');
+    .medical-record-print-actions {
+      align-items: center;
+      background: #f8fafc;
+      border-bottom: 1px solid #cbd5e1;
+      box-sizing: border-box;
+      display: ${isPopup ? 'flex' : 'none'};
+      font-family: Arial, Helvetica, sans-serif;
+      gap: 8px;
+      left: 0;
+      padding: 10px 12px;
+      position: sticky;
+      right: 0;
+      top: 0;
+      z-index: 10;
+    }
+
+    .medical-record-print-actions button {
+      background: #006d3c;
+      border: 0;
+      border-radius: 4px;
+      color: #fff;
+      font: 600 14px Arial, Helvetica, sans-serif;
+      padding: 9px 12px;
+    }
+
+    .medical-record-print-actions span {
+      color: #334155;
+      font: 13px Arial, Helvetica, sans-serif;
+    }
+
+    @media print {
+      .medical-record-print-actions {
+        display: none !important;
+      }
+    }
+  `;
+  printDocument.head.appendChild(printStyle);
+
+  const actionBar = printDocument.createElement('div');
+  actionBar.className = 'medical-record-print-actions';
+  const actionButton = printDocument.createElement('button');
+  actionButton.type = 'button';
+  actionButton.textContent = 'Save as PDF / Print';
+  actionButton.addEventListener('click', () => printWindow.print());
+  const actionHint = printDocument.createElement('span');
+  actionHint.textContent = 'Use this button if the print dialog does not open automatically.';
+  actionBar.append(actionButton, actionHint);
+  printDocument.body.appendChild(actionBar);
+
+  const wrapper = printDocument.createElement('div');
   wrapper.className = 'medical-record-print-page';
 
   const clone = source.cloneNode(true) as HTMLElement;
   prepareMedicalRecordPdfClone(clone, width);
   wrapper.appendChild(clone);
-  frameDocument.body.appendChild(wrapper);
+  printDocument.body.appendChild(wrapper);
 
   await Promise.all(
-    Array.from(frameDocument.images).map((img) => {
+    Array.from(printDocument.images).map((img) => {
       if (img.complete) return Promise.resolve();
       return new Promise<void>((resolve) => {
         img.addEventListener('load', () => resolve(), { once: true });
@@ -110,7 +204,8 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
       });
     }),
   );
-  await frameDocument.fonts?.ready;
+  await printDocument.fonts?.ready;
+  await waitForNextPaint(printWindow);
 
   const renderedBounds = clone.getBoundingClientRect();
   const renderedHeight = Math.ceil(Math.max(clone.scrollHeight, renderedBounds.height));
@@ -120,25 +215,25 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
   const pageWidthIn = pageWidth / CSS_PX_PER_INCH;
   const pageHeightIn = pageHeight / CSS_PX_PER_INCH;
 
-  frame.style.height = `${pageHeight}px`;
+  setHeight(pageHeight);
   wrapper.style.height = `${pageHeight}px`;
-  frameDocument.documentElement.style.height = `${pageHeight}px`;
-  frameDocument.body.style.height = `${pageHeight}px`;
+  printDocument.documentElement.style.height = `${pageHeight}px`;
+  printDocument.body.style.height = `${pageHeight}px`;
   clone.style.transform = `scale(${scale})`;
 
-  const pageSizeStyle = frameDocument.createElement('style');
+  const pageSizeStyle = printDocument.createElement('style');
   pageSizeStyle.textContent = `
     @page {
       size: ${pageWidthIn}in ${pageHeightIn}in;
       margin: 0;
     }
   `;
-  frameDocument.head.appendChild(pageSizeStyle);
+  printDocument.head.appendChild(pageSizeStyle);
 
-  frameWindow.focus();
-  frameWindow.print();
-
+  await waitForNextPaint(printWindow);
+  printWindow.focus();
   window.setTimeout(() => {
-    if (frame.parentNode) frame.parentNode.removeChild(frame);
-  }, 1000);
+    printWindow.print();
+    cleanup();
+  }, 100);
 }
