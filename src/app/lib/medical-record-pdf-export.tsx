@@ -2,6 +2,7 @@ import { Document, Image, Page, StyleSheet, Text, View, pdf } from '@react-pdf/r
 import type { ReactElement, ReactNode } from 'react';
 import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel, normalizeSubmissionSlot } from './academic-year';
+import { formatOperationDetailsForDisplay } from './operation-details';
 import type { LabResults, SubmissionRecord } from './record-types';
 
 const CLEARANCE_SIGNATORY_NAMES = ['GERALD S. BERNAL, MD', 'ARMANDO TAMAYO, MD'] as const;
@@ -17,8 +18,14 @@ const CERTIFICATE_COPY_HEIGHT = 364 * CERTIFICATE_SCALE;
 const CERTIFICATE_LOGO_SIZE = 44 * CERTIFICATE_SCALE;
 const CERTIFICATE_COPY_BADGE_HEIGHT = 22 * CERTIFICATE_SCALE;
 const CERTIFICATE_COPY_GAP = 6 * CERTIFICATE_SCALE;
-const CERTIFICATE_BODY_FONT_SIZE = 12.5 * CERTIFICATE_SCALE;
-const CERTIFICATE_SIGNATORY_NAME_FONT_SIZE = 13 * CERTIFICATE_SCALE;
+const CERTIFICATE_BODY_FONT_SIZE = 11.5 * CERTIFICATE_SCALE;
+const CERTIFICATE_SIGNATORY_NAME_FONT_SIZE = 12 * CERTIFICATE_SCALE;
+const CERTIFICATE_SCHOOL_FONT_SIZE = 18 * CERTIFICATE_SCALE;
+const CERTIFICATE_ADDRESS_FONT_SIZE = 10 * CERTIFICATE_SCALE;
+const CERTIFICATE_UNIT_FONT_SIZE = 11 * CERTIFICATE_SCALE;
+const CERTIFICATE_TITLE_FONT_SIZE = 15 * CERTIFICATE_SCALE;
+const CERTIFICATE_YEAR_FONT_SIZE = 11 * CERTIFICATE_SCALE;
+const CERTIFICATE_BADGE_FONT_SIZE = 8.5 * CERTIFICATE_SCALE;
 const MEDICAL_FORM_TABLE_WIDTH = 764 * PX_TO_PT;
 const MEDICAL_FORM_EXAM_LABEL_WIDTH = 168 * PX_TO_PT;
 const MEDICAL_FORM_EXAM_YEAR_WIDTH = 149 * PX_TO_PT;
@@ -110,6 +117,163 @@ function getPdfFileName(title: string, record?: SubmissionRecord) {
     .replace(/^-+|-+$/g, '')
     .toLowerCase();
   return `${normalized || 'document'}.pdf`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function writePdfPreviewShell(targetWindow: Window, title: string) {
+  targetWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #111827; color: #111827; font-family: Arial, Helvetica, sans-serif; }
+    body { display: grid; place-items: center; }
+    .status { border-radius: 10px; background: #fff; padding: 18px 20px; box-shadow: 0 20px 50px rgba(0,0,0,.25); font-size: 15px; }
+  </style>
+</head>
+<body>
+  <div class="status">Preparing PDF...</div>
+</body>
+</html>`);
+  targetWindow.document.close();
+}
+
+function writePdfPreviewDocument(targetWindow: Window, title: string, fileName: string, pdfUrl: string) {
+  const safeTitle = escapeHtml(title);
+  const safeFileName = escapeHtml(fileName);
+  const scriptTitle = JSON.stringify(title);
+  const scriptFileName = JSON.stringify(fileName);
+  const scriptPdfUrl = JSON.stringify(pdfUrl);
+
+  targetWindow.document.open();
+  targetWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>${safeFileName}</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-family: Arial, Helvetica, sans-serif; background: #1f2937; color: #111827; }
+    body { display: flex; flex-direction: column; min-height: 100%; }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 56px;
+      padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+      background: #fff;
+      border-bottom: 1px solid #d1d5db;
+      box-shadow: 0 1px 3px rgba(0,0,0,.12);
+      z-index: 2;
+    }
+    .title { min-width: 0; flex: 1; font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .actions { display: flex; gap: 8px; }
+    button, a.action {
+      appearance: none;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+      color: #111827;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+      padding: 10px 12px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    button.primary, a.primary { background: #166534; border-color: #166534; color: #fff; }
+    .viewer { flex: 1; min-height: 0; display: flex; background: #374151; }
+    iframe { width: 100%; height: 100%; border: 0; background: #52525b; }
+    .mobile-help { display: none; padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #d1d5db; font-size: 12px; line-height: 1.4; }
+    @media (max-width: 720px) {
+      .toolbar { align-items: stretch; flex-direction: column; }
+      .title { width: 100%; white-space: normal; }
+      .actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+      button, a.action { width: 100%; text-align: center; padding: 12px 10px; }
+      .mobile-help { display: block; }
+    }
+    @media print {
+      .toolbar, .mobile-help { display: none; }
+      iframe { height: 100vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="title">${safeFileName}</div>
+    <div class="actions">
+      <a class="action primary" id="open-link" href="">Open PDF</a>
+      <a class="action" id="download-link" href="" download="${safeFileName}">Download</a>
+      <button type="button" id="share-button">Share / Print</button>
+      <button type="button" id="print-button">Print</button>
+    </div>
+  </div>
+  <div class="mobile-help">On iPhone/iPad, use Share / Print to open the iOS share sheet, then choose Print or Save to Files. On Android, Open PDF or Download will hand the file to the browser/PDF viewer.</div>
+  <div class="viewer">
+    <iframe id="pdf-frame" title="${safeTitle}" src=""></iframe>
+  </div>
+  <script>
+    const pdfUrl = ${scriptPdfUrl};
+    const fileName = ${scriptFileName};
+    const documentTitle = ${scriptTitle};
+    const frame = document.getElementById('pdf-frame');
+    const openLink = document.getElementById('open-link');
+    const downloadLink = document.getElementById('download-link');
+    const shareButton = document.getElementById('share-button');
+    const printButton = document.getElementById('print-button');
+
+    frame.src = pdfUrl;
+    openLink.href = pdfUrl;
+    downloadLink.href = pdfUrl;
+
+    async function sharePdf() {
+      try {
+        if (!navigator.share) {
+          window.open(pdfUrl, '_blank', 'noopener');
+          return;
+        }
+        const response = await fetch(pdfUrl);
+        const blob = await response.blob();
+        const file = new File([blob], fileName, { type: 'application/pdf' });
+        const payload = { files: [file], title: documentTitle };
+        if (navigator.canShare && !navigator.canShare(payload)) {
+          window.open(pdfUrl, '_blank', 'noopener');
+          return;
+        }
+        await navigator.share(payload);
+      } catch (error) {
+        window.open(pdfUrl, '_blank', 'noopener');
+      }
+    }
+
+    function printPdf() {
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch (error) {
+        window.open(pdfUrl, '_blank', 'noopener');
+      }
+    }
+
+    shareButton.addEventListener('click', sharePdf);
+    printButton.addEventListener('click', printPdf);
+  </script>
+</body>
+</html>`);
+  targetWindow.document.close();
 }
 
 function normalizeExaminerName(value?: string | null) {
@@ -340,13 +504,13 @@ function CertificateTitle() {
           style={[
             S.bold,
             {
-              width: 9 * CERTIFICATE_SCALE,
-              height: 19 * CERTIFICATE_SCALE,
+              width: 10.5 * CERTIFICATE_SCALE,
+              height: 21 * CERTIFICATE_SCALE,
               marginRight: 2.5 * CERTIFICATE_SCALE,
               paddingBottom: 5 * CERTIFICATE_SCALE,
               borderBottomWidth: 1.1,
               borderBottomColor: '#000',
-              fontSize: 13 * CERTIFICATE_SCALE,
+              fontSize: CERTIFICATE_TITLE_FONT_SIZE,
               lineHeight: 1,
               textAlign: 'center',
             },
@@ -413,11 +577,11 @@ function CertificateCopy({
           <Image src={assetUrl('/gordon_college_academicaffairs.png')} style={S.logo} />
         </View>
         <View style={[S.center, { flex: 1 }]}>
-          <Text style={[S.bold, { fontSize: 16 * CERTIFICATE_SCALE, letterSpacing: 2 * CERTIFICATE_SCALE, marginBottom: 1 * CERTIFICATE_SCALE }]}>GORDON COLLEGE</Text>
-          <Text style={{ fontSize: 8 * CERTIFICATE_SCALE, lineHeight: 1.5, color: '#222' }}>Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City</Text>
-          <Text style={{ fontSize: 8 * CERTIFICATE_SCALE, lineHeight: 1.5, color: '#222' }}>Tel. No.: (047) 222-4080</Text>
-          <Text style={[S.bold, { fontSize: 9 * CERTIFICATE_SCALE, marginTop: 4 * CERTIFICATE_SCALE }]}>Office of Student Welfare and Services</Text>
-          <Text style={[S.bold, { fontSize: 9 * CERTIFICATE_SCALE }]}>Health Services Unit</Text>
+          <Text style={[S.bold, { fontSize: CERTIFICATE_SCHOOL_FONT_SIZE, letterSpacing: 2 * CERTIFICATE_SCALE, marginBottom: 1 * CERTIFICATE_SCALE }]}>GORDON COLLEGE</Text>
+          <Text style={{ fontSize: CERTIFICATE_ADDRESS_FONT_SIZE, lineHeight: 1.5, color: '#222' }}>Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City</Text>
+          <Text style={{ fontSize: CERTIFICATE_ADDRESS_FONT_SIZE, lineHeight: 1.5, color: '#222' }}>Tel. No.: (047) 222-4080</Text>
+          <Text style={[S.bold, { fontSize: CERTIFICATE_UNIT_FONT_SIZE, marginTop: 4 * CERTIFICATE_SCALE }]}>Office of Student Welfare and Services</Text>
+          <Text style={[S.bold, { fontSize: CERTIFICATE_UNIT_FONT_SIZE }]}>Health Services Unit</Text>
         </View>
         <View style={[S.center, { width: Math.max(badgeWidth, 60 * CERTIFICATE_SCALE), paddingTop: 2 * CERTIFICATE_SCALE }]}>
           <Image src={assetUrl('/gordonhsc.png')} style={S.logo} />
@@ -431,13 +595,13 @@ function CertificateCopy({
               justifyContent: 'center',
             }}
           >
-            <Text style={[S.bold, { fontSize: 6.5 * CERTIFICATE_SCALE, textAlign: 'center' }]}>{copyType}</Text>
+            <Text style={[S.bold, { fontSize: CERTIFICATE_BADGE_FONT_SIZE, textAlign: 'center' }]}>{copyType}</Text>
           </View>
         </View>
       </View>
       <View style={[S.center, { marginTop: 10 * CERTIFICATE_SCALE, marginBottom: 8 * CERTIFICATE_SCALE }]}>
         <CertificateTitle />
-        <Text style={[S.bold, { fontSize: 9 * CERTIFICATE_SCALE, marginTop: 8 * CERTIFICATE_SCALE, letterSpacing: 0.08 }]}>{academicYearLabel}</Text>
+        <Text style={[S.bold, { fontSize: CERTIFICATE_YEAR_FONT_SIZE, marginTop: 8 * CERTIFICATE_SCALE, letterSpacing: 0.08 }]}>{academicYearLabel}</Text>
       </View>
       <View style={{ flex: 1, justifyContent: 'space-between' }}>
         <View style={{ gap: 10 * CERTIFICATE_SCALE }}>
@@ -688,7 +852,7 @@ function MedicalRecordPdfPage({
         </View>
         <View style={[S.row, { alignItems: 'flex-end', gap: 4 * PX_TO_PT, marginBottom: 8 * PX_TO_PT }]}>
           <FormLabel>• If yes, state the nature of the operation and date/year</FormLabel>
-          <FormLine value={record.hadOperation === 'yes' ? record.operationDetails : ''} style={{ flex: 1 }} />
+          <FormLine value={record.hadOperation === 'yes' ? formatOperationDetailsForDisplay(record.operationDetails) : ''} style={{ flex: 1 }} />
         </View>
         <View style={{ height: 8 * PX_TO_PT }} />
         <View style={[S.row, { alignItems: 'flex-end', gap: 4 * PX_TO_PT, marginBottom: 8 * PX_TO_PT }]}>
@@ -883,16 +1047,14 @@ async function openPdfDocument(document: ReactElement, title: string, record?: S
   if (!previewWindow) {
     throw new Error('The PDF preview was blocked. Please allow pop-ups for this site and try again.');
   }
-  previewWindow.document.write(
-    '<!doctype html><title>Preparing PDF...</title><body style="font-family:Arial,sans-serif">Preparing PDF...</body>',
-  );
-  previewWindow.document.close();
+  writePdfPreviewShell(previewWindow, 'Preparing PDF...');
   try {
     const blob = await pdf(document).toBlob();
-    const file = new File([blob], getPdfFileName(title, record), { type: 'application/pdf' });
+    const fileName = getPdfFileName(title, record);
+    const file = new File([blob], fileName, { type: 'application/pdf' });
     const url = URL.createObjectURL(file);
-    previewWindow.location.replace(url);
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    writePdfPreviewDocument(previewWindow, title, fileName, url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 15 * 60_000);
   } catch (error) {
     previewWindow.close();
     throw error;

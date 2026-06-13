@@ -398,17 +398,17 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <div className="space-y-1">
                 <h4 className="font-semibold text-on-surface">Surgical History Details</h4>
                 <p className="text-sm text-muted-foreground">
-                  Enter the procedure and date as they would appear in a clinical surgical history.
+                  Enter the nature of the operation and the date it happened.
                 </p>
               </div>
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="operationProcedure">Procedure / surgery performed *</Label>
+                  <Label htmlFor="operationProcedure">Nature of operation *</Label>
                   <Input
                     id="operationProcedure"
                     value={formData.operationProcedure}
                     onChange={(event) => onFieldChange('operationProcedure', event.target.value)}
-                    placeholder="e.g. Appendectomy, tonsillectomy"
+                    placeholder="e.g. Nephrectomy"
                     maxLength={80}
                     className={requiredFieldClass(!formData.operationProcedure.trim())}
                   />
@@ -426,26 +426,6 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   {operationDateInvalid ? (
                     <p className="text-xs text-red-600">Operation date cannot be in the future.</p>
                   ) : null}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="operationFacility">Hospital / clinic</Label>
-                  <Input
-                    id="operationFacility"
-                    value={formData.operationFacility}
-                    onChange={(event) => onFieldChange('operationFacility', event.target.value)}
-                    placeholder="e.g. James L. Gordon Memorial Hospital"
-                    maxLength={60}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="operationNotes">Additional notes</Label>
-                  <Input
-                    id="operationNotes"
-                    value={formData.operationNotes}
-                    onChange={(event) => onFieldChange('operationNotes', event.target.value)}
-                    placeholder="e.g. No complications, fully recovered"
-                    maxLength={120}
-                  />
                 </div>
               </div>
             </div>
