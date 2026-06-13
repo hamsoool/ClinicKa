@@ -373,7 +373,49 @@ function buildPrintDocumentHtml({
 </html>`;
 }
 
+function writePreparingPrintDocument(printWindow: Window, title: string) {
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    html, body {
+      align-items: center;
+      background: #f8fafc;
+      color: #0f172a;
+      display: flex;
+      font-family: Arial, Helvetica, sans-serif;
+      height: 100%;
+      justify-content: center;
+      margin: 0;
+    }
+    .status {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+      font-size: 15px;
+      padding: 18px 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="status">Preparing print preview...</div>
+</body>
+</html>`);
+  printWindow.document.close();
+}
+
 export async function printMedicalRecordPreview(source: HTMLElement, width: number, title = 'Medical Record') {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    throw new Error('The print page was blocked. Please allow pop-ups for this site and try again.');
+  }
+
+  writePreparingPrintDocument(printWindow, title);
+
   const pageWidth = Math.max(width, PRINT_PAGE_WIDTH_PX);
   const clone = source.cloneNode(true) as HTMLElement;
   prepareMedicalRecordPdfClone(clone, width);
@@ -395,11 +437,6 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
     contentHtml: clone.outerHTML,
   });
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    throw new Error('The print page was blocked. Please allow pop-ups for this site and try again.');
-  }
-
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
@@ -415,6 +452,7 @@ export async function printMedicalRecordPreview(source: HTMLElement, width: numb
       printWindow.print();
     }
   } catch {
-    printWindow.print();
+    // Mobile browsers may reject scripted print calls. Keep the prepared
+    // preview open so the visible "Save as PDF / Print" button can be used.
   }
 }
