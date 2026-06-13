@@ -1051,8 +1051,7 @@ async function openPdfDocument(document: ReactElement, title: string, record?: S
   try {
     const blob = await pdf(document).toBlob();
     const fileName = getPdfFileName(title, record);
-    const file = new File([blob], fileName, { type: 'application/pdf' });
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(blob);
     writePdfPreviewDocument(previewWindow, title, fileName, url);
     window.setTimeout(() => URL.revokeObjectURL(url), 15 * 60_000);
   } catch (error) {
