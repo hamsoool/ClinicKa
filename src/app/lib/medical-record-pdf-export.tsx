@@ -1,5 +1,5 @@
 import { Document, Image, Page, StyleSheet, Text, View, pdf } from '@react-pdf/renderer';
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel, normalizeSubmissionSlot } from './academic-year';
 import { formatOperationDetailsForDisplay } from './operation-details';
@@ -108,172 +108,6 @@ function assetUrl(path: string) {
 
 function text(value: unknown) {
   return String(value || '').trim();
-}
-
-function getPdfFileName(title: string, record?: SubmissionRecord) {
-  const id = text(record?.studentId);
-  const normalized = (id || title || 'document')
-    .replace(/[^a-z0-9]+/gi, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase();
-  return `${normalized || 'document'}.pdf`;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function writePdfPreviewShell(targetWindow: Window, title: string) {
-  targetWindow.document.write(`<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>${escapeHtml(title)}</title>
-  <style>
-    html, body { height: 100%; margin: 0; background: #111827; color: #111827; font-family: Arial, Helvetica, sans-serif; }
-    body { display: grid; place-items: center; }
-    .status { border-radius: 10px; background: #fff; padding: 18px 20px; box-shadow: 0 20px 50px rgba(0,0,0,.25); font-size: 15px; }
-  </style>
-</head>
-<body>
-  <div class="status">Preparing PDF...</div>
-</body>
-</html>`);
-  targetWindow.document.close();
-}
-
-function writePdfPreviewDocument(targetWindow: Window, title: string, fileName: string, pdfUrl: string) {
-  const safeTitle = escapeHtml(title);
-  const safeFileName = escapeHtml(fileName);
-  const scriptTitle = JSON.stringify(title);
-  const scriptFileName = JSON.stringify(fileName);
-  const scriptPdfUrl = JSON.stringify(pdfUrl);
-
-  targetWindow.document.open();
-  targetWindow.document.write(`<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>${safeFileName}</title>
-  <style>
-    * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; font-family: Arial, Helvetica, sans-serif; background: #1f2937; color: #111827; }
-    body { display: flex; flex-direction: column; min-height: 100%; }
-    .toolbar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-height: 56px;
-      padding: max(8px, env(safe-area-inset-top)) 12px 8px;
-      background: #fff;
-      border-bottom: 1px solid #d1d5db;
-      box-shadow: 0 1px 3px rgba(0,0,0,.12);
-      z-index: 2;
-    }
-    .title { min-width: 0; flex: 1; font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .actions { display: flex; gap: 8px; }
-    button, a.action {
-      appearance: none;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      background: #fff;
-      color: #111827;
-      cursor: pointer;
-      font: inherit;
-      font-size: 13px;
-      font-weight: 700;
-      line-height: 1;
-      padding: 10px 12px;
-      text-decoration: none;
-      white-space: nowrap;
-    }
-    button.primary, a.primary { background: #166534; border-color: #166534; color: #fff; }
-    .viewer { flex: 1; min-height: 0; display: flex; background: #374151; }
-    iframe { width: 100%; height: 100%; border: 0; background: #52525b; }
-    .mobile-help { display: none; padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #d1d5db; font-size: 12px; line-height: 1.4; }
-    @media (max-width: 720px) {
-      .toolbar { align-items: stretch; flex-direction: column; }
-      .title { width: 100%; white-space: normal; }
-      .actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
-      button, a.action { width: 100%; text-align: center; padding: 12px 10px; }
-      .mobile-help { display: block; }
-    }
-    @media print {
-      .toolbar, .mobile-help { display: none; }
-      iframe { height: 100vh; }
-    }
-  </style>
-</head>
-<body>
-  <div class="toolbar">
-    <div class="title">${safeFileName}</div>
-    <div class="actions">
-      <a class="action primary" id="open-link" href="">Open PDF</a>
-      <a class="action" id="download-link" href="" download="${safeFileName}">Download</a>
-      <button type="button" id="share-button">Share / Print</button>
-      <button type="button" id="print-button">Print</button>
-    </div>
-  </div>
-  <div class="mobile-help">On iPhone/iPad, use Share / Print to open the iOS share sheet, then choose Print or Save to Files. On Android, Open PDF or Download will hand the file to the browser/PDF viewer.</div>
-  <div class="viewer">
-    <iframe id="pdf-frame" title="${safeTitle}" src=""></iframe>
-  </div>
-  <script>
-    const pdfUrl = ${scriptPdfUrl};
-    const fileName = ${scriptFileName};
-    const documentTitle = ${scriptTitle};
-    const frame = document.getElementById('pdf-frame');
-    const openLink = document.getElementById('open-link');
-    const downloadLink = document.getElementById('download-link');
-    const shareButton = document.getElementById('share-button');
-    const printButton = document.getElementById('print-button');
-
-    frame.src = pdfUrl;
-    openLink.href = pdfUrl;
-    downloadLink.href = pdfUrl;
-
-    async function sharePdf() {
-      try {
-        if (!navigator.share) {
-          window.open(pdfUrl, '_blank', 'noopener');
-          return;
-        }
-        const response = await fetch(pdfUrl);
-        const blob = await response.blob();
-        const file = new File([blob], fileName, { type: 'application/pdf' });
-        const payload = { files: [file], title: documentTitle };
-        if (navigator.canShare && !navigator.canShare(payload)) {
-          window.open(pdfUrl, '_blank', 'noopener');
-          return;
-        }
-        await navigator.share(payload);
-      } catch (error) {
-        window.open(pdfUrl, '_blank', 'noopener');
-      }
-    }
-
-    function printPdf() {
-      try {
-        frame.contentWindow.focus();
-        frame.contentWindow.print();
-      } catch (error) {
-        window.open(pdfUrl, '_blank', 'noopener');
-      }
-    }
-
-    shareButton.addEventListener('click', sharePdf);
-    printButton.addEventListener('click', printPdf);
-  </script>
-</body>
-</html>`);
-  targetWindow.document.close();
 }
 
 function normalizeExaminerName(value?: string | null) {
@@ -1042,28 +876,10 @@ function MedicalRecordPdf({
   );
 }
 
-async function openPdfDocument(document: ReactElement, title: string, record?: SubmissionRecord) {
-  const previewWindow = window.open('', '_blank');
-  if (!previewWindow) {
-    throw new Error('The PDF preview was blocked. Please allow pop-ups for this site and try again.');
-  }
-  writePdfPreviewShell(previewWindow, 'Preparing PDF...');
-  try {
-    const blob = await pdf(document).toBlob();
-    const fileName = getPdfFileName(title, record);
-    const url = URL.createObjectURL(blob);
-    writePdfPreviewDocument(previewWindow, title, fileName, url);
-    window.setTimeout(() => URL.revokeObjectURL(url), 15 * 60_000);
-  } catch (error) {
-    previewWindow.close();
-    throw error;
-  }
+export function createMedicalCertificatePdfBlob(record: SubmissionRecord, academicYearLabel?: string) {
+  return pdf(<MedicalCertificatePdf record={record} academicYearLabel={academicYearLabel} />).toBlob();
 }
 
-export function openMedicalCertificatePdf(record: SubmissionRecord, academicYearLabel?: string) {
-  return openPdfDocument(<MedicalCertificatePdf record={record} academicYearLabel={academicYearLabel} />, 'Medical Certificate', record);
-}
-
-export function openMedicalRecordPdf(record: SubmissionRecord, records?: SubmissionRecord[], academicYearLabel?: string) {
-  return openPdfDocument(<MedicalRecordPdf record={record} records={records} academicYearLabel={academicYearLabel} />, 'Medical Record', record);
+export function createMedicalRecordPdfBlob(record: SubmissionRecord, records?: SubmissionRecord[], academicYearLabel?: string) {
+  return pdf(<MedicalRecordPdf record={record} records={records} academicYearLabel={academicYearLabel} />).toBlob();
 }

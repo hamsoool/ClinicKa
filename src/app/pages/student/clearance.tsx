@@ -1,21 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Download, FileText, ShieldCheck, Clock, AlertCircle } from 'lucide-react';
+import { FileText, ShieldCheck, Clock, AlertCircle } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import StudentPageIntro from '../../components/student-page-intro';
 import type { SubmissionRecord } from '../../lib/record-types';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import MedicalRecordPreview from '../../components/medical-record-preview';
+import InlinePdfViewer from '../../components/inline-pdf-viewer';
 import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel } from '../../lib/academic-year';
 import { useAcademicYear } from '../../lib/academic-year-query';
-import { openMedicalCertificatePdf, openMedicalRecordPdf } from '../../lib/medical-record-pdf-export';
+import { createMedicalCertificatePdfBlob, createMedicalRecordPdfBlob } from '../../lib/medical-record-pdf-export';
 import { useStudentRecordsQuery } from './student-records-query';
 
 type StudentClearanceTab = 'history' | 'form' | 'medical-clearance';
@@ -118,27 +119,15 @@ export default function StudentClearance() {
     }
   }, [isError]);
 
-  const downloadClearancePDF = async () => {
-    if (!record) return;
-    try {
-      await openMedicalCertificatePdf(record, clearanceAcademicYearLabel);
-      toast.success('Medical certificate opened for PDF saving.');
-    } catch (error) {
-      console.error('Failed to generate clearance PDF:', error);
-      toast.error('Failed to download PDF. Please try again.');
-    }
-  };
+  const createRecordPdfBlob = useCallback(() => {
+    if (!profileRecord) return Promise.reject(new Error('No medical record is available.'));
+    return createMedicalRecordPdfBlob(profileRecord, sortedRecords, recordAcademicYearLabel);
+  }, [profileRecord, recordAcademicYearLabel, sortedRecords]);
 
-  const downloadRecordPDF = async () => {
-    if (!profileRecord) return;
-    try {
-      await openMedicalRecordPdf(profileRecord, sortedRecords, recordAcademicYearLabel);
-      toast.success('Medical record opened for PDF saving.');
-    } catch (error) {
-      console.error('Failed to generate medical record PDF:', error);
-      toast.error('Failed to download PDF. Please try again.');
-    }
-  };
+  const createClearancePdfBlob = useCallback(() => {
+    if (!record) return Promise.reject(new Error('No medical certificate is available.'));
+    return createMedicalCertificatePdfBlob(record, clearanceAcademicYearLabel);
+  }, [clearanceAcademicYearLabel, record]);
 
   const handleTabChange = (value: string) => {
     const nextTab = normalizeClearanceTab(value);
@@ -323,23 +312,23 @@ export default function StudentClearance() {
           <Card>
             <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <CardTitle>Medical Record Preview</CardTitle>
-                {profileRecord ? (
-                  <Button onClick={downloadRecordPDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
-                    <Download className="mr-2 h-4 w-4" />
-                    Print
-                  </Button>
-                ) : null}
+                <CardTitle>Medical Record PDF</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {profileRecord ? (
                 <>
-                  <p className="text-xs text-muted-foreground lg:hidden">
-                    Swipe sideways on mobile to view the full medical record.
-                  </p>
-                  <div className="overflow-hidden rounded-lg border bg-muted/30">
-                    <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
+                  <InlinePdfViewer
+                    title="Medical Record Form"
+                    fileName={`${profileRecord.studentId || 'medical-record'}.pdf`}
+                    documentKey={`student-record-${profileRecord.id}-${recordAcademicYearLabel}-${sortedRecords.map((item) => `${item.id}:${item.updatedAt || item.submittedAt || ''}`).join('|')}`}
+                    createBlob={createRecordPdfBlob}
+                  />
+                  <details className="rounded-lg border bg-muted/20">
+                    <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">
+                      Show rendered medical record preview
+                    </summary>
+                    <div className="border-t px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
                       <div className="overflow-x-auto overscroll-x-contain">
                         <div className="flex w-max min-w-full justify-center print:w-full">
                           <div
@@ -356,7 +345,7 @@ export default function StudentClearance() {
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </details>
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -492,29 +481,33 @@ export default function StudentClearance() {
                           <p className="mt-0.5 text-sm font-medium text-green-600">Approved - 3 copies on A4</p>
                         </div>
                       </div>
-                      <Button onClick={downloadClearancePDF} className="w-full bg-primary text-white hover:bg-primary/90 sm:w-auto">
-                        <Download className="mr-2 h-4 w-4" />
-                        Print
-                      </Button>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <p className="text-xs text-muted-foreground lg:hidden">
-                      Swipe sideways on mobile to view the full medical certificate.
-                    </p>
-                    <div className="overflow-hidden rounded-lg border bg-white">
-                      <div className="overflow-auto overscroll-contain px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh]">
-                        <div className="w-max print:w-full lg:w-full">
-                          <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
-                            <MedicalClearancePreview
-                              ref={clearanceRef}
-                              record={record}
-                              academicYearLabel={clearanceAcademicYearLabel}
-                            />
+                    <InlinePdfViewer
+                      title="Medical Certificate"
+                      fileName={`${record.studentId || 'medical-certificate'}.pdf`}
+                      documentKey={`student-certificate-${record.id}-${record.updatedAt || record.submittedAt || ''}-${clearanceAcademicYearLabel}`}
+                      createBlob={createClearancePdfBlob}
+                    />
+                    <details className="rounded-lg border bg-muted/20">
+                      <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">
+                        Show rendered medical certificate preview
+                      </summary>
+                      <div className="border-t bg-white px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
+                        <div className="overflow-auto overscroll-contain">
+                          <div className="w-max print:w-full lg:w-full">
+                            <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
+                              <MedicalClearancePreview
+                                ref={clearanceRef}
+                                record={record}
+                                academicYearLabel={clearanceAcademicYearLabel}
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </details>
                   </CardContent>
                 </Card>
               ) : (

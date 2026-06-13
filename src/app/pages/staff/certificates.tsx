@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -11,13 +11,14 @@ import { Skeleton } from '../../components/ui/skeleton';
 import type { SubmissionRecord } from '../../lib/record-types';
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
-import { Download, Search, FileText, X, ClipboardList, Award } from 'lucide-react';
+import InlinePdfViewer from '../../components/inline-pdf-viewer';
+import { Search, FileText, X, ClipboardList, Award } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useAuth } from '../../lib/auth';
 import { getRoleLabel } from '../../lib/api';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
-import { openMedicalCertificatePdf, openMedicalRecordPdf } from '../../lib/medical-record-pdf-export';
+import { createMedicalCertificatePdfBlob, createMedicalRecordPdfBlob } from '../../lib/medical-record-pdf-export';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import {
   useStaffApprovedStudentsQuery,
@@ -330,27 +331,15 @@ function StaffCertificatesWorkspace() {
     setClearanceYearFilter('all');
   };
 
-  const downloadRecordPDF = async () => {
-    if (!combinedRecord) return;
-    try {
-      await openMedicalRecordPdf(combinedRecord, selectedRecordsSorted);
-      toast.success('Medical record opened for PDF saving.');
-    } catch (error) {
-      console.error('Failed to generate medical record PDF:', error);
-      toast.error('Failed to download PDF. Please try again.');
-    }
-  };
+  const createRecordPdfBlob = useCallback(() => {
+    if (!combinedRecord) return Promise.reject(new Error('No medical record is available.'));
+    return createMedicalRecordPdfBlob(combinedRecord, selectedRecordsSorted);
+  }, [combinedRecord, selectedRecordsSorted]);
 
-  const downloadClearancePDF = async () => {
-    if (!clearanceRecord) return;
-    try {
-      await openMedicalCertificatePdf(clearanceRecord);
-      toast.success('Medical certificate opened for PDF saving.');
-    } catch (error) {
-      console.error('Failed to generate clearance PDF:', error);
-      toast.error('Failed to download PDF. Please try again.');
-    }
-  };
+  const createClearancePdfBlob = useCallback(() => {
+    if (!clearanceRecord) return Promise.reject(new Error('No medical certificate is available.'));
+    return createMedicalCertificatePdfBlob(clearanceRecord);
+  }, [clearanceRecord]);
 
   if (loading && studentRows.length === 0) {
     return <StaffCertificatesWorkspaceSkeleton />;
@@ -486,18 +475,20 @@ function StaffCertificatesWorkspace() {
                           <span className="mt-2 block text-xs text-muted-foreground">Refreshing selected student...</span>
                         ) : null}
                       </div>
-                      <Button onClick={downloadRecordPDF} className="min-h-11 w-full shrink-0 px-5 bg-primary text-white hover:bg-primary/90 sm:w-auto">
-                        <Download className="mr-2 h-4 w-4" />
-                        Print
-                      </Button>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <p className="text-xs text-muted-foreground lg:hidden">
-                      Swipe sideways on mobile to view the full medical record.
-                    </p>
-                    <div className="overflow-hidden rounded-lg border bg-muted/30">
-                      <div className="px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
+                    <InlinePdfViewer
+                      title="Medical Record Form"
+                      fileName={`${combinedRecord.studentId || 'medical-record'}.pdf`}
+                      documentKey={`staff-record-${combinedRecord.id}-${selectedRecordsSorted.map((entry) => `${entry.id}:${entry.updatedAt || entry.submittedAt || ''}`).join('|')}`}
+                      createBlob={createRecordPdfBlob}
+                    />
+                    <details className="rounded-lg border bg-muted/20">
+                      <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">
+                        Show rendered medical record preview
+                      </summary>
+                      <div className="border-t px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
                         <div className="overflow-x-auto overscroll-x-contain">
                           <div className="flex w-max min-w-full justify-center print:w-full">
                             <div
@@ -513,7 +504,7 @@ function StaffCertificatesWorkspace() {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </details>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -548,25 +539,29 @@ function StaffCertificatesWorkspace() {
                           <CardTitle className="leading-snug">Medical Certificate</CardTitle>
                           <p className="mt-1 text-sm text-muted-foreground">3 copies (Student, Coordinator, Registrar) | A4 bond paper</p>
                         </div>
-                        <Button onClick={downloadClearancePDF} className="min-h-11 w-full shrink-0 px-5 bg-primary text-white hover:bg-primary/90 sm:w-auto">
-                          <Download className="mr-2 h-4 w-4" />
-                          Print
-                        </Button>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <p className="text-xs text-muted-foreground lg:hidden">
-                        Swipe sideways on mobile to view the full medical certificate.
-                      </p>
-                      <div className="overflow-hidden rounded-lg border bg-white">
-                        <div className="overflow-auto overscroll-contain px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh]">
-                          <div className="w-max print:w-full lg:w-full">
-                            <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
-                              <MedicalClearancePreview ref={clearancePreviewRef} record={clearanceRecord} />
+                      <InlinePdfViewer
+                        title="Medical Certificate"
+                        fileName={`${clearanceRecord.studentId || 'medical-certificate'}.pdf`}
+                        documentKey={`staff-certificate-${clearanceRecord.id}-${clearanceRecord.updatedAt || clearanceRecord.submittedAt || ''}`}
+                        createBlob={createClearancePdfBlob}
+                      />
+                      <details className="rounded-lg border bg-muted/20">
+                        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">
+                          Show rendered medical certificate preview
+                        </summary>
+                        <div className="border-t bg-white px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
+                          <div className="overflow-auto overscroll-contain">
+                            <div className="w-max print:w-full lg:w-full">
+                              <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
+                                <MedicalClearancePreview ref={clearancePreviewRef} record={clearanceRecord} />
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
+                      </details>
                     </CardContent>
                   </Card>
                 ) : (
