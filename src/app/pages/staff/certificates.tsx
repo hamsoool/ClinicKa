@@ -17,7 +17,7 @@ import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useAuth } from '../../lib/auth';
 import { getRoleLabel } from '../../lib/api';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
-import { printMedicalRecordPreview } from '../../lib/medical-record-pdf-export';
+import { openMedicalCertificatePdf, openMedicalRecordPdf } from '../../lib/medical-record-pdf-export';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import {
   useStaffApprovedStudentsQuery,
@@ -331,9 +331,9 @@ function StaffCertificatesWorkspace() {
   };
 
   const downloadRecordPDF = async () => {
-    if (!recordPreviewRef.current || !combinedRecord) return;
+    if (!combinedRecord) return;
     try {
-      await printMedicalRecordPreview(recordPreviewRef.current, RECORD_PREVIEW_BASE_WIDTH);
+      await openMedicalRecordPdf(combinedRecord, selectedRecordsSorted);
       toast.success('Medical record opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate medical record PDF:', error);
@@ -342,9 +342,9 @@ function StaffCertificatesWorkspace() {
   };
 
   const downloadClearancePDF = async () => {
-    if (!clearancePreviewRef.current || !clearanceRecord) return;
+    if (!clearanceRecord) return;
     try {
-      await printMedicalRecordPreview(clearancePreviewRef.current, CLEARANCE_PREVIEW_BASE_WIDTH, 'Medical Certificate');
+      await openMedicalCertificatePdf(clearanceRecord);
       toast.success('Medical certificate opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate clearance PDF:', error);

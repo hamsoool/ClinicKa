@@ -1,6 +1,7 @@
 import { forwardRef, memo } from 'react';
 import type { CSSProperties, ForwardedRef } from 'react';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel, normalizeSubmissionSlot } from '../lib/academic-year';
+import { formatOperationDetailsForDisplay } from '../lib/operation-details';
 import type { SubmissionRecord } from '../lib/record-types';
 import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
 
@@ -793,7 +794,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
           <span style={S.fieldLabel}>
             • If yes, state the nature of the operation and date/year
           </span>
-          {renderLineField(record.hadOperation === 'yes' ? record.operationDetails || '' : '', 'flex-1', {
+          {renderLineField(record.hadOperation === 'yes' ? formatOperationDetailsForDisplay(record.operationDetails) : '', 'flex-1', {
             flex: 1,
           })}
         </div>

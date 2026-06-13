@@ -88,11 +88,12 @@ export default function StudentMedicalForm() {
 
   useEffect(() => {
     if (recordsLoading || academicYearLoading) return;
+    if (submitted) return;
     if (canAccessSelectedYear) return;
 
     toast.error(`This school year submission is filed under ${expectedSlot ? getSubmissionSlotLabel(expectedSlot) : 'the next available record slot'}.`);
     navigate('/student/year-selection', { replace: true });
-  }, [academicYearLoading, canAccessSelectedYear, expectedSlot, navigate, recordsLoading]);
+  }, [academicYearLoading, canAccessSelectedYear, expectedSlot, navigate, recordsLoading, submitted]);
 
   if (recordsLoading || academicYearLoading) {
     return <PortalPageSkeleton variant="dashboard" />;
