@@ -48,8 +48,6 @@ const MAX_CLINIC_NAME_LENGTH = 60;
 const MAX_TEST_SITE_OTHER_LENGTH = 50;
 const MAX_OTHER_MEDICAL_HISTORY_LENGTH = 20;
 const MAX_OPERATION_PROCEDURE_LENGTH = 80;
-const MAX_OPERATION_FACILITY_LENGTH = 60;
-const MAX_OPERATION_NOTES_LENGTH = 120;
 const MAX_OPERATION_DETAILS_LENGTH = 300;
 const MIN_AGE = 15;
 const LAB_RESULT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -176,15 +174,11 @@ function isValidPastOrTodayDate(value: string) {
   return Boolean(normalizedValue && normalizedValue <= getTodayDateInputValue());
 }
 
-function buildOperationDetails(data: Pick<MedicalFormData, 'operationProcedure' | 'operationDate' | 'operationFacility' | 'operationNotes'>) {
-  const parts = [
-    data.operationProcedure.trim() ? `Procedure: ${data.operationProcedure.trim()}` : '',
-    data.operationDate.trim() ? `Date: ${data.operationDate.trim()}` : '',
-    data.operationFacility.trim() ? `Facility: ${data.operationFacility.trim()}` : '',
-    data.operationNotes.trim() ? `Notes: ${data.operationNotes.trim()}` : '',
-  ].filter(Boolean);
-
-  return sanitizeSafeText(parts.join(' | '), MAX_OPERATION_DETAILS_LENGTH);
+function buildOperationDetails(data: Pick<MedicalFormData, 'operationProcedure' | 'operationDate'>) {
+  const nature = data.operationProcedure.trim();
+  const operationDate = data.operationDate.trim();
+  if (!nature && !operationDate) return '';
+  return sanitizeSafeText(nature && operationDate ? `${nature} last ${operationDate}` : nature || operationDate, MAX_OPERATION_DETAILS_LENGTH);
 }
 
 function parseOperationDetails(value?: string | null) {
@@ -199,6 +193,14 @@ function parseOperationDetails(value?: string | null) {
 
   if (!rawValue) return parsed;
 
+  const directMatch = rawValue.match(/^(.*?)\s+last\s+(.+)$/i);
+  if (directMatch) {
+    parsed.operationProcedure = sanitizeOperationText(directMatch[1].trim(), MAX_OPERATION_PROCEDURE_LENGTH);
+    parsed.operationDate = normalizeDateInputValue(directMatch[2].trim());
+    parsed.operationDetails = buildOperationDetails(parsed) || rawValue;
+    return parsed;
+  }
+
   const segments = rawValue.split('|').map((segment) => segment.trim()).filter(Boolean);
   segments.forEach((segment) => {
     const [rawLabel = '', ...rest] = segment.split(':');
@@ -206,14 +208,10 @@ function parseOperationDetails(value?: string | null) {
     const text = rest.join(':').trim();
     if (!text) return;
 
-    if (label === 'procedure' || label === 'surgery' || label === 'operation') {
+    if (label === 'procedure' || label === 'surgery' || label === 'operation' || label === 'nature') {
       parsed.operationProcedure = sanitizeOperationText(text, MAX_OPERATION_PROCEDURE_LENGTH);
     } else if (label === 'date' || label === 'operation date' || label === 'surgery date') {
       parsed.operationDate = normalizeDateInputValue(text);
-    } else if (label === 'facility' || label === 'hospital' || label === 'clinic') {
-      parsed.operationFacility = sanitizeOperationText(text, MAX_OPERATION_FACILITY_LENGTH);
-    } else if (label === 'notes' || label === 'details') {
-      parsed.operationNotes = sanitizeOperationText(text, MAX_OPERATION_NOTES_LENGTH);
     }
   });
 
@@ -822,14 +820,8 @@ export function useStudentMedicalForm({
         return { ...prev, hadOperation: 'yes' };
       });
     }
-    if (field === 'operationProcedure' || field === 'operationFacility' || field === 'operationNotes') {
-      const maxLength =
-        field === 'operationProcedure'
-          ? MAX_OPERATION_PROCEDURE_LENGTH
-          : field === 'operationFacility'
-          ? MAX_OPERATION_FACILITY_LENGTH
-          : MAX_OPERATION_NOTES_LENGTH;
-      const safe = sanitizeOperationText(String(value), maxLength);
+    if (field === 'operationProcedure') {
+      const safe = sanitizeOperationText(String(value), MAX_OPERATION_PROCEDURE_LENGTH);
       if (SQL_INJECTION_REGEX.test(safe)) return;
       return setFormData((prev) => {
         const next = { ...prev, [field]: safe };
@@ -1111,7 +1103,7 @@ export function useStudentMedicalForm({
     if (!formData.sex) blockers.push('Select your sex.');
     if (!formData.hadOperation) blockers.push('Answer the operation history question.');
     if (formData.hadOperation === 'yes' && !formData.operationProcedure.trim()) {
-      blockers.push('Enter the procedure or surgery performed.');
+      blockers.push('Enter the nature of the operation.');
     }
     if (formData.hadOperation === 'yes' && !formData.operationDate.trim()) {
       blockers.push('Enter the operation date.');

@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel } from '../../lib/academic-year';
 import { useAcademicYear } from '../../lib/academic-year-query';
-import { printMedicalRecordPreview } from '../../lib/medical-record-pdf-export';
+import { openMedicalCertificatePdf, openMedicalRecordPdf } from '../../lib/medical-record-pdf-export';
 import { useStudentRecordsQuery } from './student-records-query';
 
 type StudentClearanceTab = 'history' | 'form' | 'medical-clearance';
@@ -119,9 +119,9 @@ export default function StudentClearance() {
   }, [isError]);
 
   const downloadClearancePDF = async () => {
-    if (!clearanceRef.current || !record) return;
+    if (!record) return;
     try {
-      await printMedicalRecordPreview(clearanceRef.current, CLEARANCE_PREVIEW_BASE_WIDTH, 'Medical Certificate');
+      await openMedicalCertificatePdf(record, clearanceAcademicYearLabel);
       toast.success('Medical certificate opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate clearance PDF:', error);
@@ -130,9 +130,9 @@ export default function StudentClearance() {
   };
 
   const downloadRecordPDF = async () => {
-    if (!recordPreviewRef.current || !profileRecord) return;
+    if (!profileRecord) return;
     try {
-      await printMedicalRecordPreview(recordPreviewRef.current, RECORD_PREVIEW_BASE_WIDTH);
+      await openMedicalRecordPdf(profileRecord, sortedRecords, recordAcademicYearLabel);
       toast.success('Medical record opened for PDF saving.');
     } catch (error) {
       console.error('Failed to generate medical record PDF:', error);
