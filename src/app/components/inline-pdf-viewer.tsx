@@ -248,7 +248,34 @@ export default function InlinePdfViewer({
           <p className="truncate text-sm font-semibold">{fileName}</p>
           <p className="text-xs text-white/70">{title}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* Download button — always visible, prioritized */}
+          {pdfUrl && !loading ? (
+            <Button asChild variant="secondary" size="sm" className="h-9 gap-1.5 px-3" title="Download PDF">
+              <a href={pdfUrl} download={fileName}>
+                <Download className="h-4 w-4" />
+                <span className="text-xs sm:hidden">Download</span>
+              </a>
+            </Button>
+          ) : (
+            <Button type="button" variant="secondary" size="sm" className="h-9 gap-1.5 px-3" disabled title="Download PDF">
+              <Download className="h-4 w-4" />
+              <span className="text-xs sm:hidden">Download</span>
+            </Button>
+          )}
+          {/* Print button — hidden on mobile since it doesn't work on most Android browsers */}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="hidden h-9 px-3 sm:inline-flex"
+            onClick={handlePrint}
+            disabled={!isFullyRendered || loading}
+            title="Print PDF"
+          >
+            <Printer className="h-4 w-4" />
+          </Button>
+          {/* Refresh button */}
           <Button
             type="button"
             variant="secondary"
@@ -260,51 +287,32 @@ export default function InlinePdfViewer({
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="h-9 px-3"
-            onClick={() => setZoom((value) => Math.max(0.75, Number((value - 0.1).toFixed(2))))}
-            disabled={loading}
-            title="Zoom out"
-          >
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <span className="min-w-12 text-center text-xs font-semibold">{Math.round(zoom * 100)}%</span>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="h-9 px-3"
-            onClick={() => setZoom((value) => Math.min(1.6, Number((value + 0.1).toFixed(2))))}
-            disabled={loading}
-            title="Zoom in"
-          >
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="h-9 px-3"
-            onClick={handlePrint}
-            disabled={!isFullyRendered || loading}
-            title="Print PDF"
-          >
-            <Printer className="h-4 w-4" />
-          </Button>
-          {pdfUrl && !loading ? (
-            <Button asChild variant="secondary" size="sm" className="h-9 px-3" title="Download PDF">
-              <a href={pdfUrl} download={fileName}>
-                <Download className="h-4 w-4" />
-              </a>
+          {/* Zoom controls — hidden on very small screens to prevent overflow */}
+          <div className="hidden items-center gap-2 sm:flex">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-9 px-3"
+              onClick={() => setZoom((value) => Math.max(0.75, Number((value - 0.1).toFixed(2))))}
+              disabled={loading}
+              title="Zoom out"
+            >
+              <ZoomOut className="h-4 w-4" />
             </Button>
-          ) : (
-            <Button type="button" variant="secondary" size="sm" className="h-9 px-3" disabled title="Download PDF">
-              <Download className="h-4 w-4" />
+            <span className="min-w-12 text-center text-xs font-semibold">{Math.round(zoom * 100)}%</span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-9 px-3"
+              onClick={() => setZoom((value) => Math.min(1.6, Number((value + 0.1).toFixed(2))))}
+              disabled={loading}
+              title="Zoom in"
+            >
+              <ZoomIn className="h-4 w-4" />
             </Button>
-          )}
+          </div>
         </div>
       </div>
 
