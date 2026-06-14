@@ -188,14 +188,34 @@ function getExamCompletenessScore(record: SubmissionRecord) {
 
 function buildBestRecordBySlot(records: SubmissionRecord[]) {
   const recordsBySlot = new Map<number, SubmissionRecord>();
+
   for (const item of records) {
     const slot = normalizeSubmissionSlot(item.year);
     if (!slot) continue;
+
     const current = recordsBySlot.get(slot);
-    if (!current || getExamCompletenessScore(item) >= getExamCompletenessScore(current)) {
+    if (!current) {
+      recordsBySlot.set(slot, item);
+      continue;
+    }
+
+    const currentScore = getExamCompletenessScore(current);
+    const nextScore = getExamCompletenessScore(item);
+    if (nextScore > currentScore) {
+      recordsBySlot.set(slot, item);
+      continue;
+    }
+    if (currentScore > nextScore) {
+      continue;
+    }
+
+    const currentTs = new Date(current.updatedAt || current.submittedAt || 0).getTime();
+    const nextTs = new Date(item.updatedAt || item.submittedAt || 0).getTime();
+    if (nextTs >= currentTs) {
       recordsBySlot.set(slot, item);
     }
   }
+
   return recordsBySlot;
 }
 

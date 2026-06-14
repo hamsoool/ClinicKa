@@ -95,16 +95,24 @@ export default function StudentClearance() {
     () => (selectedYear === 'all' ? records : records.filter((entry) => String(entry.year || '') === selectedYear)),
     [records, selectedYear],
   );
-  const sortedFilteredRecords = [...filteredRecords].sort(
-    (a, b) => new Date(b.updatedAt || b.submittedAt).getTime() - new Date(a.updatedAt || a.submittedAt).getTime(),
+  const sortedFilteredRecords = useMemo(
+    () =>
+      [...filteredRecords].sort(
+        (a, b) => new Date(b.updatedAt || b.submittedAt).getTime() - new Date(a.updatedAt || a.submittedAt).getTime(),
+      ),
+    [filteredRecords],
   );
   const record =
     sortedFilteredRecords.find((entry) => entry.status === 'approved' && entry.clearanceInfo?.controlNo) ||
     sortedFilteredRecords.find((entry) => entry.status === 'approved') ||
     sortedFilteredRecords[0] ||
     null;
-  const sortedRecords = [...records].sort(
-    (a, b) => new Date(b.updatedAt || b.submittedAt).getTime() - new Date(a.updatedAt || a.submittedAt).getTime(),
+  const sortedRecords = useMemo(
+    () =>
+      [...records].sort(
+        (a, b) => new Date(b.updatedAt || b.submittedAt).getTime() - new Date(a.updatedAt || a.submittedAt).getTime(),
+      ),
+    [records],
   );
   const profileRecord = sortedRecords[0] || null;
   const recordAcademicYearLabel = profileRecord
