@@ -483,6 +483,17 @@ function StaffCertificatesWorkspace() {
                       fileName={`${combinedRecord.studentId || 'medical-record'}.pdf`}
                       documentKey={`staff-record-${combinedRecord.id}-${selectedRecordsSorted.map((entry) => `${entry.id}:${entry.updatedAt || entry.submittedAt || ''}`).join('|')}`}
                       createBlob={createRecordPdfBlob}
+                      fallbackContent={
+                        <div
+                          className="overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
+                          style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
+                        >
+                          <MedicalRecordPreview
+                            record={combinedRecord}
+                            records={selectedRecordsSorted}
+                          />
+                        </div>
+                      }
                     />
                     <details className="rounded-lg border bg-muted/20">
                       <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">
@@ -547,6 +558,11 @@ function StaffCertificatesWorkspace() {
                         fileName={`${clearanceRecord.studentId || 'medical-certificate'}.pdf`}
                         documentKey={`staff-certificate-${clearanceRecord.id}-${clearanceRecord.updatedAt || clearanceRecord.submittedAt || ''}`}
                         createBlob={createClearancePdfBlob}
+                        fallbackContent={
+                          <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
+                            <MedicalClearancePreview record={clearanceRecord} />
+                          </div>
+                        }
                       />
                       <details className="rounded-lg border bg-muted/20">
                         <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">

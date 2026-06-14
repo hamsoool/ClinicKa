@@ -110,6 +110,20 @@ function text(value: unknown) {
   return String(value || '').trim();
 }
 
+function safePdfImageUrl(value?: string | null) {
+  const rawValue = text(value);
+  if (!rawValue) return '';
+  if (rawValue.startsWith('data:') || rawValue.startsWith('blob:')) return rawValue;
+  if (typeof window === 'undefined') return rawValue;
+
+  try {
+    const url = new URL(rawValue, window.location.origin);
+    return url.origin === window.location.origin ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
 function normalizeExaminerName(value?: string | null) {
   return text(value)
     .toLowerCase()
@@ -592,6 +606,8 @@ function MedicalRecordPdfPage({
 }) {
   const history = record.medicalHistory || {};
   const civilStatus = text(record.civilStatus).toLowerCase();
+  const photoUrl = safePdfImageUrl(record.photoUrl);
+  const signatureUrl = safePdfImageUrl(record.signatureUrl);
   const getSlotRecord = (slot: number) => recordsBySlot.get(slot);
   const getSlotLab = (slot: number): LabResults => getSlotRecord(slot)?.labResults || {};
 
@@ -612,7 +628,7 @@ function MedicalRecordPdfPage({
         </View>
         <View style={{ width: 78 * PX_TO_PT, alignItems: 'center' }}>
           <View style={{ borderWidth: 0.75, width: 78 * PX_TO_PT, height: 78 * PX_TO_PT, alignItems: 'center', justifyContent: 'center' }}>
-            {record.photoUrl ? <Image src={record.photoUrl} style={{ width: 78 * PX_TO_PT, height: 78 * PX_TO_PT, objectFit: 'cover' }} /> : <Text style={[S.bold, { fontSize: 11 * PX_TO_PT, textAlign: 'center' }]}>1 x 1{'\n'}photo</Text>}
+            {photoUrl ? <Image src={photoUrl} style={{ width: 78 * PX_TO_PT, height: 78 * PX_TO_PT, objectFit: 'cover' }} /> : <Text style={[S.bold, { fontSize: 11 * PX_TO_PT, textAlign: 'center' }]}>1 x 1{'\n'}photo</Text>}
           </View>
         </View>
       </View>
@@ -728,7 +744,7 @@ function MedicalRecordPdfPage({
       <View style={{ alignItems: 'flex-end', marginBottom: 9 * PX_TO_PT }}>
         <Text style={[S.bold, { fontSize: 10.5 * PX_TO_PT, marginBottom: 4 * PX_TO_PT, marginRight: 20 * PX_TO_PT }]}>Signature of Student</Text>
         <View style={{ borderBottomWidth: 0.75, width: 180 * PX_TO_PT, minHeight: 26 * PX_TO_PT, alignItems: 'center' }}>
-          {record.signatureUrl ? <Image src={record.signatureUrl} style={{ maxHeight: 24 * PX_TO_PT, maxWidth: 170 * PX_TO_PT, objectFit: 'contain' }} /> : null}
+          {signatureUrl ? <Image src={signatureUrl} style={{ maxHeight: 24 * PX_TO_PT, maxWidth: 170 * PX_TO_PT, objectFit: 'contain' }} /> : null}
         </View>
       </View>
 
@@ -751,7 +767,7 @@ function MedicalRecordPdfPage({
             const exam = getSlotRecord(slot)?.staffMeasurements || {};
             return (
               <FormTableCell key={slot} style={{ width: MEDICAL_FORM_EXAM_YEAR_WIDTH, minHeight: 60 * PX_TO_PT, alignItems: 'center', justifyContent: 'center' }}>
-                {exam.examinedBySignatureUrl ? <Image src={exam.examinedBySignatureUrl} style={{ height: 32 * PX_TO_PT, width: 96 * PX_TO_PT, objectFit: 'contain' }} /> : null}
+                {safePdfImageUrl(exam.examinedBySignatureUrl) ? <Image src={safePdfImageUrl(exam.examinedBySignatureUrl)} style={{ height: 32 * PX_TO_PT, width: 96 * PX_TO_PT, objectFit: 'contain' }} /> : null}
                 <Text style={[S.small, { textAlign: 'center', marginTop: 3 }]}>{text(exam.examinedBy)}</Text>
               </FormTableCell>
             );

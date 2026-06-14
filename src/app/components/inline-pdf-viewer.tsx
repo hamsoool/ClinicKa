@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Download, Loader2, Printer, RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -7,10 +8,32 @@ interface InlinePdfViewerProps {
   fileName: string;
   documentKey: string;
   createBlob: () => Promise<Blob>;
+  fallbackContent?: ReactNode;
 }
 
-export default function InlinePdfViewer({ title, fileName, documentKey, createBlob }: InlinePdfViewerProps) {
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function getDocumentStyleMarkup() {
+  return Array.from(document.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style'))
+    .map((node) => {
+      if (node instanceof HTMLLinkElement) {
+        const href = new URL(node.getAttribute('href') || node.href, document.baseURI).href;
+        return `<link rel="stylesheet" href="${href}">`;
+      }
+      return `<style>${node.textContent || ''}</style>`;
+    })
+    .join('\n');
+}
+
+export default function InlinePdfViewer({ title, fileName, documentKey, createBlob, fallbackContent }: InlinePdfViewerProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const fallbackRef = useRef<HTMLDivElement>(null);
   const [pdfUrl, setPdfUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,7 +56,11 @@ export default function InlinePdfViewer({ title, fileName, documentKey, createBl
         console.error('Failed to generate inline PDF:', generationError);
         if (!cancelled) {
           setPdfUrl('');
-          setError('Failed to generate PDF preview. Please refresh and try again.');
+          setError(
+            fallbackContent
+              ? 'PDF preview could not be generated on this device. Showing the rendered document preview instead.'
+              : 'Failed to generate PDF preview. Please refresh and try again.',
+          );
         }
       })
       .finally(() => {
@@ -48,13 +75,43 @@ export default function InlinePdfViewer({ title, fileName, documentKey, createBl
 
   const handlePrint = () => {
     try {
-      const frameWindow = frameRef.current?.contentWindow;
-      if (!frameWindow) throw new Error('PDF frame is not ready.');
-      frameWindow.focus();
-      frameWindow.print();
+      if (pdfUrl) {
+        const frameWindow = frameRef.current?.contentWindow;
+        if (!frameWindow) throw new Error('PDF frame is not ready.');
+        frameWindow.focus();
+        frameWindow.print();
+        return;
+      }
+
+      const fallbackElement = fallbackRef.current;
+      if (!fallbackElement) throw new Error('Rendered preview is not ready.');
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) throw new Error('The print page was blocked.');
+      printWindow.document.open();
+      printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <base href="${escapeHtml(document.baseURI)}">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(fileName)}</title>
+  ${getDocumentStyleMarkup()}
+  <style>
+    @page { margin: 0; }
+    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .inline-pdf-fallback-print-root { display: flex; justify-content: center; width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="inline-pdf-fallback-print-root">${fallbackElement.innerHTML}</div>
+</body>
+</html>`);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 150);
     } catch (printError) {
       console.error('Failed to print inline PDF:', printError);
-      setError('Unable to open the print dialog from this browser. Use Download, then print from your PDF viewer.');
+      setError('Unable to open the print dialog from this browser. Use the rendered preview below or download the PDF if available.');
     }
   };
 
@@ -83,7 +140,7 @@ export default function InlinePdfViewer({ title, fileName, documentKey, createBl
             size="sm"
             className="h-9 px-3"
             onClick={handlePrint}
-            disabled={!pdfUrl || loading}
+            disabled={(!pdfUrl && !fallbackContent) || loading}
             title="Print PDF"
           >
             <Printer className="h-4 w-4" />
@@ -103,7 +160,15 @@ export default function InlinePdfViewer({ title, fileName, documentKey, createBl
       </div>
 
       {error ? (
-        <div className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div
+          className={
+            fallbackContent
+              ? 'border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800'
+              : 'border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'
+          }
+        >
+          {error}
+        </div>
       ) : null}
 
       <div className="relative min-h-[70vh] bg-neutral-800">
@@ -120,6 +185,12 @@ export default function InlinePdfViewer({ title, fileName, documentKey, createBl
             src={`${pdfUrl}#toolbar=1&navpanes=1&view=FitH`}
             className="h-[70vh] min-h-[620px] w-full border-0 bg-neutral-800"
           />
+        ) : fallbackContent && error ? (
+          <div className="h-[70vh] min-h-[620px] overflow-auto bg-neutral-800 p-3">
+            <div ref={fallbackRef} className="mx-auto w-max bg-white">
+              {fallbackContent}
+            </div>
+          </div>
         ) : (
           <div className="flex min-h-[70vh] items-center justify-center px-4 text-center text-sm text-white/80">
             PDF preview is not available.
