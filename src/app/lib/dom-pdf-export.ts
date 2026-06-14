@@ -73,6 +73,8 @@ export async function createPdfFromElement(
       imageTimeout: 15000,
       windowWidth: Math.max(document.documentElement.clientWidth, page.scrollWidth),
       windowHeight: Math.max(document.documentElement.clientHeight, page.scrollHeight),
+      scrollX: 0,
+      scrollY: 0,
     });
 
     if (index > 0) pdf.addPage(pageSize.format, 'portrait');

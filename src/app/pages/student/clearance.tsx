@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { FileText, ShieldCheck, Clock, AlertCircle } from 'lucide-react';
+import { FileText, Clock, AlertCircle } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import StudentPageIntro from '../../components/student-page-intro';
 import type { SubmissionRecord } from '../../lib/record-types';
@@ -24,6 +24,24 @@ const clearanceTabs = new Set<StudentClearanceTab>(['history', 'form', 'medical-
 
 function normalizeClearanceTab(value: string | null): StudentClearanceTab {
   return clearanceTabs.has(value as StudentClearanceTab) ? (value as StudentClearanceTab) : 'form';
+}
+
+function formatMedicalFormFileName(lastName?: string) {
+  const namePart = (lastName || 'Student')
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('');
+  return `${namePart}.MedicalForm.pdf`;
+}
+
+function formatMedicalCertificateFileName(lastName?: string) {
+  const namePart = (lastName || 'Student')
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('');
+  return `${namePart}.MedicalCertificate.pdf`;
 }
 
 const styles = `
@@ -48,8 +66,7 @@ export default function StudentClearance() {
   const CLEARANCE_PREVIEW_BASE_WIDTH = 794;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const recordPreviewRef = useRef<HTMLDivElement>(null);
-  const clearanceRef = useRef<HTMLDivElement>(null);
+
   const activeTab = normalizeClearanceTab(searchParams.get('tab'));
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
   const { me } = useAuth();
@@ -75,20 +92,29 @@ export default function StudentClearance() {
       ),
     [records],
   );
-  const requestedYear = searchParams.get('year') || 'all';
-  const selectedYear =
-    !loading && requestedYear !== 'all' && !yearOptions.includes(requestedYear)
-      ? 'all'
-      : requestedYear;
+  const latestYear = useMemo(() => {
+    return yearOptions.length > 0 ? yearOptions[yearOptions.length - 1] : 'all';
+  }, [yearOptions]);
+
+  const requestedYear = searchParams.get('year');
+  const selectedYear = useMemo(() => {
+    if (loading) return 'all';
+    if (requestedYear === null) return latestYear;
+    if (requestedYear !== 'all' && !yearOptions.includes(requestedYear)) return latestYear;
+    return requestedYear;
+  }, [loading, requestedYear, latestYear, yearOptions]);
 
   useEffect(() => {
     if (loading) return;
-    if (requestedYear === 'all' || yearOptions.includes(requestedYear)) return;
+    const req = searchParams.get('year');
+    if (!req) return;
+
+    if (req === 'all' || yearOptions.includes(req)) return;
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('year');
     setSearchParams(nextParams, { replace: true });
-  }, [loading, requestedYear, searchParams, setSearchParams, yearOptions]);
+  }, [loading, searchParams, setSearchParams, yearOptions]);
 
   const filteredRecords = useMemo(
     () => (selectedYear === 'all' ? records : records.filter((entry) => String(entry.year || '') === selectedYear)),
@@ -135,11 +161,7 @@ export default function StudentClearance() {
 
   const handleYearChange = (value: string) => {
     const nextParams = new URLSearchParams(searchParams);
-    if (value === 'all') {
-      nextParams.delete('year');
-    } else {
-      nextParams.set('year', value);
-    }
+    nextParams.set('year', value);
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -295,29 +317,29 @@ export default function StudentClearance() {
           <Card>
             <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div className="min-w-0">
-                <CardTitle className="text-base sm:text-lg">Medical Record Form</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Medical Submission Form</CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Submit the active school year medical record or continue an existing one before your medical certificate is issued.
                 </p>
               </div>
               <Button onClick={() => navigate('/student/year-selection')} className="w-full shrink-0 sm:w-auto">
-                Open Form
+                Open Submission
               </Button>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="gap-4">
             <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <CardTitle>Medical Record PDF</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Medical Record (Legal Size)</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {profileRecord ? (
                 <>
                   <InlinePdfViewer
-                    title="Medical Record Form"
-                    fileName={`${profileRecord.studentId || 'medical-record'}.pdf`}
+                    title="Medical Submission Form"
+                    fileName={formatMedicalFormFileName(profileRecord.lastName)}
                     documentKey={`student-record-${profileRecord.id}-${recordAcademicYearLabel}-${sortedRecords.map((item) => `${item.id}:${item.updatedAt || item.submittedAt || ''}`).join('|')}`}
                     pageFormat="legal"
                     sourceContent={
@@ -333,28 +355,7 @@ export default function StudentClearance() {
                       </div>
                     }
                   />
-                  <details className="rounded-lg border bg-muted/20">
-                    <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">
-                      Show rendered medical record preview
-                    </summary>
-                    <div className="border-t px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
-                      <div className="overflow-x-auto overscroll-x-contain">
-                        <div className="flex w-max min-w-full justify-center print:w-full">
-                          <div
-                            className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
-                            style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
-                          >
-                            <MedicalRecordPreview
-                              ref={recordPreviewRef}
-                              record={profileRecord}
-                              records={sortedRecords}
-                              academicYearLabel={recordAcademicYearLabel}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </details>
+
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -366,26 +367,24 @@ export default function StudentClearance() {
         </TabsContent>
 
         <TabsContent value="medical-clearance" className="min-w-0 space-y-4 animate-fade-in">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col gap-2 sm:max-w-xs">
-                <p className="text-sm font-medium">Filter by Record Slot</p>
-                <Select value={selectedYear} onValueChange={handleYearChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select record slot" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Record Slots</SelectItem>
-                    {yearOptions.map((year) => (
-                      <SelectItem key={year} value={year}>
-                        {getSubmissionSlotLabel(year)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex justify-end mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Filter by Record Slot:</span>
+              <Select value={selectedYear} onValueChange={handleYearChange}>
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue placeholder="Select record slot" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Record Slots</SelectItem>
+                  {yearOptions.map((year) => (
+                    <SelectItem key={year} value={year}>
+                      {getSubmissionSlotLabel(year)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
           {!record ? (
             <Card>
@@ -480,22 +479,16 @@ export default function StudentClearance() {
               )}
 
               {isApproved ? (
-                <Card>
+                <Card className="gap-4">
                   <CardHeader>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-3">
-                        <ShieldCheck className="h-5 w-5 text-green-600" />
-                        <div>
-                          <CardTitle>Medical Certificate</CardTitle>
-                          <p className="mt-0.5 text-sm font-medium text-green-600">Approved - 3 copies on A4</p>
-                        </div>
-                      </div>
+                      <CardTitle className="text-base sm:text-lg">Medical Certificate (A4)</CardTitle>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <InlinePdfViewer
                       title="Medical Certificate"
-                      fileName={`${record.studentId || 'medical-certificate'}.pdf`}
+                      fileName={formatMedicalCertificateFileName(record.lastName)}
                       documentKey={`student-certificate-${record.id}-${record.updatedAt || record.submittedAt || ''}-${clearanceAcademicYearLabel}`}
                       pageFormat="a4"
                       sourceContent={
@@ -507,24 +500,6 @@ export default function StudentClearance() {
                         </div>
                       }
                     />
-                    <details className="rounded-lg border bg-muted/20">
-                      <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">
-                        Show rendered medical certificate preview
-                      </summary>
-                      <div className="border-t bg-white px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
-                        <div className="overflow-auto overscroll-contain">
-                          <div className="w-max print:w-full lg:w-full">
-                            <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
-                              <MedicalClearancePreview
-                                ref={clearanceRef}
-                                record={record}
-                                academicYearLabel={clearanceAcademicYearLabel}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </details>
                   </CardContent>
                 </Card>
               ) : (

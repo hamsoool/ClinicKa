@@ -112,7 +112,7 @@ export default function StudentMedicalForm() {
         </Button>
 
         <StudentPageIntro
-          title={`${formatAcademicYearLabel(formAcademicYear)} Medical Record Form`}
+          title={`${formatAcademicYearLabel(formAcademicYear)} Medical Submission Form`}
         />
 
         <div className="space-y-2">

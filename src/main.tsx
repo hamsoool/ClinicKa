@@ -2,8 +2,15 @@
 import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import { toast } from "sonner";
+import { pdfjs } from "react-pdf";
 import App from "./app/App";
 import "./styles/index.css";
+
+// Configure the PDF.js worker locally to prevent version mismatch errors
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
 
 const PWA_MIGRATION_KEY = "clinicka-pwa-migration-v2";
 const SW_UPDATE_INTERVAL_MS = 60 * 60 * 1000;

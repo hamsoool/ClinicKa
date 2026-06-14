@@ -10,7 +10,6 @@ const S = {
     color: '#000',
     background: '#fff',
     width: '794px',
-    height: '1132px',
     margin: '0 auto',
     padding: '10px 18px 18px 18px',
     boxSizing: 'border-box' as const,
@@ -58,6 +57,8 @@ const S = {
     lineHeight: '10px',
     color: '#fff',
     flexShrink: 0,
+    position: 'relative' as const,
+    top: '5px',
   }),
   sigBlock: {
     textAlign: 'right' as const,

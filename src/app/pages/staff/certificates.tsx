@@ -43,6 +43,24 @@ function normalizeStaffRecordsCertificatesTab(value: string | null): StaffRecord
     : 'archive';
 }
 
+function formatMedicalFormFileName(lastName?: string) {
+  const namePart = (lastName || 'Student')
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('');
+  return `${namePart}.MedicalForm.pdf`;
+}
+
+function formatMedicalCertificateFileName(lastName?: string) {
+  const namePart = (lastName || 'Student')
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('');
+  return `${namePart}.MedicalCertificate.pdf`;
+}
+
 function getCertificateSelectionStorageKey(staffId?: string | null) {
   return `${CERTIFICATE_SELECTION_STORAGE_KEY_PREFIX}:${String(staffId || '').trim()}`;
 }
@@ -137,33 +155,7 @@ function StaffCertificatePreviewSkeleton() {
   );
 }
 
-function StaffCertificatesWorkspaceSkeleton() {
-  return (
-    <div aria-busy="true" aria-live="polite" className="grid gap-6 xl:grid-cols-[minmax(18rem,0.72fr)_minmax(0,1.7fr)] xl:items-start">
-      <div className="min-w-0">
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-5 w-40 bg-surface-container-high" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <Skeleton className="h-10 w-full rounded-md bg-surface-container-high" />
-              <div className="grid grid-cols-2 gap-2">
-                <Skeleton className="h-10 rounded-md bg-surface-container-high" />
-                <Skeleton className="h-10 rounded-md bg-surface-container-high" />
-              </div>
-              <ApprovedStudentsListSkeleton />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
-      <div className="min-w-0">
-        <StaffCertificatePreviewSkeleton />
-      </div>
-    </div>
-  );
-}
 
 function StaffCertificatesWorkspace() {
   const RECORD_PREVIEW_BASE_WIDTH = 816;
@@ -186,12 +178,12 @@ function StaffCertificatesWorkspace() {
     workspacePreferences.certificatesDefaultView,
   );
   const [clearanceYearFilter, setClearanceYearFilter] = useState('all');
+  const [lastDefaultedStudentId, setLastDefaultedStudentId] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const deferredSearchQuery = useDeferredValue(debouncedSearchQuery.trim());
 
-  const recordPreviewRef = useRef<HTMLDivElement>(null);
-  const clearancePreviewRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     setCurrentPage(1);
@@ -309,6 +301,18 @@ function StaffCertificatesWorkspace() {
     }
   }, [availableYears, clearanceYearFilter]);
 
+  useEffect(() => {
+    if (selectedStudentId && selectedStudentId !== lastDefaultedStudentId && !selectedStudentRecordsFetching) {
+      if (availableYears.length > 0) {
+        setClearanceYearFilter(availableYears[availableYears.length - 1]);
+        setLastDefaultedStudentId(selectedStudentId);
+      } else {
+        setClearanceYearFilter('all');
+        setLastDefaultedStudentId(selectedStudentId);
+      }
+    }
+  }, [selectedStudentId, availableYears, selectedStudentRecordsFetching, lastDefaultedStudentId]);
+
   const clearanceRecord = useMemo(() => {
     const source =
       clearanceYearFilter === 'all'
@@ -327,12 +331,9 @@ function StaffCertificatesWorkspace() {
   const handleStudentSelect = (studentId: string) => {
     if (!studentId || studentId === selectedStudentId) return;
     setSelectedStudentId(studentId);
-    setClearanceYearFilter('all');
   };
 
-  if (loading && studentRows.length === 0) {
-    return <StaffCertificatesWorkspaceSkeleton />;
-  }
+
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(18rem,0.72fr)_minmax(0,1.7fr)] xl:items-start">
@@ -458,7 +459,7 @@ function StaffCertificatesWorkspace() {
                   <CardHeader>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
-                        <CardTitle className="leading-snug">Medical Record Form</CardTitle>
+                        <CardTitle className="leading-snug">Medical Submission Form</CardTitle>
                         <p className="mt-1 text-sm text-muted-foreground">{combinedRecord.lastName}, {combinedRecord.firstName} | {combinedRecord.studentId}</p>
                         {selectedStudentRecordsFetching ? (
                           <span className="mt-2 block text-xs text-muted-foreground">Refreshing selected student...</span>
@@ -468,8 +469,8 @@ function StaffCertificatesWorkspace() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                       <InlinePdfViewer
-                        title="Medical Record Form"
-                        fileName={`${combinedRecord.studentId || 'medical-record'}.pdf`}
+                        title="Medical Submission Form"
+                        fileName={formatMedicalFormFileName(combinedRecord.lastName)}
                         documentKey={`staff-record-${combinedRecord.id}-${selectedRecordsSorted.map((entry) => `${entry.id}:${entry.updatedAt || entry.submittedAt || ''}`).join('|')}`}
                         pageFormat="legal"
                         sourceContent={
@@ -484,52 +485,30 @@ function StaffCertificatesWorkspace() {
                         </div>
                       }
                     />
-                    <details className="rounded-lg border bg-muted/20">
-                      <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">
-                        Show rendered medical record preview
-                      </summary>
-                      <div className="border-t px-2 py-2 sm:px-4 sm:py-4 lg:max-h-[72vh] lg:overflow-auto">
-                        <div className="overflow-x-auto overscroll-x-contain">
-                          <div className="flex w-max min-w-full justify-center print:w-full">
-                            <div
-                              className="overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
-                              style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
-                            >
-                              <MedicalRecordPreview
-                                ref={recordPreviewRef}
-                                record={combinedRecord}
-                                records={selectedRecordsSorted}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </details>
+
                   </CardContent>
                 </Card>
               </TabsContent>
 
               <TabsContent value="medical-clearance" className="min-w-0">
-                <Card className="mb-4">
-                  <CardContent className="pt-6">
-                    <div className="flex max-w-xs flex-col gap-2">
-                      <p className="text-sm font-medium">Record Slot Filter</p>
-                      <Select value={clearanceYearFilter} onValueChange={setClearanceYearFilter}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select record slot" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Record Slots</SelectItem>
-                          {availableYears.map((year) => (
-                            <SelectItem key={year} value={year}>
-                              {getSubmissionSlotLabel(year)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
+                <div className="mb-4 flex justify-end">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">Filter by Record Slot:</span>
+                    <Select value={clearanceYearFilter} onValueChange={setClearanceYearFilter}>
+                      <SelectTrigger className="w-[180px] h-9">
+                        <SelectValue placeholder="Select record slot" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Record Slots</SelectItem>
+                        {availableYears.map((year) => (
+                          <SelectItem key={year} value={year}>
+                            {getSubmissionSlotLabel(year)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
                 {clearanceRecord ? (
                   <Card>
@@ -544,7 +523,7 @@ function StaffCertificatesWorkspace() {
                     <CardContent className="space-y-3">
                       <InlinePdfViewer
                         title="Medical Certificate"
-                        fileName={`${clearanceRecord.studentId || 'medical-certificate'}.pdf`}
+                        fileName={formatMedicalCertificateFileName(clearanceRecord.lastName)}
                         documentKey={`staff-certificate-${clearanceRecord.id}-${clearanceRecord.updatedAt || clearanceRecord.submittedAt || ''}`}
                         pageFormat="a4"
                         sourceContent={
@@ -553,20 +532,7 @@ function StaffCertificatesWorkspace() {
                           </div>
                         }
                       />
-                      <details className="rounded-lg border bg-muted/20">
-                        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-on-surface">
-                          Show rendered medical certificate preview
-                        </summary>
-                        <div className="border-t bg-white px-1 py-1 sm:px-2 sm:py-2 lg:max-h-[72vh] lg:overflow-auto">
-                          <div className="overflow-auto overscroll-contain">
-                            <div className="w-max print:w-full lg:w-full">
-                              <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
-                                <MedicalClearancePreview ref={clearancePreviewRef} record={clearanceRecord} />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </details>
+
                     </CardContent>
                   </Card>
                 ) : (
