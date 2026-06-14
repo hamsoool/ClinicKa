@@ -4,6 +4,12 @@ import type { ReactNode } from 'react';
 import { Document as PdfDocument, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+
+// Configure the PDF.js worker locally to prevent version mismatch errors
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
 import { Download, Loader2, Printer, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from './ui/button';
 import { createPdfFromElement } from '../lib/dom-pdf-export';
