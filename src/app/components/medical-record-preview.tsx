@@ -139,10 +139,15 @@ const S = {
   },
 };
 
-const PRINT_LINE_FIELD_CLASS =
-  'medical-record-line-field inline-flex border-b border-black px-0.5 pb-[3.5px] align-baseline';
-const PRINT_INLINE_FIELD_CLASS =
-  'medical-record-inline-field inline-flex whitespace-nowrap border-b border-black px-0.5 pb-[3.5px] align-baseline';
+const LINE_FIELD_BASE_STYLE: CSSProperties = {
+  display: 'inline-flex',
+  borderBottom: '1px solid #000',
+  paddingLeft: '2px',
+  paddingRight: '2px',
+  paddingBottom: '3.5px',
+  verticalAlign: 'baseline',
+  boxSizing: 'border-box',
+};
 
 function renderLineField(
   value: unknown,
@@ -152,7 +157,10 @@ function renderLineField(
   const text = String(value || '').trim();
 
   return (
-    <span className={`${PRINT_LINE_FIELD_CLASS} ${className}`.trim()} style={style}>
+    <span
+      className={`medical-record-line-field ${className}`.trim()}
+      style={{ ...LINE_FIELD_BASE_STYLE, ...style }}
+    >
       {text || '\u00A0'}
     </span>
   );
@@ -163,10 +171,11 @@ function renderInlineField(value: unknown, minWidth = '44px') {
 
   return (
     <span
-      className={PRINT_INLINE_FIELD_CLASS}
+      className="medical-record-inline-field"
       style={{
+        ...LINE_FIELD_BASE_STYLE,
+        whiteSpace: 'nowrap',
         minWidth,
-        boxSizing: 'border-box',
       }}
     >
       {text || '\u00A0'}

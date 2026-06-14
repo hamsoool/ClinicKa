@@ -122,28 +122,64 @@ export default function InlinePdfViewer({
         throw new Error('PDF pages are still rendering.');
       }
 
-      // Create a temporary hidden iframe to trigger the print dialog in the background
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      iframe.style.pointerEvents = 'none';
-      document.body.appendChild(iframe);
-
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!iframeDoc) throw new Error('Could not access iframe document.');
-
       const pageImages = canvases
         .slice(0, numPages)
         .map((canvas) => canvas.toDataURL('image/png'))
         .map((src, index) => `<img class="print-page" src="${src}" alt="Page ${index + 1}">`)
         .join('');
 
-      iframeDoc.open();
-      iframeDoc.write(`<!doctype html>
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) throw new Error('Could not open print window.');
+
+        printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(fileName)}</title>
+  <style>
+    @page { size: ${getPrintPageSize(pageFormat)} portrait; margin: 0; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .print-page { display: block; width: 100%; height: auto; page-break-after: always; break-after: page; }
+    .print-page:last-child { page-break-after: auto; break-after: auto; }
+  </style>
+</head>
+<body>
+  ${pageImages}
+  <script>
+    window.onload = function() {
+      window.focus();
+      setTimeout(function() {
+        window.print();
+      }, 300);
+    };
+    window.onafterprint = function() {
+      window.close();
+    };
+  </script>
+</body>
+</html>`);
+        printWindow.document.close();
+      } else {
+        // Create a temporary hidden iframe to trigger the print dialog in the background
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.style.pointerEvents = 'none';
+        document.body.appendChild(iframe);
+
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!iframeDoc) throw new Error('Could not access iframe document.');
+
+        iframeDoc.open();
+        iframeDoc.write(`<!doctype html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -166,19 +202,20 @@ export default function InlinePdfViewer({
   </script>
 </body>
 </html>`);
-      iframeDoc.close();
+        iframeDoc.close();
 
-      // Clean up the iframe from the document once print dialog closes
-      if (iframe.contentWindow) {
-        iframe.contentWindow.addEventListener('afterprint', () => {
-          document.body.removeChild(iframe);
-        });
-      } else {
-        setTimeout(() => {
-          if (iframe.parentNode) {
+        // Clean up the iframe from the document once print dialog closes
+        if (iframe.contentWindow) {
+          iframe.contentWindow.addEventListener('afterprint', () => {
             document.body.removeChild(iframe);
-          }
-        }, 5000);
+          });
+        } else {
+          setTimeout(() => {
+            if (iframe.parentNode) {
+              document.body.removeChild(iframe);
+            }
+          }, 5000);
+        }
       }
     } catch (printError) {
       console.error('Failed to print inline PDF:', printError);
