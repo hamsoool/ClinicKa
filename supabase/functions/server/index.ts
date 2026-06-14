@@ -76,6 +76,7 @@ import {
   getCachedAnalyticsSummary,
   getCachedApprovedStudents,
   getCachedStaffDashboardOverview,
+  getCachedStaffSubmissionReportSummaries,
   getCachedStaffSubmissionSummaries,
   getCachedStudentRecords,
   getCachedSubmissionsList,
@@ -2139,6 +2140,20 @@ app.get("/staff/dashboard-overview", async (c) => {
   } catch (error) {
     console.log('Error fetching staff dashboard overview:', error);
     return internalServerError(c, 'Failed to fetch staff dashboard overview', error);
+  }
+});
+
+app.get("/staff/submission-report-summaries", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isStaffRole(requester.profile.role)) return forbidden();
+
+  try {
+    return c.json(await getCachedStaffSubmissionReportSummaries());
+  } catch (error) {
+    console.log('Error fetching staff submission report summaries:', error);
+    return internalServerError(c, 'Failed to fetch submission report summaries', error);
   }
 });
 

@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/badge';
 import ListPagination from '../../components/list-pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import PortalPageIntro from '../../components/portal-page-intro';
-import { ChevronDown, Pencil, Search, X } from 'lucide-react';
+import { ChevronDown, Eye, Search, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
 import type { ApprovedStudentSummary } from '../../lib/record-types';
@@ -338,8 +338,8 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
                                 onMouseEnter={() => prefetchSubmissionDetail(record.id)}
                                 onClick={() => navigate(`/staff/review/${record.id}?archiveEdit=1`)}
                               >
-                                <Pencil className="mr-2 h-3.5 w-3.5" />
-                                Edit
+                                <Eye className="mr-2 h-3.5 w-3.5" />
+                                View
                               </Button>
                               <Badge className="bg-green-100 text-green-800">Approved</Badge>
                             </div>

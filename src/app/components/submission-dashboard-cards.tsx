@@ -12,8 +12,10 @@ import {
   YAxis,
   type TooltipProps,
 } from 'recharts';
-import { Menu } from 'lucide-react';
+import { CalendarDays, Menu } from 'lucide-react';
 import type { StudentAccountSummary, SubmissionRecord, SubmissionStatus } from '../lib/record-types';
+import { getAcademicYearRange, getRecordAcademicYear } from '../lib/academic-year';
+import { useAcademicYear } from '../lib/academic-year-query';
 import { getYearLevelLabel } from '../lib/student-year';
 import {
   DropdownMenu,
@@ -24,6 +26,7 @@ import {
 } from './ui/dropdown-menu';
 
 type AnalyticsView = 'year' | 'gender' | 'department';
+type DonutDateFilter = 'day' | 'week' | 'month' | 'schoolYear';
 
 type AnalyticsSeries = {
   key: string;
@@ -69,7 +72,7 @@ type NoActionStudent = StudentAccountSummary & {
 
 const ANALYTICS_VIEW_LABELS: Record<AnalyticsView, string> = {
   year: 'Year Level',
-  gender: 'Gender (Sex at birth)',
+  gender: 'Gender',
   department: 'Department',
 };
 
@@ -85,6 +88,12 @@ const STATUS_METRIC_LABELS: Record<StatusMetricKey, string> = {
   pending: 'Pending',
   returned: 'Returned',
   noAction: 'No Action Taken',
+};
+const DONUT_FILTER_LABELS: Record<DonutDateFilter, string> = {
+  day: 'Daily',
+  week: 'Weekly',
+  month: 'Monthly',
+  schoolYear: 'Yearly',
 };
 
 const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'short' });
@@ -203,6 +212,37 @@ function getValidTimestamp(value?: string) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
+function getDayStart(referenceDate = new Date()) {
+  return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+}
+
+function getWeekStart(referenceDate = new Date()) {
+  const start = getDayStart(referenceDate);
+  const dayOfWeek = start.getDay();
+  const weekOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  start.setDate(start.getDate() + weekOffset);
+  return start;
+}
+
+function getNextDayStart(referenceDate = new Date()) {
+  const end = getDayStart(referenceDate);
+  end.setDate(end.getDate() + 1);
+  return end;
+}
+
+function getMonthStart(referenceDate = new Date()) {
+  return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+}
+
+function getNextMonthStart(referenceDate = new Date()) {
+  return new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 1);
+}
+
+function isDateInRange(value: string | undefined, start: Date, end: Date) {
+  const timestamp = getValidTimestamp(value);
+  return timestamp >= start.getTime() && timestamp < end.getTime();
+}
+
 function getStudentKey(value?: string) {
   return String(value || '').trim();
 }
@@ -216,8 +256,7 @@ function buildNoActionStudents(
   registeredStudents: StudentAccountSummary[],
 ): NoActionStudent[] {
   const registeredByStudentId = new Map<string, StudentAccountSummary>();
-  const submittedStudentIds = new Set<string>();
-  const returnedByStudentId = new Map<string, SubmissionRecord>();
+  const latestSubmissionByStudentId = new Map<string, SubmissionRecord>();
 
   registeredStudents.forEach((student) => {
     const studentId = getStudentKey(student.studentId);
@@ -228,14 +267,10 @@ function buildNoActionStudents(
   submissions.forEach((submission) => {
     const studentId = getStudentKey(submission.studentId);
     if (!studentId) return;
-    submittedStudentIds.add(studentId);
 
-    const status = String(submission.status || '').trim().toLowerCase();
-    if (!isStatus(status, ['returned'])) return;
-
-    const existing = returnedByStudentId.get(studentId);
+    const existing = latestSubmissionByStudentId.get(studentId);
     if (!existing || getValidTimestamp(getReturnedAt(submission)) > getValidTimestamp(getReturnedAt(existing))) {
-      returnedByStudentId.set(studentId, submission);
+      latestSubmissionByStudentId.set(studentId, submission);
     }
   });
 
@@ -243,7 +278,7 @@ function buildNoActionStudents(
 
   registeredStudents.forEach((student) => {
     const studentId = getStudentKey(student.studentId);
-    if (!studentId || submittedStudentIds.has(studentId)) return;
+    if (!studentId || latestSubmissionByStudentId.has(studentId)) return;
 
     noActionByStudentId.set(studentId, {
       ...student,
@@ -252,7 +287,10 @@ function buildNoActionStudents(
     });
   });
 
-  returnedByStudentId.forEach((submission, studentId) => {
+  latestSubmissionByStudentId.forEach((submission, studentId) => {
+    const status = String(submission.status || '').trim().toLowerCase();
+    if (!isStatus(status, ['returned'])) return;
+
     const registeredStudent = registeredByStudentId.get(studentId);
 
     noActionByStudentId.set(studentId, {
@@ -398,6 +436,43 @@ function buildDonutData(submissions: SubmissionRecord[], noActionStudents: NoAct
   ];
 }
 
+function filterSubmissionsByDonutDateRange(
+  submissions: SubmissionRecord[],
+  filter: DonutDateFilter,
+  academicYear: string,
+) {
+  if (filter === 'schoolYear') {
+    return submissions.filter((submission) => getRecordAcademicYear(submission, academicYear) === academicYear);
+  }
+
+  const today = new Date();
+  const range =
+    filter === 'day'
+      ? { start: getDayStart(today), end: getNextDayStart(today) }
+      : filter === 'week'
+        ? { start: getWeekStart(today), end: getNextDayStart(today) }
+        : { start: getMonthStart(today), end: getNextMonthStart(today) };
+
+  return submissions.filter((submission) => isDateInRange(submission.submittedAt, range.start, range.end));
+}
+
+function filterNoActionStudentsByDonutDateRange(
+  noActionStudents: NoActionStudent[],
+  filter: DonutDateFilter,
+  academicYear: string,
+) {
+  if (filter !== 'schoolYear') {
+    return noActionStudents;
+  }
+
+  const currentAcademicYearRange = getAcademicYearRange(academicYear);
+
+  return noActionStudents.filter((student) => {
+    const timestamp = getValidTimestamp(student.noActionAt || student.registeredAt);
+    return !timestamp || timestamp < currentAcademicYearRange.end.getTime();
+  });
+}
+
 function hasAnalyticsValues(data: AnalyticsDatum[], series: AnalyticsSeries[]) {
   return data.some((row) => series.some((item) => Number(row[item.key] || 0) > 0));
 }
@@ -454,7 +529,9 @@ export default function SubmissionDashboardCards({
   submissions = [],
 }: SubmissionDashboardCardsProps) {
   const [analyticsView, setAnalyticsView] = useState<AnalyticsView>('year');
+  const [donutDateFilter, setDonutDateFilter] = useState<DonutDateFilter>('day');
   const [hoveredSeriesKey, setHoveredSeriesKey] = useState<string | null>(null);
+  const { academicYear } = useAcademicYear();
 
   const selectedSeries = useMemo(
     () => getSeriesForView(submissions, analyticsView),
@@ -468,9 +545,17 @@ export default function SubmissionDashboardCards({
     () => buildNoActionStudents(submissions, registeredStudents),
     [registeredStudents, submissions],
   );
+  const filteredDonutSubmissions = useMemo(
+    () => filterSubmissionsByDonutDateRange(submissions, donutDateFilter, academicYear),
+    [academicYear, donutDateFilter, submissions],
+  );
+  const filteredNoActionStudents = useMemo(
+    () => filterNoActionStudentsByDonutDateRange(noActionStudents, donutDateFilter, academicYear),
+    [academicYear, donutDateFilter, noActionStudents],
+  );
   const selectedDonutData = useMemo(
-    () => buildDonutData(submissions, noActionStudents),
-    [noActionStudents, submissions],
+    () => buildDonutData(filteredDonutSubmissions, filteredNoActionStudents),
+    [filteredDonutSubmissions, filteredNoActionStudents],
   );
   const statusMetrics = useMemo(
     () => buildStatusMetrics(submissions, noActionStudents),
@@ -516,7 +601,7 @@ export default function SubmissionDashboardCards({
                   Year Level
                 </DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="gender" className="rounded-[12px]">
-                  Gender (Sex at birth)
+                  Gender
                 </DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="department" className="rounded-[12px]">
                   Department
@@ -640,11 +725,43 @@ export default function SubmissionDashboardCards({
       <section className="box-border flex min-h-[27rem] w-full min-w-0 flex-col rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6 sm:py-6">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-on-surface">Cleared</h2>
+            <h2 className="text-lg font-semibold text-on-surface">Submissions</h2>
             <p className="mt-1 text-xs text-on-surface-variant">
-              Status mix for records and idle student accounts.
+              Overview of existing records.
             </p>
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Filter cleared chart"
+                title="Filter cleared chart"
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-outline-variant/50 bg-surface-container-low px-3 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                {DONUT_FILTER_LABELS[donutDateFilter]}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuRadioGroup
+                value={donutDateFilter}
+                onValueChange={(value) => setDonutDateFilter(value as DonutDateFilter)}
+              >
+                <DropdownMenuRadioItem value="day" className="rounded-[12px]">
+                  Daily
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="week" className="rounded-[12px]">
+                  Weekly
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="month" className="rounded-[12px]">
+                  Monthly
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="schoolYear" className="rounded-[12px]">
+                  Yearly
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="relative mx-auto flex h-64 w-full max-w-[18rem] items-center justify-center">
@@ -664,31 +781,31 @@ export default function SubmissionDashboardCards({
             <>
               <div className="relative z-10 h-full w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Tooltip
-                    allowEscapeViewBox={{ x: true, y: true }}
-                    content={<SubmissionDonutTooltip />}
-                    offset={14}
-                    wrapperStyle={{ zIndex: 30, pointerEvents: 'none', outline: 'none' }}
-                  />
-                  <Pie
-                    data={selectedDonutData}
-                    dataKey="value"
-                    nameKey="label"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius="58%"
-                    outerRadius="82%"
-                    cornerRadius={8}
-                    paddingAngle={4}
-                    stroke="#ffffff"
-                    strokeWidth={4}
-                  >
-                    {selectedDonutData.map((segment) => (
-                      <Cell key={segment.key} fill={segment.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
+                  <PieChart>
+                    <Tooltip
+                      allowEscapeViewBox={{ x: true, y: true }}
+                      content={<SubmissionDonutTooltip />}
+                      offset={14}
+                      wrapperStyle={{ zIndex: 30, pointerEvents: 'none', outline: 'none' }}
+                    />
+                    <Pie
+                      data={selectedDonutData}
+                      dataKey="value"
+                      nameKey="label"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius="58%"
+                      outerRadius="82%"
+                      cornerRadius={8}
+                      paddingAngle={4}
+                      stroke="#ffffff"
+                      strokeWidth={4}
+                    >
+                      {selectedDonutData.map((segment) => (
+                        <Cell key={segment.key} fill={segment.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
                 </ResponsiveContainer>
               </div>
               <div className="pointer-events-none absolute inset-0 z-0 flex flex-col items-center justify-center text-center">

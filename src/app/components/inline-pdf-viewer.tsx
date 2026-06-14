@@ -243,7 +243,7 @@ export default function InlinePdfViewer({
         {sourceContent}
       </div>
 
-      <div className="flex flex-col gap-3 border-b bg-neutral-900 px-3 py-3 text-white sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-white/10 bg-primary px-3 py-3 text-white sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{fileName}</p>
           <p className="text-xs text-white/70">{title}</p>
