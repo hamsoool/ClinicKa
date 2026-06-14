@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -16,7 +16,6 @@ import { toast } from 'sonner';
 import { useAuth } from '../../lib/auth';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel } from '../../lib/academic-year';
 import { useAcademicYear } from '../../lib/academic-year-query';
-import { createMedicalCertificatePdfBlob, createMedicalRecordPdfBlob } from '../../lib/medical-record-pdf-export';
 import { useStudentRecordsQuery } from './student-records-query';
 
 type StudentClearanceTab = 'history' | 'form' | 'medical-clearance';
@@ -126,16 +125,6 @@ export default function StudentClearance() {
       toast.error('Failed to load clearance details');
     }
   }, [isError]);
-
-  const createRecordPdfBlob = useCallback(() => {
-    if (!profileRecord) return Promise.reject(new Error('No medical record is available.'));
-    return createMedicalRecordPdfBlob(profileRecord, sortedRecords, recordAcademicYearLabel);
-  }, [profileRecord, recordAcademicYearLabel, sortedRecords]);
-
-  const createClearancePdfBlob = useCallback(() => {
-    if (!record) return Promise.reject(new Error('No medical certificate is available.'));
-    return createMedicalCertificatePdfBlob(record, clearanceAcademicYearLabel);
-  }, [clearanceAcademicYearLabel, record]);
 
   const handleTabChange = (value: string) => {
     const nextTab = normalizeClearanceTab(value);
@@ -330,8 +319,8 @@ export default function StudentClearance() {
                     title="Medical Record Form"
                     fileName={`${profileRecord.studentId || 'medical-record'}.pdf`}
                     documentKey={`student-record-${profileRecord.id}-${recordAcademicYearLabel}-${sortedRecords.map((item) => `${item.id}:${item.updatedAt || item.submittedAt || ''}`).join('|')}`}
-                    createBlob={createRecordPdfBlob}
-                    fallbackContent={
+                    pageFormat="legal"
+                    sourceContent={
                       <div
                         className="w-[816px] shrink-0 overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
                         style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
@@ -508,8 +497,8 @@ export default function StudentClearance() {
                       title="Medical Certificate"
                       fileName={`${record.studentId || 'medical-certificate'}.pdf`}
                       documentKey={`student-certificate-${record.id}-${record.updatedAt || record.submittedAt || ''}-${clearanceAcademicYearLabel}`}
-                      createBlob={createClearancePdfBlob}
-                      fallbackContent={
+                      pageFormat="a4"
+                      sourceContent={
                         <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
                           <MedicalClearancePreview
                             record={record}

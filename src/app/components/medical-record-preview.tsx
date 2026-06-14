@@ -487,6 +487,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
         {slotPages.map((slots, pageIndex) => (
           <div
             key={`medical-record-page-${slots[0]}`}
+            data-pdf-page="legal"
             className="pdf-print-exact flex flex-col bg-white print:flex print:flex-col"
             style={{
               ...S.page,
@@ -562,6 +563,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               <img
                 src={photoUrl}
                 alt="1x1 photo"
+                crossOrigin="anonymous"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
@@ -866,6 +868,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
               <img
                 src={signatureUrl}
                 alt="Student signature"
+                crossOrigin="anonymous"
                 style={{
                   maxWidth: '170px',
                   maxHeight: '24px',

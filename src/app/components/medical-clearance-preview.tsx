@@ -504,6 +504,7 @@ const MedicalClearancePreviewBase = forwardRef<HTMLDivElement, Props>(({ record,
   return (
     <div
       ref={ref}
+      data-pdf-page="a4"
       className="pdf-print-exact flex flex-col bg-white print:flex print:flex-col"
       style={S.page}
     >

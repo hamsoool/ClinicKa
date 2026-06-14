@@ -1,14 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import '../lib/pdf-polyfills';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Download, Loader2, Printer, RefreshCw } from 'lucide-react';
+import { Document as PdfDocument, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+import { Download, Loader2, Printer, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from './ui/button';
+import { createPdfFromElement } from '../lib/dom-pdf-export';
+import type { DomPdfPageFormat } from '../lib/dom-pdf-export';
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 interface InlinePdfViewerProps {
   title: string;
   fileName: string;
   documentKey: string;
-  createBlob: () => Promise<Blob>;
-  fallbackContent?: ReactNode;
+  pageFormat: DomPdfPageFormat;
+  sourceContent: ReactNode;
 }
 
 function escapeHtml(value: string) {
@@ -19,25 +27,45 @@ function escapeHtml(value: string) {
     .replace(/"/g, '&quot;');
 }
 
-function getDocumentStyleMarkup() {
-  return Array.from(document.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style'))
-    .map((node) => {
-      if (node instanceof HTMLLinkElement) {
-        const href = new URL(node.getAttribute('href') || node.href, document.baseURI).href;
-        return `<link rel="stylesheet" href="${href}">`;
-      }
-      return `<style>${node.textContent || ''}</style>`;
-    })
-    .join('\n');
+function getPrintPageSize(pageFormat: DomPdfPageFormat) {
+  return pageFormat === 'legal' ? 'legal' : 'A4';
 }
 
-export default function InlinePdfViewer({ title, fileName, documentKey, createBlob, fallbackContent }: InlinePdfViewerProps) {
-  const frameRef = useRef<HTMLIFrameElement>(null);
-  const fallbackRef = useRef<HTMLDivElement>(null);
+export default function InlinePdfViewer({
+  title,
+  fileName,
+  documentKey,
+  pageFormat,
+  sourceContent,
+}: InlinePdfViewerProps) {
+  const sourceRef = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const pagesRef = useRef<HTMLDivElement>(null);
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [pdfUrl, setPdfUrl] = useState('');
+  const [numPages, setNumPages] = useState(0);
+  const [renderedPages, setRenderedPages] = useState<Set<number>>(() => new Set());
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [zoom, setZoom] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    const element = viewerRef.current;
+    if (!element) return;
+
+    if (typeof ResizeObserver === 'undefined') {
+      setContainerWidth(element.clientWidth);
+      return;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      setContainerWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,22 +73,25 @@ export default function InlinePdfViewer({ title, fileName, documentKey, createBl
 
     setLoading(true);
     setError('');
+    setPdfBlob(null);
+    setPdfUrl('');
+    setNumPages(0);
+    setRenderedPages(new Set());
 
-    createBlob()
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPdfUrl(objectUrl);
-      })
+    const generate = async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const blob = await createPdfFromElement(sourceRef.current, { pageFormat });
+      if (cancelled) return;
+      objectUrl = URL.createObjectURL(blob);
+      setPdfBlob(blob);
+      setPdfUrl(objectUrl);
+    };
+
+    generate()
       .catch((generationError) => {
         console.error('Failed to generate inline PDF:', generationError);
         if (!cancelled) {
-          setPdfUrl('');
-          setError(
-            fallbackContent
-              ? 'PDF preview could not be generated on this device. Showing the rendered document preview instead.'
-              : 'Failed to generate PDF preview. Please refresh and try again.',
-          );
+          setError('Failed to generate PDF preview. Refresh and try again.');
         }
       })
       .finally(() => {
@@ -71,52 +102,76 @@ export default function InlinePdfViewer({ title, fileName, documentKey, createBl
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [createBlob, documentKey, reloadToken]);
+  }, [documentKey, pageFormat, reloadToken]);
 
-  const handlePrint = () => {
+  const pageWidth = useMemo(() => {
+    const availableWidth = Math.max(280, containerWidth - 32);
+    return Math.round(Math.min(availableWidth, 900) * zoom);
+  }, [containerWidth, zoom]);
+
+  const isFullyRendered = numPages > 0 && renderedPages.size >= numPages;
+
+  const handlePrint = useCallback(() => {
     try {
-      if (pdfUrl) {
-        const frameWindow = frameRef.current?.contentWindow;
-        if (!frameWindow) throw new Error('PDF frame is not ready.');
-        frameWindow.focus();
-        frameWindow.print();
-        return;
+      const canvases = Array.from(pagesRef.current?.querySelectorAll('canvas') || []);
+      if (!canvases.length || canvases.length < numPages) {
+        throw new Error('PDF pages are still rendering.');
       }
 
-      const fallbackElement = fallbackRef.current;
-      if (!fallbackElement) throw new Error('Rendered preview is not ready.');
       const printWindow = window.open('', '_blank');
       if (!printWindow) throw new Error('The print page was blocked.');
+
+      const pageImages = canvases
+        .slice(0, numPages)
+        .map((canvas) => canvas.toDataURL('image/png'))
+        .map((src, index) => `<img class="print-page" src="${src}" alt="Page ${index + 1}">`)
+        .join('');
+
       printWindow.document.open();
       printWindow.document.write(`<!doctype html>
 <html>
 <head>
-  <base href="${escapeHtml(document.baseURI)}">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(fileName)}</title>
-  ${getDocumentStyleMarkup()}
   <style>
-    @page { margin: 0; }
-    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
-    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    .inline-pdf-fallback-print-root { display: flex; justify-content: center; width: 100%; }
+    @page { size: ${getPrintPageSize(pageFormat)} portrait; margin: 0; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .print-page { display: block; width: 100%; height: auto; page-break-after: always; break-after: page; }
+    .print-page:last-child { page-break-after: auto; break-after: auto; }
   </style>
 </head>
-<body>
-  <div class="inline-pdf-fallback-print-root">${fallbackElement.innerHTML}</div>
-</body>
+<body>${pageImages}</body>
 </html>`);
       printWindow.document.close();
       printWindow.focus();
-      setTimeout(() => printWindow.print(), 150);
+      setTimeout(() => printWindow.print(), 200);
     } catch (printError) {
       console.error('Failed to print inline PDF:', printError);
-      setError('Unable to open the print dialog from this browser. Use the rendered preview below or download the PDF if available.');
+      setError('The PDF is still preparing. Wait for the pages to finish rendering, then print again.');
     }
-  };
+  }, [fileName, numPages, pageFormat]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-outline-variant/50 bg-white shadow-sm">
+      <div
+        aria-hidden="true"
+        ref={sourceRef}
+        style={{
+          position: 'fixed',
+          left: '-100000px',
+          top: 0,
+          zIndex: -1,
+          width: 'max-content',
+          height: 'auto',
+          overflow: 'visible',
+          background: '#fff',
+          pointerEvents: 'none',
+        }}
+      >
+        {sourceContent}
+      </div>
+
       <div className="flex flex-col gap-3 border-b bg-neutral-900 px-3 py-3 text-white sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{fileName}</p>
@@ -139,8 +194,31 @@ export default function InlinePdfViewer({ title, fileName, documentKey, createBl
             variant="secondary"
             size="sm"
             className="h-9 px-3"
+            onClick={() => setZoom((value) => Math.max(0.75, Number((value - 0.1).toFixed(2))))}
+            disabled={loading}
+            title="Zoom out"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <span className="min-w-12 text-center text-xs font-semibold">{Math.round(zoom * 100)}%</span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-9 px-3"
+            onClick={() => setZoom((value) => Math.min(1.6, Number((value + 0.1).toFixed(2))))}
+            disabled={loading}
+            title="Zoom in"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-9 px-3"
             onClick={handlePrint}
-            disabled={(!pdfUrl && !fallbackContent) || loading}
+            disabled={!isFullyRendered || loading}
             title="Print PDF"
           >
             <Printer className="h-4 w-4" />
@@ -159,43 +237,59 @@ export default function InlinePdfViewer({ title, fileName, documentKey, createBl
         </div>
       </div>
 
-      {error ? (
-        <div
-          className={
-            fallbackContent
-              ? 'border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800'
-              : 'border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'
-          }
-        >
-          {error}
-        </div>
-      ) : null}
+      {error ? <div className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
 
-      <div className="relative min-h-[70vh] bg-neutral-800">
+      <div ref={viewerRef} className="relative min-h-[70vh] bg-neutral-800">
         {loading ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-neutral-900 text-white">
             <Loader2 className="h-6 w-6 animate-spin" />
             <p className="text-sm">Preparing PDF preview...</p>
           </div>
         ) : null}
-        {pdfUrl ? (
-          <iframe
-            ref={frameRef}
-            title={title}
-            src={`${pdfUrl}#toolbar=1&navpanes=1&view=FitH`}
-            className="h-[70vh] min-h-[620px] w-full border-0 bg-neutral-800"
-          />
-        ) : fallbackContent && error ? (
-          <div className="h-[70vh] min-h-[620px] overflow-auto bg-neutral-800 p-3">
-            <div ref={fallbackRef} className="mx-auto w-max bg-white">
-              {fallbackContent}
-            </div>
+
+        {pdfBlob ? (
+          <div ref={pagesRef} className="h-[70vh] min-h-[620px] overflow-auto bg-neutral-800 px-3 py-4">
+            <PdfDocument
+              file={pdfBlob}
+              loading={<p className="py-10 text-center text-sm text-white/80">Loading PDF pages...</p>}
+              error={<p className="py-10 text-center text-sm text-red-200">PDF preview could not be opened.</p>}
+              onLoadSuccess={({ numPages: nextNumPages }) => {
+                setNumPages(nextNumPages);
+                setRenderedPages(new Set());
+              }}
+              onLoadError={(loadError) => {
+                console.error('Failed to load generated PDF:', loadError);
+                setError('Generated PDF could not be loaded. Refresh and try again.');
+              }}
+            >
+              {Array.from({ length: numPages }, (_, index) => {
+                const pageNumber = index + 1;
+                return (
+                  <div key={pageNumber} className="mb-4 flex justify-center last:mb-0">
+                    <Page
+                      pageNumber={pageNumber}
+                      width={pageWidth}
+                      renderAnnotationLayer={false}
+                      renderTextLayer={false}
+                      loading={<div className="h-96 w-full max-w-[720px] animate-pulse rounded bg-neutral-700" />}
+                      onRenderSuccess={() => {
+                        setRenderedPages((current) => {
+                          const next = new Set(current);
+                          next.add(pageNumber);
+                          return next;
+                        });
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </PdfDocument>
           </div>
-        ) : (
+        ) : !loading ? (
           <div className="flex min-h-[70vh] items-center justify-center px-4 text-center text-sm text-white/80">
             PDF preview is not available.
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

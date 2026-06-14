@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -18,7 +18,6 @@ import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useAuth } from '../../lib/auth';
 import { getRoleLabel } from '../../lib/api';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
-import { createMedicalCertificatePdfBlob, createMedicalRecordPdfBlob } from '../../lib/medical-record-pdf-export';
 import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import {
   useStaffApprovedStudentsQuery,
@@ -331,16 +330,6 @@ function StaffCertificatesWorkspace() {
     setClearanceYearFilter('all');
   };
 
-  const createRecordPdfBlob = useCallback(() => {
-    if (!combinedRecord) return Promise.reject(new Error('No medical record is available.'));
-    return createMedicalRecordPdfBlob(combinedRecord, selectedRecordsSorted);
-  }, [combinedRecord, selectedRecordsSorted]);
-
-  const createClearancePdfBlob = useCallback(() => {
-    if (!clearanceRecord) return Promise.reject(new Error('No medical certificate is available.'));
-    return createMedicalCertificatePdfBlob(clearanceRecord);
-  }, [clearanceRecord]);
-
   if (loading && studentRows.length === 0) {
     return <StaffCertificatesWorkspaceSkeleton />;
   }
@@ -478,15 +467,15 @@ function StaffCertificatesWorkspace() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <InlinePdfViewer
-                      title="Medical Record Form"
-                      fileName={`${combinedRecord.studentId || 'medical-record'}.pdf`}
-                      documentKey={`staff-record-${combinedRecord.id}-${selectedRecordsSorted.map((entry) => `${entry.id}:${entry.updatedAt || entry.submittedAt || ''}`).join('|')}`}
-                      createBlob={createRecordPdfBlob}
-                      fallbackContent={
-                        <div
-                          className="overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
-                          style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
+                      <InlinePdfViewer
+                        title="Medical Record Form"
+                        fileName={`${combinedRecord.studentId || 'medical-record'}.pdf`}
+                        documentKey={`staff-record-${combinedRecord.id}-${selectedRecordsSorted.map((entry) => `${entry.id}:${entry.updatedAt || entry.submittedAt || ''}`).join('|')}`}
+                        pageFormat="legal"
+                        sourceContent={
+                          <div
+                            className="overflow-hidden rounded-sm bg-white shadow-[3px_5px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/5 print:w-[816px]"
+                            style={{ width: `${RECORD_PREVIEW_BASE_WIDTH}px` }}
                         >
                           <MedicalRecordPreview
                             record={combinedRecord}
@@ -557,8 +546,8 @@ function StaffCertificatesWorkspace() {
                         title="Medical Certificate"
                         fileName={`${clearanceRecord.studentId || 'medical-certificate'}.pdf`}
                         documentKey={`staff-certificate-${clearanceRecord.id}-${clearanceRecord.updatedAt || clearanceRecord.submittedAt || ''}`}
-                        createBlob={createClearancePdfBlob}
-                        fallbackContent={
+                        pageFormat="a4"
+                        sourceContent={
                           <div className="print:w-[794px] lg:mx-auto" style={{ width: `${CLEARANCE_PREVIEW_BASE_WIDTH}px` }}>
                             <MedicalClearancePreview record={clearanceRecord} />
                           </div>
