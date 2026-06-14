@@ -8,6 +8,7 @@ import {
 import type {
   ApprovedStudentSummary,
   StaffDashboardOverview,
+  StudentAccountSummary,
   SubmissionRecord,
   SubmissionSummaryRecord,
 } from './record-types';
@@ -4482,23 +4483,146 @@ export async function getSubmissions() {
   return { submissions };
 }
 
-export async function getSubmissionReportSummaries() {
-  const rows = await restRequest<any[]>(
-    'submissions',
-    'select=id,student_id,department,course,year_level,sex,submitted_at,academic_year&order=submitted_at.desc',
-  ).catch(() => []);
+async function getPagedRestRows<T>(table: string, buildQuery: (pageSize: number, offset: number) => string) {
+  const pageSize = 1000;
+  const rows: T[] = [];
+
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await restRequest<T[]>(table, buildQuery(pageSize, offset));
+    rows.push(...(page || []));
+
+    if (!page || page.length < pageSize) {
+      break;
+    }
+  }
+
+  return rows;
+}
+
+async function getReportStudentRows() {
+  const columnsWithCreatedAt =
+    'student_id,profile_id,first_name,last_name,department,course,year_level,sex,created_at';
+  const columnsWithoutCreatedAt =
+    'student_id,profile_id,first_name,last_name,department,course,year_level,sex';
+
+  try {
+    return await getPagedRestRows<any>('students', (pageSize, offset) => (
+      `select=${columnsWithCreatedAt}&order=student_id.asc&limit=${pageSize}&offset=${offset}`
+    ));
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (!message.includes('created_at')) {
+      throw error;
+    }
+
+    return getPagedRestRows<any>('students', (pageSize, offset) => (
+      `select=${columnsWithoutCreatedAt}&order=student_id.asc&limit=${pageSize}&offset=${offset}`
+    ));
+  }
+}
+
+async function getArchivedReportProfileIds() {
+  try {
+    const rows = await getPagedRestRows<any>('archived_accounts', (pageSize, offset) => (
+      `select=user_id&limit=${pageSize}&offset=${offset}`
+    ));
+    return new Set((rows || []).map((row) => String(row?.user_id || '').trim()).filter(Boolean));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+async function getRegisteredStudentReportSummaries(): Promise<StudentAccountSummary[]> {
+  const [studentRows, profileRows, archivedProfileIds] = await Promise.all([
+    getReportStudentRows().catch(() => []),
+    getPagedRestRows<any>('profiles', (pageSize, offset) => (
+      `role=eq.student&select=id,student_id,first_name,last_name,department,course,created_at,updated_at&order=created_at.asc&limit=${pageSize}&offset=${offset}`
+    )).catch(() => []),
+    getArchivedReportProfileIds(),
+  ]);
+  const studentById = new Map<string, any>();
+
+  (studentRows || []).forEach((student) => {
+    const studentId = String(student?.student_id || '').trim();
+    if (!studentId) return;
+    studentById.set(studentId, student);
+  });
+
+  const studentsByReportId = new Map<string, StudentAccountSummary>();
+
+  (profileRows || []).forEach((profile) => {
+    const profileId = String(profile?.id || '').trim();
+    if (profileId && archivedProfileIds.has(profileId)) return;
+
+    const studentId = String(profile?.student_id || profileId || '').trim();
+    if (!studentId) return;
+
+    const student = studentById.get(String(profile?.student_id || '').trim()) || {};
+    studentsByReportId.set(studentId, {
+      studentId,
+      profileId: profileId || String(student?.profile_id || '').trim() || undefined,
+      firstName: student.first_name || profile.first_name || undefined,
+      lastName: student.last_name || profile.last_name || undefined,
+      department: student.department || profile.department || undefined,
+      course: student.course || profile.course || undefined,
+      year: String(student.year_level || ''),
+      studentYearLevel: String(student.year_level || ''),
+      sex: student.sex || undefined,
+      registeredAt: profile.created_at || student.created_at || profile.updated_at || undefined,
+    });
+  });
+
+  (studentRows || []).forEach((student) => {
+    const studentId = String(student?.student_id || '').trim();
+    const profileId = String(student?.profile_id || '').trim();
+    if (!studentId || studentsByReportId.has(studentId)) return;
+    if (profileId && archivedProfileIds.has(profileId)) return;
+
+    studentsByReportId.set(studentId, {
+      studentId,
+      profileId: profileId || undefined,
+      firstName: student.first_name || undefined,
+      lastName: student.last_name || undefined,
+      department: student.department || undefined,
+      course: student.course || undefined,
+      year: String(student.year_level || ''),
+      studentYearLevel: String(student.year_level || ''),
+      sex: student.sex || undefined,
+      registeredAt: student.created_at || undefined,
+    });
+  });
+
+  return [...studentsByReportId.values()];
+}
+
+export async function getSubmissionReportSummaries(): Promise<{
+  submissions: SubmissionRecord[];
+  registeredStudents: StudentAccountSummary[];
+}> {
+  const [submissionRows, registeredStudents] = await Promise.all([
+    getPagedRestRows<any>('submissions', (pageSize, offset) => (
+      `select=id,student_id,department,course,year_level,sex,status,submitted_at,updated_at,academic_year&order=submitted_at.desc&limit=${pageSize}&offset=${offset}`
+    )),
+    getRegisteredStudentReportSummaries(),
+  ]);
 
   return {
-    submissions: (rows || []).map((row) => ({
+    submissions: (submissionRows || []).map((row) => ({
       id: row.id,
       studentId: row.student_id || '',
+      firstName: '',
+      lastName: '',
       department: row.department || '',
       course: row.course || '',
       year: String(row.year_level || ''),
+      studentYearLevel: String(row.year_level || ''),
       sex: row.sex || '',
+      status: row.status || 'pending',
       submittedAt: row.submitted_at,
+      updatedAt: row.updated_at || undefined,
       academicYear: row.academic_year || undefined,
     })),
+    registeredStudents,
   };
 }
 

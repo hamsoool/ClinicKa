@@ -87,6 +87,19 @@ export type StudentProfileRecord = {
   address?: string;
 };
 
+export type StudentAccountSummary = {
+  studentId: string;
+  profileId?: string;
+  firstName?: string;
+  lastName?: string;
+  course?: string;
+  department?: string;
+  year?: string;
+  studentYearLevel?: string;
+  sex?: string;
+  registeredAt?: string;
+};
+
 export type SubmissionStatus =
   | 'pending'
   | 'in_review'
