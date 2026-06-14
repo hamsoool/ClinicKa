@@ -12,7 +12,7 @@ import type { SubmissionRecord } from '../../lib/record-types';
 import MedicalRecordPreview from '../../components/medical-record-preview';
 import MedicalClearancePreview from '../../components/medical-clearance-preview';
 import InlinePdfViewer from '../../components/inline-pdf-viewer';
-import { Search, FileText, X, ClipboardList, Award } from 'lucide-react';
+import { Search, FileText, X, ClipboardList, Award, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
 import { useAuth } from '../../lib/auth';
@@ -343,7 +343,7 @@ function StaffCertificatesWorkspace() {
               <div className="flex items-center justify-between gap-3">
                 <CardTitle className="text-base">Approved Students</CardTitle>
                 {!loading && approvedStudentsFetching ? (
-                  <span className="text-xs text-muted-foreground">Refreshing...</span>
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 ) : null}
               </div>
             </CardHeader>
@@ -417,12 +417,37 @@ function StaffCertificatesWorkspace() {
                   </div>
                 )}
 
-                {!loading && totalPages > 1 ? (
-                  <div className="flex items-center justify-between gap-2 pt-2">
-                    <p className="text-xs text-muted-foreground">Page {clampedPage} of {totalPages}</p>
-                    <div className="flex items-center gap-1">
-                      <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={clampedPage <= 1} onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}>Previous</Button>
-                      <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={clampedPage >= totalPages} onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}>Next</Button>
+                {!loading && totalStudents > 0 ? (
+                  <div className="flex flex-col gap-2 pt-3 border-t border-outline-variant/20 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Showing {((clampedPage - 1) * STUDENTS_PER_PAGE) + 1}-{Math.min(clampedPage * STUDENTS_PER_PAGE, totalStudents)} of {totalStudents} records
+                    </p>
+                    <div className="flex items-center justify-between sm:justify-end gap-3">
+                      <p className="text-xs text-muted-foreground">Page {clampedPage} of {totalPages}</p>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 w-7 p-0"
+                          disabled={clampedPage <= 1}
+                          onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                          aria-label="Previous page"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 w-7 p-0"
+                          disabled={clampedPage >= totalPages}
+                          onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                          aria-label="Next page"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ) : null}

@@ -31,7 +31,6 @@ export default function PortalPageIntro({
   return (
     <div
       className={cn(
-        'rounded-[18px] border border-outline-variant/55 bg-white p-5 sm:p-8',
         className,
       )}
     >

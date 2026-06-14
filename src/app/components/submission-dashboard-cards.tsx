@@ -77,6 +77,19 @@ const ANALYTICS_VIEW_LABELS: Record<AnalyticsView, string> = {
 };
 
 const SERIES_COLORS = ['#006d3c', '#12b76a', '#3d8f66', '#85cfa4', '#5d7c68', '#e5a93a', '#d26d6d', '#6d7b6e'];
+const DEPARTMENT_COLORS: Record<string, string> = {
+  CCS: '#FF7F3F',
+  CBA: '#FBDF07',
+  CEAS: '#406093',
+  CHTM: '#FCB7C7',
+  CAHS: '#DE3E3E',
+};
+const GENDER_COLORS: Record<string, string> = {
+  male: '#9ED3DC',
+  female: '#FCB7C7',
+  other: '#85f6ae',
+  unspecified: '#d8e4d7',
+};
 const STATUS_SEGMENT_COLORS = {
   submissions: '#006d3c',
   pending: '#e5a93a',
@@ -181,12 +194,23 @@ function getSeriesForView(submissions: SubmissionRecord[], view: AnalyticsView) 
 
       return a.localeCompare(b);
     })
-    .map((value, index) => ({
-      key: normalizeSeriesKey(view, value),
-      rawValue: value,
-      label: getSubmissionGroupLabel(value, view),
-      color: SERIES_COLORS[index % SERIES_COLORS.length],
-    }));
+    .map((value, index) => {
+      let color = SERIES_COLORS[index % SERIES_COLORS.length];
+      if (view === 'department') {
+        const dept = String(value || '').trim().toUpperCase();
+        if (DEPARTMENT_COLORS[dept]) color = DEPARTMENT_COLORS[dept];
+      } else if (view === 'gender') {
+        const gender = String(value || '').trim().toLowerCase();
+        if (GENDER_COLORS[gender]) color = GENDER_COLORS[gender];
+      }
+
+      return {
+        key: normalizeSeriesKey(view, value),
+        rawValue: value,
+        label: getSubmissionGroupLabel(value, view),
+        color,
+      };
+    });
 }
 
 function getMonthKey(date: Date) {
@@ -482,26 +506,36 @@ type SubmissionAreaTooltipProps = TooltipProps<number, string> & {
 };
 
 function SubmissionAreaTooltip({ active, label, payload, hoveredSeriesKey }: SubmissionAreaTooltipProps) {
-  const entry = hoveredSeriesKey
-    ? payload?.find((item) => String(item.dataKey) === hoveredSeriesKey)
-    : undefined;
-
-  if (!active || !entry) {
+  if (!active || !payload || payload.length === 0) {
     return null;
   }
 
   return (
-    <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 shadow-sm">
+    <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-lowest px-3.5 py-2.5 shadow-sm space-y-2.5 min-w-36">
       <p className="text-sm font-semibold text-on-surface">{label}</p>
-      <div className="mt-2 flex items-center justify-between gap-5 text-xs">
-        <span className="flex items-center gap-2 text-on-surface-variant">
-          <span
-            className="h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: entry.color || '#006d3c' }}
-          />
-          {entry.name}
-        </span>
-        <span className="font-semibold text-on-surface">{formatNumber(Number(entry.value || 0))}</span>
+      <div className="space-y-1.5">
+        {payload.map((entry) => {
+          const isHovered = hoveredSeriesKey === entry.dataKey;
+          return (
+            <div
+              key={String(entry.dataKey)}
+              className={`flex items-center justify-between gap-5 text-xs transition-opacity ${
+                hoveredSeriesKey && !isHovered ? 'opacity-40' : 'opacity-100'
+              }`}
+            >
+              <span className="flex items-center gap-2 text-on-surface-variant font-medium">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: entry.color || '#006d3c' }}
+                />
+                {entry.name}
+              </span>
+              <span className={`font-semibold ${isHovered ? 'text-primary font-bold' : 'text-on-surface'}`}>
+                {formatNumber(Number(entry.value || 0))}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -533,21 +567,40 @@ export default function SubmissionDashboardCards({
   const [hoveredSeriesKey, setHoveredSeriesKey] = useState<string | null>(null);
   const { academicYear } = useAcademicYear();
 
+  // Resolve submissions' sex from registered student profiles or gender field fallbacks
+  const resolvedSubmissions = useMemo(() => {
+    const studentMap = new Map<string, string>();
+    registeredStudents.forEach((student) => {
+      if (student.studentId && student.sex) {
+        studentMap.set(student.studentId.trim().toLowerCase(), student.sex);
+      }
+    });
+
+    return submissions.map((sub) => {
+      const studentId = String(sub.studentId || '').trim().toLowerCase();
+      const resolvedSex = sub.sex || (sub as any).gender || studentMap.get(studentId) || '';
+      return {
+        ...sub,
+        sex: resolvedSex,
+      };
+    });
+  }, [submissions, registeredStudents]);
+
   const selectedSeries = useMemo(
-    () => getSeriesForView(submissions, analyticsView),
-    [analyticsView, submissions],
+    () => getSeriesForView(resolvedSubmissions, analyticsView),
+    [analyticsView, resolvedSubmissions],
   );
   const selectedAnalyticsData = useMemo(
-    () => buildAnalyticsData(submissions, analyticsView, selectedSeries),
-    [analyticsView, selectedSeries, submissions],
+    () => buildAnalyticsData(resolvedSubmissions, analyticsView, selectedSeries),
+    [analyticsView, selectedSeries, resolvedSubmissions],
   );
   const noActionStudents = useMemo(
-    () => buildNoActionStudents(submissions, registeredStudents),
-    [registeredStudents, submissions],
+    () => buildNoActionStudents(resolvedSubmissions, registeredStudents),
+    [registeredStudents, resolvedSubmissions],
   );
   const filteredDonutSubmissions = useMemo(
-    () => filterSubmissionsByDonutDateRange(submissions, donutDateFilter, academicYear),
-    [academicYear, donutDateFilter, submissions],
+    () => filterSubmissionsByDonutDateRange(resolvedSubmissions, donutDateFilter, academicYear),
+    [academicYear, donutDateFilter, resolvedSubmissions],
   );
   const filteredNoActionStudents = useMemo(
     () => filterNoActionStudentsByDonutDateRange(noActionStudents, donutDateFilter, academicYear),
@@ -558,8 +611,8 @@ export default function SubmissionDashboardCards({
     [filteredDonutSubmissions, filteredNoActionStudents],
   );
   const statusMetrics = useMemo(
-    () => buildStatusMetrics(submissions, noActionStudents),
-    [noActionStudents, submissions],
+    () => buildStatusMetrics(resolvedSubmissions, noActionStudents),
+    [noActionStudents, resolvedSubmissions],
   );
   const donutTotal = useMemo(
     () => selectedDonutData.reduce((total, segment) => total + segment.value, 0),
@@ -653,61 +706,68 @@ export default function SubmissionDashboardCards({
               </p>
             </div>
           ) : (
-            <div className="h-[19rem] w-full min-w-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={selectedAnalyticsData}
-                  margin={{ top: 16, right: 14, left: -18, bottom: 0 }}
-                  onMouseLeave={() => setHoveredSeriesKey(null)}
-                >
-                  <defs>
-                    {selectedSeries.map((series) => (
-                      <linearGradient key={series.key} id={`submission-${series.key}`} x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="5%" stopColor={series.color} stopOpacity={0.28} />
-                        <stop offset="95%" stopColor={series.color} stopOpacity={0.03} />
-                      </linearGradient>
-                    ))}
-                  </defs>
-                  <CartesianGrid stroke="var(--outline-variant)" strokeOpacity={0.55} vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#3d4a3f', fontSize: 12 }}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#3d4a3f', fontSize: 12 }}
-                    allowDecimals={false}
-                    domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]}
-                  />
-                  <Tooltip
-                    content={<SubmissionAreaTooltip hoveredSeriesKey={hoveredSeriesKey} />}
-                    cursor={{ stroke: '#006d3c', strokeOpacity: 0.16 }}
-                  />
-                  {selectedSeries.map((series) => {
-                    const isDimmed = Boolean(hoveredSeriesKey && hoveredSeriesKey !== series.key);
+            <div className="flex h-[19rem] flex-col w-full min-w-0">
+              <div className="mb-2.5 px-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant/80">
+                  Monthly Submission Volume Trend
+                </span>
+              </div>
+              <div className="min-h-0 flex-1 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={selectedAnalyticsData}
+                    margin={{ top: 16, right: 14, left: -18, bottom: 0 }}
+                    onMouseLeave={() => setHoveredSeriesKey(null)}
+                  >
+                    <defs>
+                      {selectedSeries.map((series) => (
+                        <linearGradient key={series.key} id={`submission-${series.key}`} x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="5%" stopColor={series.color} stopOpacity={0.28} />
+                          <stop offset="95%" stopColor={series.color} stopOpacity={0.03} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid stroke="var(--outline-variant)" strokeOpacity={0.55} vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#3d4a3f', fontSize: 12 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#3d4a3f', fontSize: 12 }}
+                      allowDecimals={false}
+                      domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]}
+                    />
+                    <Tooltip
+                      content={<SubmissionAreaTooltip hoveredSeriesKey={hoveredSeriesKey} />}
+                      cursor={{ stroke: '#006d3c', strokeOpacity: 0.16 }}
+                    />
+                    {selectedSeries.map((series) => {
+                      const isDimmed = Boolean(hoveredSeriesKey && hoveredSeriesKey !== series.key);
 
-                    return (
-                      <Area
-                        key={series.key}
-                        type="monotone"
-                        dataKey={series.key}
-                        name={series.label}
-                        stroke={series.color}
-                        strokeOpacity={isDimmed ? 0.3 : 1}
-                        strokeWidth={hoveredSeriesKey === series.key ? 3 : 2.25}
-                        fill={`url(#submission-${series.key})`}
-                        fillOpacity={isDimmed ? 0.18 : 1}
-                        activeDot={hoveredSeriesKey === series.key ? { r: 4, strokeWidth: 2, stroke: '#ffffff' } : false}
-                        onMouseEnter={() => setHoveredSeriesKey(series.key)}
-                        onMouseLeave={() => setHoveredSeriesKey(null)}
-                      />
-                    );
-                  })}
-                </AreaChart>
-              </ResponsiveContainer>
+                      return (
+                        <Area
+                          key={series.key}
+                          type="monotone"
+                          dataKey={series.key}
+                          name={series.label}
+                          stroke={series.color}
+                          strokeOpacity={isDimmed ? 0.3 : 1}
+                          strokeWidth={hoveredSeriesKey === series.key ? 3 : 2.25}
+                          fill={`url(#submission-${series.key})`}
+                          fillOpacity={isDimmed ? 0.18 : 1}
+                          activeDot={hoveredSeriesKey === series.key ? { r: 4, strokeWidth: 2, stroke: '#ffffff' } : false}
+                          onMouseEnter={() => setHoveredSeriesKey(series.key)}
+                          onMouseLeave={() => setHoveredSeriesKey(null)}
+                        />
+                      );
+                    })}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           )}
         </div>

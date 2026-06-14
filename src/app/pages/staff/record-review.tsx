@@ -875,13 +875,13 @@ function createClearanceForm(submission?: SubmissionDetails | null): ClearanceFo
 function getStatusBadge(status: ReviewStatus) {
   switch (status) {
     case 'pending':
-      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending Review</Badge>;
+      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
     case 'in_review':
-      return null;
+      return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">In Review</Badge>;
     case 'physical_exam_done':
       return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Physical Exam Done</Badge>;
     case 'approved':
-      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved</Badge>;
+      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Issued Medical Certificate</Badge>;
     case 'returned':
       return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Returned</Badge>;
     case 'resubmitted':
@@ -2439,15 +2439,7 @@ export default function StaffRecordReview() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 lg:justify-end">
-            {getStatusBadge(persistedStatus) || (
-              <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">In Review</Badge>
-            )}
-            <Badge className={physicalExamStatus === 'Completed' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
-              Exam {physicalExamStatus}
-            </Badge>
-            <Badge className={clearanceStatus === 'Approved' ? 'bg-green-100 text-green-800 hover:bg-green-100' : clearanceStatus === 'Returned' ? 'bg-red-100 text-red-800 hover:bg-red-100' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100'}>
-              Clearance {clearanceStatus}
-            </Badge>
+            {getStatusBadge(persistedStatus)}
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
@@ -3592,7 +3584,7 @@ export default function StaffRecordReview() {
             ) : null}
           </div>
           ) : (
-            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved - Locked</Badge>
+            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Cleared</Badge>
           )}
         </CardContent>
       </Card>
