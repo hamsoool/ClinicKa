@@ -468,7 +468,8 @@ export type StudentProfileUpdateInput = {
 };
 
 export type StaffProfileUpdateInput = {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   position?: string;
   phone: string;
@@ -2889,15 +2890,17 @@ async function resolveActiveAcademicYear(value?: unknown) {
 
 export async function updateStaffProfile(data: StaffProfileUpdateInput) {
   const payload = {
-    name: String(data.name || '').trim(),
+    name: `${String(data.firstName || '').trim()} ${String(data.lastName || '').trim()}`.trim(),
+    firstName: String(data.firstName || '').trim(),
+    lastName: String(data.lastName || '').trim(),
     email: normalizeEmail(data.email) || '',
     position: String(data.position || '').trim(),
     phone: String(data.phone || '').trim(),
     applyAcrossRoles: data.applyAcrossRoles !== false,
   };
 
-  if (!payload.name || !payload.email) {
-    throw new Error('Name and email are required.');
+  if (!payload.firstName || !payload.lastName || !payload.email) {
+    throw new Error('First name, last name, and email are required.');
   }
 
   try {
@@ -2924,7 +2927,8 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
   }
 
   const me = await getMe();
-  const { firstName, lastName } = splitNameParts(payload.name);
+  const { firstName, lastName } = payload;
+  const fullName = [firstName, lastName].filter(Boolean).join(' ');
 
   let updatedProfileRows: any[] = [];
   if (payload.applyAcrossRoles) {
@@ -2940,7 +2944,6 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
         body: JSON.stringify({
           first_name: firstName || null,
           last_name: lastName || null,
-          email: payload.email || null,
         }),
       },
     );
@@ -2958,6 +2961,7 @@ export async function updateStaffProfile(data: StaffProfileUpdateInput) {
       body: JSON.stringify({
         profile_id: me.profile.id,
         email: payload.email || null,
+        name: fullName,
         first_name: firstName || null,
         last_name: lastName || null,
         position: me.staff?.position || payload.position || null,

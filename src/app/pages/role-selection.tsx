@@ -148,36 +148,52 @@ export default function RoleSelection() {
             : 'border-transparent bg-transparent'
         }`}
       >
-        <div className="mx-auto flex h-12 w-full max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-10">
+        <div className={`mx-auto flex w-full max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-10 transition-all duration-300 ${
+          isScrolled ? 'h-12 md:h-16' : 'h-14 md:h-20'
+        }`}>
           <button
             type="button"
             onClick={() => scrollToSection('hero')}
-            className="flex min-w-0 items-center gap-2 text-left"
+            className="flex min-w-0 items-center gap-2 md:gap-3 text-left"
           >
             {logoVisible ? (
               <img
                 src={LOGO_SRC}
                 alt="ClinicKa logo"
-                className="h-7 w-7 rounded-full object-cover"
+                className={`rounded-full object-cover transition-all duration-300 ${
+                  isScrolled ? 'h-7 w-7 md:h-8 md:w-8' : 'h-8 w-8 md:h-10 md:w-10'
+                }`}
                 onError={() => setLogoVisible(false)}
               />
             ) : (
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#d9f3e4] text-[#006d3c]">
-                <Stethoscope className="h-4 w-4" />
+              <span className={`inline-flex items-center justify-center rounded-full bg-[#d9f3e4] text-[#006d3c] transition-all duration-300 ${
+                isScrolled ? 'h-7 w-7 md:h-8 md:w-8' : 'h-8 w-8 md:h-10 md:w-10'
+              }`}>
+                <Stethoscope className={`transition-all duration-300 ${isScrolled ? 'h-4 w-4' : 'h-4 w-4 md:h-5 md:w-5'}`} />
               </span>
             )}
-            <span className={`truncate text-sm font-semibold tracking-[-0.01em] ${isScrolled ? 'text-white' : 'text-[#161d18]'}`}>
+            <span className={`truncate font-bold tracking-tight transition-all duration-300 ${
+              isScrolled 
+                ? 'text-sm md:text-base text-white' 
+                : 'text-sm md:text-[20px] text-[#161d18]'
+            }`}>
               ClinicKa!
             </span>
           </button>
 
-          <div className={`hidden items-center gap-7 text-xs font-normal md:flex ${isScrolled ? 'text-white/78' : 'text-[#3d4a3f]'}`}>
+          <div className={`hidden items-center font-normal transition-all duration-300 md:flex ${
+            isScrolled 
+              ? 'text-white/78 text-sm gap-7 lg:gap-8' 
+              : 'text-[#3d4a3f] text-[16px] gap-8 lg:gap-10'
+          }`}>
             {navLinks.map((link) => (
               <button
                 key={link.label}
                 type="button"
                 onClick={() => handleNavClick(link.target)}
-                className={isScrolled ? 'transition hover:text-white' : 'transition hover:text-[#006d3c]'}
+                className={`transition-colors duration-200 ${
+                  isScrolled ? 'hover:text-white' : 'hover:text-[#006d3c]'
+                }`}
               >
                 {link.label}
               </button>
@@ -187,17 +203,21 @@ export default function RoleSelection() {
           <div className="flex items-center gap-2">
             <Link
               to="/auth?mode=signin"
-              className="hidden h-9 items-center justify-center rounded-full bg-[#006d3c] px-4 text-sm font-normal text-white transition active:scale-95 hover:bg-[#005f34] md:inline-flex"
+              className={`hidden items-center justify-center rounded-full bg-[#006d3c] text-white transition-all duration-300 active:scale-95 hover:bg-[#005f34] md:inline-flex ${
+                isScrolled 
+                  ? 'h-9 md:h-10 px-4 md:px-5 text-sm font-normal' 
+                  : 'h-10 md:h-11 px-5 md:px-7 text-sm md:text-[15px] font-medium'
+              }`}
             >
               Sign In
             </Link>
             <button
               type="button"
               onClick={() => setIsMenuOpen((prev) => !prev)}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition active:scale-95 md:hidden ${
+              className={`inline-flex items-center justify-center rounded-full border transition-all duration-300 active:scale-95 md:hidden ${
                 isScrolled
-                  ? 'border-white/20 bg-white/10 text-white'
-                  : 'border-[#d8e4d7] bg-white text-[#006d3c]'
+                  ? 'h-9 w-9 border-white/20 bg-white/10 text-white'
+                  : 'h-10 w-10 border-[#d8e4d7] bg-white text-[#006d3c]'
               }`}
               aria-expanded={isMenuOpen}
               aria-controls="mobile-dropbar"
@@ -237,16 +257,16 @@ export default function RoleSelection() {
       </nav>
 
       <main>
-        <section id="hero" className="relative overflow-hidden pt-12" style={heroGridStyle}>
+        <section id="hero" className="relative overflow-hidden pt-14 md:pt-20" style={heroGridStyle}>
           <div className="absolute inset-0 bg-white/70" aria-hidden="true" />
-          <div className="relative mx-auto grid min-h-[calc(100dvh-3rem)] w-full max-w-[90rem] items-center gap-10 px-5 py-14 sm:px-8 md:py-18 lg:grid-cols-12 lg:px-10">
+          <div className="relative mx-auto grid min-h-[calc(100dvh-3.5rem)] md:min-h-[calc(100dvh-5rem)] w-full max-w-[90rem] items-center gap-10 px-5 py-14 sm:px-8 md:py-18 lg:grid-cols-12 lg:px-10">
             <div className="space-y-6 lg:col-span-7">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#006d3c]">
                 Gordon College Health Services
               </p>
               <div className="space-y-4">
                 <h1 className="max-w-3xl text-[2.5rem] font-semibold leading-[1.07] tracking-[-0.025em] text-[#161d18] sm:text-5xl lg:text-[3.5rem]">
-                  ClinicKa! <br/>A Student Health <br/>Record Portal
+                  <span className="text-[#006d3c]">ClinicKa!</span> <br/>A Student Health <br/>Record Portal
                 </h1>
                 <p className="max-w-2xl text-[17px] leading-7 tracking-[-0.01em] text-[#3d4a3f] sm:text-xl sm:leading-8">
                   A focused medical clearance and student health record system for submissions, clinic review, and
@@ -500,7 +520,7 @@ export default function RoleSelection() {
       <footer id="resources" className="border-t border-[#d8e4d7] bg-[#f4fcf2] py-12">
         <div className="mx-auto grid max-w-[90rem] grid-cols-1 gap-8 px-5 text-sm sm:px-8 md:grid-cols-2 md:items-center lg:px-10">
           <div>
-            <div className="text-base font-semibold text-[#161d18]">ClinicKa!</div>
+            <div className="text-base font-semibold text-[#006d3c]">ClinicKa!</div>
             <p className="mt-2 text-[#3d4a3f]">Gordon College Health Services</p>
             <p className="mt-4 text-xs text-[#6d7b6e]">Copyright 2026 ClinicKa. All rights reserved.</p>
           </div>

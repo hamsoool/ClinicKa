@@ -14,7 +14,7 @@ import ListPagination from '../../components/list-pagination';
 import SubmissionDashboardCards from '../../components/submission-dashboard-cards';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { getActiveAjaxRefetchInterval } from '../../lib/ajax-refresh';
-import { getRoleLabel, getSubmissionReportSummaries } from '../../lib/api';
+import { getRoleLabel, getSubmissionReportSummaries, isDoctorPosition } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import type { StudentAccountSummary, SubmissionRecord, SubmissionSummaryRecord } from '../../lib/record-types';
 import { getYearLevelLabel } from '../../lib/student-year';
@@ -183,13 +183,17 @@ export default function StaffDashboard() {
     () => loadStaffWorkspacePreferences(staffPreferenceId, staffRoleLabel),
     [staffPreferenceId, staffRoleLabel],
   );
-  const displayName =
+  const rawDisplayName =
     [me?.staff?.first_name || me?.profile.first_name || '', me?.staff?.last_name || me?.profile.last_name || '']
       .filter(Boolean)
       .join(' ')
       .trim() ||
     formatEmailName(me?.profile.email) ||
     staffRoleLabel;
+  const isDoctor = isDoctorPosition(me?.staff?.position);
+  const displayName = isDoctor && rawDisplayName && !rawDisplayName.startsWith('Dr. ')
+    ? `Dr. ${rawDisplayName}`
+    : rawDisplayName;
 
   const [queueSortOrder, setQueueSortOrder] = useState<'desc' | 'asc'>(workspacePreferences.reviewSortOrder);
   const [queueTab, setQueueTab] = useState<'all' | 'pending' | 'returned' | 'resubmitted'>(
@@ -364,23 +368,25 @@ export default function StaffDashboard() {
 
       <div className="grid min-w-0 grid-cols-1 gap-5 sm:gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <div className="box-border flex w-full min-w-0 flex-col rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6 sm:py-6">
-          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="mb-6 flex flex-row items-center justify-between gap-2">
             <div>
-              <h2 className="text-lg font-semibold text-on-surface">Submission Queue</h2>
+              <h2 className="text-sm font-bold text-on-surface sm:text-lg whitespace-nowrap">Submission Queue</h2>
             </div>
-            <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:justify-end">
+            <div className="flex flex-row items-center gap-1.5 sm:gap-2">
               <button
+                type="button"
                 onClick={() => setQueueSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-[18px] border border-outline-variant/50 bg-surface-container-low px-4 py-2 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface md:w-auto"
+                className="inline-flex h-8 items-center justify-center gap-1 rounded-[14px] border border-outline-variant/50 bg-surface-container-low px-2 text-[10px] font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface sm:h-10 sm:rounded-[18px] sm:px-4 sm:text-xs"
               >
-                <ArrowUpDown className="h-3.5 w-3.5" />
-                {queueSortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
+                <ArrowUpDown className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span>{queueSortOrder === 'desc' ? 'Newest' : 'Oldest'}</span>
               </button>
               <button
+                type="button"
                 onClick={() => navigate('/staff/submissions')}
-                className="inline-flex min-h-10 w-full items-center justify-center rounded-[18px] bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 md:w-auto"
+                className="inline-flex h-8 items-center justify-center rounded-[14px] bg-primary px-2 text-[10px] font-semibold text-white transition-colors hover:bg-primary/90 sm:h-10 sm:rounded-[18px] sm:px-4 sm:text-sm"
               >
-                Open Queue
+                Open<span className="hidden sm:inline">&nbsp;Queue</span>
               </button>
               <button
                 type="button"
@@ -390,9 +396,9 @@ export default function StaffDashboard() {
                 disabled={overviewFetching}
                 aria-label="Refresh queue"
                 title="Refresh queue"
-                className="inline-flex min-h-10 w-full items-center justify-center rounded-[18px] border border-outline-variant/50 bg-surface-container-low px-3 py-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:w-10"
               >
-                <RefreshCw className={`h-4 w-4 ${overviewFetching ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${overviewFetching ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
@@ -402,17 +408,17 @@ export default function StaffDashboard() {
             className="mb-5"
           >
             <div className="pb-1">
-              <TabsList className="grid h-auto min-h-10 w-full grid-cols-2 gap-2 rounded-[18px] p-2 md:grid-cols-4">
-                <TabsTrigger value="pending" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal md:text-sm">
+              <TabsList className="grid h-auto min-h-10 w-full grid-cols-4 gap-1 rounded-[18px] p-1.5 sm:p-2 sm:gap-2">
+                <TabsTrigger value="pending" className="h-full min-h-10 px-1 sm:px-3 text-center text-[10px] sm:text-xs md:text-sm leading-tight whitespace-normal">
                   Pending ({(overview.pendingRecords || 0) + (overview.inReviewRecords || 0)})
                 </TabsTrigger>
-                <TabsTrigger value="returned" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal md:text-sm">
+                <TabsTrigger value="returned" className="h-full min-h-10 px-1 sm:px-3 text-center text-[10px] sm:text-xs md:text-sm leading-tight whitespace-normal">
                   Returned ({overview.returnedRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="resubmitted" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal md:text-sm">
+                <TabsTrigger value="resubmitted" className="h-full min-h-10 px-1 sm:px-3 text-center text-[10px] sm:text-xs md:text-sm leading-tight whitespace-normal">
                   Resubmitted ({overview.resubmittedRecords || 0})
                 </TabsTrigger>
-                <TabsTrigger value="all" className="h-full min-h-10 px-3 text-center text-xs leading-tight whitespace-normal md:text-sm">
+                <TabsTrigger value="all" className="h-full min-h-10 px-1 sm:px-3 text-center text-[10px] sm:text-xs md:text-sm leading-tight whitespace-normal">
                   All Action Needed ({overview.actionableRecords || 0})
                 </TabsTrigger>
               </TabsList>
@@ -492,7 +498,40 @@ export default function StaffDashboard() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-x-auto">
+          {/* Mobile/Tablet Stacked View */}
+          <div className="flex-1 md:hidden">
+            {paginatedRecentActions.length === 0 ? (
+              <div className="py-8 text-center text-on-surface-variant text-sm">
+                No recent submissions found.
+              </div>
+            ) : (
+              <div className="divide-y divide-outline-variant/15">
+                {paginatedRecentActions.map((action) => (
+                  <div key={action.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-sm text-on-surface truncate">
+                        {action.fullName}
+                      </h3>
+                      <p className="text-[10px] text-on-surface-variant truncate mt-0.5">
+                        {action.studentId} • {[action.courseCode, action.deptCode].filter(v => v && v !== 'Unspecified').join(' / ') || 'Unspecified'} • {getYearLevelLabel(action.yearLevel)}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${getStatusStyles(action.status as any)}`}>
+                        {getStatusLabel(action.status as any)}
+                      </span>
+                      <span className="text-[10px] text-on-surface-variant font-medium">
+                        {formatDate(action.submittedAt)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="flex-1 overflow-x-auto hidden md:block">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-outline-variant/30 bg-surface-container-low text-[10px] uppercase tracking-[0.16em] text-on-surface-variant">

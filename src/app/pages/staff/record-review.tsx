@@ -47,6 +47,7 @@ import {
   extractChestXrayFindings,
   extractUrinalysisFields,
   getStaffSignature,
+  isDoctorPosition,
   saveSubmissionReview,
   updateSubmissionStatus,
   uploadFile,
@@ -1070,13 +1071,17 @@ export default function StaffRecordReview() {
   const xrayOcrRunRef = useRef(0);
   const cbcOcrRunRef = useRef(0);
   const urinalysisOcrRunRef = useRef(0);
-  const defaultSignatoryName = [
+  const rawDefaultSignatoryName = [
     me?.staff?.first_name || me?.profile.first_name || '',
     me?.staff?.last_name || me?.profile.last_name || '',
   ]
     .filter(Boolean)
     .join(' ')
     .trim();
+  const isDoctor = isDoctorPosition(me?.staff?.position);
+  const defaultSignatoryName = isDoctor && rawDefaultSignatoryName && !rawDefaultSignatoryName.startsWith('Dr. ')
+    ? `Dr. ${rawDefaultSignatoryName}`
+    : rawDefaultSignatoryName;
   const currentStaffSignatureUrl = signaturePreviewUrl || staffSignature.signatureUrl || null;
   const {
     data: submissionData,

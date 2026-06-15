@@ -16,7 +16,7 @@ import PortalShell, {
 } from '../../components/portal-shell';
 import { prefetchPortalRoutes } from '../../route-modules';
 import { useAuth } from '../../lib/auth';
-import { getRoleLabel } from '../../lib/api';
+import { getRoleLabel, isDoctorPosition } from '../../lib/api';
 
 const navItems = [
   { path: '/staff', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
@@ -34,13 +34,17 @@ const topActions = [
 export default function StaffLayout() {
   const { me } = useAuth();
 
-  const displayName =
+  const rawDisplayName =
     [me?.staff?.first_name || me?.profile.first_name || '', me?.staff?.last_name || me?.profile.last_name || '']
       .filter(Boolean)
       .join(' ')
       .trim() ||
     formatEmailName(me?.profile.email) ||
     getRoleLabel(me?.profile?.role, me?.staff?.position);
+  const isDoctor = isDoctorPosition(me?.staff?.position);
+  const displayName = isDoctor && rawDisplayName && !rawDisplayName.startsWith('Dr. ')
+    ? `Dr. ${rawDisplayName}`
+    : rawDisplayName;
   const position = getRoleLabel(me?.profile?.role, me?.staff?.position);
 
   useEffect(() => {

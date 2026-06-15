@@ -8,8 +8,9 @@ import { Badge } from '../../components/ui/badge';
 import ListPagination from '../../components/list-pagination';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { ChevronDown, ChevronUp, Eye, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, Search, X, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '../../components/ui/utils';
 import type { SubmissionSummaryRecord } from '../../lib/record-types';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
 import { useAuth } from '../../lib/auth';
@@ -205,7 +206,7 @@ export default function StaffSubmissions() {
     setDepartmentFilter('all');
     setYearFilter('all');
     setSortOrder(defaultSortOrder);
-    setShowAdvancedFilters(defaultShowAdvancedFilters);
+    setShowAdvancedFilters(false);
   };
 
   const hasActiveFilters =
@@ -276,14 +277,26 @@ export default function StaffSubmissions() {
             </button>
           </div>
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search by name or student ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or student ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setShowAdvancedFilters(true)}
+                className="h-10 w-full pl-10"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAdvancedFilters(prev => !prev)}
+              className="h-10 gap-2 px-3"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+              <span className="hidden sm:inline">{(showAdvancedFilters || hasActiveFilters) ? 'Hide Filters' : 'Filters'}</span>
+            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -301,22 +314,18 @@ export default function StaffSubmissions() {
             >
               All Records
             </Button>
-            <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAdvancedFilters((prev) => !prev)}
-              >
-                {showAdvancedFilters ? <ChevronUp className="mr-1 h-4 w-4" /> : <ChevronDown className="mr-1 h-4 w-4" />}
-                {showAdvancedFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
-              </Button>
-            </div>
           </div>
 
-          {showAdvancedFilters ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div
+            className={cn(
+              "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 transition-all duration-300",
+              (showAdvancedFilters || hasActiveFilters) ? "grid" : "hidden"
+            )}
+          >
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">Sort Order</p>
               <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as 'asc' | 'desc')}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10 w-full">
                   <SelectValue placeholder="Sort Order" />
                 </SelectTrigger>
                 <SelectContent>
@@ -324,9 +333,12 @@ export default function StaffSubmissions() {
                   <SelectItem value="asc">Oldest First</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
 
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">Status</p>
               <Select value={statusFilter} onValueChange={updateStatusFilter}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10 w-full">
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
                 <SelectContent>
@@ -339,9 +351,12 @@ export default function StaffSubmissions() {
                   <SelectItem value="resubmitted">Resubmitted</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
 
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">Department</p>
               <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10 w-full">
                   <SelectValue placeholder="All Departments" />
                 </SelectTrigger>
                 <SelectContent>
@@ -353,9 +368,12 @@ export default function StaffSubmissions() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
 
+            <div className="space-y-1">
+              <p className="px-1 text-xs font-medium text-muted-foreground">Record Slot</p>
               <Select value={yearFilter} onValueChange={setYearFilter}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10 w-full">
                   <SelectValue placeholder="All Record Slots" />
                 </SelectTrigger>
                 <SelectContent>
@@ -368,7 +386,7 @@ export default function StaffSubmissions() {
                 </SelectContent>
               </Select>
             </div>
-          ) : null}
+          </div>
 
           {hasActiveFilters && (
             <div className="flex flex-wrap items-center gap-2">
