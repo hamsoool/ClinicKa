@@ -1547,7 +1547,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
       {/* ── Clinical Records Card ─────────────────────────────────────── */}
       <Card className="border-outline-variant/30 print:border-0 print:bg-white print:shadow-none">
-        <CardHeader className="pb-0 pt-1 px-5 print:hidden">
+        <CardHeader className="pb-0 pt-5 px-5 print:hidden">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="flex flex-col gap-3">
               <div>
@@ -1566,7 +1566,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                 />
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 print:hidden md:-mt-1">
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
 
               {/* Reset all shortcut if active filters exist */}
               {hasActiveFilters && (

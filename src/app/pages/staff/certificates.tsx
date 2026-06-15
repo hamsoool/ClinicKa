@@ -468,7 +468,7 @@ function StaffCertificatesWorkspace() {
             </Card>
           ) : (
             <Tabs className="min-w-0" value={activeTab} onValueChange={(value) => setActiveTab(value as 'form' | 'medical-clearance')}>
-              <TabsList className="mb-4 h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-2">
+              <TabsList className="mb-4 h-auto w-full grid grid-cols-2 gap-1 p-1">
                 <TabsTrigger value="form" className="min-h-11 justify-center gap-2 px-3 text-center whitespace-normal">
                   <ClipboardList className="h-4 w-4" />
                   Form
@@ -601,7 +601,7 @@ export default function StaffRecordsAndCertificates() {
       />
 
       <Tabs className="min-w-0" value={activeWorkspaceTab} onValueChange={handleWorkspaceTabChange}>
-        <TabsList className="mb-4 h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-2">
+        <TabsList className="mb-4 h-auto w-full grid grid-cols-2 gap-1 p-1">
           <TabsTrigger value="certificates" className="min-h-11 justify-center gap-2 px-3 text-center whitespace-normal">
             <Award className="h-4 w-4" />
             Certificates

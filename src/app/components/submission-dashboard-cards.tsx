@@ -664,21 +664,21 @@ export default function SubmissionDashboardCards({
           </DropdownMenu>
         </div>
 
-        <div className="mb-5 grid gap-3 md:grid-cols-4">
+        <div className="mb-5 grid grid-cols-4 gap-1.5 sm:gap-3">
           {statusMetrics.map((metric) => (
             <div
               key={metric.key}
-              className="rounded-[18px] border border-outline-variant/25 bg-surface-container-low px-4 py-3"
+              className="rounded-[12px] sm:rounded-[18px] border border-outline-variant/25 bg-surface-container-low p-2 sm:px-4 sm:py-3"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+              <p className="text-[9px] sm:text-[11px] font-semibold uppercase tracking-wider sm:tracking-[0.16em] text-on-surface-variant line-clamp-2 min-h-[1.5rem] sm:min-h-0">
                 {metric.label}
               </p>
-              <div className="mt-3">
-                <p className="text-2xl font-bold leading-none text-on-surface">{formatNumber(metric.value)}</p>
+              <div className="mt-1.5 sm:mt-3">
+                <p className="text-lg sm:text-2xl font-bold leading-none text-on-surface">{formatNumber(metric.value)}</p>
               </div>
-              <div className="mt-2 flex items-center gap-2 text-[11px] font-medium text-on-surface-variant">
-                <span>vs last month</span>
-                <span className="rounded-full bg-surface-container-lowest px-2 py-1 text-xs font-semibold text-on-surface-variant">
+              <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center gap-1 sm:gap-2 text-[9px] sm:text-[11px] font-medium text-on-surface-variant">
+                <span className="hidden sm:inline">vs last month</span>
+                <span className="rounded-full bg-surface-container-lowest px-1 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-semibold text-on-surface-variant">
                   {formatPercent(metric.changePercent)}
                 </span>
               </div>

@@ -202,7 +202,7 @@ export default function StudentClearance() {
       />
 
       <Tabs className="min-w-0" value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="h-auto w-full flex-col items-stretch gap-1 p-1 sm:grid sm:grid-cols-3">
+        <TabsList className="h-auto w-full grid grid-cols-3 gap-1 p-1">
           <TabsTrigger value="form" className="min-h-11 justify-center px-3 text-center whitespace-normal">Form</TabsTrigger>
           <TabsTrigger value="medical-clearance" className="min-h-11 justify-center px-3 text-center whitespace-normal">Medical Certificate</TabsTrigger>
           <TabsTrigger value="history" className="min-h-11 justify-center px-3 text-center whitespace-normal">History</TabsTrigger>

@@ -243,36 +243,36 @@ export default function StaffSubmissions() {
 
       <Card className="mb-6">
         <CardContent className="pt-6 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
             <button
               type="button"
               onClick={() => updateStatusFilter('pending')}
-              className={`rounded-[18px] border px-3 py-3 text-left transition-colors ${
+              className={`rounded-[12px] sm:rounded-[18px] border p-2 sm:px-3 sm:py-3 text-left transition-colors ${
                 statusFilter === 'pending' ? 'border-amber-300 bg-amber-50' : 'border-border hover:bg-accent/50'
               }`}
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pending</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{pendingDisplayCount}</p>
+              <p className="text-[9px] sm:text-xs font-semibold uppercase tracking-wider sm:tracking-[0.16em] text-muted-foreground line-clamp-1">Pending</p>
+              <p className="mt-1 text-lg sm:text-2xl font-bold text-foreground leading-none">{pendingDisplayCount}</p>
             </button>
             <button
               type="button"
               onClick={() => updateStatusFilter('returned')}
-              className={`rounded-[18px] border px-3 py-3 text-left transition-colors ${
+              className={`rounded-[12px] sm:rounded-[18px] border p-2 sm:px-3 sm:py-3 text-left transition-colors ${
                 statusFilter === 'returned' ? 'border-red-300 bg-red-50' : 'border-border hover:bg-accent/50'
               }`}
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Returned</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{counts.returned}</p>
+              <p className="text-[9px] sm:text-xs font-semibold uppercase tracking-wider sm:tracking-[0.16em] text-muted-foreground line-clamp-1">Returned</p>
+              <p className="mt-1 text-lg sm:text-2xl font-bold text-foreground leading-none">{counts.returned}</p>
             </button>
             <button
               type="button"
               onClick={() => updateStatusFilter('resubmitted')}
-              className={`rounded-[18px] border px-3 py-3 text-left transition-colors ${
+              className={`rounded-[12px] sm:rounded-[18px] border p-2 sm:px-3 sm:py-3 text-left transition-colors ${
                 statusFilter === 'resubmitted' ? 'border-orange-300 bg-orange-50' : 'border-border hover:bg-accent/50'
               }`}
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Resubmitted</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{counts.resubmitted}</p>
+              <p className="text-[9px] sm:text-xs font-semibold uppercase tracking-wider sm:tracking-[0.16em] text-muted-foreground line-clamp-1">Resubmitted</p>
+              <p className="mt-1 text-lg sm:text-2xl font-bold text-foreground leading-none">{counts.resubmitted}</p>
             </button>
           </div>
 
