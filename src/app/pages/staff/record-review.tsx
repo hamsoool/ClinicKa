@@ -27,6 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import FilePickerButton from '../../components/file-picker-button';
 import { StudentProfileFormCard } from '../../components/student-profile-form-card';
 
+import { Checkbox } from '../../components/ui/checkbox';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
@@ -229,10 +230,6 @@ function isClearancePurpose(value: string): value is ClearancePurpose {
 }
 
 const DEFAULT_LICENSE_NO = '0084558';
-const CLEARANCE_LICENSE_OPTIONS = [
-  { value: DEFAULT_LICENSE_NO, label: `Current License No. ${DEFAULT_LICENSE_NO}` },
-  { value: 'manual', label: 'Manual license no.' },
-] as const;
 const CLEARANCE_DOCTORS = ['GERALD S. BERNAL, MD', 'ARMANDO TAMAYO, MD'] as const;
 
 const MEDICAL_HISTORY_FIELDS: Array<{ key: keyof MedicalHistory; label: string }> = [
@@ -995,6 +992,39 @@ export default function StaffRecordReview() {
   const [recordForm, setRecordForm] = useState<RecordForm>(() => createRecordForm());
   const [assessmentForm, setAssessmentForm] = useState<AssessmentForm>(() => createAssessmentForm());
   const [clearanceForm, setClearanceForm] = useState<ClearanceForm>(() => createClearanceForm());
+  const [saveLicenseNoChecked, setSaveLicenseNoChecked] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const staffId = String(me?.staff?.id || '').trim();
+    if (!staffId) return false;
+    return window.localStorage.getItem(`gc-save-license-no-checked:${staffId}`) === 'true';
+  });
+
+  useEffect(() => {
+    if (!currentStaffId) return;
+    const isChecked = window.localStorage.getItem(`gc-save-license-no-checked:${currentStaffId}`) === 'true';
+    setSaveLicenseNoChecked(isChecked);
+    if (isChecked) {
+      const savedLicense = window.localStorage.getItem(`gc-saved-license-no:${currentStaffId}`);
+      if (savedLicense && (!clearanceForm.licenseNo || clearanceForm.licenseNo === DEFAULT_LICENSE_NO)) {
+        setClearanceForm((prev) => ({
+          ...prev,
+          licenseNo: savedLicense,
+        }));
+      }
+    }
+  }, [currentStaffId]);
+
+  const handleSaveLicenseNoChange = (checked: boolean) => {
+    setSaveLicenseNoChecked(checked);
+    if (currentStaffId) {
+      window.localStorage.setItem(`gc-save-license-no-checked:${currentStaffId}`, String(checked));
+      if (checked) {
+        window.localStorage.setItem(`gc-saved-license-no:${currentStaffId}`, clearanceForm.licenseNo);
+      } else {
+        window.localStorage.removeItem(`gc-saved-license-no:${currentStaffId}`);
+      }
+    }
+  };
   const [staffNotes, setStaffNotes] = useState('');
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('pending');
   const [activeReviewStep, setActiveReviewStep] = useState<ReviewStep>('record');
@@ -1369,6 +1399,16 @@ export default function StaffRecordReview() {
     setRecordForm(createRecordForm(loadedSubmission));
     const nextAssessmentForm = createAssessmentForm(loadedSubmission);
     const nextClearanceForm = createClearanceForm(loadedSubmission);
+    if (currentStaffId) {
+      const isChecked = window.localStorage.getItem(`gc-save-license-no-checked:${currentStaffId}`) === 'true';
+      if (isChecked) {
+        const savedLicense = window.localStorage.getItem(`gc-saved-license-no:${currentStaffId}`);
+        const hasDBSavedLicense = loadedSubmission?.clearanceInfo?.licenseNo;
+        if (savedLicense && !hasDBSavedLicense) {
+          nextClearanceForm.licenseNo = savedLicense;
+        }
+      }
+    }
     if (!nextAssessmentForm.examinedBy && defaultSignatoryName) {
       nextAssessmentForm.examinedBy = defaultSignatoryName;
     }
@@ -1399,7 +1439,7 @@ export default function StaffRecordReview() {
     setStaffNotes(loadedSubmission.staffNotes || '');
     setReviewStatus(loadedSubmission.status);
     hydratedSubmissionIdRef.current = loadedSubmission.id;
-  }, [defaultSignatoryName, submissionData]);
+  }, [defaultSignatoryName, submissionData, currentStaffId]);
 
   useEffect(() => {
     if (isError) {
@@ -3419,33 +3459,32 @@ export default function StaffRecordReview() {
                   </div>
 
                   <div className="xl:col-span-6">
-                    <Label htmlFor="licenseNoSelect">License No.</Label>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
-                      <Select
-                        value={CLEARANCE_LICENSE_OPTIONS.some((option) => option.value === clearanceForm.licenseNo)
-                          ? clearanceForm.licenseNo
-                          : 'manual'}
-                        onValueChange={(value) => {
-                          if (value !== 'manual') {
-                            updateClearanceField('licenseNo', value);
-                          }
-                        }}
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="licenseNo">License No.</Label>
+                      <Label
+                        htmlFor="saveLicenseNo"
+                        className="inline-flex cursor-pointer items-center gap-2 text-xs font-normal text-on-surface"
                       >
-                        <SelectTrigger id="licenseNoSelect">
-                          <SelectValue placeholder="Select license no." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CLEARANCE_LICENSE_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <Checkbox
+                          id="saveLicenseNo"
+                          checked={saveLicenseNoChecked}
+                          onCheckedChange={(checked) => handleSaveLicenseNoChange(checked === true)}
+                          className="size-4"
+                        />
+                        Save License No.
+                      </Label>
+                    </div>
+                    <div className="mt-2">
                       <Input
                         id="licenseNo"
                         value={clearanceForm.licenseNo}
-                        onChange={(event) => updateClearanceField('licenseNo', event.target.value)}
+                        onChange={(event) => {
+                          const val = sanitizeLicenseNo(event.target.value);
+                          updateClearanceField('licenseNo', val);
+                          if (saveLicenseNoChecked && currentStaffId) {
+                            window.localStorage.setItem(`gc-saved-license-no:${currentStaffId}`, val);
+                          }
+                        }}
                         inputMode="numeric"
                         maxLength={15}
                         placeholder="License No."

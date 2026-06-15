@@ -118,7 +118,10 @@ function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null):
     studentId: me?.student?.student_id || me?.profile.student_id || '',
     firstName: sanitizeName(me?.student?.first_name || me?.profile.first_name || ''),
     lastName: sanitizeName(me?.student?.last_name || me?.profile.last_name || ''),
-    middleInitial: String(me?.student?.middle_initial || '').replace(/[^A-Za-z]/g, '').slice(0, 1),
+    middleInitial: (() => {
+      const letter = String(me?.student?.middle_initial || '').replace(/[^A-Za-z]/g, '').slice(0, 1).toUpperCase();
+      return letter ? `${letter}.` : '';
+    })(),
     department,
     course: normalizeProgramForDepartment(department, me?.student?.course || me?.profile.course || ''),
     yearLevel: me?.student?.year_level ? String(me.student.year_level) : '',
@@ -266,48 +269,55 @@ export default function StudentProfile() {
       ...prev,
       ...(field === 'department'
         ? {
-            department: resolveDepartmentValue(String(value)),
-            course: '',
-          }
+          department: resolveDepartmentValue(String(value)),
+          course: '',
+        }
         : field === 'course'
-        ? {
+          ? {
             course: normalizeProgramForDepartment(prev.department, String(value)),
           }
-        : field === 'contactNumber'
-        ? {
-            contactNumber: formatPhilippinePhoneInput(String(value)),
-          }
-        : field === 'firstName'
-        ? {
-            firstName: sanitizeName(String(value)),
-          }
-        : field === 'lastName'
-        ? {
-            lastName: sanitizeName(String(value)),
-          }
-        : field === 'middleInitial'
-        ? {
-            middleInitial: String(value).replace(/[^A-Za-z]/g, '').slice(0, 1),
-          }
-        : field === 'age'
-        ? {
-            age: String(value).replace(/\D/g, '').slice(0, 2),
-          }
-        : field === 'birthday'
-        ? {
-            birthday: String(value),
-            age: (() => {
-              const derivedAge = calculateAgeFromBirthdate(String(value));
-              return derivedAge !== null ? String(derivedAge) : '';
-            })(),
-          }
-        : field === 'address'
-        ? {
-            address: sanitizeAddress(String(value)),
-          }
-        : {
-            [field]: value,
-          }),
+          : field === 'contactNumber'
+            ? {
+              contactNumber: formatPhilippinePhoneInput(String(value)),
+            }
+            : field === 'firstName'
+              ? {
+                firstName: sanitizeName(String(value)),
+              }
+              : field === 'lastName'
+                ? {
+                  lastName: sanitizeName(String(value)),
+                }
+                : field === 'middleInitial'
+                  ? {
+                    middleInitial: (() => {
+                      const cleaned = String(value).replace(/[^A-Za-z]/g, '').toUpperCase();
+                      if (prev.middleInitial && prev.middleInitial.endsWith('.') && cleaned === prev.middleInitial.slice(0, -1)) {
+                        return '';
+                      }
+                      const letter = cleaned.slice(0, 1);
+                      return letter ? `${letter}.` : '';
+                    })(),
+                  }
+                  : field === 'age'
+                    ? {
+                      age: String(value).replace(/\D/g, '').slice(0, 2),
+                    }
+                    : field === 'birthday'
+                      ? {
+                        birthday: String(value),
+                        age: (() => {
+                          const derivedAge = calculateAgeFromBirthdate(String(value));
+                          return derivedAge !== null ? String(derivedAge) : '';
+                        })(),
+                      }
+                      : field === 'address'
+                        ? {
+                          address: sanitizeAddress(String(value)),
+                        }
+                        : {
+                          [field]: value,
+                        }),
     }));
   };
 
@@ -405,10 +415,12 @@ export default function StudentProfile() {
     <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-6 sm:space-y-8">
       <StudentPageIntro
         title="Profile"
+        description="Manage your personal information, contact details, and student assets to keep your clinic profile up to date."
+        descriptionClassName="max-w-4xl"
       />
 
-      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
-        <form onSubmit={handleSubmit} className="w-full min-w-0 space-y-6 p-4 md:p-0">
+      <div className="mx-auto w-full max-w-[56rem] space-y-8 p-4 md:p-0">
+        <form onSubmit={handleSubmit} className="w-full min-w-0 space-y-6">
           <StudentProfileFormCard
             value={formData}
             onChange={(field, value) => updateField(field as keyof StudentProfileFormState, value as StudentProfileFormState[keyof StudentProfileFormState])}
@@ -417,11 +429,11 @@ export default function StudentProfile() {
             hasValidContactNumber={hasValidContactNumber}
           />
 
-          <Card className="box-border w-full min-w-0 overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
+          <Card className="box-border w-full min-w-0 rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest !gap-0">
             <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
               <CardTitle className="text-xl font-semibold text-on-surface">Student Assets</CardTitle>
             </CardHeader>
-            <CardContent className="grid w-full min-w-0 gap-4 px-4 pt-6 sm:gap-6 sm:px-6 lg:grid-cols-2">
+            <CardContent className="grid w-full min-w-0 gap-4 px-4 pt-4 sm:gap-6 sm:px-6 lg:grid-cols-2">
               <div className="box-border w-full min-w-0 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:p-5">
                 <div className="mb-4 flex items-center gap-3">
                   <ImageIcon className="h-5 w-5 text-primary" />
@@ -504,7 +516,7 @@ export default function StudentProfile() {
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col items-stretch gap-3 border-t border-outline-variant/30 bg-surface-container-low px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <CardFooter className="flex flex-col items-stretch gap-3 border-t border-outline-variant/30 bg-surface-container-low px-4 !pt-4 !pb-2 translate-y-[12.5px] rounded-b-[18px] sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <p className="text-xs text-on-surface-variant sm:text-sm">
                 {hasChanges ? 'You have unsaved profile changes.' : 'Your profile and student assets are up to date.'}
               </p>
@@ -520,10 +532,18 @@ export default function StudentProfile() {
           </Card>
         </form>
 
-        <div className="w-full min-w-0 space-y-6 xl:sticky xl:top-24">
+        {/* Danger Zone */}
+        <div className="space-y-4 pt-6 border-t border-rose-500/20">
+          <div>
+            <h3 className="text-lg font-bold text-rose-700">Danger Zone</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Security-sensitive settings. Please be cautious when performing these actions.
+            </p>
+          </div>
           <PasswordChangeCard title="Change Password" />
-
-          <SettingsLogoutCard className="flex justify-end" />
+          <div className="flex justify-end pt-2">
+            <SettingsLogoutCard />
+          </div>
         </div>
       </div>
     </div>

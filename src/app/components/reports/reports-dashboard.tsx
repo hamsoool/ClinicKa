@@ -1473,7 +1473,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-5 print:space-y-4 print:bg-white print:text-black">
+    <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-5 print:space-y-4 print:bg-white print:text-black print:max-w-none">
       {/* ── Page Header ───────────────────────────────────────────────── */}
       <PortalPageIntro
         title={`${mode === 'admin' ? 'Admin' : 'Staff'} Reports & Analytics`}
@@ -1483,25 +1483,29 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
       {/* ── Official Print Header (Gordon College Letterhead) ── */}
       <div className="hidden print:block mb-5 font-sans">
-        <div className="text-center">
-          <h1 className="text-[18.5px] font-black tracking-wider uppercase text-black leading-none">
-            GORDON COLLEGE
-          </h1>
-          <p className="text-[11px] font-medium leading-relaxed text-black mt-1">
-            Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City
-          </p>
-          <p className="text-[11px] font-medium leading-relaxed text-black">
-            Tel. No.: (047) 222-2089 / (047) 603-7175
-          </p>
-          <p className="text-[11px] font-medium leading-relaxed text-black">
-            Website: www.gordoncollege.edu.ph
-          </p>
-          <div className="mt-1.5 text-[11.5px] font-bold uppercase tracking-wider text-black leading-none">
-            Health Services Unit
+        <div className="flex items-center justify-between">
+          <img src="/gordon-college-logo.png" alt="Gordon College Logo" className="w-16 h-16 object-contain" />
+          <div className="text-center flex-1 mx-4">
+            <h1 className="text-[18.5px] font-black tracking-wider uppercase text-black leading-none">
+              GORDON COLLEGE
+            </h1>
+            <p className="text-[11px] font-medium leading-relaxed text-black mt-1">
+              Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City
+            </p>
+            <p className="text-[11px] font-medium leading-relaxed text-black">
+              Tel. No.: (047) 222-2089 / (047) 603-7175
+            </p>
+            <p className="text-[11px] font-medium leading-relaxed text-black">
+              Website: www.gordoncollege.edu.ph
+            </p>
+            <div className="mt-1.5 text-[11.5px] font-bold uppercase tracking-wider text-black leading-none">
+              Health Services Unit
+            </div>
+            <div className="mt-4 text-[11px] font-bold text-black">
+              SY {reportingTermSettings.academicYear || '2026-2027'}
+            </div>
           </div>
-          <div className="mt-4 text-[11px] font-bold text-black">
-            SY {reportingTermSettings.academicYear || '2026-2027'}
-          </div>
+          <img src="/gordonhsc.png" alt="Health Services Unit Logo" className="w-16 h-16 object-contain" />
         </div>
       </div>
 
@@ -1543,8 +1547,8 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
       {/* ── Clinical Records Card ─────────────────────────────────────── */}
       <Card className="border-outline-variant/30 print:border-0 print:bg-white print:shadow-none">
-        <CardHeader className="pb-0 pt-5 px-5 print:hidden">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <CardHeader className="pb-0 pt-1 px-5 print:hidden">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="flex flex-col gap-3">
               <div>
                 <CardTitle className="text-base font-semibold print:text-sm print:text-black">Clinical Records</CardTitle>
@@ -1562,7 +1566,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                 />
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 print:hidden">
+            <div className="flex flex-wrap items-center gap-2 print:hidden md:-mt-1">
 
               {/* Reset all shortcut if active filters exist */}
               {hasActiveFilters && (
@@ -1685,12 +1689,12 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           </div>
         </CardHeader>
         <CardContent className="px-5 pb-5 pt-1 print:px-0 print:pb-0">
-          <div className="hidden print:block mb-4 print:-mt-[2.5px]">
+          <div className="hidden print:block mb-4 print:-mt-[3.5px]">
             <h2 className="text-[25px] font-bold text-left text-black leading-none">
               Summary of Submitted Records
             </h2>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-outline-variant/40 print:overflow-visible print:rounded-none print:border-[0.5px] print:border-black/20">
+          <div className="overflow-x-auto rounded-lg border border-outline-variant/40 print:overflow-visible print:rounded-none print:border-[1.5px] print:border-black/70">
             <table className="min-w-[66rem] w-full border-collapse text-left text-sm print:min-w-0 print:text-[8.5px] print:text-center">
               <thead className="bg-surface-container-low text-xs uppercase tracking-wide text-on-surface-variant print:bg-white print:text-black print:text-[8px]">
                 <tr>
@@ -1705,7 +1709,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                     'Clearance Status',
                     'Issuance Date',
                   ].map((heading) => (
-                    <th key={heading} scope="col" className="border-b border-outline-variant/50 px-3 py-3 font-semibold print:border-[0.5px] print:border-black/20 print:px-1 print:py-1">
+                    <th key={heading} scope="col" className="border-b border-outline-variant/50 px-3 py-3 font-semibold print:border-[1.5px] print:border-black/70 print:px-1 print:py-1">
                       {heading}
                     </th>
                   ))}
@@ -1714,37 +1718,50 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               <tbody className="divide-y divide-outline-variant/30 print:divide-y-0">
                 {reportTableRows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground print:border-[0.5px] print:border-black/20 print:text-black">
+                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground print:border-[1.5px] print:border-black/70 print:text-black">
                       No records matched the selected filters.
                     </td>
                   </tr>
                 ) : (
-                  reportTableRows.map((row, index) => {
-                    const isPaged = index >= (currentPage - 1) * 10 && index < currentPage * 10;
-                    return (
-                      <tr
-                        key={`${row.studentId}-${row.submissionDate}-${row.fullName}`}
-                        className={`bg-white/60 print:bg-white ${isPaged ? '' : 'hidden print:table-row'}`}
-                      >
-                        <td className="whitespace-nowrap px-3 py-3 font-medium text-on-surface print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.studentId}</td>
-                        <td className="min-w-48 px-3 py-3 text-on-surface print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black print:min-w-0">{row.fullName}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.age}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.gender}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.deptProgram}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.yearLevel}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.submissionDate}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${row.clearanceStatus === 'Cleared' ? 'bg-primary/10 text-primary' :
-                            row.clearanceStatus === 'Returned' ? 'bg-rose-100 text-rose-700' :
-                              'bg-amber-100 text-amber-700'
-                            } print:bg-transparent print:text-black print:px-0 print:py-0 print:font-normal print:text-[8.5px]`}>
-                            {row.clearanceStatus}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.issuanceDate}</td>
-                      </tr>
-                    );
-                  })
+                  <>
+                    {reportTableRows.map((row, index) => {
+                      const isPaged = index >= (currentPage - 1) * 10 && index < currentPage * 10;
+                      return (
+                        <tr
+                          key={`${row.studentId}-${row.submissionDate}-${row.fullName}`}
+                          className={`bg-white/60 print:bg-white ${isPaged ? '' : 'hidden print:table-row'}`}
+                        >
+                          <td className="whitespace-nowrap px-3 py-3 font-medium text-on-surface print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.studentId}</td>
+                          <td className="min-w-48 px-3 py-3 text-on-surface print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black print:min-w-0">{row.fullName}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.age}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.gender}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.deptProgram}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.yearLevel}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.submissionDate}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${row.clearanceStatus === 'Cleared' ? 'bg-primary/10 text-primary' :
+                              row.clearanceStatus === 'Returned' ? 'bg-rose-100 text-rose-700' :
+                                'bg-amber-100 text-amber-700'
+                              } print:bg-transparent print:text-black print:px-0 print:py-0 print:font-normal print:text-[8.5px]`}>
+                              {row.clearanceStatus}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.issuanceDate}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="hidden print:table-row bg-white/80 font-bold text-on-surface print:bg-white print:text-black print:font-bold">
+                      <td className="whitespace-nowrap px-3 py-3 font-bold text-on-surface print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black print:font-bold">Total</td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="whitespace-nowrap px-3 py-3 font-bold text-on-surface print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black print:font-bold">{reportTableRows.length}</td>
+                    </tr>
+                  </>
                 )}
               </tbody>
             </table>
@@ -1935,6 +1952,12 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           body {
             padding: 1.6cm 1.6cm 1.8cm 1.6cm !important;
             background-color: #fff !important;
+          }
+          tr {
+            break-inside: avoid;
+          }
+          thead {
+            display: table-header-group;
           }
         }
       `}} />

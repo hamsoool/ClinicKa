@@ -9,6 +9,7 @@ export type StaffReviewQueueStatus =
   | 'resubmitted';
 export type StaffReviewSortOrder = 'desc' | 'asc';
 export type StaffCertificatesDefaultView = 'form' | 'medical-clearance';
+export type StaffAutoRefreshInterval = 'off' | '1m' | '5m' | '10m';
 
 export type StaffWorkspacePreferences = {
   dashboardQueueTab: StaffDashboardQueueTab;
@@ -17,6 +18,11 @@ export type StaffWorkspacePreferences = {
   showAdvancedQueueFilters: boolean;
   certificatesDefaultView: StaffCertificatesDefaultView;
   rememberLastCertificateStudent: boolean;
+  defaultSignatoryName: string;
+  defaultSignatoryTitle: string;
+  autoRefreshInterval: StaffAutoRefreshInterval;
+  enableSoundAlerts: boolean;
+  defaultCannedResponse: string;
 };
 
 const STORAGE_KEY_PREFIX = 'gc-staff-workspace-preferences';
@@ -39,6 +45,7 @@ const REVIEW_QUEUE_STATUSES = new Set<StaffReviewQueueStatus>([
 ]);
 const REVIEW_SORT_ORDERS = new Set<StaffReviewSortOrder>(['desc', 'asc']);
 const CERTIFICATE_VIEWS = new Set<StaffCertificatesDefaultView>(['form', 'medical-clearance']);
+const AUTO_REFRESH_INTERVALS = new Set<StaffAutoRefreshInterval>(['off', '1m', '5m', '10m']);
 
 function getStorageKey(staffId?: string | null) {
   return `${STORAGE_KEY_PREFIX}:${String(staffId || '').trim()}`;
@@ -50,14 +57,21 @@ function isClinicDoctor(position?: string | null) {
 
 export function getDefaultStaffWorkspacePreferences(position?: string | null): StaffWorkspacePreferences {
   const doctorDefaults = isClinicDoctor(position);
+  const signatoryName = doctorDefaults ? 'Dr. Jane Doe, MD' : 'Nurse John Smith, RN';
+  const signatoryTitle = doctorDefaults ? 'College Physician' : 'Clinic Nurse';
 
   return {
-    dashboardQueueTab: doctorDefaults ? 'pending' : 'pending',
-    reviewQueueStatus: doctorDefaults ? 'action_needed' : 'action_needed',
+    dashboardQueueTab: 'pending',
+    reviewQueueStatus: 'action_needed',
     reviewSortOrder: 'desc',
     showAdvancedQueueFilters: false,
     certificatesDefaultView: doctorDefaults ? 'medical-clearance' : 'form',
     rememberLastCertificateStudent: true,
+    defaultSignatoryName: signatoryName,
+    defaultSignatoryTitle: signatoryTitle,
+    autoRefreshInterval: '5m',
+    enableSoundAlerts: true,
+    defaultCannedResponse: 'Please provide clear/high-resolution copies of your laboratory reports.',
   };
 }
 
@@ -88,6 +102,25 @@ export function normalizeStaffWorkspacePreferences(
       typeof value?.rememberLastCertificateStudent === 'boolean'
         ? value.rememberLastCertificateStudent
         : defaults.rememberLastCertificateStudent,
+    defaultSignatoryName:
+      typeof value?.defaultSignatoryName === 'string'
+        ? value.defaultSignatoryName
+        : defaults.defaultSignatoryName,
+    defaultSignatoryTitle:
+      typeof value?.defaultSignatoryTitle === 'string'
+        ? value.defaultSignatoryTitle
+        : defaults.defaultSignatoryTitle,
+    autoRefreshInterval: AUTO_REFRESH_INTERVALS.has(value?.autoRefreshInterval as StaffAutoRefreshInterval)
+      ? (value?.autoRefreshInterval as StaffAutoRefreshInterval)
+      : defaults.autoRefreshInterval,
+    enableSoundAlerts:
+      typeof value?.enableSoundAlerts === 'boolean'
+        ? value.enableSoundAlerts
+        : defaults.enableSoundAlerts,
+    defaultCannedResponse:
+      typeof value?.defaultCannedResponse === 'string'
+        ? value.defaultCannedResponse
+        : defaults.defaultCannedResponse,
   };
 }
 
