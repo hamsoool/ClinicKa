@@ -38,7 +38,6 @@ import {
   useAdminSystemSettingsQuery,
 } from './admin-workflow-query';
 
-const semesterOptions = ['First Semester', 'Second Semester', 'Summer'] as const;
 const sessionTimeoutOptions = [15, 30, 45, 60, 120] as const;
 const autoArchiveOptions = [
   { value: 0, label: 'Do not auto-archive' },
@@ -350,26 +349,6 @@ export default function AdminSystemSettings() {
             icon={CalendarRange}
             title="Student Intake and Clinic Term"
           >
-            <div className="grid gap-4 px-5 py-5 sm:px-6">
-              <div className="space-y-2">
-                <Label htmlFor="semester">Semester</Label>
-                <Select
-                  value={draftSettings.semester}
-                  onValueChange={(value) => updateField('semester', value as AdminSystemSettings['semester'])}
-                >
-                  <SelectTrigger id="semester">
-                    <SelectValue placeholder="Select semester" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {semesterOptions.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
             <SettingRow
               title="Student medical record submissions"
             >

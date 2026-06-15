@@ -218,29 +218,13 @@ function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRa
     return buildReportingTermRange(createDefaultAdminSystemSettings());
   }
 
-  const label = `${settings.academicYear} • ${settings.semester}`;
+  const label = settings.academicYear;
 
-  switch (settings.semester) {
-    case 'First Semester':
-      return {
-        label,
-        startMs: Date.UTC(startYear, 6, 1),
-        endMs: Date.UTC(endYear, 0, 1),
-      };
-    case 'Summer':
-      return {
-        label,
-        startMs: Date.UTC(endYear, 5, 1),
-        endMs: Date.UTC(endYear, 6, 1),
-      };
-    case 'Second Semester':
-    default:
-      return {
-        label,
-        startMs: Date.UTC(endYear, 0, 1),
-        endMs: Date.UTC(endYear, 5, 1),
-      };
-  }
+  return {
+    label,
+    startMs: Date.UTC(startYear, 6, 1),
+    endMs: Date.UTC(endYear, 6, 1),
+  };
 }
 
 function formatConditionLabel(value: string) {
@@ -1155,7 +1139,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     datedSubmissions.forEach(({ submission, date }) => {
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthLabel = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-      
+
       let existing = buckets.get(monthKey);
       if (!existing) {
         existing = { key: monthKey, label: monthLabel, groupData: new Map() };
@@ -1204,7 +1188,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       firstDate.setMonth(firstDate.getMonth() - 1);
       const prevKey = `${firstDate.getFullYear()}-${String(firstDate.getMonth() + 1).padStart(2, '0')}`;
       const prevLabel = firstDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-      
+
       const baselineRow: Record<string, any> = {
         key: prevKey,
         label: prevLabel,
@@ -1340,6 +1324,23 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       reportingTermSettings.academicYear,
     ],
   );
+
+  const activeFiltersString = useMemo(() => {
+    const list: string[] = [];
+    if (departmentFilter !== 'all') list.push(`Dept: ${departmentFilter}`);
+    if (yearFilter !== 'all') list.push(`Year: ${YEAR_LABELS[yearFilter] || yearFilter}`);
+    if (statusFilter !== 'all') list.push(`Status: ${STATUS_LABELS[statusFilter] || statusFilter}`);
+    if (courseFilter !== 'all') list.push(`Program: ${courseFilter}`);
+    if (genderFilter !== 'all') {
+      const gLabel = genderFilter === 'male' ? 'Male' : genderFilter === 'female' ? 'Female' : 'Other';
+      list.push(`Gender: ${gLabel}`);
+    }
+    if (searchQuery.trim()) list.push(`Search: "${searchQuery.trim()}"`);
+    if (fromDate) list.push(`From: ${fromDate}`);
+    if (toDate) list.push(`To: ${toDate}`);
+
+    return list.join(' • ');
+  }, [departmentFilter, yearFilter, statusFilter, courseFilter, genderFilter, searchQuery, fromDate, toDate]);
 
   const certificateRate = summary.total > 0 ? Math.round((summary.withCertificate / summary.total) * 100) : 0;
   const actionNeededCount = summary.pending + summary.inReview + summary.returned;
@@ -1480,23 +1481,32 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         className="mb-8 print:hidden"
       />
 
-      <div className="hidden print:block">
+      {/* ── Official Print Header (Gordon College Letterhead) ── */}
+      <div className="hidden print:block mb-5 font-sans">
         <div className="text-center">
-          <p className="text-base font-bold uppercase text-black">Gordon College Health Services Unit - Medical Report</p>
-          <p className="mt-1 text-sm text-black">Academic Year: SY {reportingTermSettings.academicYear || '2026-2027'}</p>
-          <p className="text-sm text-black">Generated On: {formatReportDateTime()}</p>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-black">
-          {friendlyFilters.slice(2).map((filter) => (
-            <p key={filter.label}>
-              <span className="font-semibold">{filter.label}:</span> {filter.value}
-            </p>
-          ))}
+          <h1 className="text-[18.5px] font-black tracking-wider uppercase text-black leading-none">
+            GORDON COLLEGE
+          </h1>
+          <p className="text-[11px] font-medium leading-relaxed text-black mt-1">
+            Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City
+          </p>
+          <p className="text-[11px] font-medium leading-relaxed text-black">
+            Tel. No.: (047) 222-2089 / (047) 603-7175
+          </p>
+          <p className="text-[11px] font-medium leading-relaxed text-black">
+            Website: www.gordoncollege.edu.ph
+          </p>
+          <div className="mt-1.5 text-[11.5px] font-bold uppercase tracking-wider text-black leading-none">
+            Health Services Unit
+          </div>
+          <div className="mt-4 text-[11px] font-bold text-black">
+            SY {reportingTermSettings.academicYear || '2026-2027'}
+          </div>
         </div>
       </div>
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-3 print:grid-cols-4 print:gap-2">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-3 print:hidden">
         <StatCard
           label="Total Student Submissions"
           value={globalSummary.total}
@@ -1533,7 +1543,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
       {/* ── Clinical Records Card ─────────────────────────────────────── */}
       <Card className="border-outline-variant/30 print:border-0 print:bg-white print:shadow-none">
-        <CardHeader className="pb-0 pt-5 px-5 print:px-0 print:pt-2">
+        <CardHeader className="pb-0 pt-5 px-5 print:hidden">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col gap-3">
               <div>
@@ -1590,7 +1600,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                       </button>
                     )}
                   </div>
-                  
+
                   {/* Group 1: Student Info */}
                   <FilterSection label="Student">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1606,9 +1616,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                       </LabeledSelect>
                     </div>
                   </FilterSection>
-                  
+
                   <div className="border-t border-outline-variant/20" />
-                  
+
                   {/* Group 2: Academic & Status */}
                   <FilterSection label="Academic & Status">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1630,9 +1640,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                       </LabeledSelect>
                     </div>
                   </FilterSection>
-                  
+
                   <div className="border-t border-outline-variant/20" />
-                  
+
                   {/* Group 3: Date Range */}
                   <FilterSection label="Date Range">
                     <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-sm sm:grid-cols-2">
@@ -1675,9 +1685,14 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           </div>
         </CardHeader>
         <CardContent className="px-5 pb-5 pt-1 print:px-0 print:pb-0">
-          <div className="overflow-x-auto rounded-lg border border-outline-variant/40 print:overflow-visible print:rounded-none print:border-black">
-            <table className="min-w-[66rem] w-full border-collapse text-left text-sm print:min-w-0 print:text-[10px]">
-              <thead className="bg-surface-container-low text-xs uppercase tracking-wide text-on-surface-variant print:bg-white print:text-black">
+          <div className="hidden print:block mb-4 print:-mt-[2.5px]">
+            <h2 className="text-[25px] font-bold text-left text-black leading-none">
+              Summary of Submitted Records
+            </h2>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-outline-variant/40 print:overflow-visible print:rounded-none print:border-[0.5px] print:border-black/20">
+            <table className="min-w-[66rem] w-full border-collapse text-left text-sm print:min-w-0 print:text-[8.5px] print:text-center">
+              <thead className="bg-surface-container-low text-xs uppercase tracking-wide text-on-surface-variant print:bg-white print:text-black print:text-[8px]">
                 <tr>
                   {[
                     'Student ID',
@@ -1690,7 +1705,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                     'Clearance Status',
                     'Issuance Date',
                   ].map((heading) => (
-                    <th key={heading} scope="col" className="border-b border-outline-variant/50 px-3 py-3 font-semibold print:border print:border-black print:px-1.5 print:py-1">
+                    <th key={heading} scope="col" className="border-b border-outline-variant/50 px-3 py-3 font-semibold print:border-[0.5px] print:border-black/20 print:px-1 print:py-1">
                       {heading}
                     </th>
                   ))}
@@ -1699,7 +1714,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               <tbody className="divide-y divide-outline-variant/30 print:divide-y-0">
                 {reportTableRows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground print:border print:border-black print:text-black">
+                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground print:border-[0.5px] print:border-black/20 print:text-black">
                       No records matched the selected filters.
                     </td>
                   </tr>
@@ -1711,23 +1726,22 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                         key={`${row.studentId}-${row.submissionDate}-${row.fullName}`}
                         className={`bg-white/60 print:bg-white ${isPaged ? '' : 'hidden print:table-row'}`}
                       >
-                        <td className="whitespace-nowrap px-3 py-3 font-medium text-on-surface print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.studentId}</td>
-                        <td className="min-w-48 px-3 py-3 text-on-surface print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.fullName}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.age}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.gender}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.deptProgram}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.yearLevel}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.submissionDate}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            row.clearanceStatus === 'Cleared' ? 'bg-primary/10 text-primary' :
+                        <td className="whitespace-nowrap px-3 py-3 font-medium text-on-surface print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.studentId}</td>
+                        <td className="min-w-48 px-3 py-3 text-on-surface print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black print:min-w-0">{row.fullName}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.age}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.gender}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.deptProgram}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.yearLevel}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.submissionDate}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${row.clearanceStatus === 'Cleared' ? 'bg-primary/10 text-primary' :
                             row.clearanceStatus === 'Returned' ? 'bg-rose-100 text-rose-700' :
-                            'bg-amber-100 text-amber-700'
-                          }`}>
+                              'bg-amber-100 text-amber-700'
+                            } print:bg-transparent print:text-black print:px-0 print:py-0 print:font-normal print:text-[8.5px]`}>
                             {row.clearanceStatus}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.issuanceDate}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[0.5px] print:border-black/20 print:px-1 print:py-1 print:text-black">{row.issuanceDate}</td>
                       </tr>
                     );
                   })
@@ -1744,7 +1758,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               pageSizeOptions={[10]}
               itemLabel="records"
               onPageChange={setCurrentPage}
-              onPageSizeChange={() => {}}
+              onPageSizeChange={() => { }}
             />
           </div>
         </CardContent>
@@ -1908,6 +1922,27 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           </Card>
         </div>
 
+      </div>
+
+      {/* ── Custom Print-Only Styles and Footer ── */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @media print {
+          @page {
+            size: auto;
+            margin: 0;
+          }
+          body {
+            padding: 1.6cm 1.6cm 1.8cm 1.6cm !important;
+            background-color: #fff !important;
+          }
+        }
+      `}} />
+      <div className="hidden print:flex flex-col fixed bottom-[1.2cm] left-[1.6cm] right-[1.6cm] text-[8.5px] text-black/50 font-sans">
+        <div className="flex justify-between items-end border-t border-black/15 pt-1">
+          <span className="leading-none">https://clinicka.vercel.app</span>
+          <span className="leading-none">ClinicKa!</span>
+        </div>
       </div>
 
     </div>
