@@ -128,7 +128,7 @@ function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null):
     age: derivedAge !== null ? String(derivedAge) : (me?.student?.age ? String(me.student.age) : ''),
     sex: me?.student?.sex || '',
     birthday,
-    civilStatus: me?.student?.civil_status || 'Single',
+    civilStatus: me?.student?.civil_status || '',
     contactNumber: formatPhilippinePhoneInput(me?.student?.contact_number || ''),
     address: sanitizeAddress(me?.student?.address || ''),
   };
