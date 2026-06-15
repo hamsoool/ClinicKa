@@ -1,5 +1,7 @@
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
 
 type ListPaginationProps = {
   currentPage: number;
@@ -81,10 +83,12 @@ export default function ListPagination({
             type="button"
             size="sm"
             variant="outline"
+            className="h-9 w-9 p-0"
             disabled={currentPage <= 1}
             onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            aria-label="Previous page"
           >
-            Previous
+            <ChevronLeft className="h-4 w-4" />
           </Button>
 
           {visiblePages.map((page, index) => {
@@ -112,10 +116,12 @@ export default function ListPagination({
             type="button"
             size="sm"
             variant="outline"
+            className="h-9 w-9 p-0"
             disabled={currentPage >= totalPages}
             onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            aria-label="Next page"
           >
-            Next
+            <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
       ) : null}

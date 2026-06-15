@@ -18,6 +18,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Switch } from '../../components/ui/switch';
+import { Textarea } from '../../components/ui/textarea';
 import { useAuth } from '../../lib/auth';
 import {
   getRoleLabel,
@@ -62,6 +63,10 @@ export default function StaffSettings() {
   const staffRoleLabel = useMemo(
     () => getRoleLabel(me?.profile?.role, me?.staff?.position),
     [me?.profile?.role, me?.staff?.position],
+  );
+  const isDoctor = useMemo(
+    () => String(me?.staff?.position || '').trim().toLowerCase() === 'clinic doctor',
+    [me?.staff?.position],
   );
   const staffPreferenceId = String(me?.staff?.id || me?.profile.email || '').trim();
   const initialWorkspacePreferences = useMemo(
@@ -170,9 +175,10 @@ export default function StaffSettings() {
     <div className="mx-auto w-full max-w-[100rem] space-y-6">
       <PortalPageIntro
         title="Settings"
+        description="Manage your account profile, workspace preferences, and login credentials."
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
+      <div className="mx-auto w-full max-w-[56rem] space-y-8 p-4 md:p-0">
         <div className="space-y-6">
           <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
           <CardHeader>
@@ -315,7 +321,38 @@ export default function StaffSettings() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col justify-end rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
+              <div className="min-w-0">
+                <Label htmlFor="autoRefreshInterval">Queue auto-refresh interval</Label>
+                <Select
+                  value={workspacePreferences.autoRefreshInterval}
+                  onValueChange={(value) => updateWorkspacePreference('autoRefreshInterval', value as StaffWorkspacePreferences['autoRefreshInterval'])}
+                >
+                  <SelectTrigger id="autoRefreshInterval">
+                    <SelectValue placeholder="Choose a refresh rate" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off">Off (Manual)</SelectItem>
+                    <SelectItem value="1m">Every 1 minute</SelectItem>
+                    <SelectItem value="5m">Every 5 minutes</SelectItem>
+                    <SelectItem value="10m">Every 10 minutes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <Label htmlFor="defaultCannedResponse">Default canned review response</Label>
+              <Textarea
+                id="defaultCannedResponse"
+                value={workspacePreferences.defaultCannedResponse}
+                onChange={(event) => updateWorkspacePreference('defaultCannedResponse', event.target.value)}
+                placeholder="Enter a default message to request additional student documentation..."
+                rows={3}
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex flex-col justify-center rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <p className="font-medium text-on-surface">Show advanced filters on open</p>
@@ -327,87 +364,159 @@ export default function StaffSettings() {
                   />
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-          <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <Award className="h-5 w-5 text-primary" />
-              <div>
-                <CardTitle>Certificate Workspace</CardTitle>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="min-w-0">
-                <Label htmlFor="certificatesDefaultView">Default certificate view</Label>
-                <Select
-                  value={workspacePreferences.certificatesDefaultView}
-                  onValueChange={(value) =>
-                    updateWorkspacePreference('certificatesDefaultView', value as StaffWorkspacePreferences['certificatesDefaultView'])
-                  }
-                >
-                  <SelectTrigger id="certificatesDefaultView">
-                    <SelectValue placeholder="Choose a default view" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="form">Medical record form</SelectItem>
-                    <SelectItem value="medical-clearance">Medical clearance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col justify-end rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
+              <div className="flex flex-col justify-center rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="font-medium text-on-surface">Remember last selected student</p>
+                    <p className="font-medium text-on-surface">Enable sound alerts</p>
                   </div>
                   <Switch
-                    checked={workspacePreferences.rememberLastCertificateStudent}
-                    onCheckedChange={(checked) => updateWorkspacePreference('rememberLastCertificateStudent', checked)}
-                    aria-label="Remember last selected student"
+                    checked={workspacePreferences.enableSoundAlerts}
+                    onCheckedChange={(checked) => updateWorkspacePreference('enableSoundAlerts', checked)}
+                    aria-label="Enable sound alerts"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground sm:max-w-xl">
-                {hasWorkspacePreferenceChanges
-                  ? 'You have unsaved workspace preference changes.'
-                  : 'Your workflow settings are already up to date.'}
-              </p>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setWorkspacePreferences(savedWorkspacePreferences)}
-                  disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
-                  className="w-full sm:w-auto"
-                >
-                  Reset
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleWorkspacePreferenceSave}
-                  disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
-                  className="w-full sm:w-auto"
-                >
-                  {savingWorkspacePreferences ? 'Saving...' : 'Save Workspace Settings'}
-                </Button>
+            {!isDoctor && (
+              <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground sm:max-w-xl">
+                  {hasWorkspacePreferenceChanges
+                    ? 'You have unsaved workspace preference changes.'
+                    : 'Your workflow settings are already up to date.'}
+                </p>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setWorkspacePreferences(savedWorkspacePreferences)}
+                    disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                    className="w-full sm:w-auto"
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleWorkspacePreferenceSave}
+                    disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                    className="w-full sm:w-auto"
+                  >
+                    {savingWorkspacePreferences ? 'Saving...' : 'Save Workspace Settings'}
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
+          {isDoctor && (
+            <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <Award className="h-5 w-5 text-primary" />
+                  <div>
+                    <CardTitle>Certificate Workspace</CardTitle>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="min-w-0">
+                    <Label htmlFor="certificatesDefaultView">Default certificate view</Label>
+                    <Select
+                      value={workspacePreferences.certificatesDefaultView}
+                      onValueChange={(value) =>
+                        updateWorkspacePreference('certificatesDefaultView', value as StaffWorkspacePreferences['certificatesDefaultView'])
+                      }
+                    >
+                      <SelectTrigger id="certificatesDefaultView">
+                        <SelectValue placeholder="Choose a default view" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="form">Medical record form</SelectItem>
+                        <SelectItem value="medical-clearance">Medical clearance</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col justify-end rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="font-medium text-on-surface">Remember last selected student</p>
+                      </div>
+                      <Switch
+                        checked={workspacePreferences.rememberLastCertificateStudent}
+                        onCheckedChange={(checked) => updateWorkspacePreference('rememberLastCertificateStudent', checked)}
+                        aria-label="Remember last selected student"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="min-w-0">
+                    <Label htmlFor="defaultSignatoryName">Default signatory name</Label>
+                    <Input
+                      id="defaultSignatoryName"
+                      value={workspacePreferences.defaultSignatoryName}
+                      onChange={(event) => updateWorkspacePreference('defaultSignatoryName', event.target.value)}
+                      placeholder="Enter signatory name (e.g., Dr. Jane Doe, MD)"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <Label htmlFor="defaultSignatoryTitle">Default signatory title</Label>
+                    <Input
+                      id="defaultSignatoryTitle"
+                      value={workspacePreferences.defaultSignatoryTitle}
+                      onChange={(event) => updateWorkspacePreference('defaultSignatoryTitle', event.target.value)}
+                      placeholder="Enter signatory title (e.g., College Physician)"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground sm:max-w-xl">
+                    {hasWorkspacePreferenceChanges
+                      ? 'You have unsaved workspace preference changes.'
+                      : 'Your workflow settings are already up to date.'}
+                  </p>
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setWorkspacePreferences(savedWorkspacePreferences)}
+                      disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                      className="w-full sm:w-auto"
+                    >
+                      Reset
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleWorkspacePreferenceSave}
+                      disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                      className="w-full sm:w-auto"
+                    >
+                      {savingWorkspacePreferences ? 'Saving...' : 'Save Workspace Settings'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
         </div>
 
-        <div className="space-y-6 xl:sticky xl:top-24">
+        {/* Danger Zone */}
+        <div className="space-y-4 pt-6 border-t border-rose-500/20">
+          <div>
+            <h3 className="text-lg font-bold text-rose-700">Danger Zone</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Security-sensitive settings. Please be cautious when performing these actions.
+            </p>
+          </div>
           <PasswordChangeCard title="Change Password" />
-
-          <SettingsLogoutCard className="flex justify-end" />
+          <div className="flex justify-end pt-2">
+            <SettingsLogoutCard />
+          </div>
         </div>
       </div>
 

@@ -218,13 +218,14 @@ export default function AdminDashboard() {
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
       <PortalPageIntro
+        className="border-none bg-transparent p-0 sm:p-0 shadow-none"
         eyebrow={(
           <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full bg-primary-container/30 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-on-primary-container sm:text-xs sm:tracking-[0.22em]">
             <ShieldCheck className="h-4 w-4" />
             Admin Control Center
           </div>
         )}
-        title={`Welcome, ${displayName}`}
+        title={`Welcome to ClinicKa! ${displayName}.`}
         actions={(
           <div className="grid gap-3 min-[440px]:grid-cols-2 lg:min-w-[24rem]">
             <button

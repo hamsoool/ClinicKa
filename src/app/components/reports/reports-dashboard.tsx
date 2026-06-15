@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import PortalPageIntro from '../portal-page-intro';
+import ListPagination from '../list-pagination';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Skeleton } from '../ui/skeleton';
+import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import {
   Activity,
-  Award,
   ClipboardCheck,
   FileSpreadsheet,
   Printer,
   RotateCcw,
+  Search,
   SlidersHorizontal,
-  Stethoscope,
   TrendingUp,
   Users,
 } from 'lucide-react';
@@ -36,6 +37,8 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  LineChart,
+  Line,
 } from 'recharts';
 import {
   createDefaultAdminSystemSettings,
@@ -56,7 +59,7 @@ const STATUS_LABELS: Record<string, string> = {
   returned: 'Returned',
   physical_exam_done: 'Physical Exam Done',
 };
-const CERTIFICATE_LABELS: Record<string, string> = { all: 'All Certificates', issued: 'Issued Only', not_issued: 'Not Issued' };
+
 const STATUS_COLORS: Record<string, string> = {
   Approved: '#3b6d11',
   Pending: '#ba7517',
@@ -65,27 +68,25 @@ const STATUS_COLORS: Record<string, string> = {
   'Exam Done': '#185fa5',
 };
 const DEPARTMENT_COLORS: Record<string, string> = {
-  CCS: '#f97316',
-  CBA: '#facc15',
-  CEAS: '#3b82f6',
-  CHTM: '#ec4899',
-  CAHS: '#ef4444',
+  CCS: '#FF7F3F',
+  CBA: '#FBDF07',
+  CEAS: '#406093',
+  CHTM: '#FCB7C7',
+  CAHS: '#DE3E3E',
 };
+const GENDER_COLORS: Record<string, string> = {
+  male: '#9ED3DC',
+  female: '#FCB7C7',
+  other: '#85f6ae',
+  unspecified: '#d8e4d7',
+};
+const SERIES_COLORS = ['#006d3c', '#12b76a', '#3d8f66', '#85cfa4', '#5d7c68', '#e5a93a', '#d26d6d', '#6d7b6e'];
 const CHART_PRIMARY = '#006d3c';
 const CHART_PRIMARY_SOFT = '#12b76a';
 const CHART_GREEN_PALE = '#85f6ae';
 const CHART_GRID = '#d8e4d7';
 const CHART_TEXT = '#3d4a3f';
-const CERTIFICATE_COLORS: Record<string, string> = {
-  Issued: CHART_PRIMARY,
-  'Not Issued': '#d8e4d7',
-};
-const GENDER_COLORS: Record<string, string> = {
-  Male: CHART_PRIMARY,
-  Female: CHART_PRIMARY_SOFT,
-  Other: CHART_GREEN_PALE,
-  Unspecified: '#d8e4d7',
-};
+
 
 type ReportsSummary = {
   total: number;
@@ -102,11 +103,17 @@ type ReportsSummary = {
   byCourse: Record<string, number>;
 };
 
-type SubmissionBreakdownView = 'department' | 'program';
-type SubmissionBreakdownDatum = {
-  label: string;
+type FunnelDatum = {
+  stage: string;
   count: number;
   fill: string;
+};
+type MonthlyRateDatum = {
+  key: string;
+  label: string;
+  total: number;
+  cleared: number;
+  rate: number;
 };
 type NamedCountDatum = {
   name: string;
@@ -114,16 +121,7 @@ type NamedCountDatum = {
   fill: string;
   percent?: number;
 };
-type TimelineDatum = {
-  key: string;
-  label: string;
-  count: number;
-};
-type RankedDatum = {
-  label: string;
-  count: number;
-  percent: number;
-};
+
 type ReportingTermRange = {
   label: string;
   startMs: number;
@@ -133,22 +131,16 @@ type ReportSubmission = SubmissionRecord & {
   gender?: string;
   certificatePdfUrl?: string;
 };
-type ClinicalSummary = {
-  clearanceIssued: number;
-  pendingPhysicalExams: number;
-  medicalCertificatesIssued: number;
-  abnormalXray: number;
-  anemiaTrend: number;
-  abnormalUrinalysis: number;
-};
 type ReportTableRow = {
   studentId: string;
   fullName: string;
-  courseDept: string;
+  yearLevel: string;
+  age: string;
+  gender: string;
+  deptProgram: string;
   submissionDate: string;
-  labStatus: string;
-  physicalExamStatus: string;
-  issuedCertificates: string;
+  clearanceStatus: string;
+  issuanceDate: string;
 };
 
 function normalizeCourseValue(value: unknown) {
@@ -226,29 +218,13 @@ function buildReportingTermRange(settings: AdminSystemSettings): ReportingTermRa
     return buildReportingTermRange(createDefaultAdminSystemSettings());
   }
 
-  const label = `${settings.academicYear} • ${settings.semester}`;
+  const label = settings.academicYear;
 
-  switch (settings.semester) {
-    case 'First Semester':
-      return {
-        label,
-        startMs: Date.UTC(startYear, 6, 1),
-        endMs: Date.UTC(endYear, 0, 1),
-      };
-    case 'Summer':
-      return {
-        label,
-        startMs: Date.UTC(endYear, 5, 1),
-        endMs: Date.UTC(endYear, 6, 1),
-      };
-    case 'Second Semester':
-    default:
-      return {
-        label,
-        startMs: Date.UTC(endYear, 0, 1),
-        endMs: Date.UTC(endYear, 5, 1),
-      };
-  }
+  return {
+    label,
+    startMs: Date.UTC(startYear, 6, 1),
+    endMs: Date.UTC(endYear, 6, 1),
+  };
 }
 
 function formatConditionLabel(value: string) {
@@ -258,36 +234,6 @@ function formatConditionLabel(value: string) {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/^./, (match) => match.toUpperCase());
-}
-
-function startOfLocalDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function getTimelineBucket(date: Date, mode: 'day' | 'week' | 'month') {
-  if (mode === 'month') {
-    const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-    return {
-      key: `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`,
-      label: monthStart.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-    };
-  }
-
-  if (mode === 'week') {
-    const day = startOfLocalDay(date);
-    const weekStart = new Date(day);
-    weekStart.setDate(day.getDate() - day.getDay());
-    return {
-      key: weekStart.toISOString().slice(0, 10),
-      label: `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-    };
-  }
-
-  const day = startOfLocalDay(date);
-  return {
-    key: day.toISOString().slice(0, 10),
-    label: day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-  };
 }
 
 function formatReportDate(value?: string | null) {
@@ -578,14 +524,16 @@ function buildXlsxBlob(rows: string[][]) {
   <cols>
     <col min="1" max="1" width="18" customWidth="1"/>
     <col min="2" max="2" width="28" customWidth="1"/>
-    <col min="3" max="3" width="26" customWidth="1"/>
-    <col min="4" max="4" width="18" customWidth="1"/>
-    <col min="5" max="5" width="46" customWidth="1"/>
-    <col min="6" max="6" width="22" customWidth="1"/>
-    <col min="7" max="7" width="34" customWidth="1"/>
+    <col min="3" max="3" width="10" customWidth="1"/>
+    <col min="4" max="4" width="14" customWidth="1"/>
+    <col min="5" max="5" width="20" customWidth="1"/>
+    <col min="6" max="6" width="14" customWidth="1"/>
+    <col min="7" max="7" width="18" customWidth="1"/>
+    <col min="8" max="8" width="18" customWidth="1"/>
+    <col min="9" max="9" width="18" customWidth="1"/>
   </cols>
   <sheetData>${rowXml}</sheetData>
-  <mergeCells count="1"><mergeCell ref="A1:G1"/></mergeCells>
+  <mergeCells count="1"><mergeCell ref="A1:I1"/></mergeCells>
 </worksheet>`;
 
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -693,21 +641,34 @@ function StatCard({
 }) {
   const normalizedProgress = typeof progress === 'number' ? Math.max(0, Math.min(100, progress)) : null;
 
+  // Resolve dynamic background color based on accent text class
+  const getIconBgClass = (accentClass: string) => {
+    if (accentClass.includes('text-rose-700')) return 'bg-rose-100';
+    if (accentClass.includes('text-amber-600')) return 'bg-amber-100';
+    return 'bg-primary/10';
+  };
+
   return (
     <Card className="overflow-hidden border-outline-variant/30 print:break-inside-avoid print:border print:border-black print:bg-white print:shadow-none">
-      <CardContent className="pt-5 pb-5 px-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1 truncate print:text-black">{label}</p>
-            <p className={`text-3xl font-bold leading-none print:text-black ${accent}`}>{value}</p>
-            {helper && <p className="mt-2 text-xs leading-5 text-on-surface-variant print:text-black">{helper}</p>}
+      <CardContent className="p-2 sm:p-5">
+        <div className="flex items-start justify-between gap-1.5 sm:gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 leading-tight line-clamp-2 min-h-[1.5rem] sm:min-h-0 print:text-black">
+              {label}
+            </p>
+            <p className={`text-lg sm:text-3xl font-bold leading-none print:text-black ${accent}`}>{value}</p>
+            {helper && (
+              <p className="mt-2 text-xs leading-5 text-on-surface-variant hidden sm:block print:text-black">
+                {helper}
+              </p>
+            )}
           </div>
-          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center print:bg-white ${accent.replace('text-', 'bg-').replace('600', '100').replace('foreground', '100')}`}>
+          <div className={`shrink-0 w-9 h-9 rounded-full hidden sm:flex items-center justify-center print:bg-white ${getIconBgClass(accent)}`}>
             <Icon className={`w-4.5 h-4.5 print:text-black ${accent}`} strokeWidth={2} />
           </div>
         </div>
         {normalizedProgress !== null && (
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high print:hidden">
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high hidden sm:block print:hidden">
             <div className="h-full rounded-full bg-primary" style={{ width: `${normalizedProgress}%` }} />
           </div>
         )}
@@ -754,51 +715,48 @@ function LabeledSelect({
 }
 
 // ── Custom Tooltip ─────────────────────────────────────────────────────────
-function CustomBarTooltip({ active, payload, label }: any) {
+function CustomDemographicTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-[18px] border border-outline-variant/40 bg-white px-3 py-2 text-sm">
-      <p className="font-medium">{label}</p>
-      <p className="text-muted-foreground">{payload[0].value} submissions</p>
+    <div className="rounded-[18px] border border-outline-variant/40 bg-white px-3.5 py-2 text-sm shadow-sm">
+      <p className="font-semibold text-on-surface">{payload[0].name}</p>
+      <p className="text-xs text-muted-foreground">{payload[0].value} students</p>
     </div>
   );
 }
 
-function CustomTimelineTooltip({ active, payload, label }: any) {
+function CustomApprovalRateTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-[18px] border border-outline-variant/40 bg-white px-3 py-2 text-sm">
-      <p className="font-medium">{label}</p>
-      <p className="text-muted-foreground">{payload[0].value} submissions</p>
+    <div className="rounded-[18px] border border-outline-variant/40 bg-white px-3.5 py-2.5 text-sm shadow-sm min-w-48 space-y-2">
+      <p className="font-semibold text-on-surface border-b pb-1 border-outline-variant/30">{label}</p>
+      <div className="space-y-1.5">
+        {payload.map((entry: any, index: number) => {
+          const rawGroups = entry.payload.rawGroups || {};
+          const groupInfo = rawGroups[entry.name] || { total: 0, cleared: 0 };
+          return (
+            <div key={`tooltip-item-${index}`} className="flex flex-col">
+              <div className="flex items-center justify-between gap-4 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.stroke || entry.color }} />
+                  <span className="text-on-surface-variant font-medium">{entry.name}:</span>
+                </div>
+                <span className="font-bold text-on-surface">{entry.value}%</span>
+              </div>
+              {groupInfo.total > 0 && (
+                <p className="text-[10px] text-muted-foreground pl-3.5 mt-0.5">
+                  {groupInfo.cleared} approved of {groupInfo.total} submissions
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function CustomDonutTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-[18px] border border-outline-variant/40 bg-white px-3 py-2 text-sm">
-      <p className="font-medium">{payload[0].name}</p>
-      <p className="text-muted-foreground">{payload[0].value} students</p>
-    </div>
-  );
-}
 
-function DepartmentBarValueLabel(props: any) {
-  const { x = 0, y = 0, width = 0, value = 0 } = props || {};
-
-  return (
-    <text
-      x={x + width / 2}
-      y={Math.max(Number(y) - 8, 14)}
-      textAnchor="middle"
-      fontSize={12}
-      fill="hsl(var(--muted-foreground))"
-    >
-      {value}
-    </text>
-  );
-}
 
 function EmptyChartState({ message }: { message: string }) {
   return (
@@ -808,54 +766,25 @@ function EmptyChartState({ message }: { message: string }) {
   );
 }
 
-function ProgressList({
-  items,
-  emptyMessage,
-}: {
-  items: RankedDatum[];
-  emptyMessage: string;
-}) {
-  if (!items.length) return <EmptyChartState message={emptyMessage} />;
 
-  return (
-    <div className="space-y-4">
-      {items.map((item) => (
-        <div key={item.label} className="space-y-2">
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="min-w-0 truncate font-semibold text-on-surface">{item.label}</span>
-            <span className="shrink-0 text-on-surface-variant">{item.count} • {item.percent}%</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-surface-container-high">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${item.percent}%` }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+
+
+function getSubmissionGroupValue(sub: ReportSubmission, groupBy: 'overall' | 'year' | 'department' | 'gender'): string {
+  if (groupBy === 'overall') return 'Overall';
+  if (groupBy === 'year') {
+    const year = String(sub.year || '');
+    return YEAR_LABELS[year] || (year ? `Year ${year}` : 'Unknown');
+  }
+  if (groupBy === 'department') {
+    return resolveDepartmentValue(sub.department, sub.course) || 'Unknown';
+  }
+  if (groupBy === 'gender') {
+    const gender = String(sub.gender || sub.sex || '').trim().toLowerCase();
+    return gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : 'Unknown';
+  }
+  return 'Overall';
 }
 
-function StatusPipeline({ items }: { items: NamedCountDatum[] }) {
-  if (!items.length) return <EmptyChartState message="No status data available for the selected filters." />;
-
-  return (
-    <div className="space-y-4">
-      {items.map((item) => (
-        <div key={item.name} className="rounded-[18px] border border-outline-variant/35 bg-white px-4 py-3">
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.fill }} />
-              <span className="truncate font-semibold text-on-surface">{item.name}</span>
-            </div>
-            <span className="shrink-0 text-on-surface-variant">{item.value} • {item.percent ?? 0}%</span>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-container-high">
-            <div className="h-full rounded-full" style={{ width: `${item.percent ?? 0}%`, backgroundColor: item.fill }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) {
@@ -866,13 +795,13 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
   const [yearFilter, setYearFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [courseFilter, setCourseFilter] = useState('all');
-  const [conditionFilter, setConditionFilter] = useState('all');
-  const [certificateFilter, setCertificateFilter] = useState('all');
   const [genderFilter, setGenderFilter] = useState('all');
-  const [studentBatchFilter, setStudentBatchFilter] = useState('all');
-  const [submissionBreakdownView, setSubmissionBreakdownView] = useState<SubmissionBreakdownView>('department');
+  const [searchQuery, setSearchQuery] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [studentBreakdownView, setStudentBreakdownView] = useState<'year' | 'gender' | 'department' | 'program'>('year');
+  const [approvalRateGroupBy, setApprovalRateGroupBy] = useState<'overall' | 'year' | 'department' | 'gender'>('overall');
   const today = useMemo(() => new Date().toISOString().split('T')[0], []);
   const defaultReportingTermSettings = useMemo(() => createDefaultAdminSystemSettings(), []);
   const {
@@ -947,21 +876,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     [normalizedSubmissions],
   );
 
-  const allConditions = useMemo(() => {
-    const keys = new Set<string>();
-    normalizedSubmissions.forEach((s) => Object.entries(s.medicalHistory || {}).forEach(([k, v]) => v && keys.add(k)));
-    return [...keys].sort((a, b) => a.localeCompare(b));
-  }, [normalizedSubmissions]);
 
-  const studentBatches = useMemo(() => {
-    const batches = new Set<string>();
-    normalizedSubmissions.forEach((s) => {
-      const id = String(s.studentId || '');
-      const match = id.match(/^(\d{4})/);
-      if (match?.[1]) batches.add(match[1]);
-    });
-    return [...batches].sort();
-  }, [normalizedSubmissions]);
 
   const filteredSubmissions = useMemo(
     () =>
@@ -970,26 +885,35 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         if (yearFilter !== 'all' && String(sub.year) !== yearFilter) return false;
         if (statusFilter !== 'all' && sub.status !== statusFilter) return false;
         if (courseFilter !== 'all' && normalizeCourseValue(sub.course) !== normalizeCourseValue(courseFilter)) return false;
-        if (
-          conditionFilter !== 'all'
-          && !sub.medicalHistory?.[conditionFilter as keyof NonNullable<ReportSubmission['medicalHistory']>]
-        ) return false;
-        if (certificateFilter === 'issued' && !sub.clearanceInfo?.issuedDate) return false;
-        if (certificateFilter === 'not_issued' && sub.clearanceInfo?.issuedDate) return false;
         if (genderFilter !== 'all') {
           const gender = String(sub.gender || sub.sex || '').trim().toLowerCase();
           if (gender !== genderFilter) return false;
         }
-        if (studentBatchFilter !== 'all') {
-          const id = String(sub.studentId || '');
-          if (!id.startsWith(studentBatchFilter)) return false;
+        if (searchQuery.trim() !== '') {
+          const query = searchQuery.trim().toLowerCase();
+          const studentId = String(sub.studentId || '').toLowerCase();
+          const firstName = String(sub.firstName || '').toLowerCase();
+          const lastName = String(sub.lastName || '').toLowerCase();
+          const middleInitial = String(sub.middleInitial || '').toLowerCase();
+          const fullName = `${lastName}, ${firstName} ${middleInitial}`.toLowerCase();
+          const fullNameSimple = `${firstName} ${lastName}`.toLowerCase();
+
+          if (
+            !studentId.includes(query) &&
+            !firstName.includes(query) &&
+            !lastName.includes(query) &&
+            !fullName.includes(query) &&
+            !fullNameSimple.includes(query)
+          ) {
+            return false;
+          }
         }
         const subDate = sub.submittedAt ? new Date(sub.submittedAt) : null;
         if (fromDate && subDate && subDate < new Date(`${fromDate}T00:00:00`)) return false;
         if (toDate && subDate && subDate > new Date(`${toDate}T23:59:59`)) return false;
         return true;
       }),
-    [normalizedSubmissions, departmentFilter, yearFilter, statusFilter, courseFilter, conditionFilter, certificateFilter, genderFilter, studentBatchFilter, fromDate, toDate],
+    [normalizedSubmissions, departmentFilter, yearFilter, statusFilter, courseFilter, genderFilter, searchQuery, fromDate, toDate],
   );
 
   const dedupedFilteredSubmissions = useMemo(() => {
@@ -1012,6 +936,26 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     return out;
   }, [filteredSubmissions]);
 
+  const dedupedAllSubmissions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: ReportSubmission[] = [];
+    for (const s of normalizedSubmissions) {
+      const signature = [
+        s.studentId || '',
+        (s.firstName || '').trim().toLowerCase(),
+        (s.lastName || '').trim().toLowerCase(),
+        s.year || '',
+        s.status || '',
+        s.course || '',
+        s.submittedAt ? new Date(s.submittedAt).toISOString().slice(0, 10) : '',
+      ].join('|');
+      if (seen.has(signature)) continue;
+      seen.add(signature);
+      out.push(s);
+    }
+    return out;
+  }, [normalizedSubmissions]);
+
   const dateRange = useMemo(() => {
     const timestamps = normalizedSubmissions
       .map((s) => (s.submittedAt ? new Date(s.submittedAt).getTime() : NaN))
@@ -1027,20 +971,57 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     if (!toDate) setToDate(dateRange.maxDate);
   }, [normalizedSubmissions, fromDate, toDate, dateRange.minDate, dateRange.maxDate]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    departmentFilter,
+    yearFilter,
+    statusFilter,
+    courseFilter,
+    genderFilter,
+    searchQuery,
+    fromDate,
+    toDate,
+  ]);
+
   const hasActiveFilters =
     departmentFilter !== 'all' || yearFilter !== 'all' || statusFilter !== 'all' ||
-    courseFilter !== 'all' || conditionFilter !== 'all' || certificateFilter !== 'all' ||
-    genderFilter !== 'all' || studentBatchFilter !== 'all';
+    courseFilter !== 'all' || genderFilter !== 'all' ||
+    searchQuery.trim() !== '' ||
+    (fromDate !== '' && fromDate !== dateRange.minDate) ||
+    (toDate !== '' && toDate !== dateRange.maxDate);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (departmentFilter !== 'all') count++;
+    if (yearFilter !== 'all') count++;
+    if (statusFilter !== 'all') count++;
+    if (courseFilter !== 'all') count++;
+    if (genderFilter !== 'all') count++;
+    if (searchQuery.trim() !== '') count++;
+    if (fromDate !== '' && fromDate !== dateRange.minDate) count++;
+    if (toDate !== '' && toDate !== dateRange.maxDate) count++;
+    return count;
+  }, [
+    departmentFilter,
+    yearFilter,
+    statusFilter,
+    courseFilter,
+    genderFilter,
+    searchQuery,
+    fromDate,
+    toDate,
+    dateRange.minDate,
+    dateRange.maxDate
+  ]);
 
   const resetFilters = () => {
     setDepartmentFilter('all');
     setYearFilter('all');
     setStatusFilter('all');
     setCourseFilter('all');
-    setConditionFilter('all');
-    setCertificateFilter('all');
     setGenderFilter('all');
-    setStudentBatchFilter('all');
+    setSearchQuery('');
     setFromDate(dateRange.minDate);
     setToDate(dateRange.maxDate);
   };
@@ -1084,227 +1065,230 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     () => buildReportingTermRange(reportingTermSettings),
     [reportingTermSettings],
   );
-  const currentTermSubmissions = useMemo(
-    () =>
-      dedupedFilteredSubmissions.filter((submission) => {
-        const submittedTimestamp = new Date(submission.submittedAt || 0).getTime();
-        return Number.isFinite(submittedTimestamp)
-          && submittedTimestamp >= reportingTermRange.startMs
-          && submittedTimestamp < reportingTermRange.endMs;
-      }),
-    [dedupedFilteredSubmissions, reportingTermRange.endMs, reportingTermRange.startMs],
-  );
 
-  // ── Chart data ─────────────────────────────────────────────────────────
-  const departmentChartData = useMemo(() => {
-    const counts = currentTermSubmissions.reduce((acc, sub) => {
-      const department = resolveDepartmentValue(sub.department, sub.course);
-      if (!department) return acc;
 
-      acc[department] = (acc[department] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
 
-    return DEPARTMENTS
-      .map((department) => ({
-        department,
-        count: counts[department] || 0,
-        fill: DEPARTMENT_COLORS[department] || '#94a3b8',
-      }));
-  }, [currentTermSubmissions]);
-  const programChartData = useMemo(
-    () => {
-      const programCounts = currentTermSubmissions.reduce((acc, sub) => {
-        const program = abbreviateCourse(sub.course);
-        if (!program || program === '-') return acc;
+  const studentBreakdownData = useMemo(() => {
+    const counts: Record<string, number> = {};
 
-        acc[program] = (acc[program] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+    dedupedFilteredSubmissions.forEach((sub) => {
+      let key = '';
+      if (studentBreakdownView === 'year') {
+        const year = String(sub.year || '');
+        key = YEAR_LABELS[year] || (year ? `Year ${year}` : 'Unknown');
+      } else if (studentBreakdownView === 'gender') {
+        const gender = String(sub.gender || sub.sex || '').trim().toLowerCase();
+        key = gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : 'Unknown';
+      } else if (studentBreakdownView === 'department') {
+        key = resolveDepartmentValue(sub.department, sub.course) || 'Unknown';
+      } else if (studentBreakdownView === 'program') {
+        key = abbreviateCourse(sub.course) || 'Unknown';
+      }
 
-      return (Object.entries(programCounts) as Array<[string, number]>)
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([label, count]) => ({
-          label,
-          count,
-          fill: 'hsl(var(--primary))',
-        }));
-    },
-    [currentTermSubmissions],
-  );
-  const submissionBreakdownData: SubmissionBreakdownDatum[] = submissionBreakdownView === 'department'
-    ? departmentChartData.map((item) => ({
-        label: item.department,
-        count: item.count,
-        fill: item.fill,
+      counts[key] = (counts[key] || 0) + 1;
+    });
+
+    const sortedData = Object.entries(counts)
+      .map(([name, count]) => ({
+        name,
+        count,
       }))
-    : programChartData;
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
-  const statusChartData = useMemo<NamedCountDatum[]>(
-    () => [
-      { name: 'Approved', value: summary.approved, fill: STATUS_COLORS.Approved },
-      { name: 'Pending', value: summary.pending, fill: STATUS_COLORS.Pending },
-      { name: 'In Review', value: summary.inReview, fill: STATUS_COLORS['In Review'] },
-      { name: 'Returned', value: summary.returned, fill: STATUS_COLORS.Returned },
-      { name: 'Exam Done', value: summary.physicalExamDone, fill: STATUS_COLORS['Exam Done'] },
-    ]
-      .filter((d) => d.value > 0)
-      .map((d) => ({
-        ...d,
-        percent: summary.total > 0 ? Math.round((d.value / summary.total) * 100) : 0,
-      })),
-    [summary],
-  );
+    return sortedData.map((entry, index) => {
+      let fill = SERIES_COLORS[index % SERIES_COLORS.length];
 
-  const submissionsByDate = useMemo<TimelineDatum[]>(() => {
-    const dated = dedupedFilteredSubmissions
-      .map((s) => (s.submittedAt ? new Date(s.submittedAt) : null))
-      .filter((date): date is Date => date instanceof Date && Number.isFinite(date.getTime()))
-      .sort((a, b) => a.getTime() - b.getTime());
+      if (studentBreakdownView === 'gender') {
+        const genKey = entry.name.toLowerCase();
+        if (GENDER_COLORS[genKey]) fill = GENDER_COLORS[genKey];
+      } else if (studentBreakdownView === 'department') {
+        const deptKey = entry.name.toUpperCase();
+        if (DEPARTMENT_COLORS[deptKey]) fill = DEPARTMENT_COLORS[deptKey];
+      } else if (studentBreakdownView === 'program') {
+        const matchingSub = dedupedFilteredSubmissions.find(
+          (sub) => abbreviateCourse(sub.course) === entry.name
+        );
+        if (matchingSub) {
+          const dept = resolveDepartmentValue(matchingSub.department, matchingSub.course);
+          if (DEPARTMENT_COLORS[dept]) fill = DEPARTMENT_COLORS[dept];
+        }
+      }
 
-    if (!dated.length) return [];
+      return {
+        ...entry,
+        fill,
+      };
+    });
+  }, [dedupedFilteredSubmissions, studentBreakdownView]);
 
-    const first = startOfLocalDay(dated[0]);
-    const last = startOfLocalDay(dated[dated.length - 1]);
-    const spanDays = Math.max(1, Math.round((last.getTime() - first.getTime()) / 86_400_000) + 1);
-    const bucketMode = spanDays > 180 ? 'month' : spanDays > 45 ? 'week' : 'day';
-    const buckets = new Map<string, TimelineDatum>();
+  const monthlyRateData = useMemo<any[]>(() => {
+    const datedSubmissions = dedupedFilteredSubmissions
+      .map((s) => ({ submission: s, date: s.submittedAt ? new Date(s.submittedAt) : null }))
+      .filter((item): item is { submission: ReportSubmission; date: Date } =>
+        item.date instanceof Date && Number.isFinite(item.date.getTime()),
+      );
 
-    dated.forEach((date) => {
-      const bucket = getTimelineBucket(date, bucketMode);
-      const existing = buckets.get(bucket.key);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        buckets.set(bucket.key, { ...bucket, count: 1 });
+    if (!datedSubmissions.length) return [];
+
+    const buckets = new Map<string, {
+      key: string;
+      label: string;
+      groupData: Map<string, { total: number; cleared: number }>;
+    }>();
+
+    datedSubmissions.forEach(({ submission, date }) => {
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthLabel = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+
+      let existing = buckets.get(monthKey);
+      if (!existing) {
+        existing = { key: monthKey, label: monthLabel, groupData: new Map() };
+        buckets.set(monthKey, existing);
+      }
+
+      const groupVal = getSubmissionGroupValue(submission, approvalRateGroupBy);
+      let gData = existing.groupData.get(groupVal);
+      if (!gData) {
+        gData = { total: 0, cleared: 0 };
+        existing.groupData.set(groupVal, gData);
+      }
+      gData.total += 1;
+      if (submission.status === 'approved') {
+        gData.cleared += 1;
       }
     });
 
-    return [...buckets.values()].sort((a, b) => a.key.localeCompare(b.key));
-  }, [dedupedFilteredSubmissions]);
+    const sortedBuckets = [...buckets.values()].sort((a, b) => a.key.localeCompare(b.key));
 
-  const yearLevelData = useMemo<NamedCountDatum[]>(
-    () =>
-      Object.entries(YEAR_LABELS).map(([year, label], index) => {
-        const value = dedupedFilteredSubmissions.filter((s) => String(s.year) === year).length;
-        return {
-          name: label,
-          value,
-          fill: [CHART_PRIMARY, CHART_PRIMARY_SOFT, CHART_GREEN_PALE, '#3b6d11'][index] || CHART_PRIMARY,
-          percent: summary.total > 0 ? Math.round((value / summary.total) * 100) : 0,
-        };
-      }),
-    [dedupedFilteredSubmissions, summary.total],
-  );
-
-  const certificateChartData = useMemo<NamedCountDatum[]>(
-    () => [
-      {
-        name: 'Issued',
-        value: summary.withCertificate,
-        fill: CERTIFICATE_COLORS.Issued,
-        percent: summary.total > 0 ? Math.round((summary.withCertificate / summary.total) * 100) : 0,
-      },
-      {
-        name: 'Not Issued',
-        value: Math.max(summary.total - summary.withCertificate, 0),
-        fill: CERTIFICATE_COLORS['Not Issued'],
-        percent: summary.total > 0 ? Math.round(((summary.total - summary.withCertificate) / summary.total) * 100) : 0,
-      },
-    ].filter((item) => item.value > 0),
-    [summary.total, summary.withCertificate],
-  );
-
-  const genderChartData = useMemo<NamedCountDatum[]>(() => {
-    const counts: Record<string, number> = {};
-    dedupedFilteredSubmissions.forEach((submission) => {
-      const normalized = String(submission.gender || submission.sex || '').trim().toLowerCase();
-      const label = normalized === 'male' ? 'Male' : normalized === 'female' ? 'Female' : normalized ? 'Other' : 'Unspecified';
-      counts[label] = (counts[label] || 0) + 1;
+    const allGroupNames = new Set<string>();
+    datedSubmissions.forEach(({ submission }) => {
+      allGroupNames.add(getSubmissionGroupValue(submission, approvalRateGroupBy));
     });
+    const groupsArray = [...allGroupNames];
 
-    return Object.entries(counts)
-      .map(([name, value]) => ({
-        name,
-        value,
-        fill: GENDER_COLORS[name] || CHART_PRIMARY,
-        percent: summary.total > 0 ? Math.round((value / summary.total) * 100) : 0,
-      }))
-      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
-  }, [dedupedFilteredSubmissions, summary.total]);
+    const result = sortedBuckets.map((b) => {
+      const row: Record<string, any> = {
+        key: b.key,
+        label: b.label,
+        rawGroups: {},
+      };
 
-  const conditionPrevalenceData = useMemo<RankedDatum[]>(() => {
-    const counts: Record<string, number> = {};
-    dedupedFilteredSubmissions.forEach((submission) => {
-      Object.entries(submission.medicalHistory || {}).forEach(([key, value]) => {
-        if (value) counts[key] = (counts[key] || 0) + 1;
+      groupsArray.forEach((gName) => {
+        const gData = b.groupData.get(gName) || { total: 0, cleared: 0 };
+        row[gName] = gData.total > 0 ? Math.round((gData.cleared / gData.total) * 100) : 0;
+        row.rawGroups[gName] = gData;
       });
+
+      return row;
     });
 
-    return Object.entries(counts)
-      .map(([label, count]) => ({
-        label: formatConditionLabel(label),
-        count,
-        percent: summary.total > 0 ? Math.round((count / summary.total) * 100) : 0,
-      }))
-      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-      .slice(0, 8);
-  }, [dedupedFilteredSubmissions, summary.total]);
+    if (result.length > 0) {
+      const [yearStr, monthStr] = result[0].key.split('-');
+      const firstDate = new Date(Number(yearStr), Number(monthStr) - 1, 1);
+      firstDate.setMonth(firstDate.getMonth() - 1);
+      const prevKey = `${firstDate.getFullYear()}-${String(firstDate.getMonth() + 1).padStart(2, '0')}`;
+      const prevLabel = firstDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 
-  const topPrograms = useMemo<RankedDatum[]>(
-    () =>
-      Object.entries(summary.byCourse)
-        .map(([course, count]) => ({
-          label: abbreviateCourse(course),
-          count,
-          percent: summary.total > 0 ? Math.round((count / summary.total) * 100) : 0,
-        }))
-        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-        .slice(0, 5),
-    [summary.byCourse, summary.total],
-  );
+      const baselineRow: Record<string, any> = {
+        key: prevKey,
+        label: prevLabel,
+        rawGroups: {},
+      };
 
-  const clinicalSummary = useMemo<ClinicalSummary>(() => {
-    const clearanceIssued = dedupedFilteredSubmissions.filter((submission) => Boolean(submission.clearanceInfo?.issuedDate)).length;
-    const completedPhysicalExams = dedupedFilteredSubmissions.filter(hasPhysicalExam).length;
-    const abnormalXray = dedupedFilteredSubmissions.filter(hasAbnormalXray).length;
-    const anemiaTrend = dedupedFilteredSubmissions.filter(hasAnemiaFlag).length;
-    const abnormalUrinalysis = dedupedFilteredSubmissions.filter(hasAbnormalUrinalysis).length;
+      groupsArray.forEach((gName) => {
+        baselineRow[gName] = 0;
+        baselineRow.rawGroups[gName] = { total: 0, cleared: 0 };
+      });
 
-    return {
-      clearanceIssued,
-      pendingPhysicalExams: Math.max(dedupedFilteredSubmissions.length - completedPhysicalExams, 0),
-      medicalCertificatesIssued: clearanceIssued,
-      abnormalXray,
-      anemiaTrend,
-      abnormalUrinalysis,
-    };
-  }, [dedupedFilteredSubmissions]);
+      result.unshift(baselineRow);
+    }
+
+    return result;
+  }, [dedupedFilteredSubmissions, approvalRateGroupBy]);
+
+  const approvalRateSeries = useMemo(() => {
+    const groups = new Set<string>();
+    dedupedFilteredSubmissions.forEach((sub) => {
+      groups.add(getSubmissionGroupValue(sub, approvalRateGroupBy));
+    });
+
+    // Sort groups so they appear in a predictable order:
+    // e.g., 1st Year -> 2nd Year -> 3rd Year -> 4th Year, or alphabetical for departments/gender
+    const sortedGroups = [...groups].sort((a, b) => {
+      if (approvalRateGroupBy === 'year') {
+        const order: Record<string, number> = { '1st Year': 1, '2nd Year': 2, '3rd Year': 3, '4th Year': 4 };
+        return (order[a] || 99) - (order[b] || 99);
+      }
+      return a.localeCompare(b);
+    });
+
+    return sortedGroups.map((name, index) => {
+      let color = SERIES_COLORS[index % SERIES_COLORS.length];
+
+      if (approvalRateGroupBy === 'overall') {
+        color = CHART_PRIMARY;
+      } else if (approvalRateGroupBy === 'department') {
+        const deptKey = name.toUpperCase();
+        if (DEPARTMENT_COLORS[deptKey]) color = DEPARTMENT_COLORS[deptKey];
+      } else if (approvalRateGroupBy === 'gender') {
+        const genKey = name.toLowerCase();
+        if (GENDER_COLORS[genKey]) color = GENDER_COLORS[genKey];
+      } else if (approvalRateGroupBy === 'year') {
+        const yearColors: Record<string, string> = {
+          '1st Year': '#006d3c',
+          '2nd Year': '#12b76a',
+          '3rd Year': '#3d8f66',
+          '4th Year': '#85cfa4',
+        };
+        if (yearColors[name]) color = yearColors[name];
+      }
+
+      return {
+        name,
+        color,
+      };
+    });
+  }, [dedupedFilteredSubmissions, approvalRateGroupBy]);
+
+
 
   const reportTableRows = useMemo<ReportTableRow[]>(
     () =>
-      dedupedFilteredSubmissions.map((submission) => ({
-        studentId: submission.studentId || '-',
-        fullName: getFullName(submission),
-        courseDept: [abbreviateCourse(submission.course), resolveDepartmentValue(submission.department, submission.course)]
-          .filter((value) => value && value !== '-')
-          .join(' / ') || '-',
-        submissionDate: formatReportDate(submission.submittedAt),
-        labStatus: formatLabStatus(submission),
-        physicalExamStatus: formatPhysicalExamStatus(submission),
-        issuedCertificates: formatCertificateStatus(submission),
-      })),
+      dedupedFilteredSubmissions.map((submission) => {
+        const rawGender = submission.gender || submission.sex || '-';
+        const gender = rawGender !== '-' ? rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase() : '-';
+
+        return {
+          studentId: submission.studentId || '-',
+          fullName: getFullName(submission),
+          yearLevel: submission.year ? (YEAR_LABELS[String(submission.year)] || `Year ${submission.year}`) : '-',
+          age: submission.age ? String(submission.age) : '-',
+          gender,
+          deptProgram: [resolveDepartmentValue(submission.department, submission.course), abbreviateCourse(submission.course)]
+            .filter((value) => value && value !== '-')
+            .join(' / ') || '-',
+          submissionDate: formatReportDate(submission.submittedAt),
+          clearanceStatus: submission.status === 'approved' ? 'Cleared' : submission.status === 'returned' ? 'Returned' : 'Pending',
+          issuanceDate: submission.clearanceInfo?.issuedDate ? formatReportDate(submission.clearanceInfo.issuedDate) : 'null',
+        };
+      }),
     [dedupedFilteredSubmissions],
   );
+
+  const totalPages = Math.max(1, Math.ceil(reportTableRows.length / 10));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const friendlyFilters = useMemo(
     () => {
       const friendlyDepartment = departmentFilter === 'all' ? 'All Departments' : departmentFilter;
       const friendlyYear = yearFilter === 'all' ? 'All Years' : (YEAR_LABELS[yearFilter] || `Year ${yearFilter}`);
       const friendlyStatus = statusFilter === 'all' ? 'All Statuses' : (STATUS_LABELS[statusFilter] || statusFilter);
-      const friendlyCourse = courseFilter === 'all' ? 'All Courses' : courseFilter;
-      const friendlyCondition = conditionFilter === 'all' ? 'All Conditions' : formatConditionLabel(conditionFilter);
-      const friendlyCertificate = CERTIFICATE_LABELS[certificateFilter] || certificateFilter;
+      const friendlyCourse = courseFilter === 'all' ? 'All Programs' : courseFilter;
       const friendlyGender = genderFilter === 'all'
         ? 'All Genders'
         : genderFilter === 'male'
@@ -1312,42 +1296,77 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           : genderFilter === 'female'
             ? 'Female'
             : 'Other';
-      const friendlyBatch = studentBatchFilter === 'all' ? 'All Batches' : `${studentBatchFilter} Batch`;
+      const friendlySearch = searchQuery.trim() || 'All';
 
       return [
         { label: 'Academic Year', value: `SY ${reportingTermSettings.academicYear || '2026-2027'}` },
         { label: 'Reporting Term', value: reportingTermRange.label },
         { label: 'Department', value: friendlyDepartment },
         { label: 'Year', value: friendlyYear },
-        { label: 'Status', value: friendlyStatus },
-        { label: 'Course', value: friendlyCourse },
-        { label: 'Condition', value: friendlyCondition },
-        { label: 'Certificate', value: friendlyCertificate },
+        { label: 'Clearance Status', value: friendlyStatus },
+        { label: 'Program', value: friendlyCourse },
         { label: 'Gender', value: friendlyGender },
-        { label: 'Student ID Batch', value: friendlyBatch },
+        { label: 'Search Query', value: friendlySearch },
         { label: 'Submitted From', value: fromDate || '-' },
         { label: 'Submitted To', value: toDate || '-' },
       ];
     },
     [
-      certificateFilter,
-      conditionFilter,
-      courseFilter,
       departmentFilter,
-      fromDate,
+      yearFilter,
+      statusFilter,
+      courseFilter,
       genderFilter,
+      searchQuery,
+      fromDate,
+      toDate,
       reportingTermRange.label,
       reportingTermSettings.academicYear,
-      statusFilter,
-      studentBatchFilter,
-      toDate,
-      yearFilter,
     ],
   );
+
+  const activeFiltersString = useMemo(() => {
+    const list: string[] = [];
+    if (departmentFilter !== 'all') list.push(`Dept: ${departmentFilter}`);
+    if (yearFilter !== 'all') list.push(`Year: ${YEAR_LABELS[yearFilter] || yearFilter}`);
+    if (statusFilter !== 'all') list.push(`Status: ${STATUS_LABELS[statusFilter] || statusFilter}`);
+    if (courseFilter !== 'all') list.push(`Program: ${courseFilter}`);
+    if (genderFilter !== 'all') {
+      const gLabel = genderFilter === 'male' ? 'Male' : genderFilter === 'female' ? 'Female' : 'Other';
+      list.push(`Gender: ${gLabel}`);
+    }
+    if (searchQuery.trim()) list.push(`Search: "${searchQuery.trim()}"`);
+    if (fromDate) list.push(`From: ${fromDate}`);
+    if (toDate) list.push(`To: ${toDate}`);
+
+    return list.join(' • ');
+  }, [departmentFilter, yearFilter, statusFilter, courseFilter, genderFilter, searchQuery, fromDate, toDate]);
 
   const certificateRate = summary.total > 0 ? Math.round((summary.withCertificate / summary.total) * 100) : 0;
   const actionNeededCount = summary.pending + summary.inReview + summary.returned;
   const actionNeededRate = summary.total > 0 ? Math.round((actionNeededCount / summary.total) * 100) : 0;
+
+  const globalSummary = useMemo(() => {
+    const total = dedupedAllSubmissions.length;
+    const approved = dedupedAllSubmissions.filter((s) => s.status === 'approved').length;
+    const pending = dedupedAllSubmissions.filter((s) => s.status === 'pending').length;
+    const inReview = dedupedAllSubmissions.filter((s) => s.status === 'in_review').length;
+    const returned = dedupedAllSubmissions.filter((s) => s.status === 'returned').length;
+    const withCertificate = dedupedAllSubmissions.filter((s) => Boolean(s.clearanceInfo?.issuedDate)).length;
+    const approvalRate = total > 0 ? Math.round((approved / total) * 100) : 0;
+    return {
+      total,
+      approved,
+      pending,
+      inReview,
+      returned,
+      withCertificate,
+      approvalRate,
+    };
+  }, [dedupedAllSubmissions]);
+
+  const globalActionNeededCount = globalSummary.pending + globalSummary.inReview + globalSummary.returned;
+  const globalActionNeededRate = globalSummary.total > 0 ? Math.round((globalActionNeededCount / globalSummary.total) * 100) : 0;
 
   // ── Print and spreadsheet export ────────────────────────────────────────
   const handlePrint = () => {
@@ -1368,20 +1387,24 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         [
           'Student ID',
           'Full Name',
-          'Course/Dept',
+          'Age',
+          'Gender',
+          'Dept / Program',
+          'Year Level',
           'Submission Date',
-          'Lab Status (X-Ray/CBC/Urinalysis)',
-          'Physical Exam Status',
-          'Issued Certificates',
+          'Clearance Status',
+          'Issuance Date',
         ],
         ...reportTableRows.map((row) => [
           row.studentId,
           row.fullName,
-          row.courseDept,
+          row.age,
+          row.gender,
+          row.deptProgram,
+          row.yearLevel,
           row.submissionDate,
-          row.labStatus,
-          row.physicalExamStatus,
-          row.issuedCertificates,
+          row.clearanceStatus,
+          row.issuanceDate,
         ]),
       ];
       const blob = buildXlsxBlob(workbookRows);
@@ -1450,7 +1473,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-5 print:space-y-4 print:bg-white print:text-black">
+    <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-5 print:space-y-4 print:bg-white print:text-black print:max-w-none">
       {/* ── Page Header ───────────────────────────────────────────────── */}
       <PortalPageIntro
         title={`${mode === 'admin' ? 'Admin' : 'Staff'} Reports & Analytics`}
@@ -1458,242 +1481,235 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
         className="mb-8 print:hidden"
       />
 
-      <div className="hidden print:block">
-        <div className="text-center">
-          <p className="text-base font-bold uppercase text-black">Gordon College Health Services Unit - Medical Report</p>
-          <p className="mt-1 text-sm text-black">Academic Year: SY {reportingTermSettings.academicYear || '2026-2027'}</p>
-          <p className="text-sm text-black">Generated On: {formatReportDateTime()}</p>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-black">
-          {friendlyFilters.slice(2).map((filter) => (
-            <p key={filter.label}>
-              <span className="font-semibold">{filter.label}:</span> {filter.value}
+      {/* ── Official Print Header (Gordon College Letterhead) ── */}
+      <div className="hidden print:block mb-5 font-sans">
+        <div className="flex items-center justify-between">
+          <img src="/gordon-college-logo.png" alt="Gordon College Logo" className="w-16 h-16 object-contain" />
+          <div className="text-center flex-1 mx-4">
+            <h1 className="text-[18.5px] font-black tracking-wider uppercase text-black leading-none">
+              GORDON COLLEGE
+            </h1>
+            <p className="text-[11px] font-medium leading-relaxed text-black mt-1">
+              Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City
             </p>
-          ))}
+            <p className="text-[11px] font-medium leading-relaxed text-black">
+              Tel. No.: (047) 222-2089 / (047) 603-7175
+            </p>
+            <p className="text-[11px] font-medium leading-relaxed text-black">
+              Website: www.gordoncollege.edu.ph
+            </p>
+            <div className="mt-1.5 text-[11.5px] font-bold uppercase tracking-wider text-black leading-none">
+              Health Services Unit
+            </div>
+            <div className="mt-4 text-[11px] font-bold text-black">
+              SY {reportingTermSettings.academicYear || '2026-2027'}
+            </div>
+          </div>
+          <img src="/gordonhsc.png" alt="Health Services Unit Logo" className="w-16 h-16 object-contain" />
         </div>
       </div>
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4 print:gap-2">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-3 print:hidden">
         <StatCard
-          label="Student Medical Submissions"
-          value={summary.total}
+          label="Total Student Submissions"
+          value={globalSummary.total}
           icon={Users}
           accent="text-primary"
-          helper={`Pending ${summary.pending} • In Review ${summary.inReview} • Returned ${summary.returned} • Approved ${summary.approved}`}
+          helper="Total student submissions received"
+          progress={100}
         />
         <StatCard
-          label="Clearances Issued"
-          value={clinicalSummary.clearanceIssued}
+          label="Cleared Students"
+          value={globalSummary.approved}
           icon={ClipboardCheck}
           accent="text-primary"
-          helper={`${clinicalSummary.pendingPhysicalExams} pending physical exams`}
-          progress={summary.total > 0 ? Math.round((clinicalSummary.clearanceIssued / summary.total) * 100) : 0}
-        />
-        <StatCard
-          label="Medical Certificates Issued"
-          value={clinicalSummary.medicalCertificatesIssued}
-          icon={Award}
-          accent="text-primary"
-          helper={`${certificateRate}% certificate coverage`}
-          progress={certificateRate}
-        />
-        <StatCard
-          label="Key Clinical Flags"
-          value={clinicalSummary.abnormalXray + clinicalSummary.anemiaTrend + clinicalSummary.abnormalUrinalysis}
-          icon={Stethoscope}
-          accent="text-rose-700"
-          helper={`X-Ray ${clinicalSummary.abnormalXray} • Anemia ${clinicalSummary.anemiaTrend} • Urinalysis ${clinicalSummary.abnormalUrinalysis}`}
-        />
-        <StatCard
-          label="Current-Term Records"
-          value={currentTermSubmissions.length}
-          icon={Activity}
-          accent="text-primary"
-          helper={reportingTermRange.label}
+          helper="Total students officially cleared and approved"
+          progress={globalSummary.total > 0 ? Math.round((globalSummary.approved / globalSummary.total) * 100) : 0}
         />
         <StatCard
           label="Approval Rate"
-          value={`${summary.approvalRate}%`}
+          value={`${globalSummary.approvalRate}%`}
           icon={TrendingUp}
           accent="text-primary"
-          helper={`${summary.approved} approved of ${summary.total || 0}`}
-          progress={summary.approvalRate}
+          helper="Overall approval rate."
+          progress={globalSummary.approvalRate}
         />
         <StatCard
           label="Needs Action"
-          value={actionNeededCount}
+          value={globalActionNeededCount}
           icon={Activity}
           accent="text-amber-600"
-          helper={`${summary.pending} pending • ${summary.inReview} in review • ${summary.returned} returned`}
-          progress={actionNeededRate}
-        />
-        <StatCard
-          label="Physical Exams Pending"
-          value={clinicalSummary.pendingPhysicalExams}
-          icon={ClipboardCheck}
-          accent="text-amber-600"
-          helper={`${Math.max(summary.total - clinicalSummary.pendingPhysicalExams, 0)} completed physical exams`}
+          helper={`${globalSummary.pending} pending • ${globalSummary.inReview} in review • ${globalSummary.returned} returned`}
+          progress={globalActionNeededRate}
         />
       </div>
 
-      {/* ── Filters Card ──────────────────────────────────────────────── */}
-      <Card className="border-outline-variant/30 print:hidden">
-        <CardHeader className="pb-0 pt-5 px-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
-              <CardTitle className="text-base font-semibold">Filters</CardTitle>
-              {hasActiveFilters && (
-                <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                  Active
-                </span>
-              )}
+      {/* ── Clinical Records Card ─────────────────────────────────────── */}
+      <Card className="border-outline-variant/30 print:border-0 print:bg-white print:shadow-none">
+        <CardHeader className="pb-0 pt-1 px-5 print:hidden">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="flex flex-col gap-3">
+              <div>
+                <CardTitle className="text-base font-semibold print:text-sm print:text-black">Clinical Records</CardTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground print:text-black">
+                  {reportTableRows.length} student records matched the current report filters.
+                </p>
+              </div>
+              <div className="relative w-60 sm:w-64 print:hidden mt-[30px]">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search name or student ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-9 w-full pl-9 text-sm"
+                />
+              </div>
             </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+            <div className="flex flex-wrap items-center gap-2 print:hidden md:-mt-1">
+
+              {/* Reset all shortcut if active filters exist */}
               {hasActiveFilters && (
                 <button
                   onClick={resetFilters}
-                  className="flex items-center justify-center gap-1.5 rounded-md border border-outline-variant/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground sm:justify-start sm:border-0 sm:px-0 sm:py-0"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary font-medium mr-2"
                 >
-                  <RotateCcw className="w-3 h-3" />
+                  <RotateCcw className="w-3.5 h-3.5" />
                   Reset all
                 </button>
               )}
-              <Button onClick={handlePrint} size="sm" variant="outline" className="w-full gap-2 sm:w-auto sm:shrink-0">
+              {/* Consolidated Popover Filters Dropdown */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+                    <span>Filters</span>
+                    {activeFiltersCount > 0 && (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-white">
+                        {activeFiltersCount}
+                      </span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-[680px] max-w-[90vw] p-5 space-y-5 shadow-lg border border-outline-variant/50 bg-white z-50">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h3 className="font-semibold text-sm">Filter Options</h3>
+                    {hasActiveFilters && (
+                      <button
+                        onClick={resetFilters}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary font-medium"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Reset all
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Group 1: Student Info */}
+                  <FilterSection label="Student">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <LabeledSelect label="Gender" value={genderFilter} onValueChange={setGenderFilter} placeholder="Gender">
+                        <SelectItem value="all">All Genders</SelectItem>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </LabeledSelect>
+                      <LabeledSelect label="Year Level" value={yearFilter} onValueChange={setYearFilter} placeholder="Year">
+                        <SelectItem value="all">All Years</SelectItem>
+                        {Object.entries(YEAR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                      </LabeledSelect>
+                    </div>
+                  </FilterSection>
+
+                  <div className="border-t border-outline-variant/20" />
+
+                  {/* Group 2: Academic & Status */}
+                  <FilterSection label="Academic & Status">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <LabeledSelect label="Department" value={departmentFilter} onValueChange={setDepartmentFilter} placeholder="Department">
+                        <SelectItem value="all">All Departments</SelectItem>
+                        {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                      </LabeledSelect>
+                      <LabeledSelect label="Program" value={courseFilter} onValueChange={setCourseFilter} placeholder="Program">
+                        <SelectItem value="all">All Programs</SelectItem>
+                        {allCourses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </LabeledSelect>
+                      <LabeledSelect label="Clearance Status" value={statusFilter} onValueChange={setStatusFilter} placeholder="Clearance Status">
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="in_review">In Review</SelectItem>
+                        <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="returned">Returned</SelectItem>
+                      </LabeledSelect>
+                    </div>
+                  </FilterSection>
+
+                  <div className="border-t border-outline-variant/20" />
+
+                  {/* Group 3: Date Range */}
+                  <FilterSection label="Date Range">
+                    <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-sm sm:grid-cols-2">
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-xs text-muted-foreground font-medium">From</span>
+                        <Input
+                          type="date"
+                          className="h-9 text-sm"
+                          min={dateRange.minDate || undefined}
+                          max={today}
+                          value={fromDate}
+                          onChange={(e) => setFromDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-xs text-muted-foreground font-medium">To</span>
+                        <Input
+                          type="date"
+                          className="h-9 text-sm"
+                          min={dateRange.minDate || undefined}
+                          max={today}
+                          value={toDate}
+                          onChange={(e) => setToDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </FilterSection>
+                </PopoverContent>
+              </Popover>
+
+              <Button onClick={handlePrint} size="sm" variant="outline" className="gap-2">
                 <Printer className="w-4 h-4" />
                 Print
               </Button>
-              <Button onClick={exportXlsx} size="sm" className="w-full gap-2 bg-primary text-white hover:bg-primary/90 sm:w-auto sm:shrink-0">
+              <Button onClick={exportXlsx} size="sm" className="gap-2 bg-primary text-white hover:bg-primary/90">
                 <FileSpreadsheet className="w-4 h-4" />
                 Export Excel
               </Button>
             </div>
           </div>
         </CardHeader>
-
-        <CardContent className="px-5 pb-5 pt-5 space-y-5">
-
-          {/* ── Group 1: Student Info ──────────────────────────────────── */}
-          <FilterSection label="Student">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <LabeledSelect label="Department" value={departmentFilter} onValueChange={setDepartmentFilter} placeholder="Department">
-                <SelectItem value="all">All Departments</SelectItem>
-                {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-              </LabeledSelect>
-              <LabeledSelect label="Year Level" value={yearFilter} onValueChange={setYearFilter} placeholder="Year">
-                <SelectItem value="all">All Years</SelectItem>
-                {Object.entries(YEAR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-              </LabeledSelect>
-              <LabeledSelect label="Course" value={courseFilter} onValueChange={setCourseFilter} placeholder="Course">
-                <SelectItem value="all">All Courses</SelectItem>
-                {allCourses.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </LabeledSelect>
-              <LabeledSelect label="Student ID Batch" value={studentBatchFilter} onValueChange={setStudentBatchFilter} placeholder="Batch">
-                <SelectItem value="all">All Batches</SelectItem>
-                {studentBatches.map((batch) => <SelectItem key={batch} value={batch}>{batch}</SelectItem>)}
-              </LabeledSelect>
-            </div>
-          </FilterSection>
-
-          <div className="border-t border-outline-variant/20" />
-
-          {/* ── Group 2: Submission Info ───────────────────────────────── */}
-          <FilterSection label="Submission">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <LabeledSelect label="Status" value={statusFilter} onValueChange={setStatusFilter} placeholder="Status">
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in_review">In Review</SelectItem>
-                <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="returned">Returned</SelectItem>
-              </LabeledSelect>
-              <LabeledSelect label="Certificate" value={certificateFilter} onValueChange={setCertificateFilter} placeholder="Certificate">
-                <SelectItem value="all">All Certificates</SelectItem>
-                <SelectItem value="issued">Issued Only</SelectItem>
-                <SelectItem value="not_issued">Not Issued</SelectItem>
-              </LabeledSelect>
-              <LabeledSelect label="Medical Condition" value={conditionFilter} onValueChange={setConditionFilter} placeholder="Condition">
-                <SelectItem value="all">All Conditions</SelectItem>
-                {allConditions.map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {k.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase())}
-                  </SelectItem>
-                ))}
-              </LabeledSelect>
-              <LabeledSelect label="Gender" value={genderFilter} onValueChange={setGenderFilter} placeholder="Gender">
-                <SelectItem value="all">All Genders</SelectItem>
-                <SelectItem value="male">Male</SelectItem>
-                <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </LabeledSelect>
-            </div>
-          </FilterSection>
-
-          <div className="border-t border-outline-variant/20" />
-
-          {/* ── Group 3: Date Range ────────────────────────────────────── */}
-          <FilterSection label="Date Range">
-            <div className="grid max-w-none grid-cols-1 gap-3 sm:max-w-sm sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground font-medium">From</span>
-                <Input
-                  type="date"
-                  className="h-9 text-sm"
-                  min={dateRange.minDate || undefined}
-                  max={today}
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground font-medium">To</span>
-                <Input
-                  type="date"
-                  className="h-9 text-sm"
-                  min={dateRange.minDate || undefined}
-                  max={today}
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                />
-              </div>
-            </div>
-          </FilterSection>
-
-        </CardContent>
-      </Card>
-
-      {/* ── Master Records Table ──────────────────────────────────────── */}
-      <Card className="border-outline-variant/30 print:border-0 print:bg-white print:shadow-none">
-        <CardHeader className="pb-0 pt-5 px-5 print:px-0 print:pt-2">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <CardTitle className="text-base font-semibold print:text-sm print:text-black">Filtered Clinical Records</CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground print:text-black">
-                {reportTableRows.length} student records matched the current report filters.
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground print:hidden">
-              Lab status summarizes X-Ray, CBC, and urinalysis results from the mapped submission record.
-            </p>
+        <CardContent className="px-5 pb-5 pt-1 print:px-0 print:pb-0">
+          <div className="hidden print:block mb-4 print:-mt-[3.5px]">
+            <h2 className="text-[25px] font-bold text-left text-black leading-none">
+              Summary of Submitted Records
+            </h2>
           </div>
-        </CardHeader>
-        <CardContent className="px-5 pb-5 pt-4 print:px-0 print:pb-0">
-          <div className="overflow-x-auto rounded-lg border border-outline-variant/40 print:overflow-visible print:rounded-none print:border-black">
-            <table className="min-w-[66rem] w-full border-collapse text-left text-sm print:min-w-0 print:text-[10px]">
-              <thead className="bg-surface-container-low text-xs uppercase tracking-wide text-on-surface-variant print:bg-white print:text-black">
+          <div className="overflow-x-auto rounded-lg border border-outline-variant/40 print:overflow-visible print:rounded-none print:border-[1.5px] print:border-black/70">
+            <table className="min-w-[66rem] w-full border-collapse text-left text-sm print:min-w-0 print:text-[8.5px] print:text-center">
+              <thead className="bg-surface-container-low text-xs uppercase tracking-wide text-on-surface-variant print:bg-white print:text-black print:text-[8px]">
                 <tr>
                   {[
                     'Student ID',
                     'Full Name',
-                    'Course/Dept',
+                    'Age',
+                    'Gender',
+                    'Dept / Program',
+                    'Year Level',
                     'Submission Date',
-                    'Lab Status (X-Ray/CBC/Urinalysis)',
-                    'Physical Exam Status',
-                    'Issued Certificates',
+                    'Clearance Status',
+                    'Issuance Date',
                   ].map((heading) => (
-                    <th key={heading} scope="col" className="border-b border-outline-variant/50 px-3 py-3 font-semibold print:border print:border-black print:px-1.5 print:py-1">
+                    <th key={heading} scope="col" className="border-b border-outline-variant/50 px-3 py-3 font-semibold print:border-[1.5px] print:border-black/70 print:px-1 print:py-1">
                       {heading}
                     </th>
                   ))}
@@ -1702,226 +1718,254 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               <tbody className="divide-y divide-outline-variant/30 print:divide-y-0">
                 {reportTableRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-muted-foreground print:border print:border-black print:text-black">
+                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground print:border-[1.5px] print:border-black/70 print:text-black">
                       No records matched the selected filters.
                     </td>
                   </tr>
                 ) : (
-                  reportTableRows.map((row) => (
-                    <tr key={`${row.studentId}-${row.submissionDate}-${row.fullName}`} className="bg-white/60 print:bg-white">
-                      <td className="whitespace-nowrap px-3 py-3 font-medium text-on-surface print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.studentId}</td>
-                      <td className="min-w-48 px-3 py-3 text-on-surface print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.fullName}</td>
-                      <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.courseDept}</td>
-                      <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.submissionDate}</td>
-                      <td className="min-w-72 px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.labStatus}</td>
-                      <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.physicalExamStatus}</td>
-                      <td className="min-w-44 px-3 py-3 text-on-surface-variant print:border print:border-black print:px-1.5 print:py-1 print:text-black">{row.issuedCertificates}</td>
+                  <>
+                    {reportTableRows.map((row, index) => {
+                      const isPaged = index >= (currentPage - 1) * 10 && index < currentPage * 10;
+                      return (
+                        <tr
+                          key={`${row.studentId}-${row.submissionDate}-${row.fullName}`}
+                          className={`bg-white/60 print:bg-white ${isPaged ? '' : 'hidden print:table-row'}`}
+                        >
+                          <td className="whitespace-nowrap px-3 py-3 font-medium text-on-surface print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.studentId}</td>
+                          <td className="min-w-48 px-3 py-3 text-on-surface print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black print:min-w-0">{row.fullName}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.age}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.gender}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.deptProgram}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.yearLevel}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.submissionDate}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${row.clearanceStatus === 'Cleared' ? 'bg-primary/10 text-primary' :
+                              row.clearanceStatus === 'Returned' ? 'bg-rose-100 text-rose-700' :
+                                'bg-amber-100 text-amber-700'
+                              } print:bg-transparent print:text-black print:px-0 print:py-0 print:font-normal print:text-[8.5px]`}>
+                              {row.clearanceStatus}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-on-surface-variant print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black">{row.issuanceDate}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="hidden print:table-row bg-white/80 font-bold text-on-surface print:bg-white print:text-black print:font-bold">
+                      <td className="whitespace-nowrap px-3 py-3 font-bold text-on-surface print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black print:font-bold">Total</td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="px-3 py-3 print:border-[1.5px] print:border-black/70 print:px-1 print:py-1"></td>
+                      <td className="whitespace-nowrap px-3 py-3 font-bold text-on-surface print:border-[1.5px] print:border-black/70 print:px-1 print:py-1 print:text-black print:font-bold">{reportTableRows.length}</td>
                     </tr>
-                  ))
+                  </>
                 )}
               </tbody>
             </table>
           </div>
+          <div className="print:hidden">
+            <ListPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={reportTableRows.length}
+              pageSize={10}
+              pageSizeOptions={[10]}
+              itemLabel="records"
+              onPageChange={setCurrentPage}
+              onPageSizeChange={() => { }}
+            />
+          </div>
         </CardContent>
       </Card>
 
-      {/* ── Charts ────────────────────────────────────────────────────── */}
+      {/* ── Clinical Analytics ──────────────────────────────────────── */}
       <div className="space-y-4 print:hidden">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,0.8fr)]">
+        {/* Row 1: Student Demographics & Approval Rate Trend */}
+        <div className="grid gap-4 xl:grid-cols-2">
+          {/* Card 1: Student Demographics Breakdown */}
           <Card className="border-outline-variant/30">
-            <CardHeader className="pb-0 pt-5 px-5">
-              <CardTitle className="text-base font-semibold">Submission Volume Trend</CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">Auto-groups by day, week, or month based on the selected date range.</p>
+            <CardHeader className="pb-0 pt-5 px-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold">Student Demographics Breakdown</CardTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground">Total count of students matching the current report filters, grouped by selection.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-medium">Group by:</span>
+                <Select value={studentBreakdownView} onValueChange={(v: any) => setStudentBreakdownView(v)}>
+                  <SelectTrigger className="w-40 h-8 text-xs bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="year">Year Level</SelectItem>
+                    <SelectItem value="gender">Gender</SelectItem>
+                    <SelectItem value="department">Department</SelectItem>
+                    <SelectItem value="program">Program</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent className="px-5 pb-5 pt-4">
-              {submissionsByDate.length === 0 ? (
-                <EmptyChartState message="No timeline data available for the selected filters." />
+              {studentBreakdownData.length === 0 ? (
+                <EmptyChartState message="No demographic data available for the selected filters." />
               ) : (
-                <div className="h-72">
+                <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={submissionsByDate} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
+                    <BarChart data={studentBreakdownData} margin={{ top: 18, right: 12, left: -14, bottom: 0 }}>
                       <CartesianGrid stroke={CHART_GRID} strokeOpacity={0.6} vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART_TEXT }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: CHART_TEXT }} tickLine={false} axisLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: CHART_TEXT }} tickLine={false} axisLine={false} allowDecimals={false} />
-                      <Tooltip content={<CustomTimelineTooltip />} cursor={{ stroke: CHART_GRID, strokeWidth: 1 }} />
-                      <Area
-                        type="monotone"
-                        dataKey="count"
-                        stroke={CHART_PRIMARY}
-                        strokeWidth={2.5}
-                        fill={CHART_PRIMARY_SOFT}
-                        fillOpacity={0.18}
-                        activeDot={{ r: 5, fill: CHART_PRIMARY, strokeWidth: 0 }}
+                      <Tooltip content={<CustomDemographicTooltip />} cursor={{ fill: 'rgba(0, 109, 60, 0.04)' }} />
+                      <Bar dataKey="count" name="Students" radius={[6, 6, 0, 0]} maxBarSize={50}>
+                        {studentBreakdownData.map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                        <LabelList dataKey="count" position="top" fill={CHART_TEXT} fontSize={11} fontWeight={600} offset={8} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Clearance Approval Rate Line Graph */}
+          <Card className="border-outline-variant/30">
+            <CardHeader className="pb-0 pt-5 px-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold">Clearance Approval Rate Trend</CardTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground">Monthly percentage trend of student submissions approved and cleared.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-medium">Group by:</span>
+                <Select value={approvalRateGroupBy} onValueChange={(v: any) => setApprovalRateGroupBy(v)}>
+                  <SelectTrigger className="w-40 h-8 text-xs bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="overall">Overall</SelectItem>
+                    <SelectItem value="year">Year Level</SelectItem>
+                    <SelectItem value="department">Department</SelectItem>
+                    <SelectItem value="gender">Gender</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-4">
+              {monthlyRateData.length === 0 ? (
+                <EmptyChartState message="No monthly rate data available for the selected filters." />
+              ) : (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={monthlyRateData} margin={{ top: 18, right: 24, left: -14, bottom: 0 }}>
+                      <defs>
+                        {approvalRateSeries.map((series) => (
+                          <linearGradient
+                            key={series.name}
+                            id={`approval-rate-${series.name.replace(/\s+/g, '-')}`}
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop offset="5%" stopColor={series.color} stopOpacity={0.25} />
+                            <stop offset="95%" stopColor={series.color} stopOpacity={0.02} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <CartesianGrid stroke={CHART_GRID} strokeOpacity={0.6} vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART_TEXT }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: CHART_TEXT }} tickLine={false} axisLine={false} allowDecimals={false} domain={[0, 100]} unit="%" />
+                      <Tooltip content={<CustomApprovalRateTooltip />} cursor={{ stroke: CHART_GRID, strokeWidth: 1 }} />
+                      <Legend
+                        iconType="circle"
+                        iconSize={8}
+                        verticalAlign="bottom"
+                        align="center"
+                        wrapperStyle={{ paddingTop: 12 }}
+                        formatter={(value: string) => (
+                          <span className="text-xs font-medium text-on-surface-variant mr-3">
+                            {value}
+                          </span>
+                        )}
                       />
+                      {approvalRateSeries.map((series) => (
+                        <Area
+                          key={series.name}
+                          type="monotone"
+                          dataKey={series.name}
+                          name={series.name}
+                          stroke={series.color}
+                          strokeWidth={2.5}
+                          fill={`url(#approval-rate-${series.name.replace(/\s+/g, '-')})`}
+                          fillOpacity={1}
+                          dot={(props: any) => {
+                            if (props.index === 0) return <g />;
+                            return (
+                              <circle
+                                key={`dot-${series.name}-${props.index}`}
+                                cx={props.cx}
+                                cy={props.cy}
+                                r={4}
+                                stroke={props.stroke}
+                                strokeWidth={2}
+                                fill="#ffffff"
+                              />
+                            );
+                          }}
+                          activeDot={(props: any) => {
+                            if (props.index === 0) return <g />;
+                            return (
+                              <circle
+                                key={`active-dot-${series.name}-${props.index}`}
+                                cx={props.cx}
+                                cy={props.cy}
+                                r={6}
+                                stroke={props.stroke}
+                                strokeWidth={2}
+                                fill="#ffffff"
+                              />
+                            );
+                          }}
+                        />
+                      ))}
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               )}
             </CardContent>
           </Card>
-
-          <Card className="border-outline-variant/30">
-            <CardHeader className="pb-0 pt-5 px-5">
-              <CardTitle className="text-base font-semibold">Review Pipeline</CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">Share of filtered submissions by current status.</p>
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-4">
-              <StatusPipeline items={statusChartData} />
-            </CardContent>
-          </Card>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(22rem,0.82fr)]">
-          <Card className="border-outline-variant/30">
-            <CardHeader className="pb-0 pt-5 px-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="text-base font-semibold">
-                    Current-Term Submissions by {submissionBreakdownView === 'department' ? 'Department' : 'Program'}
-                  </CardTitle>
-                  <p className="mt-0.5 text-xs text-muted-foreground">Filtered records inside {reportingTermRange.label}.</p>
-                </div>
-                <div className="w-full sm:w-44">
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">Group by</p>
-                  <Select value={submissionBreakdownView} onValueChange={(value) => setSubmissionBreakdownView(value as SubmissionBreakdownView)}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Choose chart view" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="department">Department</SelectItem>
-                      <SelectItem value="program">Program</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-4">
-              {submissionBreakdownView === 'program' && submissionBreakdownData.length === 0 ? (
-                <EmptyChartState message="No current-term program submissions are available for the selected filters." />
-              ) : (
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={submissionBreakdownData} margin={{ top: 18, right: 8, left: -16, bottom: 0 }}>
-                      <CartesianGrid stroke={CHART_GRID} strokeOpacity={0.6} vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: CHART_TEXT }} tickLine={false} axisLine={false} interval={0} />
-                      <YAxis tick={{ fontSize: 11, fill: CHART_TEXT }} tickLine={false} axisLine={false} allowDecimals={false} domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]} />
-                      <Tooltip content={<CustomBarTooltip />} cursor={{ fill: 'rgba(0, 109, 60, 0.05)' }} />
-                      <Bar dataKey="count" radius={[8, 8, 0, 0]} maxBarSize={52}>
-                        {submissionBreakdownData.map((entry) => (
-                          <Cell key={entry.label} fill={entry.fill} />
-                        ))}
-                        <LabelList dataKey="count" content={<DepartmentBarValueLabel />} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      </div>
 
-          <Card className="border-outline-variant/30">
-            <CardHeader className="pb-0 pt-5 px-5">
-              <CardTitle className="text-base font-semibold">Year-Level Distribution</CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">Student record mix across academic levels.</p>
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-4">
-              {summary.total === 0 ? (
-                <EmptyChartState message="No year-level data available for the selected filters." />
-              ) : (
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={yearLevelData} layout="vertical" margin={{ top: 4, right: 18, left: 12, bottom: 4 }}>
-                      <CartesianGrid stroke={CHART_GRID} strokeOpacity={0.55} horizontal={false} />
-                      <XAxis type="number" hide domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: CHART_TEXT }} tickLine={false} axisLine={false} width={72} />
-                      <Tooltip content={<CustomDonutTooltip />} cursor={{ fill: 'rgba(0, 109, 60, 0.05)' }} />
-                      <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={24}>
-                        {yearLevelData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                        <LabelList dataKey="value" position="right" fill={CHART_TEXT} fontSize={12} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      {/* ── Custom Print-Only Styles and Footer ── */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @media print {
+          @page {
+            size: auto;
+            margin: 0;
+          }
+          body {
+            padding: 1.6cm 1.6cm 1.8cm 1.6cm !important;
+            background-color: #fff !important;
+          }
+          tr {
+            break-inside: avoid;
+          }
+          thead {
+            display: table-header-group;
+          }
+        }
+      `}} />
+      <div className="hidden print:flex flex-col fixed bottom-[1.2cm] left-[1.6cm] right-[1.6cm] text-[8.5px] text-black/50 font-sans">
+        <div className="flex justify-between items-end border-t border-black/15 pt-1">
+          <span className="leading-none">https://clinicka.vercel.app</span>
+          <span className="leading-none">ClinicKa!</span>
         </div>
-
-        <div className="grid gap-4 xl:grid-cols-3">
-          <Card className="border-outline-variant/30">
-            <CardHeader className="pb-0 pt-5 px-5">
-              <CardTitle className="text-base font-semibold">Certificate Coverage</CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">Issued certificates against filtered submissions.</p>
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-4">
-              {certificateChartData.length === 0 ? (
-                <EmptyChartState message="No certificate data available for the selected filters." />
-              ) : (
-                <div className="h-60">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={certificateChartData} cx="50%" cy="48%" innerRadius="58%" outerRadius="78%" dataKey="value" paddingAngle={2} strokeWidth={0}>
-                        {certificateChartData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<CustomDonutTooltip />} />
-                      <Legend iconType="circle" iconSize={9} formatter={(value) => <span style={{ fontSize: 12, color: CHART_TEXT }}>{value}</span>} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-outline-variant/30">
-            <CardHeader className="pb-0 pt-5 px-5">
-              <CardTitle className="text-base font-semibold">Gender Mix</CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">Filtered submissions by recorded sex/gender.</p>
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-4">
-              {genderChartData.length === 0 ? (
-                <EmptyChartState message="No gender data available for the selected filters." />
-              ) : (
-                <div className="h-60">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={genderChartData} cx="50%" cy="48%" innerRadius="50%" outerRadius="76%" dataKey="value" paddingAngle={3} strokeWidth={0}>
-                        {genderChartData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<CustomDonutTooltip />} />
-                      <Legend iconType="circle" iconSize={9} formatter={(value) => <span style={{ fontSize: 12, color: CHART_TEXT }}>{value}</span>} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-outline-variant/30">
-            <CardHeader className="pb-0 pt-5 px-5">
-              <CardTitle className="text-base font-semibold">Top Programs</CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">Highest-volume programs in the filtered set.</p>
-            </CardHeader>
-            <CardContent className="px-5 pb-5 pt-4">
-              <ProgressList items={topPrograms} emptyMessage="No program data available for the selected filters." />
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="border-outline-variant/30">
-          <CardHeader className="pb-0 pt-5 px-5">
-            <CardTitle className="text-base font-semibold">Medical History Prevalence</CardTitle>
-            <p className="mt-0.5 text-xs text-muted-foreground">Most common declared conditions among filtered submissions.</p>
-          </CardHeader>
-          <CardContent className="px-5 pb-5 pt-4">
-            <ProgressList items={conditionPrevalenceData} emptyMessage="No declared medical-history conditions are present in the selected filters." />
-          </CardContent>
-        </Card>
       </div>
 
     </div>

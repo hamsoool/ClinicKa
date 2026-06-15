@@ -71,7 +71,7 @@ export default function PasswordChangeCard({
   };
 
   return (
-    <Card id="password" className="scroll-mt-24 overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
+    <Card id="password" className="scroll-mt-24 overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest !gap-0">
       <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
         <div className="flex items-center gap-3">
           <LockKeyhole className="h-5 w-5 text-primary" />
@@ -81,7 +81,7 @@ export default function PasswordChangeCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-6">
+      <CardContent className="pt-4">
         <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
           <div className="min-w-0 md:col-span-2">
             <Label htmlFor="currentPassword">Current Password</Label>

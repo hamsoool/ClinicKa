@@ -4541,26 +4541,39 @@ async function getRegisteredStudentReportSummaries(): Promise<StudentAccountSumm
     getArchivedReportProfileIds(),
   ]);
   const studentById = new Map<string, any>();
+  const studentByProfileId = new Map<string, any>();
 
   (studentRows || []).forEach((student) => {
     const studentId = String(student?.student_id || '').trim();
-    if (!studentId) return;
-    studentById.set(studentId, student);
+    const profileId = String(student?.profile_id || '').trim();
+    if (studentId) {
+      studentById.set(studentId, student);
+    }
+    if (profileId) {
+      studentByProfileId.set(profileId, student);
+    }
   });
 
   const studentsByReportId = new Map<string, StudentAccountSummary>();
+  const reportProfileIds = new Set<string>();
 
   (profileRows || []).forEach((profile) => {
     const profileId = String(profile?.id || '').trim();
     if (profileId && archivedProfileIds.has(profileId)) return;
 
-    const studentId = String(profile?.student_id || profileId || '').trim();
+    const profileStudentId = String(profile?.student_id || '').trim();
+    const student = (profileStudentId && studentById.get(profileStudentId)) || (profileId && studentByProfileId.get(profileId)) || {};
+    const studentId = String(profileStudentId || student?.student_id || profileId || '').trim();
     if (!studentId) return;
 
-    const student = studentById.get(String(profile?.student_id || '').trim()) || {};
+    const resolvedProfileId = profileId || String(student?.profile_id || '').trim();
+    if (resolvedProfileId) {
+      reportProfileIds.add(resolvedProfileId);
+    }
+
     studentsByReportId.set(studentId, {
       studentId,
-      profileId: profileId || String(student?.profile_id || '').trim() || undefined,
+      profileId: resolvedProfileId || undefined,
       firstName: student.first_name || profile.first_name || undefined,
       lastName: student.last_name || profile.last_name || undefined,
       department: student.department || profile.department || undefined,
@@ -4577,6 +4590,7 @@ async function getRegisteredStudentReportSummaries(): Promise<StudentAccountSumm
     const profileId = String(student?.profile_id || '').trim();
     if (!studentId || studentsByReportId.has(studentId)) return;
     if (profileId && archivedProfileIds.has(profileId)) return;
+    if (profileId && reportProfileIds.has(profileId)) return;
 
     studentsByReportId.set(studentId, {
       studentId,
@@ -4599,6 +4613,21 @@ export async function getSubmissionReportSummaries(): Promise<{
   submissions: SubmissionRecord[];
   registeredStudents: StudentAccountSummary[];
 }> {
+  try {
+    return await apiRequest<{
+      submissions: SubmissionRecord[];
+      registeredStudents: StudentAccountSummary[];
+    }>('/functions/v1/server/staff/submission-report-summaries');
+  } catch (error) {
+    const isMissingRoute =
+      (error instanceof ApiRequestError && error.status === 404) ||
+      (error instanceof Error && error.message.toLowerCase().includes('not found'));
+
+    if (!isMissingRoute) {
+      throw error;
+    }
+  }
+
   const [submissionRows, registeredStudents] = await Promise.all([
     getPagedRestRows<any>('submissions', (pageSize, offset) => (
       `select=id,student_id,department,course,year_level,sex,status,submitted_at,updated_at,academic_year&order=submitted_at.desc&limit=${pageSize}&offset=${offset}`

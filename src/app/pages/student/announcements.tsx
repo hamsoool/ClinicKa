@@ -46,7 +46,7 @@ export default function StudentAnnouncements() {
 
   if (isError) {
     return (
-      <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
+      <div className="mx-auto w-full max-w-[100rem] space-y-4 sm:space-y-5">
         {pageIntro}
         <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-6 text-sm text-on-surface-variant">
           We could not load announcements right now. Please try again in a moment.
@@ -57,7 +57,7 @@ export default function StudentAnnouncements() {
 
   if (!announcements.length) {
     return (
-      <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
+      <div className="mx-auto w-full max-w-[100rem] space-y-4 sm:space-y-5">
         {pageIntro}
         <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-6 text-sm text-on-surface-variant">
           No announcements posted yet.
@@ -67,7 +67,7 @@ export default function StudentAnnouncements() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
+    <div className="mx-auto w-full max-w-[100rem] space-y-4 sm:space-y-5">
       {pageIntro}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(24rem,0.75fr)] xl:items-start">
         <article className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">

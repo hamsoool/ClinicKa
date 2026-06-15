@@ -308,12 +308,10 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
   const formHeading = form.id ? 'Edit Announcement' : 'Create Announcement';
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto w-full max-w-[100rem] px-4 py-8 sm:px-6">
-        <PortalPageIntro
-          className="mb-8"
-          title="Announcements"
-        />
+    <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-5 sm:space-y-6">
+      <PortalPageIntro
+        title="Announcements"
+      />
 
         <section className="grid gap-6 xl:grid-cols-[minmax(22rem,24rem)_minmax(0,1fr)] xl:items-start">
           {/* Form Section */}
@@ -537,7 +535,6 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
             )}
           </div>
         </section>
-      </div>
 
       <ConfirmationModal
         action={confirmAction}

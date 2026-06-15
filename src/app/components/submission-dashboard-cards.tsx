@@ -12,8 +12,10 @@ import {
   YAxis,
   type TooltipProps,
 } from 'recharts';
-import { Menu } from 'lucide-react';
+import { CalendarDays, Menu } from 'lucide-react';
 import type { StudentAccountSummary, SubmissionRecord, SubmissionStatus } from '../lib/record-types';
+import { getAcademicYearRange, getRecordAcademicYear } from '../lib/academic-year';
+import { useAcademicYear } from '../lib/academic-year-query';
 import { getYearLevelLabel } from '../lib/student-year';
 import {
   DropdownMenu,
@@ -24,6 +26,7 @@ import {
 } from './ui/dropdown-menu';
 
 type AnalyticsView = 'year' | 'gender' | 'department';
+type DonutDateFilter = 'day' | 'week' | 'month' | 'schoolYear';
 
 type AnalyticsSeries = {
   key: string;
@@ -69,11 +72,24 @@ type NoActionStudent = StudentAccountSummary & {
 
 const ANALYTICS_VIEW_LABELS: Record<AnalyticsView, string> = {
   year: 'Year Level',
-  gender: 'Gender (Sex at birth)',
+  gender: 'Gender',
   department: 'Department',
 };
 
 const SERIES_COLORS = ['#006d3c', '#12b76a', '#3d8f66', '#85cfa4', '#5d7c68', '#e5a93a', '#d26d6d', '#6d7b6e'];
+const DEPARTMENT_COLORS: Record<string, string> = {
+  CCS: '#FF7F3F',
+  CBA: '#FBDF07',
+  CEAS: '#406093',
+  CHTM: '#FCB7C7',
+  CAHS: '#DE3E3E',
+};
+const GENDER_COLORS: Record<string, string> = {
+  male: '#9ED3DC',
+  female: '#FCB7C7',
+  other: '#85f6ae',
+  unspecified: '#d8e4d7',
+};
 const STATUS_SEGMENT_COLORS = {
   submissions: '#006d3c',
   pending: '#e5a93a',
@@ -85,6 +101,12 @@ const STATUS_METRIC_LABELS: Record<StatusMetricKey, string> = {
   pending: 'Pending',
   returned: 'Returned',
   noAction: 'No Action Taken',
+};
+const DONUT_FILTER_LABELS: Record<DonutDateFilter, string> = {
+  day: 'Daily',
+  week: 'Weekly',
+  month: 'Monthly',
+  schoolYear: 'Yearly',
 };
 
 const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'short' });
@@ -172,12 +194,23 @@ function getSeriesForView(submissions: SubmissionRecord[], view: AnalyticsView) 
 
       return a.localeCompare(b);
     })
-    .map((value, index) => ({
-      key: normalizeSeriesKey(view, value),
-      rawValue: value,
-      label: getSubmissionGroupLabel(value, view),
-      color: SERIES_COLORS[index % SERIES_COLORS.length],
-    }));
+    .map((value, index) => {
+      let color = SERIES_COLORS[index % SERIES_COLORS.length];
+      if (view === 'department') {
+        const dept = String(value || '').trim().toUpperCase();
+        if (DEPARTMENT_COLORS[dept]) color = DEPARTMENT_COLORS[dept];
+      } else if (view === 'gender') {
+        const gender = String(value || '').trim().toLowerCase();
+        if (GENDER_COLORS[gender]) color = GENDER_COLORS[gender];
+      }
+
+      return {
+        key: normalizeSeriesKey(view, value),
+        rawValue: value,
+        label: getSubmissionGroupLabel(value, view),
+        color,
+      };
+    });
 }
 
 function getMonthKey(date: Date) {
@@ -203,6 +236,37 @@ function getValidTimestamp(value?: string) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
+function getDayStart(referenceDate = new Date()) {
+  return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+}
+
+function getWeekStart(referenceDate = new Date()) {
+  const start = getDayStart(referenceDate);
+  const dayOfWeek = start.getDay();
+  const weekOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  start.setDate(start.getDate() + weekOffset);
+  return start;
+}
+
+function getNextDayStart(referenceDate = new Date()) {
+  const end = getDayStart(referenceDate);
+  end.setDate(end.getDate() + 1);
+  return end;
+}
+
+function getMonthStart(referenceDate = new Date()) {
+  return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+}
+
+function getNextMonthStart(referenceDate = new Date()) {
+  return new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 1);
+}
+
+function isDateInRange(value: string | undefined, start: Date, end: Date) {
+  const timestamp = getValidTimestamp(value);
+  return timestamp >= start.getTime() && timestamp < end.getTime();
+}
+
 function getStudentKey(value?: string) {
   return String(value || '').trim();
 }
@@ -216,8 +280,7 @@ function buildNoActionStudents(
   registeredStudents: StudentAccountSummary[],
 ): NoActionStudent[] {
   const registeredByStudentId = new Map<string, StudentAccountSummary>();
-  const submittedStudentIds = new Set<string>();
-  const returnedByStudentId = new Map<string, SubmissionRecord>();
+  const latestSubmissionByStudentId = new Map<string, SubmissionRecord>();
 
   registeredStudents.forEach((student) => {
     const studentId = getStudentKey(student.studentId);
@@ -228,14 +291,10 @@ function buildNoActionStudents(
   submissions.forEach((submission) => {
     const studentId = getStudentKey(submission.studentId);
     if (!studentId) return;
-    submittedStudentIds.add(studentId);
 
-    const status = String(submission.status || '').trim().toLowerCase();
-    if (!isStatus(status, ['returned'])) return;
-
-    const existing = returnedByStudentId.get(studentId);
+    const existing = latestSubmissionByStudentId.get(studentId);
     if (!existing || getValidTimestamp(getReturnedAt(submission)) > getValidTimestamp(getReturnedAt(existing))) {
-      returnedByStudentId.set(studentId, submission);
+      latestSubmissionByStudentId.set(studentId, submission);
     }
   });
 
@@ -243,7 +302,7 @@ function buildNoActionStudents(
 
   registeredStudents.forEach((student) => {
     const studentId = getStudentKey(student.studentId);
-    if (!studentId || submittedStudentIds.has(studentId)) return;
+    if (!studentId || latestSubmissionByStudentId.has(studentId)) return;
 
     noActionByStudentId.set(studentId, {
       ...student,
@@ -252,7 +311,10 @@ function buildNoActionStudents(
     });
   });
 
-  returnedByStudentId.forEach((submission, studentId) => {
+  latestSubmissionByStudentId.forEach((submission, studentId) => {
+    const status = String(submission.status || '').trim().toLowerCase();
+    if (!isStatus(status, ['returned'])) return;
+
     const registeredStudent = registeredByStudentId.get(studentId);
 
     noActionByStudentId.set(studentId, {
@@ -398,6 +460,43 @@ function buildDonutData(submissions: SubmissionRecord[], noActionStudents: NoAct
   ];
 }
 
+function filterSubmissionsByDonutDateRange(
+  submissions: SubmissionRecord[],
+  filter: DonutDateFilter,
+  academicYear: string,
+) {
+  if (filter === 'schoolYear') {
+    return submissions.filter((submission) => getRecordAcademicYear(submission, academicYear) === academicYear);
+  }
+
+  const today = new Date();
+  const range =
+    filter === 'day'
+      ? { start: getDayStart(today), end: getNextDayStart(today) }
+      : filter === 'week'
+        ? { start: getWeekStart(today), end: getNextDayStart(today) }
+        : { start: getMonthStart(today), end: getNextMonthStart(today) };
+
+  return submissions.filter((submission) => isDateInRange(submission.submittedAt, range.start, range.end));
+}
+
+function filterNoActionStudentsByDonutDateRange(
+  noActionStudents: NoActionStudent[],
+  filter: DonutDateFilter,
+  academicYear: string,
+) {
+  if (filter !== 'schoolYear') {
+    return noActionStudents;
+  }
+
+  const currentAcademicYearRange = getAcademicYearRange(academicYear);
+
+  return noActionStudents.filter((student) => {
+    const timestamp = getValidTimestamp(student.noActionAt || student.registeredAt);
+    return !timestamp || timestamp < currentAcademicYearRange.end.getTime();
+  });
+}
+
 function hasAnalyticsValues(data: AnalyticsDatum[], series: AnalyticsSeries[]) {
   return data.some((row) => series.some((item) => Number(row[item.key] || 0) > 0));
 }
@@ -407,26 +506,36 @@ type SubmissionAreaTooltipProps = TooltipProps<number, string> & {
 };
 
 function SubmissionAreaTooltip({ active, label, payload, hoveredSeriesKey }: SubmissionAreaTooltipProps) {
-  const entry = hoveredSeriesKey
-    ? payload?.find((item) => String(item.dataKey) === hoveredSeriesKey)
-    : undefined;
-
-  if (!active || !entry) {
+  if (!active || !payload || payload.length === 0) {
     return null;
   }
 
   return (
-    <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 shadow-sm">
+    <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-lowest px-3.5 py-2.5 shadow-sm space-y-2.5 min-w-36">
       <p className="text-sm font-semibold text-on-surface">{label}</p>
-      <div className="mt-2 flex items-center justify-between gap-5 text-xs">
-        <span className="flex items-center gap-2 text-on-surface-variant">
-          <span
-            className="h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: entry.color || '#006d3c' }}
-          />
-          {entry.name}
-        </span>
-        <span className="font-semibold text-on-surface">{formatNumber(Number(entry.value || 0))}</span>
+      <div className="space-y-1.5">
+        {payload.map((entry) => {
+          const isHovered = hoveredSeriesKey === entry.dataKey;
+          return (
+            <div
+              key={String(entry.dataKey)}
+              className={`flex items-center justify-between gap-5 text-xs transition-opacity ${
+                hoveredSeriesKey && !isHovered ? 'opacity-40' : 'opacity-100'
+              }`}
+            >
+              <span className="flex items-center gap-2 text-on-surface-variant font-medium">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: entry.color || '#006d3c' }}
+                />
+                {entry.name}
+              </span>
+              <span className={`font-semibold ${isHovered ? 'text-primary font-bold' : 'text-on-surface'}`}>
+                {formatNumber(Number(entry.value || 0))}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -454,27 +563,56 @@ export default function SubmissionDashboardCards({
   submissions = [],
 }: SubmissionDashboardCardsProps) {
   const [analyticsView, setAnalyticsView] = useState<AnalyticsView>('year');
+  const [donutDateFilter, setDonutDateFilter] = useState<DonutDateFilter>('day');
   const [hoveredSeriesKey, setHoveredSeriesKey] = useState<string | null>(null);
+  const { academicYear } = useAcademicYear();
+
+  // Resolve submissions' sex from registered student profiles or gender field fallbacks
+  const resolvedSubmissions = useMemo(() => {
+    const studentMap = new Map<string, string>();
+    registeredStudents.forEach((student) => {
+      if (student.studentId && student.sex) {
+        studentMap.set(student.studentId.trim().toLowerCase(), student.sex);
+      }
+    });
+
+    return submissions.map((sub) => {
+      const studentId = String(sub.studentId || '').trim().toLowerCase();
+      const resolvedSex = sub.sex || (sub as any).gender || studentMap.get(studentId) || '';
+      return {
+        ...sub,
+        sex: resolvedSex,
+      };
+    });
+  }, [submissions, registeredStudents]);
 
   const selectedSeries = useMemo(
-    () => getSeriesForView(submissions, analyticsView),
-    [analyticsView, submissions],
+    () => getSeriesForView(resolvedSubmissions, analyticsView),
+    [analyticsView, resolvedSubmissions],
   );
   const selectedAnalyticsData = useMemo(
-    () => buildAnalyticsData(submissions, analyticsView, selectedSeries),
-    [analyticsView, selectedSeries, submissions],
+    () => buildAnalyticsData(resolvedSubmissions, analyticsView, selectedSeries),
+    [analyticsView, selectedSeries, resolvedSubmissions],
   );
   const noActionStudents = useMemo(
-    () => buildNoActionStudents(submissions, registeredStudents),
-    [registeredStudents, submissions],
+    () => buildNoActionStudents(resolvedSubmissions, registeredStudents),
+    [registeredStudents, resolvedSubmissions],
+  );
+  const filteredDonutSubmissions = useMemo(
+    () => filterSubmissionsByDonutDateRange(resolvedSubmissions, donutDateFilter, academicYear),
+    [academicYear, donutDateFilter, resolvedSubmissions],
+  );
+  const filteredNoActionStudents = useMemo(
+    () => filterNoActionStudentsByDonutDateRange(noActionStudents, donutDateFilter, academicYear),
+    [academicYear, donutDateFilter, noActionStudents],
   );
   const selectedDonutData = useMemo(
-    () => buildDonutData(submissions, noActionStudents),
-    [noActionStudents, submissions],
+    () => buildDonutData(filteredDonutSubmissions, filteredNoActionStudents),
+    [filteredDonutSubmissions, filteredNoActionStudents],
   );
   const statusMetrics = useMemo(
-    () => buildStatusMetrics(submissions, noActionStudents),
-    [noActionStudents, submissions],
+    () => buildStatusMetrics(resolvedSubmissions, noActionStudents),
+    [noActionStudents, resolvedSubmissions],
   );
   const donutTotal = useMemo(
     () => selectedDonutData.reduce((total, segment) => total + segment.value, 0),
@@ -516,7 +654,7 @@ export default function SubmissionDashboardCards({
                   Year Level
                 </DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="gender" className="rounded-[12px]">
-                  Gender (Sex at birth)
+                  Gender
                 </DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="department" className="rounded-[12px]">
                   Department
@@ -568,61 +706,68 @@ export default function SubmissionDashboardCards({
               </p>
             </div>
           ) : (
-            <div className="h-[19rem] w-full min-w-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={selectedAnalyticsData}
-                  margin={{ top: 16, right: 14, left: -18, bottom: 0 }}
-                  onMouseLeave={() => setHoveredSeriesKey(null)}
-                >
-                  <defs>
-                    {selectedSeries.map((series) => (
-                      <linearGradient key={series.key} id={`submission-${series.key}`} x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="5%" stopColor={series.color} stopOpacity={0.28} />
-                        <stop offset="95%" stopColor={series.color} stopOpacity={0.03} />
-                      </linearGradient>
-                    ))}
-                  </defs>
-                  <CartesianGrid stroke="var(--outline-variant)" strokeOpacity={0.55} vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#3d4a3f', fontSize: 12 }}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#3d4a3f', fontSize: 12 }}
-                    allowDecimals={false}
-                    domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]}
-                  />
-                  <Tooltip
-                    content={<SubmissionAreaTooltip hoveredSeriesKey={hoveredSeriesKey} />}
-                    cursor={{ stroke: '#006d3c', strokeOpacity: 0.16 }}
-                  />
-                  {selectedSeries.map((series) => {
-                    const isDimmed = Boolean(hoveredSeriesKey && hoveredSeriesKey !== series.key);
+            <div className="flex h-[19rem] flex-col w-full min-w-0">
+              <div className="mb-2.5 px-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant/80">
+                  Monthly Submission Volume Trend
+                </span>
+              </div>
+              <div className="min-h-0 flex-1 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={selectedAnalyticsData}
+                    margin={{ top: 16, right: 14, left: -18, bottom: 0 }}
+                    onMouseLeave={() => setHoveredSeriesKey(null)}
+                  >
+                    <defs>
+                      {selectedSeries.map((series) => (
+                        <linearGradient key={series.key} id={`submission-${series.key}`} x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="5%" stopColor={series.color} stopOpacity={0.28} />
+                          <stop offset="95%" stopColor={series.color} stopOpacity={0.03} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid stroke="var(--outline-variant)" strokeOpacity={0.55} vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#3d4a3f', fontSize: 12 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#3d4a3f', fontSize: 12 }}
+                      allowDecimals={false}
+                      domain={[0, (dataMax: number) => Math.max(1, Number(dataMax) || 0)]}
+                    />
+                    <Tooltip
+                      content={<SubmissionAreaTooltip hoveredSeriesKey={hoveredSeriesKey} />}
+                      cursor={{ stroke: '#006d3c', strokeOpacity: 0.16 }}
+                    />
+                    {selectedSeries.map((series) => {
+                      const isDimmed = Boolean(hoveredSeriesKey && hoveredSeriesKey !== series.key);
 
-                    return (
-                      <Area
-                        key={series.key}
-                        type="monotone"
-                        dataKey={series.key}
-                        name={series.label}
-                        stroke={series.color}
-                        strokeOpacity={isDimmed ? 0.3 : 1}
-                        strokeWidth={hoveredSeriesKey === series.key ? 3 : 2.25}
-                        fill={`url(#submission-${series.key})`}
-                        fillOpacity={isDimmed ? 0.18 : 1}
-                        activeDot={hoveredSeriesKey === series.key ? { r: 4, strokeWidth: 2, stroke: '#ffffff' } : false}
-                        onMouseEnter={() => setHoveredSeriesKey(series.key)}
-                        onMouseLeave={() => setHoveredSeriesKey(null)}
-                      />
-                    );
-                  })}
-                </AreaChart>
-              </ResponsiveContainer>
+                      return (
+                        <Area
+                          key={series.key}
+                          type="monotone"
+                          dataKey={series.key}
+                          name={series.label}
+                          stroke={series.color}
+                          strokeOpacity={isDimmed ? 0.3 : 1}
+                          strokeWidth={hoveredSeriesKey === series.key ? 3 : 2.25}
+                          fill={`url(#submission-${series.key})`}
+                          fillOpacity={isDimmed ? 0.18 : 1}
+                          activeDot={hoveredSeriesKey === series.key ? { r: 4, strokeWidth: 2, stroke: '#ffffff' } : false}
+                          onMouseEnter={() => setHoveredSeriesKey(series.key)}
+                          onMouseLeave={() => setHoveredSeriesKey(null)}
+                        />
+                      );
+                    })}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           )}
         </div>
@@ -640,11 +785,43 @@ export default function SubmissionDashboardCards({
       <section className="box-border flex min-h-[27rem] w-full min-w-0 flex-col rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6 sm:py-6">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-on-surface">Cleared</h2>
+            <h2 className="text-lg font-semibold text-on-surface">Submissions</h2>
             <p className="mt-1 text-xs text-on-surface-variant">
-              Status mix for records and idle student accounts.
+              Overview of existing records.
             </p>
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Filter cleared chart"
+                title="Filter cleared chart"
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-outline-variant/50 bg-surface-container-low px-3 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                {DONUT_FILTER_LABELS[donutDateFilter]}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuRadioGroup
+                value={donutDateFilter}
+                onValueChange={(value) => setDonutDateFilter(value as DonutDateFilter)}
+              >
+                <DropdownMenuRadioItem value="day" className="rounded-[12px]">
+                  Daily
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="week" className="rounded-[12px]">
+                  Weekly
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="month" className="rounded-[12px]">
+                  Monthly
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="schoolYear" className="rounded-[12px]">
+                  Yearly
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="relative mx-auto flex h-64 w-full max-w-[18rem] items-center justify-center">
@@ -664,31 +841,31 @@ export default function SubmissionDashboardCards({
             <>
               <div className="relative z-10 h-full w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Tooltip
-                    allowEscapeViewBox={{ x: true, y: true }}
-                    content={<SubmissionDonutTooltip />}
-                    offset={14}
-                    wrapperStyle={{ zIndex: 30, pointerEvents: 'none', outline: 'none' }}
-                  />
-                  <Pie
-                    data={selectedDonutData}
-                    dataKey="value"
-                    nameKey="label"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius="58%"
-                    outerRadius="82%"
-                    cornerRadius={8}
-                    paddingAngle={4}
-                    stroke="#ffffff"
-                    strokeWidth={4}
-                  >
-                    {selectedDonutData.map((segment) => (
-                      <Cell key={segment.key} fill={segment.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
+                  <PieChart>
+                    <Tooltip
+                      allowEscapeViewBox={{ x: true, y: true }}
+                      content={<SubmissionDonutTooltip />}
+                      offset={14}
+                      wrapperStyle={{ zIndex: 30, pointerEvents: 'none', outline: 'none' }}
+                    />
+                    <Pie
+                      data={selectedDonutData}
+                      dataKey="value"
+                      nameKey="label"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius="58%"
+                      outerRadius="82%"
+                      cornerRadius={8}
+                      paddingAngle={4}
+                      stroke="#ffffff"
+                      strokeWidth={4}
+                    >
+                      {selectedDonutData.map((segment) => (
+                        <Cell key={segment.key} fill={segment.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
                 </ResponsiveContainer>
               </div>
               <div className="pointer-events-none absolute inset-0 z-0 flex flex-col items-center justify-center text-center">

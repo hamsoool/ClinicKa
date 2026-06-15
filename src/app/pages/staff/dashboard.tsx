@@ -22,6 +22,7 @@ import { loadStaffWorkspacePreferences } from './staff-workspace-preferences';
 import { useStaffDashboardOverviewQuery } from './staff-workflow-query';
 
 const DASHBOARD_QUEUE_PAGE_SIZE = 20;
+const DASHBOARD_RECENT_ACTIONS_PAGE_SIZE = 10;
 const DASHBOARD_CHART_REFRESH_INTERVAL_MS = 60_000;
 
 function formatEmailName(email?: string | null) {
@@ -87,6 +88,92 @@ function formatSubmittedYearLevel(value?: string) {
   return normalizedValue ? getYearLevelLabel(normalizedValue) : 'Year Level --';
 }
 
+function abbreviateCourse(value?: string) {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Unspecified';
+
+  const parenMatch = raw.match(/\(([A-Za-z]{2,10})\)\s*$/);
+  if (parenMatch?.[1]) return parenMatch[1].toUpperCase();
+
+  const normalized = raw.toLowerCase().replace(/\./g, '');
+  const known: Array<[string, string]> = [
+    ['bachelor of science in information technology', 'BSIT'],
+    ['bs information technology', 'BSIT'],
+    ['bachelor of science in computer science', 'BSCS'],
+    ['bs computer science', 'BSCS'],
+    ['bachelor of science in nursing', 'BSN'],
+    ['bs nursing', 'BSN'],
+    ['bachelor of science in business administration', 'BSBA'],
+    ['bs business administration', 'BSBA'],
+    ['bachelor of science in psychology', 'BSPsych'],
+    ['bs psychology', 'BSPsych'],
+    ['bachelor of science in hospitality management', 'BSHM'],
+    ['bs hospitality management', 'BSHM'],
+    ['bachelor of secondary education', 'BSEd'],
+    ['bachelor of elementary education', 'BEEd'],
+  ];
+  const exact = known.find(([key]) => normalized === key);
+  if (exact) return exact[1];
+
+  const bsInMatch = normalized.match(/^bachelor of science in\s+(.+)$/i);
+  if (bsInMatch?.[1]) {
+    const major = bsInMatch[1]
+      .replace(/[()]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((w) => !['and', 'of', 'the', 'in'].includes(w));
+    const majorAcronym = major.map((w) => w[0]).join('').toUpperCase();
+    if (majorAcronym) return `BS${majorAcronym}`;
+  }
+
+  if (/^[A-Za-z]{2,8}$/.test(raw.replace(/\s+/g, ''))) return raw.toUpperCase();
+
+  const acronym = raw
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((part) => !['of', 'in', 'and', 'the'].includes(part.toLowerCase()))
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
+  return acronym.length >= 3 && acronym.length <= 8 ? acronym : raw;
+}
+
+function abbreviateDepartment(value?: string) {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Unspecified';
+
+  const upper = raw.toUpperCase();
+  if (['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'].includes(upper)) return upper;
+
+  const parenMatch = raw.match(/\(([A-Za-z]{2,10})\)\s*$/);
+  if (parenMatch?.[1]) {
+    const pUpper = parenMatch[1].toUpperCase();
+    if (['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'].includes(pUpper)) return pUpper;
+    return pUpper;
+  }
+
+  const normalized = raw.toLowerCase();
+  if (normalized.includes('computer studies') || normalized.includes('ccs')) return 'CCS';
+  if (normalized.includes('business') || normalized.includes('cba')) return 'CBA';
+  if (normalized.includes('education') || normalized.includes('arts') || normalized.includes('sciences') || normalized.includes('ceas')) return 'CEAS';
+  if (normalized.includes('hospitality') || normalized.includes('tourism') || normalized.includes('chtm')) return 'CHTM';
+  if (normalized.includes('allied health') || normalized.includes('health sciences') || normalized.includes('cahs')) return 'CAHS';
+
+  if (raw.length > 8) {
+    const acronym = raw
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((part) => !['of', 'in', 'and', 'the'].includes(part.toLowerCase()))
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase();
+    if (acronym.length >= 2 && acronym.length <= 8) return acronym;
+  }
+
+  return raw;
+}
+
 export default function StaffDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
@@ -109,6 +196,7 @@ export default function StaffDashboard() {
     workspacePreferences.dashboardQueueTab === 'in_review' ? 'pending' : workspacePreferences.dashboardQueueTab,
   );
   const [queuePage, setQueuePage] = useState(1);
+  const [recentActionsPage, setRecentActionsPage] = useState(1);
   const {
     data: overview,
     isLoading: overviewLoading,
@@ -191,10 +279,10 @@ export default function StaffDashboard() {
     queueTab === 'pending'
       ? pendingQueue
       : queueTab === 'returned'
-      ? returnedQueue
-      : queueTab === 'resubmitted'
-      ? resubmittedQueue
-      : sortedBySubmitted;
+        ? returnedQueue
+        : queueTab === 'resubmitted'
+          ? resubmittedQueue
+          : sortedBySubmitted;
   const queueTotalPages = Math.max(1, Math.ceil(visibleQueue.length / DASHBOARD_QUEUE_PAGE_SIZE));
   const paginatedQueue = visibleQueue.slice(
     (queuePage - 1) * DASHBOARD_QUEUE_PAGE_SIZE,
@@ -207,6 +295,55 @@ export default function StaffDashboard() {
     }
   }, [queuePage, queueTotalPages]);
 
+  const recentActions = useMemo(() => {
+    const studentMap = new Map<string, StudentAccountSummary>();
+    reportData.registeredStudents.forEach((student) => {
+      if (student.studentId) {
+        studentMap.set(student.studentId.trim(), student);
+      }
+    });
+
+    return [...reportData.submissions]
+      .map((sub) => {
+        const student = studentMap.get(sub.studentId.trim());
+        const firstName = student?.firstName || sub.firstName || '';
+        const lastName = student?.lastName || sub.lastName || '';
+        const fullName = [lastName, firstName].filter(Boolean).join(', ') || 'Unknown Student';
+
+        const rawDept = sub.department || student?.department || '';
+        const rawCourse = sub.course || student?.course || '';
+        const deptCode = abbreviateDepartment(rawDept);
+        const courseCode = abbreviateCourse(rawCourse);
+
+        return {
+          ...sub,
+          fullName,
+          deptCode,
+          courseCode,
+          yearLevel: sub.studentYearLevel || student?.year || 'Unspecified',
+        };
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.submittedAt || 0).getTime();
+        const timeB = new Date(b.submittedAt || 0).getTime();
+        return timeB - timeA;
+      });
+  }, [reportData.submissions, reportData.registeredStudents]);
+
+  const recentActionsTotalPages = Math.max(1, Math.ceil(recentActions.length / DASHBOARD_RECENT_ACTIONS_PAGE_SIZE));
+  const paginatedRecentActions = useMemo(() => {
+    return recentActions.slice(
+      (recentActionsPage - 1) * DASHBOARD_RECENT_ACTIONS_PAGE_SIZE,
+      recentActionsPage * DASHBOARD_RECENT_ACTIONS_PAGE_SIZE,
+    );
+  }, [recentActions, recentActionsPage]);
+
+  useEffect(() => {
+    if (recentActionsPage > recentActionsTotalPages) {
+      setRecentActionsPage(recentActionsTotalPages);
+    }
+  }, [recentActionsPage, recentActionsTotalPages]);
+
   if (overviewLoading || !overview) {
     return <PortalPageSkeleton variant="dashboard" />;
   }
@@ -214,12 +351,8 @@ export default function StaffDashboard() {
   return (
     <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-5 sm:space-y-8">
       <PortalPageIntro
-        eyebrow={(
-          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
-            Clinic Operations Portal
-          </span>
-        )}
-        title={`Welcome, ${displayName}`}
+        className="border-none bg-transparent p-0 sm:p-0 shadow-none"
+        title={`Welcome to ClinicKa! ${displayName}.`}
       />
 
       <SubmissionDashboardCards
@@ -229,7 +362,7 @@ export default function StaffDashboard() {
         submissions={reportData.submissions}
       />
 
-      <div className="grid min-w-0 gap-5 sm:gap-6">
+      <div className="grid min-w-0 grid-cols-1 gap-5 sm:gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <div className="box-border flex w-full min-w-0 flex-col rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6 sm:py-6">
           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
@@ -352,6 +485,68 @@ export default function StaffDashboard() {
           )}
         </div>
 
+        <div className="box-border flex w-full min-w-0 flex-col rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6 sm:py-6">
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-on-surface">Recent Actions</h2>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-outline-variant/30 bg-surface-container-low text-[10px] uppercase tracking-[0.16em] text-on-surface-variant">
+                  <th className="px-4 py-3 font-semibold">Student ID</th>
+                  <th className="px-4 py-3 font-semibold">Full Name</th>
+                  <th className="px-4 py-3 font-semibold">Course / Dept</th>
+                  <th className="px-4 py-3 font-semibold">Year Level</th>
+                  <th className="px-4 py-3 font-semibold">Submission Date</th>
+                  <th className="px-4 py-3 font-semibold text-right">Clearance Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/20 text-on-surface">
+                {paginatedRecentActions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-on-surface-variant text-sm">
+                      No recent submissions found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedRecentActions.map((action) => (
+                    <tr key={action.id} className="transition-colors hover:bg-surface-container-low/35">
+                      <td className="px-4 py-3 font-bold">{action.studentId}</td>
+                      <td className="px-4 py-3 font-semibold whitespace-nowrap">{action.fullName}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {[action.courseCode, action.deptCode].filter(v => v && v !== 'Unspecified').join(' / ') || 'Unspecified'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">{getYearLevelLabel(action.yearLevel)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(action.submittedAt)}</td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getStatusStyles(action.status as any)}`}>
+                          {getStatusLabel(action.status as any)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {recentActions.length > 0 && (
+            <div className="mt-auto">
+              <ListPagination
+                currentPage={recentActionsPage}
+                totalPages={recentActionsTotalPages}
+                totalItems={recentActions.length}
+                pageSize={DASHBOARD_RECENT_ACTIONS_PAGE_SIZE}
+                pageSizeOptions={[DASHBOARD_RECENT_ACTIONS_PAGE_SIZE]}
+                itemLabel="records"
+                onPageChange={setRecentActionsPage}
+                onPageSizeChange={() => undefined}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

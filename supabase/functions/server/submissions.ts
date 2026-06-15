@@ -24,6 +24,7 @@ const ANALYTICS_CACHE_TTL_MS = 30_000;
 const SUBMISSIONS_CACHE_TTL_MS = 15_000;
 const STUDENT_RECORDS_CACHE_TTL_MS = 20_000;
 const STAFF_DASHBOARD_OVERVIEW_TTL_MS = 15_000;
+const STAFF_SUBMISSION_REPORT_SUMMARIES_TTL_MS = 30_000;
 const STAFF_SUBMISSION_SUMMARIES_TTL_MS = 20_000;
 const STAFF_APPROVED_STUDENTS_TTL_MS = 30_000;
 const STAFF_DASHBOARD_QUEUE_LIMIT_PER_STATUS = 20;
@@ -107,6 +108,8 @@ const studentRecordsReadCache = new Map<string, TimedValue<any[]>>();
 const studentRecordsReadPromises = new Map<string, Promise<any[]>>();
 let staffDashboardOverviewCache: TimedValue<any> | null = null;
 let staffDashboardOverviewPromise: Promise<any> | null = null;
+let staffSubmissionReportSummariesCache: TimedValue<any> | null = null;
+let staffSubmissionReportSummariesPromise: Promise<any> | null = null;
 let staffSubmissionStatusCountsCache: TimedValue<any> | null = null;
 let staffSubmissionStatusCountsPromise: Promise<any> | null = null;
 const staffSubmissionSummariesCache = new Map<string, TimedValue<any>>();
@@ -123,6 +126,8 @@ export function invalidateDashboardReadCaches() {
   studentRecordsReadPromises.clear();
   staffDashboardOverviewCache = null;
   staffDashboardOverviewPromise = null;
+  staffSubmissionReportSummariesCache = null;
+  staffSubmissionReportSummariesPromise = null;
   staffSubmissionStatusCountsCache = null;
   staffSubmissionStatusCountsPromise = null;
   staffSubmissionSummariesCache.clear();
@@ -1346,6 +1351,207 @@ async function loadStaffDashboardOverview() {
     resubmittedQueueItems,
     departmentBreakdown,
   };
+}
+
+async function loadPagedReportRows(buildQuery: (from: number, to: number) => any) {
+  const pageSize = 1000;
+  const rows: any[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1;
+    const { data, error } = await buildQuery(from, to);
+    if (error) throw new Error(error.message);
+
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+
+  return rows;
+}
+
+async function loadReportStudentRows() {
+  const columnsWithCreatedAt =
+    "student_id,profile_id,first_name,last_name,department,course,year_level,sex,created_at";
+  const columnsWithoutCreatedAt =
+    "student_id,profile_id,first_name,last_name,department,course,year_level,sex";
+
+  try {
+    return await loadPagedReportRows((from, to) =>
+      supabase
+        .from("students")
+        .select(columnsWithCreatedAt)
+        .order("student_id", { ascending: true })
+        .range(from, to)
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+    if (!message.includes("created_at")) {
+      throw error;
+    }
+
+    return await loadPagedReportRows((from, to) =>
+      supabase
+        .from("students")
+        .select(columnsWithoutCreatedAt)
+        .order("student_id", { ascending: true })
+        .range(from, to)
+    );
+  }
+}
+
+async function loadArchivedReportProfileIds() {
+  try {
+    const rows = await loadPagedReportRows((from, to) =>
+      supabase
+        .from("archived_accounts")
+        .select("user_id")
+        .range(from, to)
+    );
+
+    return new Set((rows || []).map((row) => String(row?.user_id || "").trim()).filter(Boolean));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function buildRegisteredStudentReportSummaries(
+  studentRows: any[],
+  profileRows: any[],
+  archivedProfileIds: Set<string>,
+) {
+  const studentById = new Map<string, any>();
+  const studentByProfileId = new Map<string, any>();
+
+  (studentRows || []).forEach((student) => {
+    const studentId = String(student?.student_id || "").trim();
+    const profileId = String(student?.profile_id || "").trim();
+    if (studentId) {
+      studentById.set(studentId, student);
+    }
+    if (profileId) {
+      studentByProfileId.set(profileId, student);
+    }
+  });
+
+  const studentsByReportId = new Map<string, any>();
+  const reportProfileIds = new Set<string>();
+
+  (profileRows || []).forEach((profile) => {
+    const profileId = String(profile?.id || "").trim();
+    if (profileId && archivedProfileIds.has(profileId)) return;
+
+    const profileStudentId = String(profile?.student_id || "").trim();
+    const student = (profileStudentId && studentById.get(profileStudentId)) ||
+      (profileId && studentByProfileId.get(profileId)) ||
+      {};
+    const studentId = String(profileStudentId || student?.student_id || profileId || "").trim();
+    if (!studentId) return;
+
+    const resolvedProfileId = profileId || String(student?.profile_id || "").trim();
+    if (resolvedProfileId) {
+      reportProfileIds.add(resolvedProfileId);
+    }
+
+    studentsByReportId.set(studentId, {
+      studentId,
+      profileId: resolvedProfileId || undefined,
+      firstName: student.first_name || profile.first_name || undefined,
+      lastName: student.last_name || profile.last_name || undefined,
+      department: student.department || profile.department || undefined,
+      course: student.course || profile.course || undefined,
+      year: String(student.year_level || ""),
+      studentYearLevel: String(student.year_level || ""),
+      sex: student.sex || undefined,
+      registeredAt: profile.created_at || student.created_at || profile.updated_at || undefined,
+    });
+  });
+
+  (studentRows || []).forEach((student) => {
+    const studentId = String(student?.student_id || "").trim();
+    const profileId = String(student?.profile_id || "").trim();
+    if (!studentId || studentsByReportId.has(studentId)) return;
+    if (profileId && archivedProfileIds.has(profileId)) return;
+    if (profileId && reportProfileIds.has(profileId)) return;
+
+    studentsByReportId.set(studentId, {
+      studentId,
+      profileId: profileId || undefined,
+      firstName: student.first_name || undefined,
+      lastName: student.last_name || undefined,
+      department: student.department || undefined,
+      course: student.course || undefined,
+      year: String(student.year_level || ""),
+      studentYearLevel: String(student.year_level || ""),
+      sex: student.sex || undefined,
+      registeredAt: student.created_at || undefined,
+    });
+  });
+
+  return [...studentsByReportId.values()];
+}
+
+async function loadStaffSubmissionReportSummaries() {
+  const [submissionRows, studentRows, profileRows, archivedProfileIds] = await Promise.all([
+    loadPagedReportRows((from, to) =>
+      supabase
+        .from("submissions")
+        .select("id,student_id,department,course,year_level,sex,status,submitted_at,updated_at,academic_year")
+        .order("submitted_at", { ascending: false })
+        .range(from, to)
+    ),
+    loadReportStudentRows(),
+    loadPagedReportRows((from, to) =>
+      supabase
+        .from("profiles")
+        .select("id,student_id,first_name,last_name,department,course,created_at,updated_at")
+        .eq("role", "student")
+        .order("created_at", { ascending: true })
+        .range(from, to)
+    ),
+    loadArchivedReportProfileIds(),
+  ]);
+
+  return {
+    submissions: (submissionRows || []).map((row) => ({
+      id: row.id,
+      studentId: row.student_id || "",
+      firstName: "",
+      lastName: "",
+      department: row.department || "",
+      course: row.course || "",
+      year: String(row.year_level || ""),
+      studentYearLevel: String(row.year_level || ""),
+      sex: row.sex || "",
+      status: row.status || "pending",
+      submittedAt: row.submitted_at,
+      updatedAt: row.updated_at || undefined,
+      academicYear: row.academic_year || undefined,
+    })),
+    registeredStudents: buildRegisteredStudentReportSummaries(
+      studentRows || [],
+      profileRows || [],
+      archivedProfileIds,
+    ),
+  };
+}
+
+export async function getCachedStaffSubmissionReportSummaries() {
+  const cached = getValidCachedValue(staffSubmissionReportSummariesCache);
+  if (cached) return cached;
+  if (staffSubmissionReportSummariesPromise) return staffSubmissionReportSummariesPromise;
+
+  staffSubmissionReportSummariesPromise = (async () => {
+    const reportSummaries = await loadStaffSubmissionReportSummaries();
+    staffSubmissionReportSummariesCache = createTimedValue(
+      reportSummaries,
+      STAFF_SUBMISSION_REPORT_SUMMARIES_TTL_MS,
+    );
+    return reportSummaries;
+  })().finally(() => {
+    staffSubmissionReportSummariesPromise = null;
+  });
+
+  return staffSubmissionReportSummariesPromise;
 }
 
 export async function getCachedStaffDashboardOverview() {

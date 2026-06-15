@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, ArrowRight, CalendarDays, CheckCircle2, Lock } from 'lucide-react';
+import { ArrowRight, CalendarDays, CheckCircle2, Lock } from 'lucide-react';
 import StudentPageIntro from '../../components/student-page-intro';
 import { useAuth } from '../../lib/auth';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
@@ -99,15 +99,6 @@ export default function StudentYearSelection() {
 
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
-      <button
-        type="button"
-        onClick={() => navigate('/student')}
-        className="inline-flex items-center gap-2 text-sm font-semibold text-primary transition-colors hover:text-primary/80"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Dashboard
-      </button>
-
       <StudentPageIntro
         title="Submit Medical Record"
         description={pageDescription}

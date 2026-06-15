@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/badge';
 import ListPagination from '../../components/list-pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import PortalPageIntro from '../../components/portal-page-intro';
-import { ChevronDown, Pencil, Search, X } from 'lucide-react';
+import { ChevronDown, Eye, Search, X, Loader2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
 import type { ApprovedStudentSummary } from '../../lib/record-types';
@@ -26,8 +26,8 @@ const YEAR_LABELS = Object.fromEntries(
     return [slot, getSubmissionSlotLabel(slot)];
   }),
 ) as Record<string, string>;
-const DEFAULT_PAGE_SIZE = 20;
-const PAGE_SIZE_OPTIONS = [20];
+const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10];
 
 type StaffRecordsProps = {
   embedded?: boolean;
@@ -232,7 +232,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
               <div className="flex items-center justify-between gap-2 px-1">
                 <p className="text-xs font-medium text-muted-foreground">To</p>
                 {!loading && isFetching ? (
-                  <span className="text-[11px] text-muted-foreground">Refreshing...</span>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                 ) : null}
               </div>
               <Input
@@ -338,8 +338,8 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
                                 onMouseEnter={() => prefetchSubmissionDetail(record.id)}
                                 onClick={() => navigate(`/staff/review/${record.id}?archiveEdit=1`)}
                               >
-                                <Pencil className="mr-2 h-3.5 w-3.5" />
-                                Edit
+                                <Eye className="mr-2 h-3.5 w-3.5" />
+                                View
                               </Button>
                               <Badge className="bg-green-100 text-green-800">Approved</Badge>
                             </div>

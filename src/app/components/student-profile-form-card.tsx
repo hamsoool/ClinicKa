@@ -181,18 +181,18 @@ export function StudentProfileFormCard({
   const disabledFieldClass = readOnly ? 'cursor-not-allowed opacity-80' : '';
 
   return (
-    <Card className="box-border w-full min-w-0 overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
+    <Card className="box-border w-full min-w-0 overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest !gap-0">
       <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
         <CardTitle className="text-xl font-semibold text-on-surface">{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
-      <CardContent className="grid w-full min-w-0 gap-5 px-4 pt-6 sm:px-6 md:grid-cols-2">
+      <CardContent className="grid w-full min-w-0 gap-5 px-4 pt-4 sm:px-6 md:grid-cols-2">
         <div className="w-full min-w-0">
           <Label htmlFor="studentId">Student ID</Label>
           <Input id="studentId" value={value.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
         </div>
         <div className="w-full min-w-0">
-          <Label htmlFor="firstName">First Name{readOnly ? '' : ' *'}</Label>
+          <Label htmlFor="firstName">First Name</Label>
           <Input
             id="firstName"
             value={value.firstName}
@@ -204,7 +204,7 @@ export function StudentProfileFormCard({
           />
         </div>
         <div className="w-full min-w-0">
-          <Label htmlFor="lastName">Last Name{readOnly ? '' : ' *'}</Label>
+          <Label htmlFor="lastName">Last Name</Label>
           <Input
             id="lastName"
             value={value.lastName}
@@ -216,7 +216,7 @@ export function StudentProfileFormCard({
           />
         </div>
         <div className="w-full min-w-0">
-          <Label htmlFor="middleInitial">Middle Initial{readOnly ? '' : ' *'}</Label>
+          <Label htmlFor="middleInitial">Middle Initial</Label>
           <Input
             id="middleInitial"
             value={value.middleInitial}
@@ -224,12 +224,12 @@ export function StudentProfileFormCard({
             readOnly={readOnly}
             disabled={readOnly}
             placeholder={readOnly ? '' : 'Required'}
-            maxLength={1}
+            maxLength={2}
             className={`${disabledFieldClass} ${requiredFieldClass(!value.middleInitial.trim())}`.trim()}
           />
         </div>
         <div className="w-full min-w-0">
-          <Label htmlFor="age">Age{readOnly ? '' : ' *'}</Label>
+          <Label htmlFor="age">Age</Label>
           <Input
             id="age"
             type="text"
@@ -241,7 +241,7 @@ export function StudentProfileFormCard({
           />
         </div>
         <div className="w-full min-w-0">
-          <Label htmlFor="sex">Sex at Birth{readOnly ? '' : ' *'}</Label>
+          <Label htmlFor="sex">Sex at Birth</Label>
           {readOnly ? (
             <Input id="sex" value={formatReadOnlySex(value.sex)} readOnly disabled className="cursor-not-allowed opacity-80" />
           ) : (
@@ -259,7 +259,7 @@ export function StudentProfileFormCard({
         <div className="w-full min-w-0 md:col-span-2">
           <div className="grid w-full min-w-0 grid-cols-1 gap-5 md:grid-cols-2">
             <div className="w-full min-w-0">
-              <Label htmlFor="department">Department{readOnly ? '' : ' *'}</Label>
+              <Label htmlFor="department">Department</Label>
               {readOnly ? (
                 <Input id="department" value={value.department} readOnly disabled className="cursor-not-allowed opacity-80" />
               ) : (
@@ -278,7 +278,7 @@ export function StudentProfileFormCard({
               )}
             </div>
             <div className="w-full min-w-0">
-              <Label htmlFor="course">Course / Program{readOnly ? '' : ' *'}</Label>
+              <Label htmlFor="course">Course / Program</Label>
               {readOnly ? (
                 <Input id="course" value={value.course} readOnly disabled className="cursor-not-allowed opacity-80" />
               ) : (
@@ -303,7 +303,7 @@ export function StudentProfileFormCard({
           </div>
         </div>
         <div className="w-full min-w-0">
-          <Label htmlFor="yearLevel">{yearLevelLabel}{readOnly ? '' : ' *'}</Label>
+          <Label htmlFor="yearLevel">{yearLevelLabel}</Label>
           {readOnly ? (
             <Input
               id="yearLevel"
@@ -334,7 +334,7 @@ export function StudentProfileFormCard({
           </div>
         ))}
         <div className="w-full min-w-0">
-          <Label htmlFor="birthday">Birthday{readOnly ? '' : ' *'}</Label>
+          <Label htmlFor="birthday">Birthday</Label>
           {readOnly ? (
             <Input
               id="birthday"
@@ -464,7 +464,7 @@ export function StudentProfileFormCard({
           )}
         </div>
         <div className="w-full min-w-0">
-          <Label htmlFor="civilStatus">Civil Status{readOnly ? '' : ' *'}</Label>
+          <Label htmlFor="civilStatus">Civil Status</Label>
           {readOnly ? (
             <Input id="civilStatus" value={value.civilStatus} readOnly disabled className="cursor-not-allowed opacity-80" />
           ) : (
@@ -480,7 +480,7 @@ export function StudentProfileFormCard({
           )}
         </div>
         <div className="w-full min-w-0">
-          <Label htmlFor="contactNumber">Contact Number{readOnly ? '' : ' *'}</Label>
+          <Label htmlFor="contactNumber">Contact Number</Label>
           <Input
             id="contactNumber"
             type="tel"
@@ -497,8 +497,8 @@ export function StudentProfileFormCard({
             <p className="mt-1 text-sm text-red-600">Use exactly 11 digits starting with 09.</p>
           ) : null}
         </div>
-        <div className="w-full min-w-0 md:col-span-2">
-          <Label htmlFor="address">Street Address{readOnly ? '' : ' *'}</Label>
+        <div className="w-full min-w-0">
+          <Label htmlFor="address">Street Address</Label>
           <Input
             id="address"
             value={value.address}
