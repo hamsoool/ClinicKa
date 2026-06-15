@@ -38,7 +38,7 @@ export function PasswordSetupScreen({
     'absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-full text-[#60717e] transition hover:text-[#006d3c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006d3c]/20';
 
   return (
-    <div className="min-h-screen bg-[#f4fcf2] px-5 py-6 text-[#161d18] sm:px-6 sm:py-10">
+    <div className="min-h-screen bg-[#fffeff] px-5 py-6 text-[#161d18] sm:px-6 sm:py-10">
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl items-center justify-center sm:min-h-[calc(100vh-5rem)]">
         <div className="grid w-full gap-6 sm:gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div className="hidden space-y-5 lg:block">

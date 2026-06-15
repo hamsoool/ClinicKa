@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   Accordion,
@@ -25,16 +25,36 @@ const LANDING_PREVIEW_SRC = '/clinickalogo.png';
 const FORM_PREVIEW_SRC = '/previews/student-medical-form-preview.png';
 const CAMPUS_PREVIEW_SRC = '/backdrop.jpg';
 
-const heroGridStyle: CSSProperties = {
-  backgroundColor: '#ffffff',
+const baseGridStyle: CSSProperties = {
   backgroundImage: [
-    'linear-gradient(rgba(0, 109, 60, 0.1) 1px, transparent 1px)',
-    'linear-gradient(90deg, rgba(0, 109, 60, 0.1) 1px, transparent 1px)',
-    'linear-gradient(rgba(216, 228, 215, 0.38) 1px, transparent 1px)',
-    'linear-gradient(90deg, rgba(216, 228, 215, 0.38) 1px, transparent 1px)',
+    'linear-gradient(rgba(0, 109, 60, 0.08) 1px, transparent 1px)',
+    'linear-gradient(90deg, rgba(0, 109, 60, 0.08) 1px, transparent 1px)',
+    'linear-gradient(rgba(216, 228, 215, 0.32) 1px, transparent 1px)',
+    'linear-gradient(90deg, rgba(216, 228, 215, 0.32) 1px, transparent 1px)',
   ].join(', '),
   backgroundPosition: '-1px -1px, -1px -1px, -1px -1px, -1px -1px',
   backgroundSize: '96px 96px, 96px 96px, 24px 24px, 24px 24px',
+};
+
+const activeGridStyle: CSSProperties = {
+  backgroundImage: [
+    'linear-gradient(rgba(0, 109, 60, 0.35) 1px, transparent 1px)',
+    'linear-gradient(90deg, rgba(0, 109, 60, 0.35) 1px, transparent 1px)',
+    'linear-gradient(rgba(0, 109, 60, 0.22) 1px, transparent 1px)',
+    'linear-gradient(90deg, rgba(0, 109, 60, 0.22) 1px, transparent 1px)',
+  ].join(', '),
+  backgroundPosition: '-1px -1px, -1px -1px, -1px -1px, -1px -1px',
+  backgroundSize: '96px 96px, 96px 96px, 24px 24px, 24px 24px',
+  maskImage: 'radial-gradient(circle 240px at var(--mouse-x, 0px) var(--mouse-y, 0px), black 20%, transparent 100%)',
+  WebkitMaskImage: 'radial-gradient(circle 240px at var(--mouse-x, 0px) var(--mouse-y, 0px), black 20%, transparent 100%)',
+  opacity: 'var(--mouse-opacity, 0)',
+  transition: 'opacity 0.4s ease-out',
+};
+
+const spotlightStyle: CSSProperties = {
+  background: 'radial-gradient(circle 400px at var(--mouse-x, 0px) var(--mouse-y, 0px), rgba(0, 109, 60, 0.09), transparent 80%)',
+  opacity: 'var(--mouse-opacity, 0)',
+  transition: 'opacity 0.4s ease-out',
 };
 
 const navLinks = [
@@ -107,6 +127,32 @@ export default function RoleSelection() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [logoVisible, setLogoVisible] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const heroRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!hero) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = hero.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      hero.style.setProperty('--mouse-x', `${x}px`);
+      hero.style.setProperty('--mouse-y', `${y}px`);
+      hero.style.setProperty('--mouse-opacity', '1');
+    };
+
+    const handleMouseLeave = () => {
+      hero.style.setProperty('--mouse-opacity', '0');
+    };
+
+    hero.addEventListener('mousemove', handleMouseMove);
+    hero.addEventListener('mouseleave', handleMouseLeave);
+    return () => {
+      hero.removeEventListener('mousemove', handleMouseMove);
+      hero.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -140,7 +186,136 @@ export default function RoleSelection() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4fcf2] text-[#161d18]">
+    <div className="min-h-screen bg-[#fffeff] text-[#161d18]">
+      <style>{`
+        .ecg-container {
+          position: absolute;
+          top: 20%;
+          transform: translateY(-50%);
+          left: 0;
+          right: 0;
+          height: 128px;
+          overflow: hidden;
+          pointer-events: none;
+          opacity: 0.2;
+          z-index: 10;
+        }
+
+        .ecg-line {
+          filter: drop-shadow(0 0 3px rgba(0, 109, 60, 0.5));
+          mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,1) 95%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,1) 95%, transparent 100%);
+          mask-size: 500px 100%;
+          -webkit-mask-size: 500px 100%;
+          mask-repeat: no-repeat;
+          -webkit-mask-repeat: no-repeat;
+          animation: ecg-sweep 7s linear infinite;
+        }
+
+        .ecg-hover-box {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 500px;
+          pointer-events: auto;
+          cursor: pointer;
+          animation: ecg-box-sweep 7s linear infinite;
+        }
+
+        .ecg-container:hover .ecg-line,
+        .ecg-container:hover .ecg-hover-box {
+          animation-play-state: paused;
+        }
+
+        @keyframes ecg-sweep {
+          0% {
+            mask-position: -500px 0;
+            -webkit-mask-position: -500px 0;
+          }
+          100% {
+            mask-position: calc(100% + 500px) 0;
+            -webkit-mask-position: calc(100% + 500px) 0;
+          }
+        }
+
+        @keyframes ecg-box-sweep {
+          0% {
+            left: -500px;
+          }
+          100% {
+            left: calc(100% + 500px);
+          }
+        }
+
+        .resp-container {
+          position: absolute;
+          top: 76%;
+          transform: translateY(-50%);
+          left: 0;
+          right: 0;
+          height: 128px;
+          overflow: hidden;
+          pointer-events: none;
+          opacity: 0.2;
+          z-index: 10;
+        }
+
+        .resp-line {
+          filter: drop-shadow(0 0 3px rgba(0, 109, 61, 0.5));
+          mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,1) 95%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,1) 95%, transparent 100%);
+          mask-size: 500px 100%;
+          -webkit-mask-size: 500px 100%;
+          mask-repeat: no-repeat;
+          -webkit-mask-repeat: no-repeat;
+          animation: resp-sweep 9s linear infinite;
+        }
+
+        .resp-hover-box {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 500px;
+          pointer-events: auto;
+          cursor: pointer;
+          animation: resp-box-sweep 9s linear infinite;
+        }
+
+        .resp-container:hover .resp-line,
+        .resp-container:hover .resp-hover-box {
+          animation-play-state: paused;
+        }
+
+        @keyframes resp-sweep {
+          0% {
+            mask-position: -500px 0;
+            -webkit-mask-position: -500px 0;
+          }
+          100% {
+            mask-position: calc(100% + 500px) 0;
+            -webkit-mask-position: calc(100% + 500px) 0;
+          }
+        }
+
+        @keyframes resp-box-sweep {
+          0% {
+            left: -500px;
+          }
+          100% {
+            left: calc(100% + 500px);
+          }
+        }
+
+        .logo-interactive {
+          transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+          transform-origin: center;
+          will-change: transform;
+        }
+
+        .logo-interactive:hover {
+          transform: scale(1.04);
+        }
+      `}</style>
       <nav
         className={`fixed inset-x-0 top-0 z-50 border-b transition-colors duration-300 ${
           isScrolled
@@ -230,7 +405,7 @@ export default function RoleSelection() {
 
         <div
           id="mobile-dropbar"
-          className={`overflow-hidden border-t border-[#d8e4d7] bg-[#f4fcf2]/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 md:hidden ${
+          className={`overflow-hidden border-t border-[#d8e4d7] bg-[#fffeff]/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 md:hidden ${
             isMenuOpen ? 'max-h-[22rem] opacity-100' : 'max-h-0 opacity-0'
           }`}
         >
@@ -257,18 +432,71 @@ export default function RoleSelection() {
       </nav>
 
       <main>
-        <section id="hero" className="relative overflow-hidden pt-14 md:pt-20" style={heroGridStyle}>
-          <div className="absolute inset-0 bg-white/70" aria-hidden="true" />
-          <div className="relative mx-auto grid min-h-[calc(100dvh-3.5rem)] md:min-h-[calc(100dvh-5rem)] w-full max-w-[90rem] items-center gap-10 px-5 py-14 sm:px-8 md:py-18 lg:grid-cols-12 lg:px-10">
-            <div className="space-y-6 lg:col-span-7">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#006d3c]">
+        <section id="hero" ref={heroRef} className="relative overflow-hidden pt-14 md:pt-20 bg-[#fffeff]">
+          {/* Base Grid Layer */}
+          <div className="absolute inset-0 pointer-events-none" style={baseGridStyle} />
+          
+          {/* White Overlay to soften the base grid */}
+          <div className="absolute inset-0 bg-[#fffeff]/70 pointer-events-none" aria-hidden="true" />
+          
+          {/* Spotlight Glow Layer */}
+          <div className="absolute inset-0 pointer-events-none" style={spotlightStyle} />
+          
+          {/* Masked Active Grid Layer */}
+          <div className="absolute inset-0 pointer-events-none" style={activeGridStyle} />
+          
+          {/* Animated ECG Heartbeat Line */}
+          <div className="ecg-container">
+            <svg className="w-full h-full text-[#006d3c]" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="ecg-pattern" width="480" height="128" patternUnits="userSpaceOnUse">
+                  <path
+                    d="M 0,64 L 50,64 Q 62,46 74,64 L 79,74 L 95,4 L 111,124 L 119,64 Q 136,36 153,64 L 180,64 Q 192,54 204,64 L 209,69 L 225,34 L 241,94 L 249,64 Q 266,50 283,64 L 480,64"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#ecg-pattern)" className="ecg-line" />
+            </svg>
+            {/* Moving Hover Target synchronized with the sweep window */}
+            <div className="ecg-hover-box" />
+          </div>
+
+          {/* Animated RESP Wave Line */}
+          <div className="resp-container">
+            <svg className="w-full h-full text-secondary" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="resp-pattern" width="480" height="128" patternUnits="userSpaceOnUse">
+                  <path
+                    d="M 0,64 Q 60,16 120,64 T 240,64 Q 300,16 360,64 T 480,64"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#resp-pattern)" className="resp-line" />
+            </svg>
+            {/* Moving Hover Target synchronized with the sweep window */}
+            <div className="resp-hover-box" />
+          </div>
+          
+          <div className="relative mx-auto grid min-h-[calc(100dvh-3.5rem)] md:min-h-[calc(100dvh-5rem)] w-full max-w-[90rem] items-center gap-10 px-5 py-14 sm:px-8 md:py-18 lg:grid-cols-12 lg:px-10 pointer-events-none">
+            <div className="space-y-6 lg:col-span-7 -translate-y-8 md:-translate-y-16 lg:-translate-y-24 pointer-events-auto">
+              <p className="text-base font-semibold uppercase tracking-[0.18em] text-[#006d3c]">
                 Gordon College Health Services
               </p>
               <div className="space-y-4">
-                <h1 className="max-w-3xl text-[2.5rem] font-semibold leading-[1.07] tracking-[-0.025em] text-[#161d18] sm:text-5xl lg:text-[3.5rem]">
+                <h1 className="max-w-3xl text-[2.85rem] font-semibold leading-[1.07] tracking-[-0.025em] text-[#161d18] sm:text-[3.75rem] lg:text-[4.25rem]">
                   <span className="text-[#006d3c]">ClinicKa!</span> <br/>A Student Health <br/>Record Portal
                 </h1>
-                <p className="max-w-2xl text-[17px] leading-7 tracking-[-0.01em] text-[#3d4a3f] sm:text-xl sm:leading-8">
+                <p className="max-w-2xl text-[19px] leading-7 tracking-[-0.01em] text-[#3d4a3f] sm:text-[22px] sm:leading-8">
                   A focused medical clearance and student health record system for submissions, clinic review, and
                   administrative workflows in one Gordon College portal.
                 </p>
@@ -277,32 +505,32 @@ export default function RoleSelection() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Link
                   to="/auth?mode=signin"
-                  className="inline-flex h-11 items-center justify-center rounded-full bg-[#006d3c] px-6 text-[17px] font-normal text-white transition active:scale-95 hover:bg-[#005f34]"
+                  className="inline-flex h-12 items-center justify-center rounded-full bg-[#006d3c] px-8 text-[18px] font-medium text-white transition active:scale-95 hover:bg-[#005f34] shadow-[0_4px_14px_rgba(0,109,60,0.25)]"
                 >
                   Sign In
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
                 <button
                   type="button"
                   onClick={() => scrollToSection('features')}
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-[#006d3c] bg-white px-6 text-[17px] font-normal text-[#006d3c] transition active:scale-95 hover:bg-[#eef6ec]"
+                  className="inline-flex h-12 items-center justify-center rounded-full border border-[#006d3c] bg-white px-8 text-[18px] font-medium text-[#006d3c] transition active:scale-95 hover:bg-[#eef6ec] shadow-[0_4px_14px_rgba(0,0,0,0.02)]"
                 >
                   View Services
                 </button>
               </div>
             </div>
 
-            <div className="flex justify-center lg:col-span-5">
+            <div className="flex justify-center lg:col-span-5 -translate-y-8 md:-translate-y-16 lg:-translate-y-24 pointer-events-auto">
               <img
                 src={LANDING_PREVIEW_SRC}
                 alt="ClinicKa logo"
-                className="w-full max-w-[500px] object-contain drop-shadow-[3px_5px_30px_rgba(0,0,0,0.18)]"
+                className="w-full max-w-[500px] object-contain drop-shadow-[3px_5px_30px_rgba(0,0,0,0.18)] logo-interactive"
               />
             </div>
           </div>
         </section>
 
-        <section id="features" className="bg-[#f4fcf2] py-16 md:py-20">
+        <section id="features" className="bg-[#fffeff] py-16 md:py-20">
           <div className="mx-auto max-w-[90rem] px-5 sm:px-8 lg:px-10">
             <div className="mx-auto mb-10 max-w-3xl text-center">
               <h2 className="text-3xl font-semibold tracking-[-0.02em] text-[#161d18] md:text-[2.5rem]">
@@ -373,7 +601,7 @@ export default function RoleSelection() {
                       managed by clinic staff, and reports help administrators monitor clinic activity.
                     </p>
                   </div>
-                  <div className="hidden flex-1 border border-[#d8e4d7] bg-[#f4fcf2] p-4 md:block">
+                  <div className="hidden flex-1 border border-[#d8e4d7] bg-[#fffeff] p-4 md:block">
                     <div className="h-3 w-2/3 rounded-full bg-[#d8e4d7]" />
                     <div className="mt-3 h-3 w-1/2 rounded-full bg-[#d8e4d7]" />
                     <div className="mt-6 space-y-3">
@@ -440,9 +668,9 @@ export default function RoleSelection() {
                 monitor submissions, certificates, user accounts, and operational reports.
               </p>
               <div className="flex flex-wrap gap-3 text-sm text-[#3d4a3f]">
-                <span className="rounded-full border border-[#d8e4d7] bg-[#f4fcf2] px-4 py-2">Student records</span>
-                <span className="rounded-full border border-[#d8e4d7] bg-[#f4fcf2] px-4 py-2">Staff review queue</span>
-                <span className="rounded-full border border-[#d8e4d7] bg-[#f4fcf2] px-4 py-2">Admin reports</span>
+                <span className="rounded-full border border-[#d8e4d7] bg-[#fffeff] px-4 py-2">Student records</span>
+                <span className="rounded-full border border-[#d8e4d7] bg-[#fffeff] px-4 py-2">Staff review queue</span>
+                <span className="rounded-full border border-[#d8e4d7] bg-[#fffeff] px-4 py-2">Admin reports</span>
               </div>
             </div>
             <div className="relative">
@@ -461,7 +689,7 @@ export default function RoleSelection() {
           </div>
         </section>
 
-        <section id="faq" className="bg-[#f4fcf2] py-16 md:py-20">
+        <section id="faq" className="bg-[#fffeff] py-16 md:py-20">
           <div className="mx-auto grid max-w-[90rem] gap-10 px-5 sm:px-8 md:gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:px-10">
             <div className="space-y-6">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#006d3c]">Student FAQ</p>
@@ -517,7 +745,7 @@ export default function RoleSelection() {
         </section>
       </main>
 
-      <footer id="resources" className="border-t border-[#d8e4d7] bg-[#f4fcf2] py-12">
+      <footer id="resources" className="border-t border-[#d8e4d7] bg-[#fffeff] py-12">
         <div className="mx-auto grid max-w-[90rem] grid-cols-1 gap-8 px-5 text-sm sm:px-8 md:grid-cols-2 md:items-center lg:px-10">
           <div>
             <div className="text-base font-semibold text-[#006d3c]">ClinicKa!</div>

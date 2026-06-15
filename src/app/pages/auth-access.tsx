@@ -258,7 +258,7 @@ export default function AuthAccessPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4fcf2] text-[#161d18]">
+    <div className="min-h-screen bg-[#fffeff] text-[#161d18]">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-8 sm:py-8 lg:py-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Link to="/" className="inline-flex items-center gap-3">
