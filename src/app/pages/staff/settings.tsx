@@ -32,7 +32,8 @@ import {
 } from './staff-workspace-preferences';
 
 type StaffProfileFormState = {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   position: string;
   phone: string;
@@ -43,15 +44,10 @@ function normalizeProfileValue(value: string) {
 }
 
 function buildProfileFormState(me?: ReturnType<typeof useAuth>['me'] | null): StaffProfileFormState {
-  const name =
-    [me?.staff?.first_name || me?.profile.first_name || '', me?.staff?.last_name || me?.profile.last_name || '']
-      .filter(Boolean)
-      .join(' ')
-      .trim() || '';
-
   return {
-    name,
-    email: me?.staff?.email || me?.profile.email || '',
+    firstName: me?.staff?.first_name || me?.profile?.first_name || '',
+    lastName: me?.staff?.last_name || me?.profile?.last_name || '',
+    email: me?.staff?.email || me?.profile?.email || '',
     position: getRoleLabel(me?.profile?.role, me?.staff?.position),
     phone: formatPhilippinePhoneInput(me?.staff?.phone || ''),
   };
@@ -105,7 +101,8 @@ export default function StaffSettings() {
   );
 
   const isProfileValid =
-    Boolean(profile.name.trim()) &&
+    Boolean(profile.firstName.trim()) &&
+    Boolean(profile.lastName.trim()) &&
     Boolean(profile.email.trim()) &&
     (!profile.phone.trim() || isValidPhilippinePhoneNumber(profile.phone));
 
@@ -128,7 +125,7 @@ export default function StaffSettings() {
 
   const requestSaveConfirmation = () => {
     if (!isProfileValid) {
-      toast.error('Please complete your name and email, and use a valid phone number if provided.');
+      toast.error('Please complete your first name, last name, and email, and use a valid phone number if provided.');
       return;
     }
     if (!hasProfileChanges) {
@@ -192,34 +189,35 @@ export default function StaffSettings() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="min-w-0">
-                <Label htmlFor="staffName">Staff Name</Label>
+                <Label htmlFor="staffFirstName">First Name</Label>
                 <Input
-                  id="staffName"
-                  value={profile.name}
-                  onChange={(event) => updateProfileField('name', event.target.value)}
-                  placeholder="Enter your name"
+                  id="staffFirstName"
+                  value={profile.firstName}
+                  onChange={(event) => updateProfileField('firstName', event.target.value)}
+                  placeholder="Enter your first name"
                 />
               </div>
+              <div className="min-w-0">
+                <Label htmlFor="staffLastName">Last Name</Label>
+                <Input
+                  id="staffLastName"
+                  value={profile.lastName}
+                  onChange={(event) => updateProfileField('lastName', event.target.value)}
+                  placeholder="Enter your last name"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="min-w-0">
                 <Label htmlFor="staffEmail">Email</Label>
                 <Input
                   id="staffEmail"
                   type="email"
                   value={profile.email}
-                  onChange={(event) => updateProfileField('email', event.target.value)}
-                  placeholder="Enter your email"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="min-w-0">
-                <Label htmlFor="staffPosition">Role</Label>
-                <Input
-                  id="staffPosition"
-                  value={staffRoleLabel}
                   readOnly
                   disabled
                   className="cursor-not-allowed opacity-80"
+                  placeholder="Enter your email"
                 />
               </div>
               <div className="min-w-0">

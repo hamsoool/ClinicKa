@@ -1219,18 +1219,23 @@ app.put("/staff-profile", async (c) => {
 
   try {
     const data = await c.req.json();
-    const fullName = String(data.name || "").trim();
+    let firstName = String(data.firstName || "").trim();
+    let lastName = String(data.lastName || "").trim();
     const email = normalizeEmail(data.email) || null;
     const phone = String(data.phone || "").trim() || null;
     const applyAcrossRoles = data.applyAcrossRoles !== false;
 
-    if (!fullName || !email) {
-      return badRequest("Name and email are required");
+    if (!firstName && !lastName && data.name) {
+      const nameParts = String(data.name).split(/\s+/).filter(Boolean);
+      firstName = nameParts.slice(0, -1).join(" ").trim() || nameParts[0] || "";
+      lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
     }
 
-    const nameParts = fullName.split(/\s+/).filter(Boolean);
-    const firstName = nameParts.slice(0, -1).join(" ").trim() || nameParts[0] || null;
-    const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : null;
+    if (!firstName || !lastName || !email) {
+      return badRequest("First name, last name, and email are required");
+    }
+
+    const fullName = `${firstName} ${lastName}`.trim();
     const preservedPosition = requester.staff?.position || "Clinic Staff";
 
     let updatedProfile = requester.profile;
@@ -1240,7 +1245,6 @@ app.put("/staff-profile", async (c) => {
         .update({
           first_name: firstName,
           last_name: lastName,
-          email,
         })
         .eq("id", requester.profile.id)
         .select(PROFILE_SELECT_COLUMNS)
@@ -1256,6 +1260,7 @@ app.put("/staff-profile", async (c) => {
     const staffPayload = {
       profile_id: requester.profile.id,
       email,
+      name: fullName,
       first_name: firstName,
       last_name: lastName,
       position: preservedPosition,

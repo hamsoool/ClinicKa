@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { Camera, KeyRound, LogOut, X, type LucideIcon } from 'lucide-react';
+import { Camera, KeyRound, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { LogoutBlockedError, useAuth } from '../lib/auth';
 import FilePickerButton from './file-picker-button';
@@ -123,6 +123,9 @@ export default function PortalShell({
 
   const currentPage = navItems.find((item) => isRouteActive(location.pathname, item.path))?.label || portalLabel;
 
+  const showMoreInBottomNav = navItems.length > 5;
+  const bottomNavItems = showMoreInBottomNav ? navItems.slice(0, 4) : navItems;
+
   const getPasswordSettingsPath = () => {
     if (location.pathname.startsWith('/student')) return '/student/profile#password';
     if (location.pathname.startsWith('/staff')) return '/staff/settings#password';
@@ -241,12 +244,12 @@ export default function PortalShell({
       <aside
         id="portal-sidebar"
         className={cn(
-          'fixed inset-y-0 left-0 z-40 w-72 border-r border-emerald-950/25 bg-sidebar text-sidebar-foreground transition-transform duration-200 print:hidden',
+          'fixed inset-y-0 left-0 z-40 w-72 overflow-y-auto border-r border-emerald-950/25 bg-sidebar text-sidebar-foreground transition-transform duration-200 print:hidden',
           menuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
         aria-label={`${portalLabel} navigation`}
       >
-        <div className="flex h-full flex-col px-4 py-6">
+        <div className="flex min-h-full flex-col px-4 py-6">
           <div className="px-2 pb-6">
             <div className="mb-4 flex items-center justify-end md:hidden">
               <button
@@ -355,6 +358,8 @@ export default function PortalShell({
 
       <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/55 bg-background/85 backdrop-blur-xl md:left-72 md:h-16 print:hidden">
         <div className="flex h-full items-center justify-between gap-2 px-4 md:gap-3 md:px-8">
+
+
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
               <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
@@ -470,11 +475,11 @@ export default function PortalShell({
         <div
           className="grid gap-1 px-1.5 py-2"
           style={{
-            gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${bottomNavItems.length + (showMoreInBottomNav ? 1 : 0)}, minmax(0, 1fr))`,
             paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)',
           }}
         >
-          {navItems.map((item) => {
+          {bottomNavItems.map((item) => {
             const Icon = item.icon;
             const active = isRouteActive(location.pathname, item.path);
             const emphasized = item.mobileEmphasis;
@@ -499,6 +504,16 @@ export default function PortalShell({
               </button>
             );
           })}
+          {showMoreInBottomNav ? (
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-[10px] leading-tight text-on-surface-variant transition-all active:scale-95 hover:bg-surface-container-low sm:text-xs"
+            >
+              <Menu className="h-5 w-5 shrink-0" />
+              <span className="w-full truncate text-center">More</span>
+            </button>
+          ) : null}
         </div>
       </nav>
 

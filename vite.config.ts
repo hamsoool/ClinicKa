@@ -11,14 +11,14 @@ export default defineConfig({
     VitePWA({
       injectRegister: false,
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "logo.png", "clinickalogo.png", "icon-192.png", "icon-512.png"],
+      includeAssets: ["favicon.ico", "logo.png", "clinickalogo.png", "clinickamobile.png"],
       manifest: {
         id: "/",
         name: "ClinicKa!",
         short_name: "ClinicKa!",
         description: "ClinicKa! health records and clinic management for Gordon College",
         theme_color: "#006d3c",
-        background_color: "#f4fcf2",
+        background_color: "#fffeff",
         display: "standalone",
         start_url: "/",
         scope: "/",
@@ -26,13 +26,13 @@ export default defineConfig({
         categories: ["medical", "health", "education"],
         icons: [
           {
-            src: "icon-192.png",
+            src: "clinickamobile.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any maskable",
           },
           {
-            src: "icon-512.png",
+            src: "clinickamobile.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any maskable",
@@ -56,6 +56,7 @@ export default defineConfig({
         clientsClaim: true,
         disableDevLogs: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/api\//],
         skipWaiting: true,
         runtimeCaching: [

@@ -128,7 +128,7 @@ function buildProfileFormState(me?: Pick<AuthMe, 'profile' | 'student'> | null):
     age: derivedAge !== null ? String(derivedAge) : (me?.student?.age ? String(me.student.age) : ''),
     sex: me?.student?.sex || '',
     birthday,
-    civilStatus: me?.student?.civil_status || 'Single',
+    civilStatus: me?.student?.civil_status || '',
     contactNumber: formatPhilippinePhoneInput(me?.student?.contact_number || ''),
     address: sanitizeAddress(me?.student?.address || ''),
   };
@@ -516,7 +516,7 @@ export default function StudentProfile() {
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col items-stretch gap-3 border-t border-outline-variant/30 bg-surface-container-low px-4 !pt-4 !pb-2 translate-y-[12.5px] rounded-b-[18px] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <CardFooter className="flex flex-col items-stretch gap-3 border-t border-outline-variant/30 bg-surface-container-lowest px-4 !pt-4 !pb-2 translate-y-[12.5px] rounded-b-[18px] sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <p className="text-xs text-on-surface-variant sm:text-sm">
                 {hasChanges ? 'You have unsaved profile changes.' : 'Your profile and student assets are up to date.'}
               </p>

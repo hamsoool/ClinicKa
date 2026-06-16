@@ -381,7 +381,7 @@ function buildInitialFormData(year: string | undefined, me?: AuthMe | null, init
     age: derivedAge !== null ? sanitizeDigits(String(derivedAge), 2) : student?.age ? sanitizeDigits(String(student.age), 2) : '',
     sex: student?.sex || '',
     birthday,
-    civilStatus: student?.civil_status || 'Single',
+    civilStatus: student?.civil_status || '',
     contactNumber: formatPhilippinePhoneInput(student?.contact_number || ''),
     address: sanitizeAddress(student?.address || ''),
     medicalHistory: { ...DEFAULT_MEDICAL_HISTORY },

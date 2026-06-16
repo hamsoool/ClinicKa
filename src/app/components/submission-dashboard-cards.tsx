@@ -624,7 +624,7 @@ export default function SubmissionDashboardCards({
   return (
     <div className="grid min-w-0 gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(21rem,0.65fr)]">
       <section className="box-border flex min-h-[27rem] w-full min-w-0 flex-col rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6 sm:py-6">
-        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="mb-5 flex flex-row items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-on-surface">Submission Analytics</h2>
             <p className="mt-1 text-xs text-on-surface-variant">
@@ -664,20 +664,22 @@ export default function SubmissionDashboardCards({
           </DropdownMenu>
         </div>
 
-        <div className="mb-5 grid grid-cols-4 gap-1.5 sm:gap-3">
+        <div className="mb-5 grid grid-cols-2 gap-1.5 sm:gap-3 xl:grid-cols-4">
           {statusMetrics.map((metric) => (
             <div
               key={metric.key}
-              className="rounded-[12px] sm:rounded-[18px] border border-outline-variant/25 bg-surface-container-low p-2 sm:px-4 sm:py-3"
+              className="flex flex-col justify-between rounded-[12px] sm:rounded-[18px] border border-outline-variant/25 bg-surface-container-low p-2 sm:px-4 sm:py-3"
             >
-              <p className="text-[9px] sm:text-[11px] font-semibold uppercase tracking-wider sm:tracking-[0.16em] text-on-surface-variant line-clamp-2 min-h-[1.5rem] sm:min-h-0">
-                {metric.label}
-              </p>
-              <div className="mt-1.5 sm:mt-3">
-                <p className="text-lg sm:text-2xl font-bold leading-none text-on-surface">{formatNumber(metric.value)}</p>
+              <div>
+                <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider sm:tracking-[0.16em] text-on-surface-variant line-clamp-2 min-h-[1.5rem] sm:min-h-0">
+                  {metric.label}
+                </p>
+                <div className="mt-1.5 sm:mt-3">
+                  <p className="text-lg sm:text-2xl font-bold leading-none text-on-surface">{formatNumber(metric.value)}</p>
+                </div>
               </div>
-              <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center gap-1 sm:gap-2 text-[9px] sm:text-[11px] font-medium text-on-surface-variant">
-                <span className="hidden sm:inline">vs last month</span>
+              <div className="mt-3 flex flex-wrap items-center gap-1 sm:gap-2 text-[10px] sm:text-[11px] font-medium text-on-surface-variant">
+                <span>vs last month</span>
                 <span className="rounded-full bg-surface-container-lowest px-1 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-semibold text-on-surface-variant">
                   {formatPercent(metric.changePercent)}
                 </span>
@@ -876,20 +878,23 @@ export default function SubmissionDashboardCards({
           )}
         </div>
 
-        <div className="mt-auto space-y-3 pt-4">
+        <div className="mt-auto grid grid-cols-4 gap-2 pt-4 xl:grid-cols-1 xl:gap-3">
           {selectedDonutData.map((segment) => {
             const percent = donutTotal > 0 ? Math.round((segment.value / donutTotal) * 100) : 0;
 
             return (
-              <div key={segment.key} className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low px-3 py-3">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex min-w-0 items-center gap-2 font-medium text-on-surface">
-                    <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
-                    <span className="truncate">{segment.label}</span>
+              <div
+                key={segment.key}
+                className="rounded-[12px] sm:rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-2 sm:p-3 flex flex-col justify-between"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs sm:text-sm">
+                  <span className="flex min-w-0 items-center gap-1.5 font-medium text-on-surface">
+                    <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
+                    <span className="truncate text-[10px] sm:text-xs md:text-sm">{segment.label}</span>
                   </span>
-                  <span className="font-semibold text-on-surface">{formatNumber(segment.value)}</span>
+                  <span className="font-semibold text-on-surface text-xs sm:text-sm">{formatNumber(segment.value)}</span>
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-container-high">
                   <div
                     className="h-full rounded-full"
                     style={{ width: `${percent}%`, backgroundColor: segment.color }}

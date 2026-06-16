@@ -25,7 +25,7 @@ export function PublicPageSkeleton({ variant }: { variant: PublicSkeletonVariant
     <div
       aria-busy="true"
       aria-live="polite"
-      className="min-h-screen overflow-hidden bg-[#f4fcf2] px-5 py-8 text-[#161d18] sm:px-8 lg:py-10"
+      className="min-h-screen overflow-hidden bg-[#fffeff] px-5 py-8 text-[#161d18] sm:px-8 lg:py-10"
     >
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col">
         <PublicTopBarSkeleton />

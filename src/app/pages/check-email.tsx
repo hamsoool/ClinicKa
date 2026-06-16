@@ -60,7 +60,7 @@ export default function CheckEmailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4fcf2] px-4 py-6 text-[#161d18] sm:px-8 sm:py-8 lg:py-10">
+    <div className="min-h-screen bg-[#fffeff] px-4 py-6 text-[#161d18] sm:px-8 sm:py-8 lg:py-10">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Link to="/" className="inline-flex items-center gap-3">
@@ -136,13 +136,13 @@ export default function CheckEmailPage() {
             </p>
 
             {email ? (
-              <div className="mt-5 rounded-full border border-[#d8e4d7] bg-[#f4fcf2] px-4 py-3 text-sm font-semibold text-[#161d18]">
+              <div className="mt-5 rounded-full border border-[#d8e4d7] bg-[#fffeff] px-4 py-3 text-sm font-semibold text-[#161d18]">
                 {email}
               </div>
             ) : null}
 
             <div className="mt-6 space-y-4">
-              <div className="flex items-start gap-3 rounded-[18px] border border-[#d8e4d7] bg-[#f4fcf2] px-4 py-4">
+              <div className="flex items-start gap-3 rounded-[18px] border border-[#d8e4d7] bg-[#fffeff] px-4 py-4">
                 <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#065f46]" />
                 <p className="text-sm leading-7 text-[#425468]">
                   Email verification protects student and clinic records by confirming account ownership first.

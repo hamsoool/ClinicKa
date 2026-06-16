@@ -7,9 +7,10 @@ import { Badge } from '../../components/ui/badge';
 import ListPagination from '../../components/list-pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import PortalPageIntro from '../../components/portal-page-intro';
-import { ChevronDown, Eye, Search, X, Loader2 } from 'lucide-react';
+import { ChevronDown, Eye, Search, X, Loader2, SlidersHorizontal } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { toast } from 'sonner';
+import { cn } from '../../components/ui/utils';
 import type { ApprovedStudentSummary } from '../../lib/record-types';
 import { getSubmissionSlotLabel, MAX_SUBMISSION_CYCLE } from '../../lib/academic-year';
 import { useDebouncedValue } from '../../lib/use-debounced-value';
@@ -52,6 +53,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
 
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const deferredSearchQuery = useDeferredValue(debouncedSearchQuery.trim());
@@ -132,6 +134,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
     setCourseFilter('all');
     setFromDate('');
     setToDate('');
+    setIsFiltersExpanded(false);
   };
 
   const hasActiveFilters =
@@ -152,96 +155,112 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
 
       <Card className="mb-6">
         <CardContent className="space-y-4 p-4 sm:p-6">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-            <div className="space-y-1">
-              <p className="px-1 text-xs font-medium text-muted-foreground">Search</p>
-              <div className="relative">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Name, student ID, or course"
+                  placeholder="Search name, student ID, or course..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsFiltersExpanded(true)}
                   className="h-10 w-full pl-10"
                 />
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsFiltersExpanded(prev => !prev)}
+                className="h-10 gap-2 px-3"
+              >
+                <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                <span className="hidden sm:inline">{(isFiltersExpanded || hasActiveFilters) ? 'Hide Filters' : 'Filters'}</span>
+              </Button>
             </div>
 
-            <div className="space-y-1">
-              <p className="px-1 text-xs font-medium text-muted-foreground">Department</p>
-              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                <SelectTrigger className="h-10 w-full">
-                  <SelectValue placeholder="All Departments" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {DEPARTMENTS.map((department) => (
-                    <SelectItem key={department} value={department}>
-                      {department}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <p className="px-1 text-xs font-medium text-muted-foreground">Record Slot</p>
-              <Select value={yearFilter} onValueChange={setYearFilter}>
-                <SelectTrigger className="h-10 w-full">
-                  <SelectValue placeholder="All Record Slots" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Record Slots</SelectItem>
-                  {Object.entries(YEAR_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <p className="px-1 text-xs font-medium text-muted-foreground">Course</p>
-              <Select value={courseFilter} onValueChange={setCourseFilter}>
-                <SelectTrigger className="h-10 w-full">
-                  <SelectValue placeholder="All Courses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Courses</SelectItem>
-                  {availableCourses.map((course) => (
-                    <SelectItem key={course} value={course}>
-                      {course}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <p className="px-1 text-xs font-medium text-muted-foreground">From</p>
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="h-10 w-full"
-                aria-label="From date"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2 px-1">
-                <p className="text-xs font-medium text-muted-foreground">To</p>
-                {!loading && isFetching ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                ) : null}
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-5 transition-all duration-300",
+                (isFiltersExpanded || hasActiveFilters) ? "grid" : "hidden"
+              )}
+            >
+              <div className="space-y-1">
+                <p className="px-1 text-xs font-medium text-muted-foreground">Department</p>
+                <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder="All Departments" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Departments</SelectItem>
+                    {DEPARTMENTS.map((department) => (
+                      <SelectItem key={department} value={department}>
+                        {department}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="h-10 w-full"
-                aria-label="To date"
-              />
+
+              <div className="space-y-1">
+                <p className="px-1 text-xs font-medium text-muted-foreground">Record Slot</p>
+                <Select value={yearFilter} onValueChange={setYearFilter}>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder="All Record Slots" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Record Slots</SelectItem>
+                    {Object.entries(YEAR_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <p className="px-1 text-xs font-medium text-muted-foreground">Course</p>
+                <Select value={courseFilter} onValueChange={setCourseFilter}>
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder="All Courses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Courses</SelectItem>
+                    {availableCourses.map((course) => (
+                      <SelectItem key={course} value={course}>
+                        {course}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <p className="px-1 text-xs font-medium text-muted-foreground">From</p>
+                <Input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="h-10 w-full"
+                  aria-label="From date"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <p className="text-xs font-medium text-muted-foreground">To</p>
+                  {!loading && isFetching ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : null}
+                </div>
+                <Input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="h-10 w-full"
+                  aria-label="To date"
+                />
+              </div>
             </div>
           </div>
 

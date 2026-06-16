@@ -187,10 +187,7 @@ export function StudentProfileFormCard({
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
       <CardContent className="grid w-full min-w-0 gap-5 px-4 pt-4 sm:px-6 md:grid-cols-2">
-        <div className="w-full min-w-0">
-          <Label htmlFor="studentId">Student ID</Label>
-          <Input id="studentId" value={value.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
-        </div>
+        {/* Row 1: First Name, Last Name */}
         <div className="w-full min-w-0">
           <Label htmlFor="firstName">First Name</Label>
           <Input
@@ -215,6 +212,8 @@ export function StudentProfileFormCard({
             className={`${disabledFieldClass} ${requiredFieldClass(!value.lastName.trim())}`.trim()}
           />
         </div>
+
+        {/* Row 2: Middle Initial, Birthday */}
         <div className="w-full min-w-0">
           <Label htmlFor="middleInitial">Middle Initial</Label>
           <Input
@@ -228,111 +227,6 @@ export function StudentProfileFormCard({
             className={`${disabledFieldClass} ${requiredFieldClass(!value.middleInitial.trim())}`.trim()}
           />
         </div>
-        <div className="w-full min-w-0">
-          <Label htmlFor="age">Age</Label>
-          <Input
-            id="age"
-            type="text"
-            value={value.age}
-            readOnly
-            disabled
-            placeholder="Auto-calculated from birthday"
-            className={`cursor-not-allowed opacity-80 ${requiredFieldClass(!value.age.trim())}`}
-          />
-        </div>
-        <div className="w-full min-w-0">
-          <Label htmlFor="sex">Sex at Birth</Label>
-          {readOnly ? (
-            <Input id="sex" value={formatReadOnlySex(value.sex)} readOnly disabled className="cursor-not-allowed opacity-80" />
-          ) : (
-            <Select value={value.sex || undefined} onValueChange={(nextValue) => handleChange('sex', nextValue)}>
-              <SelectTrigger id="sex" className={requiredFieldClass(!value.sex.trim())}>
-                <SelectValue placeholder="Required: select sex at birth" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="male">Male</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-        <div className="w-full min-w-0 md:col-span-2">
-          <div className="grid w-full min-w-0 grid-cols-1 gap-5 md:grid-cols-2">
-            <div className="w-full min-w-0">
-              <Label htmlFor="department">Department</Label>
-              {readOnly ? (
-                <Input id="department" value={value.department} readOnly disabled className="cursor-not-allowed opacity-80" />
-              ) : (
-                <Select value={value.department} onValueChange={(nextValue) => handleChange('department', nextValue)}>
-                  <SelectTrigger id="department" className={requiredFieldClass(!value.department.trim())}>
-                    <SelectValue placeholder="Required: select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEPARTMENT_OPTIONS.map((department) => (
-                      <SelectItem key={department.value} value={department.value}>
-                        {department.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            <div className="w-full min-w-0">
-              <Label htmlFor="course">Course / Program</Label>
-              {readOnly ? (
-                <Input id="course" value={value.course} readOnly disabled className="cursor-not-allowed opacity-80" />
-              ) : (
-                <Select
-                  value={value.course || undefined}
-                  onValueChange={(nextValue) => handleChange('course', nextValue)}
-                  disabled={!value.department}
-                >
-                  <SelectTrigger id="course" className={requiredFieldClass(!value.course.trim())}>
-                    <SelectValue placeholder={value.department ? 'Required: select program' : 'Select department first'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getProgramOptionsForSelect(value.department, value.course).map((program) => (
-                      <SelectItem key={program} value={program}>
-                        {program}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="w-full min-w-0">
-          <Label htmlFor="yearLevel">{yearLevelLabel}</Label>
-          {readOnly ? (
-            <Input
-              id="yearLevel"
-              value={formatReadOnlyYearLevel(value.yearLevel)}
-              readOnly
-              disabled
-              className="cursor-not-allowed opacity-80"
-            />
-          ) : (
-            <Select value={value.yearLevel || undefined} onValueChange={(nextValue) => handleChange('yearLevel', nextValue)}>
-              <SelectTrigger id="yearLevel" className={requiredFieldClass(!value.yearLevel.trim())}>
-                <SelectValue placeholder="Required: select year level" />
-              </SelectTrigger>
-              <SelectContent>
-                {YEAR_LEVELS.map((yearLevel) => (
-                  <SelectItem key={yearLevel.value} value={yearLevel.value}>
-                    {yearLevel.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-        {extraFields.map((field) => (
-          <div key={field.id} className="w-full min-w-0">
-            <Label htmlFor={field.id}>{field.label}</Label>
-            <Input id={field.id} value={field.value} readOnly disabled className="cursor-not-allowed opacity-80" />
-          </div>
-        ))}
         <div className="w-full min-w-0">
           <Label htmlFor="birthday">Birthday</Label>
           {readOnly ? (
@@ -463,6 +357,24 @@ export function StudentProfileFormCard({
             </>
           )}
         </div>
+
+        {/* Row 3: Sex at Birth, Civil Status */}
+        <div className="w-full min-w-0">
+          <Label htmlFor="sex">Sex at Birth</Label>
+          {readOnly ? (
+            <Input id="sex" value={formatReadOnlySex(value.sex)} readOnly disabled className="cursor-not-allowed opacity-80" />
+          ) : (
+            <Select value={value.sex || undefined} onValueChange={(nextValue) => handleChange('sex', nextValue)}>
+              <SelectTrigger id="sex" className={requiredFieldClass(!value.sex.trim())}>
+                <SelectValue placeholder="Required: select sex at birth" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="female">Female</SelectItem>
+                <SelectItem value="male">Male</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         <div className="w-full min-w-0">
           <Label htmlFor="civilStatus">Civil Status</Label>
           {readOnly ? (
@@ -475,10 +387,15 @@ export function StudentProfileFormCard({
               <SelectContent>
                 <SelectItem value="Single">Single</SelectItem>
                 <SelectItem value="Married">Married</SelectItem>
+                <SelectItem value="Widowed">Widowed</SelectItem>
+                <SelectItem value="Separated">Separated</SelectItem>
+                <SelectItem value="Divorced">Divorced</SelectItem>
               </SelectContent>
             </Select>
           )}
         </div>
+
+        {/* Row 4: Contact Number, Street Address */}
         <div className="w-full min-w-0">
           <Label htmlFor="contactNumber">Contact Number</Label>
           <Input
@@ -509,6 +426,87 @@ export function StudentProfileFormCard({
             className={`${disabledFieldClass} ${requiredFieldClass(!value.address.trim())}`.trim()}
           />
         </div>
+
+        {/* Row 5: Student ID, Year Level */}
+        <div className="w-full min-w-0">
+          <Label htmlFor="studentId">Student ID</Label>
+          <Input id="studentId" value={value.studentId} readOnly disabled className="cursor-not-allowed opacity-80" />
+        </div>
+        <div className="w-full min-w-0">
+          <Label htmlFor="yearLevel">{yearLevelLabel}</Label>
+          {readOnly ? (
+            <Input
+              id="yearLevel"
+              value={formatReadOnlyYearLevel(value.yearLevel)}
+              readOnly
+              disabled
+              className="cursor-not-allowed opacity-80"
+            />
+          ) : (
+            <Select value={value.yearLevel || undefined} onValueChange={(nextValue) => handleChange('yearLevel', nextValue)}>
+              <SelectTrigger id="yearLevel" className={requiredFieldClass(!value.yearLevel.trim())}>
+                <SelectValue placeholder="Required: select year level" />
+              </SelectTrigger>
+              <SelectContent>
+                {YEAR_LEVELS.map((yearLevel) => (
+                  <SelectItem key={yearLevel.value} value={yearLevel.value}>
+                    {yearLevel.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        {/* Row 6: Department, Program */}
+        <div className="w-full min-w-0">
+          <Label htmlFor="department">Department</Label>
+          {readOnly ? (
+            <Input id="department" value={value.department} readOnly disabled className="cursor-not-allowed opacity-80" />
+          ) : (
+            <Select value={value.department} onValueChange={(nextValue) => handleChange('department', nextValue)}>
+              <SelectTrigger id="department" className={requiredFieldClass(!value.department.trim())}>
+                <SelectValue placeholder="Required: select department" />
+              </SelectTrigger>
+              <SelectContent>
+                {DEPARTMENT_OPTIONS.map((department) => (
+                  <SelectItem key={department.value} value={department.value}>
+                    {department.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        <div className="w-full min-w-0">
+          <Label htmlFor="course">Program</Label>
+          {readOnly ? (
+            <Input id="course" value={value.course} readOnly disabled className="cursor-not-allowed opacity-80" />
+          ) : (
+            <Select
+              value={value.course || undefined}
+              onValueChange={(nextValue) => handleChange('course', nextValue)}
+              disabled={!value.department}
+            >
+              <SelectTrigger id="course" className={requiredFieldClass(!value.course.trim())}>
+                <SelectValue placeholder={value.department ? 'Required: select program' : 'Select department first'} />
+              </SelectTrigger>
+              <SelectContent>
+                {getProgramOptionsForSelect(value.department, value.course).map((program) => (
+                  <SelectItem key={program} value={program}>
+                    {program}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        {extraFields.map((field) => (
+          <div key={field.id} className="w-full min-w-0">
+            <Label htmlFor={field.id}>{field.label}</Label>
+            <Input id={field.id} value={field.value} readOnly disabled className="cursor-not-allowed opacity-80" />
+          </div>
+        ))}
       </CardContent>
     </Card>
   );

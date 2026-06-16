@@ -649,27 +649,29 @@ function StatCard({
   };
 
   return (
-    <Card className="overflow-hidden border-outline-variant/30 print:break-inside-avoid print:border print:border-black print:bg-white print:shadow-none">
-      <CardContent className="p-2 sm:p-5">
-        <div className="flex items-start justify-between gap-1.5 sm:gap-3">
+    <Card className="flex flex-col h-full overflow-hidden border-outline-variant/30 print:break-inside-avoid print:border print:border-black print:bg-white print:shadow-none">
+      <CardContent className="flex flex-col flex-1 p-3 sm:p-5">
+        <div className="flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[9px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 leading-tight line-clamp-2 min-h-[1.5rem] sm:min-h-0 print:text-black">
+            <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-[0.14em] sm:tracking-wider mb-1 leading-tight line-clamp-2 min-h-[1.5rem] sm:min-h-0 print:text-black">
               {label}
             </p>
             <p className={`text-lg sm:text-3xl font-bold leading-none print:text-black ${accent}`}>{value}</p>
             {helper && (
-              <p className="mt-2 text-xs leading-5 text-on-surface-variant hidden sm:block print:text-black">
+              <p className="mt-2 text-[11px] sm:text-xs leading-normal sm:leading-5 text-on-surface-variant print:text-black">
                 {helper}
               </p>
             )}
           </div>
-          <div className={`shrink-0 w-9 h-9 rounded-full hidden sm:flex items-center justify-center print:bg-white ${getIconBgClass(accent)}`}>
+          <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center print:bg-white ${getIconBgClass(accent)}`}>
             <Icon className={`w-4.5 h-4.5 print:text-black ${accent}`} strokeWidth={2} />
           </div>
         </div>
         {normalizedProgress !== null && (
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high hidden sm:block print:hidden">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${normalizedProgress}%` }} />
+          <div className="mt-auto pt-4">
+            <div className="h-1.5 overflow-hidden rounded-full bg-surface-container-high print:hidden">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${normalizedProgress}%` }} />
+            </div>
           </div>
         )}
       </CardContent>
@@ -1510,9 +1512,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       </div>
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-3 print:hidden">
+      <div className="grid grid-cols-2 gap-1.5 sm:gap-3 xl:grid-cols-4 print:hidden">
         <StatCard
-          label="Total Student Submissions"
+          label="Total Submissions"
           value={globalSummary.total}
           icon={Users}
           accent="text-primary"
@@ -1581,9 +1583,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
               {/* Consolidated Popover Filters Dropdown */}
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2">
                     <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
-                    <span>Filters</span>
+                    <span className="hidden sm:inline">Filters</span>
                     {activeFiltersCount > 0 && (
                       <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-white">
                         {activeFiltersCount}
@@ -1677,13 +1679,13 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                 </PopoverContent>
               </Popover>
 
-              <Button onClick={handlePrint} size="sm" variant="outline" className="gap-2">
+              <Button onClick={handlePrint} size="sm" variant="outline" className="gap-1.5 sm:gap-2">
                 <Printer className="w-4 h-4" />
-                Print
+                <span className="hidden sm:inline">Print</span>
               </Button>
-              <Button onClick={exportXlsx} size="sm" className="gap-2 bg-primary text-white hover:bg-primary/90">
+              <Button onClick={exportXlsx} size="sm" className="gap-1.5 sm:gap-2 bg-primary text-white hover:bg-primary/90">
                 <FileSpreadsheet className="w-4 h-4" />
-                Export Excel
+                <span className="hidden sm:inline">Export Excel</span>
               </Button>
             </div>
           </div>

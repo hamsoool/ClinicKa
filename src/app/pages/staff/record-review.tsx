@@ -47,6 +47,7 @@ import {
   extractChestXrayFindings,
   extractUrinalysisFields,
   getStaffSignature,
+  isDoctorPosition,
   saveSubmissionReview,
   updateSubmissionStatus,
   uploadFile,
@@ -298,7 +299,7 @@ const MAX_CLINIC_NOTES_LENGTH = 100;
 const MAX_CLEARANCE_DIAGNOSIS_LENGTH = 50;
 const MAX_CLEARANCE_REMARKS_LENGTH = 50;
 const SEX_BASE_OPTIONS = ['male', 'female'] as const;
-const CIVIL_STATUS_OPTIONS = ['Single', 'Married'] as const;
+const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated', 'Divorced'] as const;
 const MEDICAL_RECORD_DATE_RANGE_MONTHS = 6;
 const UPDATED_FIELD_CLASS = 'border-green-300 bg-green-50 text-green-950 focus-visible:border-green-500 focus-visible:ring-green-500/20';
 const INVALID_FIELD_CLASS = 'border-red-300 bg-red-50/50 focus-visible:border-red-500 focus-visible:ring-red-500/20';
@@ -1070,13 +1071,17 @@ export default function StaffRecordReview() {
   const xrayOcrRunRef = useRef(0);
   const cbcOcrRunRef = useRef(0);
   const urinalysisOcrRunRef = useRef(0);
-  const defaultSignatoryName = [
+  const rawDefaultSignatoryName = [
     me?.staff?.first_name || me?.profile.first_name || '',
     me?.staff?.last_name || me?.profile.last_name || '',
   ]
     .filter(Boolean)
     .join(' ')
     .trim();
+  const isDoctor = isDoctorPosition(me?.staff?.position);
+  const defaultSignatoryName = isDoctor && rawDefaultSignatoryName && !rawDefaultSignatoryName.startsWith('Dr. ')
+    ? `Dr. ${rawDefaultSignatoryName}`
+    : rawDefaultSignatoryName;
   const currentStaffSignatureUrl = signaturePreviewUrl || staffSignature.signatureUrl || null;
   const {
     data: submissionData,

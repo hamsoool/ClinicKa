@@ -46,7 +46,6 @@ export default function InlinePdfViewer({
   const viewerRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
-  const [pdfUrl, setPdfUrl] = useState('');
   const [numPages, setNumPages] = useState(0);
   const [renderedPages, setRenderedPages] = useState<Set<number>>(() => new Set());
   const [containerWidth, setContainerWidth] = useState(0);
@@ -73,12 +72,10 @@ export default function InlinePdfViewer({
 
   useEffect(() => {
     let cancelled = false;
-    let objectUrl = '';
 
     setLoading(true);
     setError('');
     setPdfBlob(null);
-    setPdfUrl('');
     setNumPages(0);
     setRenderedPages(new Set());
 
@@ -86,9 +83,7 @@ export default function InlinePdfViewer({
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const blob = await createPdfFromElement(sourceRef.current, { pageFormat });
       if (cancelled) return;
-      objectUrl = URL.createObjectURL(blob);
       setPdfBlob(blob);
-      setPdfUrl(objectUrl);
     };
 
     generate()
@@ -104,7 +99,6 @@ export default function InlinePdfViewer({
 
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [documentKey, pageFormat, reloadToken]);
 
@@ -223,6 +217,21 @@ export default function InlinePdfViewer({
     }
   }, [fileName, numPages, pageFormat]);
 
+  const handleDownload = useCallback(() => {
+    if (!pdfBlob) return;
+    const url = URL.createObjectURL(pdfBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Delay revocation to let the browser process the download action
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 150);
+  }, [pdfBlob, fileName]);
+
   return (
     <div className="overflow-hidden rounded-lg border border-outline-variant/50 bg-white shadow-sm">
       <div
@@ -249,20 +258,18 @@ export default function InlinePdfViewer({
           <p className="text-xs text-white/70">{title}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {/* Download button — always visible, prioritized */}
-          {pdfUrl && !loading ? (
-            <Button asChild variant="secondary" size="sm" className="h-9 gap-1.5 px-3" title="Download PDF">
-              <a href={pdfUrl} download={fileName}>
-                <Download className="h-4 w-4" />
-                <span className="text-xs sm:hidden">Download</span>
-              </a>
-            </Button>
-          ) : (
-            <Button type="button" variant="secondary" size="sm" className="h-9 gap-1.5 px-3" disabled title="Download PDF">
-              <Download className="h-4 w-4" />
-              <span className="text-xs sm:hidden">Download</span>
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-9 gap-1.5 px-3"
+            onClick={handleDownload}
+            disabled={!pdfBlob || loading}
+            title="Download PDF"
+          >
+            <Download className="h-4 w-4" />
+            <span className="text-xs sm:hidden">Download</span>
+          </Button>
           {/* Print button — hidden on mobile since it doesn't work on most Android browsers */}
           <Button
             type="button"
