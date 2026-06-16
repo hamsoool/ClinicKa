@@ -11,7 +11,7 @@ export default defineConfig({
     VitePWA({
       injectRegister: false,
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "logo.png", "clinickalogo.png", "clinickamobile.png"],
+      includeAssets: ["logo.png", "clinickalogo.png", "clinickamobile.png"],
       manifest: {
         id: "/",
         name: "ClinicKa!",
@@ -26,16 +26,22 @@ export default defineConfig({
         categories: ["medical", "health", "education"],
         icons: [
           {
-            src: "clinickamobile.png",
+            src: "icon-192.png",
             sizes: "192x192",
             type: "image/png",
-            purpose: "any maskable",
+            purpose: "any",
+          },
+          {
+            src: "icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
           },
           {
             src: "clinickamobile.png",
             sizes: "512x512",
             type: "image/png",
-            purpose: "any maskable",
+            purpose: "maskable",
           },
         ],
         shortcuts: [
@@ -56,7 +62,15 @@ export default defineConfig({
         clientsClaim: true,
         disableDevLogs: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        globIgnores: [
+          "clinickalogo111.png",
+          "clinickalogo2.png",
+          "clinickalogoo.png",
+          "gordon_college_academicaffairs.png",
+          "previews/**",
+        ],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//],
         skipWaiting: true,
         runtimeCaching: [
