@@ -12,7 +12,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
-const PWA_MIGRATION_KEY = "clinicka-pwa-migration-v2";
+const PWA_MIGRATION_KEY = "clinicka-pwa-migration-v3";
 const SW_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
 
 async function cleanupLegacyPwaState() {
@@ -20,21 +20,20 @@ async function cleanupLegacyPwaState() {
   if (window.localStorage.getItem(PWA_MIGRATION_KEY) === "done") return;
 
   try {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map((registration) => registration.unregister()));
-
+    // Only clear old/legacy caches – never unregister the active service worker
+    // since that would break the installed PWA's ability to serve content.
     if ("caches" in window) {
       const cacheKeys = await window.caches.keys();
       await Promise.all(
         cacheKeys
-          .filter((key) => key.startsWith("workbox-") || key.includes("precache") || key.includes("google-fonts"))
+          .filter((key) => key.startsWith("workbox-") || key.includes("google-fonts"))
           .map((key) => window.caches.delete(key)),
       );
     }
 
     window.localStorage.setItem(PWA_MIGRATION_KEY, "done");
   } catch {
-    toast.error("Unable to refresh the installed app cache automatically.");
+    // Silently ignore – cache cleanup is best-effort.
   }
 }
 
