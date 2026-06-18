@@ -41,7 +41,7 @@ export async function getCachedData<T>(key: string): Promise<T | null> {
 }
 
 // Save data to cache with a Time-To-Live (TTL) in seconds
-export async function setCachedData(key: string, data: any, ttlSeconds = 300): Promise<void> {
+export async function setCachedData(key: string, data: any, ttlSeconds = 3600): Promise<void> {
     const redis = getRedisClient();
     if (!redis) return;
     try { await redis.setex(key, ttlSeconds, data); }

@@ -1060,7 +1060,7 @@ async function getCachedStaffSubmissionStatusCounts() {
       counts,
       STAFF_SUBMISSION_SUMMARIES_TTL_MS,
     );
-    await setCachedData(cacheKey, counts, 300);
+    await setCachedData(cacheKey, counts);
     return counts;
   })().finally(() => {
     staffSubmissionStatusCountsPromise = null;
@@ -1585,7 +1585,7 @@ export async function getCachedStaffSubmissionReportSummaries() {
       reportSummaries,
       STAFF_SUBMISSION_REPORT_SUMMARIES_TTL_MS,
     );
-    await setCachedData(cacheKey, reportSummaries, 300);
+    await setCachedData(cacheKey, reportSummaries);
     return reportSummaries;
   })().finally(() => {
     staffSubmissionReportSummariesPromise = null;
@@ -1612,7 +1612,7 @@ export async function getCachedStaffDashboardOverview() {
       overview,
       STAFF_DASHBOARD_OVERVIEW_TTL_MS,
     );
-    await setCachedData(cacheKey, overview, 300);
+    await setCachedData(cacheKey, overview);
     return overview;
   })().finally(() => {
     staffDashboardOverviewPromise = null;
@@ -1694,8 +1694,7 @@ export async function getCachedStaffSubmissionSummaries(options: any = {}) {
       cacheKey,
       createTimedValue(result, STAFF_SUBMISSION_SUMMARIES_TTL_MS),
     );
-    // Short TTL for paginated queries (1 minute max)
-    await setCachedData(redisKey, result, 60);
+    await setCachedData(redisKey, result);
     return result;
   })().finally(() => {
     staffSubmissionSummariesPromises.delete(cacheKey);
@@ -1897,8 +1896,7 @@ export async function getCachedApprovedStudents(options: any = {}) {
       cacheKey,
       createTimedValue(result, STAFF_APPROVED_STUDENTS_TTL_MS),
     );
-    // Short TTL for paginated queries (1 minute max)
-    await setCachedData(redisKey, result, 60);
+    await setCachedData(redisKey, result);
     return result;
   })().finally(() => {
     staffApprovedStudentsPromises.delete(cacheKey);
@@ -1962,7 +1960,7 @@ export async function getCachedAnalyticsSummary() {
 
     const analytics = await loadAnalyticsSummary();
     analyticsReadCache = createTimedValue(analytics, ANALYTICS_CACHE_TTL_MS);
-    await setCachedData(cacheKey, analytics, 300);
+    await setCachedData(cacheKey, analytics);
     return analytics;
   })().finally(() => {
     analyticsReadPromise = null;
@@ -1988,7 +1986,7 @@ export async function getCachedSubmissionsList() {
       supabase.from("submissions").select(SUBMISSION_LIST_COLUMNS),
     );
     submissionsReadCache = createTimedValue(submissions, SUBMISSIONS_CACHE_TTL_MS);
-    await setCachedData(cacheKey, submissions, 300);
+    await setCachedData(cacheKey, submissions);
     return submissions;
   })().finally(() => {
     submissionsReadPromise = null;
@@ -2023,7 +2021,7 @@ export async function getCachedStudentRecords(studentId: string) {
       cacheKey,
       createTimedValue(records, STUDENT_RECORDS_CACHE_TTL_MS),
     );
-    await setCachedData(redisKey, records, 300);
+    await setCachedData(redisKey, records);
     return records;
   })().finally(() => {
     studentRecordsReadPromises.delete(cacheKey);

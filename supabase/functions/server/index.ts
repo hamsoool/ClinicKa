@@ -1181,7 +1181,7 @@ app.get("/student-announcements", async (c) => {
     }).filter((item) => item.id && item.title);
 
     const responseData = { announcements };
-    await setCachedData(cacheKey, responseData, 300); // Cache for 5 minutes
+    await setCachedData(cacheKey, responseData);
     return c.json(responseData);
   } catch (error) {
     console.log("Error fetching student announcements:", error);
@@ -2393,14 +2393,14 @@ app.put("/submission/:id/status", async (c) => {
         })
         .eq('id', id)
         .in('status', ['pending', 'resubmitted'])
-        .select('id');
+        .select('id, student_id');
 
       if (claimError) throw new Error(claimError.message);
 
       if ((claimedRows || []).length === 0) {
         const { data: currentSubmission, error: currentSubmissionError } = await supabase
           .from('submissions')
-          .select('id,status,reviewed_by')
+          .select('id,status,reviewed_by,student_id')
           .eq('id', id)
           .maybeSingle();
 
@@ -2422,6 +2422,7 @@ app.put("/submission/:id/status", async (c) => {
           if (ownUpdateError) throw new Error(ownUpdateError.message);
 
           invalidateDashboardReadCaches();
+          if (currentSubmission.student_id) invalidateStudentRecordsCache(currentSubmission.student_id);
           return c.json({ success: true });
         }
 
@@ -2452,10 +2453,11 @@ app.put("/submission/:id/status", async (c) => {
       }
 
       invalidateDashboardReadCaches();
+      if (claimedRows?.[0]?.student_id) invalidateStudentRecordsCache(claimedRows[0].student_id);
       return c.json({ success: true });
     }
 
-    const { error } = await supabase
+    const { data: updatedSub, error } = await supabase
       .from('submissions')
       .update({
         status: normalizedStatus,
@@ -2463,11 +2465,13 @@ app.put("/submission/:id/status", async (c) => {
         reviewed_by: requester.staff?.id || null,
         updated_at: now,
       })
-      .eq('id', id);
+      .eq('id', id)
+      .select('student_id');
 
     if (error) throw new Error(error.message);
 
     invalidateDashboardReadCaches();
+    if (updatedSub?.[0]?.student_id) invalidateStudentRecordsCache(updatedSub[0].student_id);
     return c.json({ success: true });
   } catch (error) {
     console.log('Error updating submission status:', error);
@@ -2829,7 +2833,7 @@ app.put("/submission/:id/measurements", async (c) => {
     const id = c.req.param('id');
     const measurements = await c.req.json();
 
-    await Promise.all([
+    const results = await Promise.all([
       supabase.from('staff_measurements').upsert({
         submission_id: id,
         blood_pressure: measurements.bloodPressure || null,
@@ -2865,10 +2869,12 @@ app.put("/submission/:id/measurements", async (c) => {
       }),
       supabase.from('submissions').update({
         updated_at: new Date().toISOString(),
-      }).eq('id', id),
+      }).eq('id', id).select('student_id'),
     ]);
 
     invalidateDashboardReadCaches();
+    const updatedSub = results[4].data;
+    if (updatedSub?.[0]?.student_id) invalidateStudentRecordsCache(updatedSub[0].student_id);
     return c.json({ success: true });
   } catch (error) {
     console.log('Error updating measurements:', error);
@@ -3397,7 +3403,7 @@ app.get("/staff-users", async (c) => {
         })),
     };
 
-    await setCachedData(cacheKey, responseData, 300);
+    await setCachedData(cacheKey, responseData);
     return c.json(responseData);
   } catch (error) {
     console.log('Error fetching staff users:', error);
@@ -3465,7 +3471,7 @@ app.get("/user-accounts", async (c) => {
         }),
     };
 
-    await setCachedData(cacheKey, responseData, 300);
+    await setCachedData(cacheKey, responseData);
     return c.json(responseData);
   } catch (error) {
     console.log('Error fetching user accounts:', error);
@@ -3548,7 +3554,7 @@ app.get("/super-admin/administrators", async (c) => {
       archivedAdministrators,
     };
 
-    await setCachedData(cacheKey, responseData, 300);
+    await setCachedData(cacheKey, responseData);
     return c.json(responseData);
   } catch (error) {
     console.log('Error fetching administrators:', error);
@@ -3806,7 +3812,7 @@ app.get("/archived-accounts", async (c) => {
       })),
     };
 
-    await setCachedData(cacheKey, responseData, 300);
+    await setCachedData(cacheKey, responseData);
     return c.json(responseData);
   } catch (error) {
     console.log('Error fetching archived accounts:', error);
