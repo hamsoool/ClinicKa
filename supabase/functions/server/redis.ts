@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Redis } from "npm:@upstash/redis@1.31.3";
 
 let redisClient: Redis | null | undefined = undefined;
