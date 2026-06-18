@@ -89,6 +89,51 @@ import {
 import { getCachedData, setCachedData } from "./redis.ts";
 
 const app = new Hono().basePath("/server");
+
+const PAYLOAD_SECRET = Deno.env.get("API_PAYLOAD_SECRET") || "default-secret-key-must-be-32-by";
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+async function getCryptoKey(secret: string) {
+  let keyBytes = encoder.encode(secret);
+  if (keyBytes.length < 32) {
+    const padded = new Uint8Array(32);
+    padded.set(keyBytes);
+    keyBytes = padded;
+  } else if (keyBytes.length > 32) {
+    keyBytes = keyBytes.slice(0, 32);
+  }
+  return await crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function encryptPayload(data: any, secret: string): Promise<string> {
+  const key = await getCryptoKey(secret);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = encoder.encode(JSON.stringify(data));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const combined = new Uint8Array(12 + ciphertext.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), 12);
+  let binString = "";
+  for (let i = 0; i < combined.length; i++) {
+    binString += String.fromCharCode(combined[i]);
+  }
+  return btoa(binString);
+}
+
+async function decryptPayload(encryptedBase64: string, secret: string): Promise<any> {
+  const key = await getCryptoKey(secret);
+  const binString = atob(encryptedBase64);
+  const combined = new Uint8Array(binString.length);
+  for (let i = 0; i < binString.length; i++) {
+    combined[i] = binString.charCodeAt(i);
+  }
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+  const decryptedBytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  return JSON.parse(decoder.decode(decryptedBytes));
+}
+
 const OCR_SPACE_DEFAULT_MAX_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const ANNOUNCEMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -961,6 +1006,43 @@ app.use("/*", async (c, next) => {
   c.header("Pragma", "no-cache");
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "no-referrer");
+});
+
+app.use("/*", async (c, next) => {
+  if (c.req.method !== "GET" && c.req.method !== "HEAD" && c.req.method !== "OPTIONS") {
+    const contentType = c.req.header("content-type") || "";
+    if (contentType.includes("text/plain")) {
+      const rawBody = await c.req.text();
+      if (rawBody) {
+        try {
+          const decrypted = await decryptPayload(rawBody, PAYLOAD_SECRET);
+          c.req.json = async () => decrypted;
+        } catch (err) {
+          console.error("Decryption failed:", err);
+          return badRequest("Invalid encrypted payload");
+        }
+      }
+    }
+  }
+
+  await next();
+
+  const resContentType = c.res.headers.get("content-type") || "";
+  if (resContentType.includes("application/json")) {
+    const clone = c.res.clone();
+    try {
+      const data = await clone.json();
+      const encrypted = await encryptPayload(data, PAYLOAD_SECRET);
+      const newHeaders = new Headers(c.res.headers);
+      newHeaders.set("Content-Type", "text/plain");
+      c.res = new Response(encrypted, {
+        status: c.res.status,
+        headers: newHeaders,
+      });
+    } catch (e) {
+      console.error("Encryption failed:", e);
+    }
+  }
 });
 
 app.options('*', (c) => new Response(null, {

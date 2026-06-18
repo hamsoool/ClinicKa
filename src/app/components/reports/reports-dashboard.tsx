@@ -1522,7 +1522,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           progress={100}
         />
         <StatCard
-          label="Cleared Students"
+          label="Cleared Students"  
           value={globalSummary.approved}
           icon={ClipboardCheck}
           accent="text-primary"
