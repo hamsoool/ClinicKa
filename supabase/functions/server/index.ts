@@ -1093,11 +1093,14 @@ app.post("/invalidate-cache", async (c) => {
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
 
-  const { studentId } = await c.req.json().catch(() => ({}));
+  const { studentId, announcements } = await c.req.json().catch(() => ({}));
 
   invalidateDashboardReadCaches();
   if (studentId) {
     invalidateStudentRecordsCache(studentId);
+  }
+  if (announcements) {
+    await setCachedData("student_announcements", null, 0);
   }
 
   return c.json({ success: true });
@@ -1141,6 +1144,49 @@ app.get("/me", async (c) => {
     student: requester.student,
     staff: requester.staff,
   });
+});
+
+app.get("/student-announcements", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+
+  try {
+    const cacheKey = "student_announcements";
+    const cached = await getCachedData<any>(cacheKey);
+    if (cached) return c.json(cached);
+
+    const { data: rows, error } = await supabase
+      .from("announcements")
+      .select("id,title,description,date_posted,image_path,created_at")
+      .eq("is_published", true)
+      .order("date_posted", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    const announcements = (rows || []).map((row) => {
+      const rawPath = String(row?.image_path || "").trim();
+      const absoluteImageUrl = /^https?:\/\//i.test(rawPath) ? normalizeMediaUrl(rawPath) : null;
+
+      return {
+        id: String(row?.id || ""),
+        title: String(row?.title || "").trim(),
+        description: String(row?.description || "").trim(),
+        datePosted: String(row?.date_posted || row?.created_at || ""),
+        imageUrl: absoluteImageUrl || null,
+        imagePath: rawPath || null,
+        createdAt: row?.created_at ? String(row.created_at) : null,
+      };
+    }).filter((item) => item.id && item.title);
+
+    const responseData = { announcements };
+    await setCachedData(cacheKey, responseData, 300); // Cache for 5 minutes
+    return c.json(responseData);
+  } catch (error) {
+    console.log("Error fetching student announcements:", error);
+    return internalServerError(c, "Failed to fetch student announcements", error);
+  }
 });
 
 // Student routes.
