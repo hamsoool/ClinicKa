@@ -67,6 +67,7 @@ Some staff/admin flows call the Supabase Edge Function at `/functions/v1/server/
 - Supabase Auth, Postgres, REST API, and Edge Functions
 - Cloudinary for uploaded media
 - OCR.space integration for lab-result extraction
+- Upstash Redis for high-performance edge caching
 - PWA support through `vite-plugin-pwa` and Workbox
 
 ## Application Roles
@@ -89,6 +90,7 @@ graph TD
   Browser --> Function[Supabase Edge Function: server]
   Browser --> Cloudinary[Cloudinary upload API]
   Function --> Database[Supabase Postgres]
+  Function --> Redis[Upstash Redis Cache]
   Function --> Cloudinary
   Function --> OCR[OCR.space]
   Function --> SMTP[SMTP provider]
@@ -234,6 +236,8 @@ Server-side only:
 - `ALLOW_VERCEL_PREVIEW_ORIGINS`
 - `SIGNED_STORAGE_URL_EXPIRES_SECONDS`
 - `ENABLE_REQUEST_LOGGING`
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 
 ### Cloudinary
 
@@ -324,6 +328,8 @@ Make sure Supabase secrets are configured before deploying:
 ```bash
 supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...
 supabase secrets set CLOUDINARY_API_SECRET=...
+supabase secrets set UPSTASH_REDIS_REST_URL=...
+supabase secrets set UPSTASH_REDIS_REST_TOKEN=...
 ```
 
 Set the rest of the required secrets from [.env.example](.env.example) according to the environment.
