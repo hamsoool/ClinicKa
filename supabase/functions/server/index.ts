@@ -86,6 +86,7 @@ import {
   requireSubmissionAccess,
   SUBMISSION_LIST_COLUMNS,
 } from "./submissions.ts";
+import { getCachedData, setCachedData } from "./redis.ts";
 
 const app = new Hono().basePath("/server");
 const OCR_SPACE_DEFAULT_MAX_BYTES = 1 * 1024 * 1024;
@@ -1086,6 +1087,21 @@ async function findProfileIdForStudentId(studentId: string) {
   return profile?.id || "";
 }
 
+app.post("/invalidate-cache", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+
+  const { studentId } = await c.req.json().catch(() => ({}));
+
+  invalidateDashboardReadCaches();
+  if (studentId) {
+    invalidateStudentRecordsCache(studentId);
+  }
+
+  return c.json({ success: true });
+});
+
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 // Authentication and shared session helpers.
@@ -1200,6 +1216,9 @@ app.put("/student-profile", async (c) => {
       throw new Error(studentError?.message || 'Failed to update student record');
     }
 
+    invalidateDashboardReadCaches();
+    invalidateStudentRecordsCache(studentId);
+
     return c.json({
       success: true,
       profile: updatedProfile,
@@ -1296,6 +1315,8 @@ app.put("/staff-profile", async (c) => {
         throw new Error(studentError.message);
       }
     }
+
+    invalidateDashboardReadCaches();
 
     return c.json({
       success: true,
@@ -3300,6 +3321,10 @@ app.get("/staff-users", async (c) => {
   if (requester.profile.role !== 'admin') return forbidden();
 
   try {
+    const cacheKey = "admin:staff_users";
+    const cached = await getCachedData<any>(cacheKey);
+    if (cached) return c.json(cached);
+
     const [{ data: staff, error }, archivedState] = await Promise.all([
       supabase
         .from('staff_users')
@@ -3311,7 +3336,7 @@ app.get("/staff-users", async (c) => {
     if (error) throw new Error(error.message);
     const archivedUserIds = archivedState.userIds;
 
-    return c.json({
+    const responseData = {
       staff: (staff || [])
         .filter((member) => !member.profile_id || !archivedUserIds.has(member.profile_id))
         .map((member) => ({
@@ -3323,7 +3348,10 @@ app.get("/staff-users", async (c) => {
           status: member.is_active ? 'Active' : 'Inactive',
           email: member.email || '',
         })),
-    });
+    };
+
+    await setCachedData(cacheKey, responseData, 300);
+    return c.json(responseData);
   } catch (error) {
     console.log('Error fetching staff users:', error);
     return internalServerError(c, 'Failed to fetch staff users', error);
@@ -3337,6 +3365,10 @@ app.get("/user-accounts", async (c) => {
   if (!isAdminRole(requester.profile.role)) return forbidden();
 
   try {
+    const cacheKey = "admin:user_accounts";
+    const cached = await getCachedData<any>(cacheKey);
+    if (cached) return c.json(cached);
+
     const [
       { data: profiles, error: profilesError },
       { data: staffUsers, error: staffError },
@@ -3361,7 +3393,7 @@ app.get("/user-accounts", async (c) => {
     }, {} as Record<string, any>);
     const archivedUserIds = archivedState.userIds;
 
-    return c.json({
+    const responseData = {
       users: (profiles || [])
         .filter((profile) => !archivedUserIds.has(profile.id))
         .map((profile) => {
@@ -3384,7 +3416,10 @@ app.get("/user-accounts", async (c) => {
             canArchive: profile.role === 'student' || profile.role === 'staff',
           };
         }),
-    });
+    };
+
+    await setCachedData(cacheKey, responseData, 300);
+    return c.json(responseData);
   } catch (error) {
     console.log('Error fetching user accounts:', error);
     return internalServerError(c, 'Failed to fetch user accounts', error);
@@ -3398,6 +3433,10 @@ app.get("/super-admin/administrators", async (c) => {
   if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
 
   try {
+    const cacheKey = "admin:super_admin_administrators";
+    const cached = await getCachedData<any>(cacheKey);
+    if (cached) return c.json(cached);
+
     const [{ data: profiles, error }, archiveState] = await Promise.all([
       supabase
         .from('profiles')
@@ -3439,7 +3478,7 @@ app.get("/super-admin/administrators", async (c) => {
       );
     }
 
-    return c.json({
+    const responseData = {
       administrators: (profiles || [])
         .filter((profile) => !archivedUserIds.has(profile.id))
         .map((profile) => {
@@ -3460,7 +3499,10 @@ app.get("/super-admin/administrators", async (c) => {
           };
         }),
       archivedAdministrators,
-    });
+    };
+
+    await setCachedData(cacheKey, responseData, 300);
+    return c.json(responseData);
   } catch (error) {
     console.log('Error fetching administrators:', error);
     return internalServerError(c, 'Failed to fetch administrators', error);
@@ -3686,6 +3728,10 @@ app.get("/archived-accounts", async (c) => {
   if (!isAdminRole(requester.profile.role) && !isSuperAdminRole(requester.profile.role)) return forbidden();
 
   try {
+    const cacheKey = "admin:archived_accounts";
+    const cached = await getCachedData<any>(cacheKey);
+    if (cached) return c.json(cached);
+
     const archiveState = await getArchivedAccountsTableState();
     if (!archiveState.available) {
       return c.json({ users: [] });
@@ -3698,7 +3744,7 @@ app.get("/archived-accounts", async (c) => {
 
     if (error) throw new Error(error.message);
 
-    return c.json({
+    const responseData = {
       users: (archivedAccounts || []).map((account) => ({
         archiveId: account.id,
         userId: account.user_id,
@@ -3711,7 +3757,10 @@ app.get("/archived-accounts", async (c) => {
         archivedAt: account.archived_at,
         archivedReason: account.archive_reason || '',
       })),
-    });
+    };
+
+    await setCachedData(cacheKey, responseData, 300);
+    return c.json(responseData);
   } catch (error) {
     console.log('Error fetching archived accounts:', error);
     return internalServerError(c, 'Failed to fetch archived accounts', error);
@@ -3792,17 +3841,17 @@ app.post("/admin/archive-account", async (c) => {
         },
         student: linkedStudent
           ? {
-              student_id: linkedStudent.student_id,
-              department: linkedStudent.department || null,
-              course: linkedStudent.course || null,
-              year_level: linkedStudent.year_level || null,
-            }
+            student_id: linkedStudent.student_id,
+            department: linkedStudent.department || null,
+            course: linkedStudent.course || null,
+            year_level: linkedStudent.year_level || null,
+          }
           : null,
         staff: linkedStaff
           ? {
-              position: linkedStaff.position || null,
-              is_active: linkedStaff.is_active ?? null,
-            }
+            position: linkedStaff.position || null,
+            is_active: linkedStaff.is_active ?? null,
+          }
           : null,
         submissions: {
           count: submissions?.length || 0,

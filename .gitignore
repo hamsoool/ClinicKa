@@ -12,3 +12,8 @@ dist/
 # React Router
 .react-router/
 build/
+
+
+
+g.image/
+gemini.md

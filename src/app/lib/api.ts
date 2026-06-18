@@ -1211,9 +1211,9 @@ function toAuthSession(session: SupabaseSession | null): AuthSession | null {
     token_type: session.token_type,
     user: session.user
       ? {
-          id: session.user.id,
-          email: session.user.email || undefined,
-        }
+        id: session.user.id,
+        email: session.user.email || undefined,
+      }
       : undefined,
   });
 }
@@ -1602,8 +1602,8 @@ function findLabFileByHint(files: any[], hint: string) {
     hint.toLowerCase() === 'xray'
       ? ['xray', 'x-ray', 'chest']
       : hint.toLowerCase() === 'cbc'
-      ? ['cbc', 'blood', 'complete blood count', 'hematology']
-      : ['urinalysis', 'urine', 'ua', 'u/a'];
+        ? ['cbc', 'blood', 'complete blood count', 'hematology']
+        : ['urinalysis', 'urine', 'ua', 'u/a'];
   const match = (files || []).find((file) => {
     const name = String(file?.file_name || '').toLowerCase();
     const path = String(file?.storage_path || '').toLowerCase();
@@ -1804,11 +1804,11 @@ function mapSubmission(row: any, related: Record<string, any>) {
     bmi: row.bmi,
     emergencyContact: emergencyContact
       ? {
-          name: emergencyContact.name,
-          relationship: emergencyContact.relationship,
-          phone: emergencyContact.phone,
-          address: emergencyContact.address,
-        }
+        name: emergencyContact.name,
+        relationship: emergencyContact.relationship,
+        phone: emergencyContact.phone,
+        address: emergencyContact.address,
+      }
       : undefined,
     medicalHistory: mapMedicalHistory(medicalHistory),
     staffMeasurements: mapStaffMeasurements(staffMeasurements, examinerSignature?.url),
@@ -1830,15 +1830,15 @@ function mapSubmission(row: any, related: Record<string, any>) {
     },
     clearanceInfo: certificate
       ? {
-          findingsNormal: certificate.findings_normal,
-          diagnosis: certificate.diagnosis,
-          remarks: certificate.remarks,
-          purpose: certificate.purpose,
-          controlNo: certificate.control_no,
-          issuedDate: certificate.issued_date || certificate.issued_at,
-          licenseNo: certificate.license_no,
-          signatoryName: certificate.signatory_name,
-        }
+        findingsNormal: certificate.findings_normal,
+        diagnosis: certificate.diagnosis,
+        remarks: certificate.remarks,
+        purpose: certificate.purpose,
+        controlNo: certificate.control_no,
+        issuedDate: certificate.issued_date || certificate.issued_at,
+        licenseNo: certificate.license_no,
+        signatoryName: certificate.signatory_name,
+      }
       : undefined,
     photoUrl: normalizeStorageFileUrl(files.photo?.url || profileAssets.photo?.url),
     signatureUrl: normalizeStorageFileUrl(files.signature?.url || profileAssets.signature?.url),
@@ -1886,15 +1886,15 @@ async function loadRelatedData(rows: any[]) {
       : Promise.resolve([]),
     submissionIds.length
       ? restRequestStaffMeasurements(
-          `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`,
-          `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS_LEGACY}`,
-        )
+        `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`,
+        `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS_LEGACY}`,
+      )
       : Promise.resolve([]),
     reviewerIds.length
       ? restRequestStaffUsers(
-          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
-          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
-        )
+        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
+        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+      )
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})&select=${LAB_CHEST_XRAY_SELECT_COLUMNS}`)
@@ -1930,9 +1930,9 @@ async function loadRelatedData(rows: any[]) {
   const missingReviewerIdList = missingReviewerIds.map((id) => encodeURIComponent(id)).join(',');
   const extraReviewers = missingReviewerIds.length
     ? await restRequestStaffUsers(
-        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
-        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
-      ).catch(() => [])
+      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
+      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+    ).catch(() => [])
     : [];
   const examinedByNames = [
     ...new Set(
@@ -1943,9 +1943,9 @@ async function loadRelatedData(rows: any[]) {
   ];
   const examinerDirectory = examinedByNames.length
     ? await restRequestStaffUsers(
-        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
-        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
-      ).catch(() => [])
+      'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
+      'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
+    ).catch(() => [])
     : [];
   const staffRows = Object.values(
     [...initialReviewerRows, ...(extraReviewers || []), ...(examinerDirectory || [])].reduce<Record<string, any>>((acc, staff: any) => {
@@ -1957,9 +1957,9 @@ async function loadRelatedData(rows: any[]) {
   const staffProfileIdList = staffProfileIds.map((id) => encodeURIComponent(id)).join(',');
   const staffSignatureFilesRaw = staffProfileIds.length
     ? await restRequest<any[]>(
-        'files',
-        `select=id,submission_id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
-      ).catch(() => [])
+      'files',
+      `select=id,submission_id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
+    ).catch(() => [])
     : [];
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
     await normalizeFileRows(staffSignatureFilesRaw, token),
@@ -1991,9 +1991,9 @@ async function loadRelatedData(rows: any[]) {
   const studentProfileIdList = studentProfileIds.map((id) => encodeURIComponent(id)).join(',');
   const profileAssetFilesRaw = studentProfileIds.length
     ? await restRequest<any[]>(
-        'files',
-        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&select=${FILE_SELECT_COLUMNS}&order=uploaded_at.desc`,
-      ).catch(() => [])
+      'files',
+      `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&select=${FILE_SELECT_COLUMNS}&order=uploaded_at.desc`,
+    ).catch(() => [])
     : [];
   const normalizedProfileAssetFiles = normalizeProfileAssetRows(
     await normalizeFileRows(profileAssetFilesRaw, token),
@@ -2072,8 +2072,8 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     studentIds.length
       ? restRequest<any[]>(
         'students',
-          `student_id=in.(${studentIdList})&select=student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at`,
-        )
+        `student_id=in.(${studentIdList})&select=student_id,profile_id,first_name,last_name,middle_initial,department,course,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at`,
+      )
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>('emergency_contacts', `submission_id=in.(${idList})&select=${EMERGENCY_CONTACT_SELECT_COLUMNS}`)
@@ -2083,9 +2083,9 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
       : Promise.resolve([]),
     submissionIds.length
       ? restRequestStaffMeasurements(
-          `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`,
-          `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS_LEGACY}`,
-        )
+        `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS}`,
+        `submission_id=in.(${idList})&select=${STAFF_MEASUREMENTS_SELECT_COLUMNS_LEGACY}`,
+      )
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>('lab_chest_xray', `submission_id=in.(${idList})&select=${LAB_CHEST_XRAY_SELECT_COLUMNS}`)
@@ -2101,15 +2101,15 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
       : Promise.resolve([]),
     submissionIds.length
       ? restRequest<any[]>(
-          'files',
-          `submission_id=in.(${idList})&type=in.(photo,signature)&select=${FILE_SELECT_COLUMNS}&order=uploaded_at.desc`,
-        ).catch(() => [])
+        'files',
+        `submission_id=in.(${idList})&type=in.(photo,signature)&select=${FILE_SELECT_COLUMNS}&order=uploaded_at.desc`,
+      ).catch(() => [])
       : Promise.resolve([]),
     reviewerIds.length
       ? restRequestStaffUsers(
-          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
-          `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
-        ).catch(() => [])
+        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
+        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+      ).catch(() => [])
       : Promise.resolve([]),
   ]);
 
@@ -2131,9 +2131,9 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     .join(',');
   const extraReviewers = missingReviewerIds.length
     ? await restRequestStaffUsers(
-        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
-        `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
-      ).catch(() => [])
+      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
+      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+    ).catch(() => [])
     : [];
   const examinedByNames = [
     ...new Set(
@@ -2144,9 +2144,9 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   ];
   const examinerDirectory = examinedByNames.length
     ? await restRequestStaffUsers(
-        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
-        'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
-      ).catch(() => [])
+      'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
+      'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
+    ).catch(() => [])
     : [];
   const staffRows = Object.values(
     [...initialReviewerRows, ...(extraReviewers || []), ...(examinerDirectory || [])].reduce<Record<string, any>>((acc, staff: any) => {
@@ -2160,9 +2160,9 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     .join(',');
   const staffSignatureFilesRaw = staffProfileIds.length
     ? await restRequest<any[]>(
-        'files',
-        `select=id,submission_id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
-      ).catch(() => [])
+      'files',
+      `select=id,submission_id,type,file_name,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,mime_type,uploaded_at,url,uploaded_by&uploaded_by=in.(${staffProfileIdList})&submission_id=is.null&order=uploaded_at.desc`,
+    ).catch(() => [])
     : [];
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
     await normalizeFileRows(staffSignatureFilesRaw, token),
@@ -2195,9 +2195,9 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     .join(',');
   const profileAssetFilesRaw = studentProfileIds.length
     ? await restRequest<any[]>(
-        'files',
-        `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&select=${FILE_SELECT_COLUMNS}&order=uploaded_at.desc`,
-      ).catch(() => [])
+      'files',
+      `uploaded_by=in.(${studentProfileIdList})&submission_id=is.null&select=${FILE_SELECT_COLUMNS}&order=uploaded_at.desc`,
+    ).catch(() => [])
     : [];
   const normalizedProfileAssetFiles = normalizeProfileAssetRows(
     await normalizeFileRows(profileAssetFilesRaw, token),
@@ -2392,18 +2392,18 @@ export async function signUpWithPassword(
   const session: AuthSession | null =
     data.session
       ? {
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-          expires_in: data.session.expires_in,
-          expires_at: data.session.expires_at,
-          token_type: data.session.token_type,
-          user: data.session.user
-            ? {
-                id: data.session.user.id,
-                email: data.session.user.email || undefined,
-              }
-            : undefined,
-        }
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        expires_in: data.session.expires_in,
+        expires_at: data.session.expires_at,
+        token_type: data.session.token_type,
+        user: data.session.user
+          ? {
+            id: data.session.user.id,
+            email: data.session.user.email || undefined,
+          }
+          : undefined,
+      }
       : null;
   const user = (data.user || null) as SupabaseAuthUser | null;
   const hasNoIdentity = Array.isArray(user?.identities) && user.identities.length === 0;
@@ -2625,10 +2625,10 @@ export async function getMe(token?: string | null) {
       const [studentRows, staffRows] = await Promise.all([
         resolvedProfile.student_id
           ? restRequest<any[]>(
-              'students',
-              `student_id=eq.${encodeURIComponent(resolvedProfile.student_id)}&select=${STUDENT_SELECT_COLUMNS}`,
-              { token },
-            )
+            'students',
+            `student_id=eq.${encodeURIComponent(resolvedProfile.student_id)}&select=${STUDENT_SELECT_COLUMNS}`,
+            { token },
+          )
           : Promise.resolve([]),
         restRequest<any[]>('staff_users', `profile_id=eq.${user.id}&select=${STAFF_SELECT_COLUMNS}`, { token }),
       ]);
@@ -3157,6 +3157,18 @@ function deriveSubmissionLabSourceMetadata(data: any) {
   };
 }
 
+export async function triggerCacheInvalidation(studentId?: string | null) {
+  try {
+    await apiRequest('/functions/v1/server/invalidate-cache', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: studentId || null }),
+    });
+  } catch {
+    // Silent failure for background invalidation
+  }
+}
+
 export async function submitMedicalRecord(data: any) {
   const me = await getMe();
   const studentId = me.profile.student_id || data.studentId;
@@ -3355,6 +3367,8 @@ export async function submitMedicalRecord(data: any) {
       },
     ),
   ]);
+
+  await triggerCacheInvalidation(studentId);
 
   return { success: true as const, recordId };
 }
@@ -3576,6 +3590,8 @@ export async function updateMedicalRecord(recordId: string, data: any) {
     ),
   ]);
 
+  await triggerCacheInvalidation(studentId);
+
   return { success: true as const, recordId };
 }
 
@@ -3612,11 +3628,11 @@ function mapStudentRecordSummary(row: any, emergencyContactsBySubmission: Record
     operationDetails: row.operation_details,
     emergencyContact: emergencyContact
       ? {
-          name: emergencyContact.name,
-          relationship: emergencyContact.relationship,
-          phone: emergencyContact.phone,
-          address: emergencyContact.address,
-        }
+        name: emergencyContact.name,
+        relationship: emergencyContact.relationship,
+        phone: emergencyContact.phone,
+        address: emergencyContact.address,
+      }
       : undefined,
     labTestLocation: row.lab_test_location || '',
     otherClinicName: row.lab_test_clinic || '',
@@ -3642,9 +3658,9 @@ export async function getStudentRecordSummaries(studentId?: string) {
     const idList = submissionIds.map((id) => encodeURIComponent(id)).join(',');
     const emergencyContacts = submissionIds.length
       ? await restRequest<any[]>(
-          'emergency_contacts',
-          `select=submission_id,name,relationship,phone,address&submission_id=in.(${idList})`,
-        ).catch(() => [])
+        'emergency_contacts',
+        `select=submission_id,name,relationship,phone,address&submission_id=in.(${idList})`,
+      ).catch(() => [])
       : [];
     const emergencyContactsBySubmission = (emergencyContacts || []).reduce((acc, contact) => {
       acc[contact.submission_id] = contact;
@@ -4996,28 +5012,28 @@ export async function saveSubmissionReview(id: string, review: any) {
     ),
     personalInfo.studentId
       ? restRequest(
-          'students',
-          `student_id=eq.${encodeURIComponent(personalInfo.studentId)}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              first_name: personalInfo.firstName || null,
-              last_name: personalInfo.lastName || null,
-              middle_initial: personalInfo.middleInitial || null,
-              department: personalInfo.department || null,
-              course: personalInfo.course || null,
-              age: personalInfo.age ? Number(personalInfo.age) : null,
-              sex: personalInfo.sex || null,
-              birthday: personalInfo.birthday || null,
-              civil_status: personalInfo.civilStatus || null,
-              contact_number: personalInfo.contactNumber || null,
-              address: personalInfo.address || null,
-            }),
+        'students',
+        `student_id=eq.${encodeURIComponent(personalInfo.studentId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
           },
-        )
+          body: JSON.stringify({
+            first_name: personalInfo.firstName || null,
+            last_name: personalInfo.lastName || null,
+            middle_initial: personalInfo.middleInitial || null,
+            department: personalInfo.department || null,
+            course: personalInfo.course || null,
+            age: personalInfo.age ? Number(personalInfo.age) : null,
+            sex: personalInfo.sex || null,
+            birthday: personalInfo.birthday || null,
+            civil_status: personalInfo.civilStatus || null,
+            contact_number: personalInfo.contactNumber || null,
+            address: personalInfo.address || null,
+          }),
+        },
+      )
       : Promise.resolve({}),
     restRequest(
       'emergency_contacts',
@@ -5146,6 +5162,8 @@ export async function saveSubmissionReview(id: string, review: any) {
     }
   }
 
+  await triggerCacheInvalidation(personalInfo.studentId);
+
   return { success: true as const };
 }
 
@@ -5219,6 +5237,8 @@ export async function updateSubmissionStatus(id: string, status: string, staffNo
       console.warn('Failed to send email notification:', error);
     }
   }
+
+  await triggerCacheInvalidation();
 
   return { success: true as const };
 }
@@ -5344,6 +5364,8 @@ export async function updateMeasurements(id: string, measurements: any) {
       ),
     ]);
   }
+
+  await triggerCacheInvalidation();
 
   return { success: true as const };
 }
@@ -5675,7 +5697,7 @@ export async function getAnalytics() {
 }
 
 export async function getStaffUsers() {
-    return apiRequest<{ staff: Array<{ id: string; userId?: string; name: string; role: string; status: string; email: string }> }>(
+  return apiRequest<{ staff: Array<{ id: string; userId?: string; name: string; role: string; status: string; email: string }> }>(
     '/functions/v1/server/staff-users',
   );
 }
@@ -5739,7 +5761,7 @@ export async function createAdminStaff(input: AdminCreateStaffInput) {
 }
 
 export async function getUserAccounts() {
-    return apiRequest<{ users: AdminUserAccount[] }>('/functions/v1/server/user-accounts');
+  return apiRequest<{ users: AdminUserAccount[] }>('/functions/v1/server/user-accounts');
 }
 
 export async function getAdminSystemSettings() {
@@ -5862,11 +5884,11 @@ export async function updateAdminSystemSettings(input: AdminSystemSettings) {
 }
 
 export async function getArchivedUserAccounts() {
-    return apiRequest<{ users: ArchivedUserAccount[] }>('/functions/v1/server/archived-accounts');
+  return apiRequest<{ users: ArchivedUserAccount[] }>('/functions/v1/server/archived-accounts');
 }
 
 export async function archiveUserAccount(input: { userId: string; reason?: string }) {
-    return apiRequest<{ success: boolean }>('/functions/v1/server/admin/archive-account', {
+  return apiRequest<{ success: boolean }>('/functions/v1/server/admin/archive-account', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -5876,13 +5898,13 @@ export async function archiveUserAccount(input: { userId: string; reason?: strin
 }
 
 export async function deleteArchivedUserAccount(archiveId: string) {
-    return apiRequest<{ success: boolean }>(`/functions/v1/server/admin/archive-account/${encodeURIComponent(archiveId)}`, {
+  return apiRequest<{ success: boolean }>(`/functions/v1/server/admin/archive-account/${encodeURIComponent(archiveId)}`, {
     method: 'DELETE',
   });
 }
 
 export async function restoreArchivedUserAccount(archiveId: string) {
-    return apiRequest<{ success: boolean }>(`/functions/v1/server/admin/restore-account/${encodeURIComponent(archiveId)}`, {
+  return apiRequest<{ success: boolean }>(`/functions/v1/server/admin/restore-account/${encodeURIComponent(archiveId)}`, {
     method: 'POST',
   });
 }
