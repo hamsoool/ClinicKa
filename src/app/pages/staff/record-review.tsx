@@ -1420,23 +1420,23 @@ export default function StaffRecordReview() {
     const previousAssessmentForm = assessmentFormRef.current;
     const hydratedAssessmentForm = isSameSubmissionRefresh
       ? {
-          ...nextAssessmentForm,
-          // Preserve locally extracted lab values when background refetches return older saved data.
-          xrayDate: previousAssessmentForm.xrayDate,
-          xrayResult: previousAssessmentForm.xrayResult,
-          xrayFindings: previousAssessmentForm.xrayFindings,
-          cbcDate: previousAssessmentForm.cbcDate,
-          hemoglobin: previousAssessmentForm.hemoglobin,
-          hematocrit: previousAssessmentForm.hematocrit,
-          wbc: previousAssessmentForm.wbc,
-          plateletCount: previousAssessmentForm.plateletCount,
-          bloodType: previousAssessmentForm.bloodType,
-          glucose: previousAssessmentForm.glucose,
-          protein: previousAssessmentForm.protein,
-          urinalysisDate: previousAssessmentForm.urinalysisDate,
-          urinalysisGlucose: previousAssessmentForm.urinalysisGlucose,
-          urinalysisProtein: previousAssessmentForm.urinalysisProtein,
-        }
+        ...nextAssessmentForm,
+        // Preserve locally extracted lab values when background refetches return older saved data.
+        xrayDate: previousAssessmentForm.xrayDate,
+        xrayResult: previousAssessmentForm.xrayResult,
+        xrayFindings: previousAssessmentForm.xrayFindings,
+        cbcDate: previousAssessmentForm.cbcDate,
+        hemoglobin: previousAssessmentForm.hemoglobin,
+        hematocrit: previousAssessmentForm.hematocrit,
+        wbc: previousAssessmentForm.wbc,
+        plateletCount: previousAssessmentForm.plateletCount,
+        bloodType: previousAssessmentForm.bloodType,
+        glucose: previousAssessmentForm.glucose,
+        protein: previousAssessmentForm.protein,
+        urinalysisDate: previousAssessmentForm.urinalysisDate,
+        urinalysisGlucose: previousAssessmentForm.urinalysisGlucose,
+        urinalysisProtein: previousAssessmentForm.urinalysisProtein,
+      }
       : nextAssessmentForm;
     assessmentFormRef.current = hydratedAssessmentForm;
     setAssessmentForm(hydratedAssessmentForm);
@@ -1482,12 +1482,12 @@ export default function StaffRecordReview() {
       setSubmission((prev) => (
         prev
           ? {
-              ...prev,
-              staffMeasurements: {
-                ...(prev.staffMeasurements || {}),
-                examinedBySignatureUrl: nextSignatureUrl || undefined,
-              },
-            }
+            ...prev,
+            staffMeasurements: {
+              ...(prev.staffMeasurements || {}),
+              examinedBySignatureUrl: nextSignatureUrl || undefined,
+            },
+          }
           : prev
       ));
       setSignatureFile(null);
@@ -1598,26 +1598,26 @@ export default function StaffRecordReview() {
         field === 'birthday'
           ? (normalizeDateInputValue(String(value)) as RecordForm[K])
           : field === 'firstName'
-          ? (sanitizeLettersOnly(String(value), MAX_FIRST_NAME_LENGTH) as RecordForm[K])
-          : field === 'lastName'
-          ? (sanitizeLettersOnly(String(value), MAX_LAST_NAME_LENGTH) as RecordForm[K])
-          : field === 'middleInitial'
-          ? (sanitizeMiddleInitial(String(value)) as RecordForm[K])
-          : field === 'age'
-          ? (String(value).replace(/\D/g, '').slice(0, MAX_AGE_LENGTH) as RecordForm[K])
-          : field === 'sex'
-          ? (normalizeSexValue(String(value)) as RecordForm[K])
-          : field === 'civilStatus'
-          ? ((CIVIL_STATUS_OPTIONS.includes(String(value) as (typeof CIVIL_STATUS_OPTIONS)[number]) ? value : '') as RecordForm[K])
-          : field === 'contactNumber'
-          ? (sanitizeContactNumber(String(value)) as RecordForm[K])
-          : field === 'address'
-          ? (sanitizeAddress(String(value)) as RecordForm[K])
-          : field === 'allergyDetails'
-          ? (String(value).slice(0, MAX_ALLERGY_DETAILS_LENGTH) as RecordForm[K])
-          : field === 'operationDetails'
-          ? (String(value).slice(0, MAX_OPERATION_HISTORY_LENGTH) as RecordForm[K])
-          : value;
+            ? (sanitizeLettersOnly(String(value), MAX_FIRST_NAME_LENGTH) as RecordForm[K])
+            : field === 'lastName'
+              ? (sanitizeLettersOnly(String(value), MAX_LAST_NAME_LENGTH) as RecordForm[K])
+              : field === 'middleInitial'
+                ? (sanitizeMiddleInitial(String(value)) as RecordForm[K])
+                : field === 'age'
+                  ? (String(value).replace(/\D/g, '').slice(0, MAX_AGE_LENGTH) as RecordForm[K])
+                  : field === 'sex'
+                    ? (normalizeSexValue(String(value)) as RecordForm[K])
+                    : field === 'civilStatus'
+                      ? ((CIVIL_STATUS_OPTIONS.includes(String(value) as (typeof CIVIL_STATUS_OPTIONS)[number]) ? value : '') as RecordForm[K])
+                      : field === 'contactNumber'
+                        ? (sanitizeContactNumber(String(value)) as RecordForm[K])
+                        : field === 'address'
+                          ? (sanitizeAddress(String(value)) as RecordForm[K])
+                          : field === 'allergyDetails'
+                            ? (String(value).slice(0, MAX_ALLERGY_DETAILS_LENGTH) as RecordForm[K])
+                            : field === 'operationDetails'
+                              ? (String(value).slice(0, MAX_OPERATION_HISTORY_LENGTH) as RecordForm[K])
+                              : value;
       const next = { ...prev, [field]: normalizedValue };
 
       if (field === 'department') {
@@ -1646,12 +1646,12 @@ export default function StaffRecordReview() {
       field === 'name'
         ? sanitizeEmergencyName(value)
         : field === 'phone'
-        ? sanitizeContactNumber(value)
-        : field === 'address'
-        ? sanitizeAddress(value)
-        : field === 'relationship'
-        ? (EMERGENCY_CONTACT_RELATIONSHIPS.includes(value as any) ? value : '')
-        : value;
+          ? sanitizeContactNumber(value)
+          : field === 'address'
+            ? sanitizeAddress(value)
+            : field === 'relationship'
+              ? (EMERGENCY_CONTACT_RELATIONSHIPS.includes(value as any) ? value : '')
+              : value;
 
     setRecordForm((prev) => ({
       ...prev,
@@ -1800,16 +1800,16 @@ export default function StaffRecordReview() {
         field === 'issuedDate'
           ? normalizeDateInputValue(String(value))
           : field === 'diagnosis'
-          ? sanitizeSafeText(String(value), MAX_CLEARANCE_DIAGNOSIS_LENGTH)
-          : field === 'remarks'
-          ? sanitizeSafeText(String(value), MAX_CLEARANCE_REMARKS_LENGTH)
-          : field === 'purpose'
-          ? normalizeSingleClearancePurpose(value as ClearanceForm['purpose'])
-          : field === 'licenseNo'
-          ? sanitizeLicenseNo(String(value))
-          : field === 'signatoryName'
-          ? normalizeClearanceSignatoryName(String(value))
-          : value,
+            ? sanitizeSafeText(String(value), MAX_CLEARANCE_DIAGNOSIS_LENGTH)
+            : field === 'remarks'
+              ? sanitizeSafeText(String(value), MAX_CLEARANCE_REMARKS_LENGTH)
+              : field === 'purpose'
+                ? normalizeSingleClearancePurpose(value as ClearanceForm['purpose'])
+                : field === 'licenseNo'
+                  ? sanitizeLicenseNo(String(value))
+                  : field === 'signatoryName'
+                    ? normalizeClearanceSignatoryName(String(value))
+                    : value,
     }));
   }
 
@@ -2046,8 +2046,8 @@ export default function StaffRecordReview() {
         message: detectedDateOutOfRange
           ? `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'} (detected date is outside allowed date window). Review before saving.`
           : isLowConfidence
-          ? `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'} with low confidence. Review before saving.`
-          : `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
+            ? `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'} with low confidence. Review before saving.`
+            : `Filled ${detectedFieldCount} field${detectedFieldCount === 1 ? '' : 's'}. Review before saving.`,
         source: result.source,
         status: isLowConfidence || detectedDateOutOfRange ? 'warning' : 'success',
       });
@@ -2745,11 +2745,10 @@ export default function StaffRecordReview() {
               {submission.xrayFileUrl ? (
                 <div
                   aria-live="polite"
-                  className={`rounded-lg border px-4 py-3 text-sm ${
-                    xrayOcrState.status === 'idle'
+                  className={`rounded-lg border px-4 py-3 text-sm ${xrayOcrState.status === 'idle'
                       ? 'border-outline-variant/50 bg-surface-container-low text-on-surface'
                       : getOcrStatusClass(xrayOcrState.status)
-                  }`}
+                    }`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
@@ -2854,11 +2853,10 @@ export default function StaffRecordReview() {
               {submission.cbcFileUrl ? (
                 <div
                   aria-live="polite"
-                  className={`rounded-lg border px-4 py-3 text-sm ${
-                    cbcOcrState.status === 'idle'
+                  className={`rounded-lg border px-4 py-3 text-sm ${cbcOcrState.status === 'idle'
                       ? 'border-outline-variant/50 bg-surface-container-low text-on-surface'
                       : getOcrStatusClass(cbcOcrState.status)
-                  }`}
+                    }`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
@@ -2995,11 +2993,10 @@ export default function StaffRecordReview() {
               {submission.urinalysisFileUrl ? (
                 <div
                   aria-live="polite"
-                  className={`rounded-lg border px-4 py-3 text-sm ${
-                    urinalysisOcrState.status === 'idle'
+                  className={`rounded-lg border px-4 py-3 text-sm ${urinalysisOcrState.status === 'idle'
                       ? 'border-outline-variant/50 bg-surface-container-low text-on-surface'
                       : getOcrStatusClass(urinalysisOcrState.status)
-                  }`}
+                    }`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
@@ -3569,12 +3566,12 @@ export default function StaffRecordReview() {
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => previousReviewStep && changeReviewStep(previousReviewStep)}
-                disabled={!previousReviewStep}
-              >
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => previousReviewStep && changeReviewStep(previousReviewStep)}
+              disabled={!previousReviewStep}
+            >
               <ChevronLeft className="mr-2 h-4 w-4" />
               Previous
             </Button>
@@ -3597,36 +3594,36 @@ export default function StaffRecordReview() {
           </div>
 
           {!isApprovedLocked ? (
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
-            <Button
-              variant="outline"
-              onClick={() => queueBackgroundReview('save', isArchiveEditMode ? 'approved' : undefined)}
-              disabled={backgroundReviewMutation.isPending}
-              loading={backgroundReviewMutation.isPending && savingAction === 'save'}
-            >
-              <Save className="mr-2 h-4 w-4" />
-              {backgroundReviewMutation.isPending && savingAction === 'save' ? 'Saving...' : 'Save Review'}
-            </Button>
-            {!isArchiveEditMode ? (
-            <Button variant="destructive" onClick={() => {
-              setReturnReason(staffNotes);
-              setShowReturnDialog(true);
-            }} disabled={backgroundReviewMutation.isPending}>
-              Decline
-            </Button>
-            ) : null}
-            {canFinalizeClearance && !isArchiveEditMode ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
               <Button
-                onClick={() => queueBackgroundReview('cleared', 'approved')}
+                variant="outline"
+                onClick={() => queueBackgroundReview('save', isArchiveEditMode ? 'approved' : undefined)}
                 disabled={backgroundReviewMutation.isPending}
-                loading={backgroundReviewMutation.isPending && savingAction === 'cleared'}
-                className="bg-green-600 text-white hover:bg-green-700"
+                loading={backgroundReviewMutation.isPending && savingAction === 'save'}
               >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                {backgroundReviewMutation.isPending && savingAction === 'cleared' ? 'Clearing...' : 'Cleared'}
+                <Save className="mr-2 h-4 w-4" />
+                {backgroundReviewMutation.isPending && savingAction === 'save' ? 'Saving...' : 'Save Review'}
               </Button>
-            ) : null}
-          </div>
+              {!isArchiveEditMode ? (
+                <Button variant="destructive" onClick={() => {
+                  setReturnReason(staffNotes);
+                  setShowReturnDialog(true);
+                }} disabled={backgroundReviewMutation.isPending}>
+                  Decline
+                </Button>
+              ) : null}
+              {canFinalizeClearance && !isArchiveEditMode ? (
+                <Button
+                  onClick={() => queueBackgroundReview('cleared', 'approved')}
+                  disabled={backgroundReviewMutation.isPending}
+                  loading={backgroundReviewMutation.isPending && savingAction === 'cleared'}
+                  className="bg-green-600 text-white hover:bg-green-700"
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  {backgroundReviewMutation.isPending && savingAction === 'cleared' ? 'Clearing...' : 'Cleared'}
+                </Button>
+              ) : null}
+            </div>
           ) : (
             <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Cleared</Badge>
           )}

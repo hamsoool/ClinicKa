@@ -429,27 +429,27 @@ const CBC_NUMERIC_FIELDS: Array<{
   pattern: RegExp;
   normalize: CbcNumericNormalizer;
 }> = [
-  {
-    key: "hemoglobin",
-    pattern: /\b(?:h[ae]moglobin|hgb|hb)\b/i,
-    normalize: normalizeHemoglobinValue,
-  },
-  {
-    key: "hematocrit",
-    pattern: /\b(?:h[ae]matocrit|hct|pcv|packed\s+cell\s+volume)\b/i,
-    normalize: normalizeHematocritValue,
-  },
-  {
-    key: "wbc",
-    pattern: /\b(?:white\s*(?:blood\s*)?(?:cell\s*)?(?:count)?|white\s+cells?|wbc|total\s+(?:wbc|leu(?:ko|co)cyte)\s*count|tlc|leu(?:ko|co)cytes?|leu(?:ko|co)cyte\s*count)\b/i,
-    normalize: normalizeWbcValue,
-  },
-  {
-    key: "plateletCount",
-    pattern: /\b(?:platelet\s*count|platelets?|plt\s*count|plt|thrombocyte\s*count|thrombocytes?)\b/i,
-    normalize: normalizePlateletValue,
-  },
-];
+    {
+      key: "hemoglobin",
+      pattern: /\b(?:h[ae]moglobin|hgb|hb)\b/i,
+      normalize: normalizeHemoglobinValue,
+    },
+    {
+      key: "hematocrit",
+      pattern: /\b(?:h[ae]matocrit|hct|pcv|packed\s+cell\s+volume)\b/i,
+      normalize: normalizeHematocritValue,
+    },
+    {
+      key: "wbc",
+      pattern: /\b(?:white\s*(?:blood\s*)?(?:cell\s*)?(?:count)?|white\s+cells?|wbc|total\s+(?:wbc|leu(?:ko|co)cyte)\s*count|tlc|leu(?:ko|co)cytes?|leu(?:ko|co)cyte\s*count)\b/i,
+      normalize: normalizeWbcValue,
+    },
+    {
+      key: "plateletCount",
+      pattern: /\b(?:platelet\s*count|platelets?|plt\s*count|plt|thrombocyte\s*count|thrombocytes?)\b/i,
+      normalize: normalizePlateletValue,
+    },
+  ];
 
 const CBC_BLOOD_TYPE_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 const MONTH_INDEX: Record<string, number> = {
@@ -595,8 +595,8 @@ function normalizeHemoglobinValue(value: number, context: string, rawValue: stri
   const normalized = /mmol\/?l|mg\/?(?:dl|l)/.test(unitContext)
     ? Number.NaN
     : hasHemoglobinGPerLUnit(context)
-    ? value / 10
-    : value;
+      ? value / 10
+      : value;
 
   if (normalized < 3 || normalized > 25) return "";
   return formatNumericValue(normalized, 1);
@@ -1272,15 +1272,15 @@ const URINALYSIS_FIELDS: Array<{
   key: UrinalysisFieldKey;
   pattern: RegExp;
 }> = [
-  {
-    key: "glucose",
-    pattern: /\b(?:urine\s*)?(?:glucose|sugar)\b/i,
-  },
-  {
-    key: "protein",
-    pattern: /\b(?:urine\s*)?(?:protein|albumin)\b/i,
-  },
-];
+    {
+      key: "glucose",
+      pattern: /\b(?:urine\s*)?(?:glucose|sugar)\b/i,
+    },
+    {
+      key: "protein",
+      pattern: /\b(?:urine\s*)?(?:protein|albumin)\b/i,
+    },
+  ];
 
 const URINALYSIS_DIPSTICK_VALUES = ["Negative", "Trace", "1+", "2+", "3+", "4+"] as const;
 
@@ -1426,8 +1426,8 @@ export function extractUrinalysisFields(rawText: string): UrinalysisParsedFields
 function getOcrSpaceConfig() {
   const apiKey = String(
     Deno.env.get("OCR_SPACE_API_KEY") ||
-      Deno.env.get("OCRSPACE_API_KEY") ||
-      "",
+    Deno.env.get("OCRSPACE_API_KEY") ||
+    "",
   ).trim();
   const language = String(Deno.env.get("OCR_SPACE_LANGUAGE") || "eng").trim() || "eng";
 

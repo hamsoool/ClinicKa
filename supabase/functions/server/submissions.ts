@@ -19,6 +19,7 @@ import {
   normalizeProfileAssetRows,
   normalizeStaffSignatureRows,
 } from "./storage.ts";
+import { getCachedData, invalidateCache, setCachedData } from "./redis.ts";
 
 const ANALYTICS_CACHE_TTL_MS = 30_000;
 const SUBMISSIONS_CACHE_TTL_MS = 15_000;
@@ -134,6 +135,22 @@ export function invalidateDashboardReadCaches() {
   staffSubmissionSummariesPromises.clear();
   staffApprovedStudentsCache.clear();
   staffApprovedStudentsPromises.clear();
+
+  const promise = invalidateCache([
+    "analytics:admin_overview",
+    "analytics:staff_dashboard_overview",
+    "analytics:staff_submission_report_summaries",
+    "analytics:staff_submission_status_counts",
+    "analytics:submissions_list",
+    "admin:staff_users",
+    "admin:user_accounts",
+    "admin:super_admin_administrators",
+    "admin:archived_accounts"
+  ]).catch((error) => console.error("Redis invalidation error:", error));
+  const edgeRuntime = (globalThis as any).EdgeRuntime;
+  if (typeof edgeRuntime?.waitUntil === "function") {
+    edgeRuntime.waitUntil(promise);
+  }
 }
 
 export function invalidateStudentRecordsCache(studentId?: string | null) {
@@ -141,6 +158,13 @@ export function invalidateStudentRecordsCache(studentId?: string | null) {
   if (!cacheKey) return;
   studentRecordsReadCache.delete(cacheKey);
   studentRecordsReadPromises.delete(cacheKey);
+
+  const promise = invalidateCache(`records:student:${cacheKey}`)
+    .catch((error) => console.error("Redis invalidation error:", error));
+  const edgeRuntime = (globalThis as any).EdgeRuntime;
+  if (typeof edgeRuntime?.waitUntil === "function") {
+    edgeRuntime.waitUntil(promise);
+  }
 }
 
 function mapMedicalHistory(row: any) {
@@ -199,7 +223,7 @@ function latestFilesByType(files: any[]) {
     if (
       !existing ||
       new Date(file.uploaded_at).getTime() >
-        new Date(existing.uploaded_at).getTime()
+      new Date(existing.uploaded_at).getTime()
     ) {
       acc[file.type] = file;
     }
@@ -539,11 +563,11 @@ function mapSubmission(row: any, related: Record<string, any>) {
     bmi: row.bmi,
     emergencyContact: emergencyContact
       ? {
-          name: emergencyContact.name,
-          relationship: emergencyContact.relationship,
-          phone: emergencyContact.phone,
-          address: emergencyContact.address,
-        }
+        name: emergencyContact.name,
+        relationship: emergencyContact.relationship,
+        phone: emergencyContact.phone,
+        address: emergencyContact.address,
+      }
       : undefined,
     medicalHistory: mapMedicalHistory(medicalHistory),
     staffMeasurements: mapStaffMeasurements(staffMeasurements, examinerSignature?.url),
@@ -565,15 +589,15 @@ function mapSubmission(row: any, related: Record<string, any>) {
     },
     clearanceInfo: certificate
       ? {
-          findingsNormal: certificate.findings_normal,
-          diagnosis: certificate.diagnosis,
-          remarks: certificate.remarks,
-          purpose: certificate.purpose,
-          controlNo: certificate.control_no,
-          issuedDate: certificate.issued_date || certificate.issued_at,
-          licenseNo: certificate.license_no,
-          signatoryName: certificate.signatory_name,
-        }
+        findingsNormal: certificate.findings_normal,
+        diagnosis: certificate.diagnosis,
+        remarks: certificate.remarks,
+        purpose: certificate.purpose,
+        controlNo: certificate.control_no,
+        issuedDate: certificate.issued_date || certificate.issued_at,
+        licenseNo: certificate.license_no,
+        signatoryName: certificate.signatory_name,
+      }
       : undefined,
     photoUrl: files.photo?.url || profileAssets.photo?.url,
     signatureUrl: files.signature?.url || profileAssets.signature?.url,
@@ -587,8 +611,8 @@ function mapSubmission(row: any, related: Record<string, any>) {
     certificatePdfUrl: files.certificate?.url || certificate?.pdf_url,
     labTestLocation: row.lab_test_location || "",
     otherClinicName: row.lab_test_clinic || "",
-    cbcTestClinic: row.cbc_test_clinic || "",           
-    urinalysisTestClinic: row.urinalysis_test_clinic || "",  
+    cbcTestClinic: row.cbc_test_clinic || "",
+    urinalysisTestClinic: row.urinalysis_test_clinic || "",
     xrayTestClinic: row.xray_test_clinic || "",
   };
 }
@@ -614,25 +638,25 @@ async function loadRelatedData(rows: any[]) {
   ] = await Promise.all([
     studentIds.length
       ? supabase
-          .from("students")
-          .select(
-            "student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at",
-          )
-          .in("student_id", studentIds)
+        .from("students")
+        .select(
+          "student_id,profile_id,first_name,last_name,middle_initial,department,course,year_level,age,sex,birthday,civil_status,contact_number,address,profile_photo_url,profile_photo_file_name,signature_url,signature_file_name,media_updated_at",
+        )
+        .in("student_id", studentIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
-          .from("emergency_contacts")
-          .select("submission_id,name,relationship,phone,address")
-          .in("submission_id", submissionIds)
+        .from("emergency_contacts")
+        .select("submission_id,name,relationship,phone,address")
+        .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
-          .from("medical_history")
-          .select(
-            "submission_id,allergy,asthma,chicken_pox,diabetes,dysmenorrhea,epilepsy_seizure,heart_disorder,hepatitis,hypertension,measles,mumps,anxiety_disorder,panic_attack,pneumonia,ptb_primary_complex,typhoid_fever,covid19,uti",
-          )
-          .in("submission_id", submissionIds)
+        .from("medical_history")
+        .select(
+          "submission_id,allergy,asthma,chicken_pox,diabetes,dysmenorrhea,epilepsy_seizure,heart_disorder,hepatitis,hypertension,measles,mumps,anxiety_disorder,panic_attack,pneumonia,ptb_primary_complex,typhoid_fever,covid19,uti",
+        )
+        .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? fetchStaffMeasurementsBySubmissionIds(submissionIds)
@@ -642,37 +666,37 @@ async function loadRelatedData(rows: any[]) {
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
-          .from("lab_chest_xray")
-          .select("submission_id,xray_date,xray_result,xray_findings,file_id,file_url,file_name,mime_type,media_updated_at")
-          .in("submission_id", submissionIds)
+        .from("lab_chest_xray")
+        .select("submission_id,xray_date,xray_result,xray_findings,file_id,file_url,file_name,mime_type,media_updated_at")
+        .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
-          .from("lab_cbc")
-          .select(
-            "submission_id,cbc_date,hemoglobin,hematocrit,wbc,platelet_count,blood_type,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at",
-          )
-          .in("submission_id", submissionIds)
+        .from("lab_cbc")
+        .select(
+          "submission_id,cbc_date,hemoglobin,hematocrit,wbc,platelet_count,blood_type,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at",
+        )
+        .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
-          .from("lab_urinalysis")
-          .select("submission_id,urinalysis_date,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at")
-          .in("submission_id", submissionIds)
+        .from("lab_urinalysis")
+        .select("submission_id,urinalysis_date,glucose,protein,file_id,file_url,file_name,mime_type,media_updated_at")
+        .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
-          .from("certificates")
-          .select(CERTIFICATE_SELECT_COLUMNS)
-          .in("submission_id", submissionIds)
+        .from("certificates")
+        .select(CERTIFICATE_SELECT_COLUMNS)
+        .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
     submissionIds.length
       ? supabase
-          .from("files")
-          .select(
-            "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by",
-          )
-          .in("submission_id", submissionIds)
+        .from("files")
+        .select(
+          "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by",
+        )
+        .in("submission_id", submissionIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
 
@@ -739,13 +763,13 @@ async function loadRelatedData(rows: any[]) {
   ];
   const staffSignatureFilesRes = staffProfileIds.length
     ? await supabase
-        .from("files")
-        .select(
-          "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by",
-        )
-        .in("uploaded_by", staffProfileIds)
-        .is("submission_id", null)
-        .order("uploaded_at", { ascending: false })
+      .from("files")
+      .select(
+        "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by",
+      )
+      .in("uploaded_by", staffProfileIds)
+      .is("submission_id", null)
+      .order("uploaded_at", { ascending: false })
     : { data: [] as any[], error: null };
 
   if (staffSignatureFilesRes.error) {
@@ -763,7 +787,7 @@ async function loadRelatedData(rows: any[]) {
     if (
       !existing ||
       new Date(file.uploaded_at || 0).getTime() >
-        new Date(existing.uploaded_at || 0).getTime()
+      new Date(existing.uploaded_at || 0).getTime()
     ) {
       acc[file.uploaded_by] = file;
     }
@@ -786,13 +810,13 @@ async function loadRelatedData(rows: any[]) {
   ];
   const profileAssetFilesRes = studentProfileIds.length
     ? await supabase
-        .from("files")
-        .select(
-          "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by",
-        )
-        .in("uploaded_by", studentProfileIds)
-        .is("submission_id", null)
-        .order("uploaded_at", { ascending: false })
+      .from("files")
+      .select(
+        "id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by",
+      )
+      .in("uploaded_by", studentProfileIds)
+      .is("submission_id", null)
+      .order("uploaded_at", { ascending: false })
     : { data: [] as any[], error: null };
 
   if (profileAssetFilesRes.error) {
@@ -953,8 +977,8 @@ function normalizeSubmissionStatusFilter(value: unknown) {
   const normalized = String(value || "action_needed").trim().toLowerCase();
   if (normalized === "all" || normalized === "action_needed") return normalized;
   return ACTIONABLE_SUBMISSION_STATUSES.includes(normalized) ||
-      normalized === "approved" ||
-      normalized === "physical_exam_done"
+    normalized === "approved" ||
+    normalized === "physical_exam_done"
     ? normalized
     : "action_needed";
 }
@@ -1024,11 +1048,19 @@ async function getCachedStaffSubmissionStatusCounts() {
   if (staffSubmissionStatusCountsPromise) return staffSubmissionStatusCountsPromise;
 
   staffSubmissionStatusCountsPromise = (async () => {
+    const cacheKey = "analytics:staff_submission_status_counts";
+    const redisCached = await getCachedData<any>(cacheKey);
+    if (redisCached) {
+      staffSubmissionStatusCountsCache = createTimedValue(redisCached, STAFF_SUBMISSION_SUMMARIES_TTL_MS);
+      return redisCached;
+    }
+
     const counts = await loadStaffSubmissionStatusCounts();
     staffSubmissionStatusCountsCache = createTimedValue(
       counts,
       STAFF_SUBMISSION_SUMMARIES_TTL_MS,
     );
+    await setCachedData(cacheKey, counts, 300);
     return counts;
   })().finally(() => {
     staffSubmissionStatusCountsPromise = null;
@@ -1541,11 +1573,19 @@ export async function getCachedStaffSubmissionReportSummaries() {
   if (staffSubmissionReportSummariesPromise) return staffSubmissionReportSummariesPromise;
 
   staffSubmissionReportSummariesPromise = (async () => {
+    const cacheKey = "analytics:staff_submission_report_summaries";
+    const redisCached = await getCachedData<any>(cacheKey);
+    if (redisCached) {
+      staffSubmissionReportSummariesCache = createTimedValue(redisCached, STAFF_SUBMISSION_REPORT_SUMMARIES_TTL_MS);
+      return redisCached;
+    }
+
     const reportSummaries = await loadStaffSubmissionReportSummaries();
     staffSubmissionReportSummariesCache = createTimedValue(
       reportSummaries,
       STAFF_SUBMISSION_REPORT_SUMMARIES_TTL_MS,
     );
+    await setCachedData(cacheKey, reportSummaries, 300);
     return reportSummaries;
   })().finally(() => {
     staffSubmissionReportSummariesPromise = null;
@@ -1560,11 +1600,19 @@ export async function getCachedStaffDashboardOverview() {
   if (staffDashboardOverviewPromise) return staffDashboardOverviewPromise;
 
   staffDashboardOverviewPromise = (async () => {
+    const cacheKey = "analytics:staff_dashboard_overview";
+    const redisCached = await getCachedData<any>(cacheKey);
+    if (redisCached) {
+      staffDashboardOverviewCache = createTimedValue(redisCached, STAFF_DASHBOARD_OVERVIEW_TTL_MS);
+      return redisCached;
+    }
+
     const overview = await loadStaffDashboardOverview();
     staffDashboardOverviewCache = createTimedValue(
       overview,
       STAFF_DASHBOARD_OVERVIEW_TTL_MS,
     );
+    await setCachedData(cacheKey, overview, 300);
     return overview;
   })().finally(() => {
     staffDashboardOverviewPromise = null;
@@ -1634,11 +1682,20 @@ export async function getCachedStaffSubmissionSummaries(options: any = {}) {
   if (inFlight) return inFlight;
 
   const nextPromise = (async () => {
+    const redisKey = `analytics:submission_summaries:${cacheKey}`;
+    const redisCached = await getCachedData<any>(redisKey);
+    if (redisCached) {
+      staffSubmissionSummariesCache.set(cacheKey, createTimedValue(redisCached, STAFF_SUBMISSION_SUMMARIES_TTL_MS));
+      return redisCached;
+    }
+
     const result = await loadStaffSubmissionSummaries(normalized);
     staffSubmissionSummariesCache.set(
       cacheKey,
       createTimedValue(result, STAFF_SUBMISSION_SUMMARIES_TTL_MS),
     );
+    // Short TTL for paginated queries (1 minute max)
+    await setCachedData(redisKey, result, 60);
     return result;
   })().finally(() => {
     staffSubmissionSummariesPromises.delete(cacheKey);
@@ -1828,11 +1885,20 @@ export async function getCachedApprovedStudents(options: any = {}) {
   if (inFlight) return inFlight;
 
   const nextPromise = (async () => {
+    const redisKey = `analytics:approved_students:${cacheKey}`;
+    const redisCached = await getCachedData<any>(redisKey);
+    if (redisCached) {
+      staffApprovedStudentsCache.set(cacheKey, createTimedValue(redisCached, STAFF_APPROVED_STUDENTS_TTL_MS));
+      return redisCached;
+    }
+
     const result = await loadApprovedStudents(normalized);
     staffApprovedStudentsCache.set(
       cacheKey,
       createTimedValue(result, STAFF_APPROVED_STUDENTS_TTL_MS),
     );
+    // Short TTL for paginated queries (1 minute max)
+    await setCachedData(redisKey, result, 60);
     return result;
   })().finally(() => {
     staffApprovedStudentsPromises.delete(cacheKey);
@@ -1887,8 +1953,16 @@ export async function getCachedAnalyticsSummary() {
   if (analyticsReadPromise) return analyticsReadPromise;
 
   analyticsReadPromise = (async () => {
+    const cacheKey = "analytics:admin_overview";
+    const redisCached = await getCachedData<any>(cacheKey);
+    if (redisCached) {
+      analyticsReadCache = createTimedValue(redisCached, ANALYTICS_CACHE_TTL_MS);
+      return redisCached;
+    }
+
     const analytics = await loadAnalyticsSummary();
     analyticsReadCache = createTimedValue(analytics, ANALYTICS_CACHE_TTL_MS);
+    await setCachedData(cacheKey, analytics, 300);
     return analytics;
   })().finally(() => {
     analyticsReadPromise = null;
@@ -1903,10 +1977,18 @@ export async function getCachedSubmissionsList() {
   if (submissionsReadPromise) return submissionsReadPromise;
 
   submissionsReadPromise = (async () => {
+    const cacheKey = "analytics:submissions_list";
+    const redisCached = await getCachedData<any>(cacheKey);
+    if (redisCached) {
+      submissionsReadCache = createTimedValue(redisCached, SUBMISSIONS_CACHE_TTL_MS);
+      return redisCached;
+    }
+
     const submissions = await getMappedSubmissions(
       supabase.from("submissions").select(SUBMISSION_LIST_COLUMNS),
     );
     submissionsReadCache = createTimedValue(submissions, SUBMISSIONS_CACHE_TTL_MS);
+    await setCachedData(cacheKey, submissions, 300);
     return submissions;
   })().finally(() => {
     submissionsReadPromise = null;
@@ -1924,6 +2006,13 @@ export async function getCachedStudentRecords(studentId: string) {
   if (inFlight) return inFlight;
 
   const nextPromise = (async () => {
+    const redisKey = `records:student:${cacheKey}`;
+    const redisCached = await getCachedData<any>(redisKey);
+    if (redisCached) {
+      studentRecordsReadCache.set(cacheKey, createTimedValue(redisCached, STUDENT_RECORDS_CACHE_TTL_MS));
+      return redisCached;
+    }
+
     const records = await getMappedSubmissions(
       supabase
         .from("submissions")
@@ -1934,6 +2023,7 @@ export async function getCachedStudentRecords(studentId: string) {
       cacheKey,
       createTimedValue(records, STUDENT_RECORDS_CACHE_TTL_MS),
     );
+    await setCachedData(redisKey, records, 300);
     return records;
   })().finally(() => {
     studentRecordsReadPromises.delete(cacheKey);
