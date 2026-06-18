@@ -3157,13 +3157,11 @@ function deriveSubmissionLabSourceMetadata(data: any) {
   };
 }
 
-export async function triggerCacheInvalidation(studentId?: string | null) {
 export async function triggerCacheInvalidation(studentId?: string | null, announcements?: boolean) {
   try {
     await apiRequest('/functions/v1/server/invalidate-cache', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId: studentId || null }),
       body: JSON.stringify({ studentId: studentId || null, announcements }),
     });
   } catch {
@@ -3740,33 +3738,9 @@ export async function getStudentRecords(studentId?: string, options: GetStudentR
 }
 
 export async function getStudentAnnouncements() {
-  const rows = await restRequest<any[]>(
-    'announcements',
-    'select=id,title,description,date_posted,image_path,created_at&is_published=eq.true&order=date_posted.desc.nullslast,created_at.desc',
   return apiRequest<{ announcements: StudentAnnouncement[] }>(
     '/functions/v1/server/student-announcements'
   );
-
-  const announcements = await Promise.all(
-    (rows || []).map((row) => {
-      const rawPath = String(row?.image_path || '').trim();
-      const absoluteImageUrl = /^https?:\/\//i.test(rawPath) ? normalizeStorageFileUrl(rawPath) : null;
-
-      return {
-        id: String(row?.id || ''),
-        title: String(row?.title || '').trim(),
-        description: String(row?.description || '').trim(),
-        datePosted: String(row?.date_posted || row?.created_at || ''),
-        imageUrl: absoluteImageUrl || null,
-        imagePath: rawPath || null,
-        createdAt: row?.created_at ? String(row.created_at) : null,
-      } satisfies StudentAnnouncement;
-    }),
-  );
-
-  return {
-    announcements: announcements.filter((item) => item.id && item.title),
-  };
 }
 
 export async function getManagedAnnouncements() {
@@ -3819,7 +3793,6 @@ export async function createAnnouncement(payload: AnnouncementUpsertInput) {
       }),
     },
   );
-  return rows?.[0] || null;
   const response = rows?.[0] || null;
   if (response) await triggerCacheInvalidation(null, true);
   return response;
@@ -3848,7 +3821,6 @@ export async function updateAnnouncement(id: string, payload: AnnouncementUpsert
     },
   );
 
-  return rows?.[0] || null;
   const response = rows?.[0] || null;
   if (response) await triggerCacheInvalidation(null, true);
   return response;
