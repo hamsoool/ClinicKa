@@ -119,6 +119,50 @@ const ANNOUNCEMENT_SELECT_COLUMNS = 'id,title,description,date_posted,image_path
 let studentProfileAssetsRouteUnavailable = false;
 let authClient: SupabaseClient | null = null;
 
+const PAYLOAD_SECRET = import.meta.env.VITE_API_PAYLOAD_SECRET || 'default-secret-key-must-be-32-by';
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+async function getCryptoKey(secret: string) {
+  let keyBytes = encoder.encode(secret);
+  if (keyBytes.length < 32) {
+    const padded = new Uint8Array(32);
+    padded.set(keyBytes);
+    keyBytes = padded;
+  } else if (keyBytes.length > 32) {
+    keyBytes = keyBytes.slice(0, 32);
+  }
+  return await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function encryptPayload(data: any, secret: string): Promise<string> {
+  const key = await getCryptoKey(secret);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = encoder.encode(JSON.stringify(data));
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+  const combined = new Uint8Array(12 + ciphertext.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), 12);
+  let binString = '';
+  for (let i = 0; i < combined.length; i++) {
+    binString += String.fromCharCode(combined[i]);
+  }
+  return btoa(binString);
+}
+
+async function decryptPayload(encryptedBase64: string, secret: string): Promise<any> {
+  const key = await getCryptoKey(secret);
+  const binString = atob(encryptedBase64);
+  const combined = new Uint8Array(binString.length);
+  for (let i = 0; i < binString.length; i++) {
+    combined[i] = binString.charCodeAt(i);
+  }
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+  const decryptedBytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+  return JSON.parse(decoder.decode(decryptedBytes));
+}
+
 function getAuthClient() {
   assertPublicSupabaseConfig();
 
@@ -994,10 +1038,23 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}, _retrie
     ...options.headers,
   };
 
+  let requestBody = options.body;
+  const isSecureRoute = path.startsWith('/functions/v1/server');
+
+  if (isSecureRoute && requestBody && typeof requestBody === 'string') {
+    try {
+      const parsed = JSON.parse(requestBody);
+      requestBody = await encryptPayload(parsed, PAYLOAD_SECRET);
+      headers['Content-Type'] = 'text/plain';
+    } catch {
+      // Fallback: If it fails to parse (not valid JSON), send it normally
+    }
+  }
+
   const response = await fetch(`${supabaseUrl}${path}`, {
     method: options.method || 'GET',
     headers,
-    body: options.body,
+    body: requestBody,
   });
 
   const rawBody = await response.text();
@@ -1015,8 +1072,13 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}, _retrie
 
     if (rawBody) {
       try {
-        const error = JSON.parse(rawBody);
-        message = error.details || error.error || error.message || message;
+        let parsedError: any;
+        if (isSecureRoute && response.headers.get('content-type')?.includes('text/plain')) {
+          parsedError = await decryptPayload(rawBody, PAYLOAD_SECRET);
+        } else {
+          parsedError = JSON.parse(rawBody);
+        }
+        message = parsedError.details || parsedError.error || parsedError.message || message;
       } catch {
         message = rawBody;
       }
@@ -1027,6 +1089,14 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}, _retrie
 
   if (!rawBody) {
     return {} as T;
+  }
+
+  if (isSecureRoute && response.headers.get('content-type')?.includes('text/plain')) {
+    try {
+      return (await decryptPayload(rawBody, PAYLOAD_SECRET)) as T;
+    } catch {
+      // Fallback to standard JSON parsing if decryption fails
+    }
   }
 
   try {
