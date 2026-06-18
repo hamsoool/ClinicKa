@@ -1724,8 +1724,13 @@ export default function StaffRecordReview() {
       const safeValue = sanitizeNumericWithLimits(String(value), 6, 2);
       normalizedValue = normalizeCountToX10Power9(safeValue) as AssessmentForm[K];
     } else if (field === 'plateletCount') {
-      const safeValue = sanitizeNumericWithLimits(String(value), 7, 0);
-      normalizedValue = normalizeCountToX10Power9Whole(safeValue) as AssessmentForm[K];
+      const val = String(value);
+      if (/^[A-Za-z\s]+$/.test(val)) {
+        normalizedValue = val.slice(0, 30) as AssessmentForm[K];
+      } else {
+        const safeValue = sanitizeNumericWithLimits(val, 7, 0);
+        normalizedValue = normalizeCountToX10Power9Whole(safeValue) as AssessmentForm[K];
+      }
     } else if (
       field === 'skin'
       || field === 'heent'
@@ -1935,19 +1940,28 @@ export default function StaffRecordReview() {
     const cbcDate = normalizeDateInputValue(fields.date);
     if (cbcDate) normalized.cbcDate = cbcDate;
 
-    const hemoglobin = sanitizeNumericWithLimits(fields.hemoglobin || '', 2, 1);
+    // Hemoglobin: keep as g/L (e.g. 140)
+    const hemoglobin = sanitizeNumericWithLimits(fields.hemoglobin || '', 4, 1);
     if (hemoglobin) normalized.hemoglobin = hemoglobin;
 
-    const hematocrit = sanitizeNumericWithLimits(fields.hematocrit || '', 3, 1);
+    // Hematocrit: keep as is (e.g., 0.44)
+    const hematocrit = sanitizeNumericWithLimits(fields.hematocrit || '', 3, 2);
     if (hematocrit) normalized.hematocrit = hematocrit;
 
+    // WBC: as is (e.g., 5.0)
     const wbc = sanitizeNumericWithLimits(fields.wbc || '', 3, 2);
-    const wbcValue = Number(wbc);
-    if (Number.isFinite(wbcValue) && wbcValue >= 0.5 && wbcValue <= 100) normalized.wbc = wbc;
+    if (wbc) normalized.wbc = wbc;
 
-    const plateletCount = sanitizeNumericWithLimits(fields.plateletCount || '', 4, 0);
-    const plateletValue = Number(plateletCount);
-    if (Number.isFinite(plateletValue) && plateletValue >= 10 && plateletValue <= 1000) normalized.plateletCount = plateletCount;
+    // Platelets: allow text strings properly (e.g. 'Adequate', 'Thrombocytopenia', 'Thrombocytosis')
+    const plateletVal = String(fields.plateletCount || '').trim();
+    if (plateletVal) {
+      if (/^[a-zA-Z\s]+$/.test(plateletVal)) {
+        normalized.plateletCount = plateletVal.slice(0, 30);
+      } else {
+        const plateletNumeric = sanitizeNumericWithLimits(plateletVal, 4, 0);
+        if (plateletNumeric) normalized.plateletCount = plateletNumeric;
+      }
+    }
 
     const bloodType = String(fields.bloodType || '').trim().toUpperCase();
     if (BLOOD_TYPE_OPTIONS.includes(bloodType as (typeof BLOOD_TYPE_OPTIONS)[number])) {
@@ -2808,17 +2822,13 @@ export default function StaffRecordReview() {
                   </Select>
                 </div>
                 <div className="md:col-span-2">
-                  <Label htmlFor="xrayFindings">Findings</Label>
-                  <Textarea
+                  <Label htmlFor="xrayFindings">Radiologist</Label>
+                  <Input
                     id="xrayFindings"
                     value={assessmentForm.xrayFindings}
                     onChange={(event) => updateAssessmentField('xrayFindings', event.target.value)}
-                    className={cn(
-                      'mt-2 h-24 resize-none overflow-x-hidden overflow-y-auto break-all whitespace-pre-wrap',
-                      getUpdatedFieldClass('xrayFindings'),
-                    )}
+                    className={cn('mt-2', getUpdatedFieldClass('xrayFindings'))}
                     maxLength={MAX_FINDINGS_LENGTH}
-                    rows={4}
                   />
                 </div>
               </div>
@@ -2937,9 +2947,8 @@ export default function StaffRecordReview() {
                     id="plateletCount"
                     value={assessmentForm.plateletCount}
                     onChange={(event) => updateAssessmentField('plateletCount', event.target.value)}
-                    inputMode="decimal"
-                    placeholder="e.g. 250"
-                    maxLength={10}
+                    placeholder="e.g. 250 or Adequate"
+                    maxLength={30}
                     className={cn('mt-2', getUpdatedFieldClass('plateletCount'))}
                   />
                 </div>

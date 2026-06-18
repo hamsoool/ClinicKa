@@ -784,18 +784,21 @@ function MedicalRecordPdfPage({
             const lab = getSlotLab(slot);
             return (
               <FormTableCell key={slot} style={{ width: MEDICAL_FORM_LAB_YEAR_WIDTH, minHeight: 64 * PX_TO_PT, paddingVertical: 5 * PX_TO_PT, gap: 3 * PX_TO_PT }}>
-                <View style={[S.row, { alignItems: 'flex-end' }]}>
+                <View style={[S.row, { alignItems: 'flex-end', gap: 4 }]}>
                   <Text style={S.small}>Date: </Text>
                   <FormInlineLine value={lab.xrayDate} width={52 * PX_TO_PT} />
+                  <Text style={S.small}> . {text(lab.xrayFindings)}</Text>
                 </View>
-                <View style={[S.row, { alignItems: 'flex-end', justifyContent: 'space-between' }]}>
-                  <Text style={S.small}>Abnormal findings</Text>
-                  <View style={[S.row, { alignItems: 'flex-end' }]}>
-                    <Text style={S.small}>Result: </Text>
-                    <FormInlineLine value={formatXrayResult(lab.xrayResult)} width={42 * PX_TO_PT} />
+                <View style={[S.row, { alignItems: 'flex-start', marginTop: 4, gap: 10 }]}>
+                  <View style={[S.row, { alignItems: 'center', gap: 4 }]}>
+                    <FormCheckbox checked={lab.xrayResult === 'normal'} />
+                    <Text style={S.small}>Normal</Text>
+                  </View>
+                  <View style={[S.row, { alignItems: 'center', gap: 4 }]}>
+                    <FormCheckbox checked={lab.xrayResult === 'abnormal'} />
+                    <Text style={S.small}>Abnormal</Text>
                   </View>
                 </View>
-                <Text style={[S.small, { lineHeight: 1.25 }]}>{text(lab.xrayFindings)}</Text>
               </FormTableCell>
             );
           })}

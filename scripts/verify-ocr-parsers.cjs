@@ -58,7 +58,7 @@ function verifyChestXrayParser(parsers) {
 
   assert.deepEqual(result, {
     date: null,
-    findings: 'No active pulmonary disease',
+    findings: 'Dr. SAMPLE',
     result: 'normal',
   });
 
@@ -68,11 +68,13 @@ function verifyChestXrayParser(parsers) {
     Mild bilateral perihilar interstitial opacity. No pleural effusion.
     Impression:
     Consider mild bronchitic change.
+    JUAN DELA CRUZ, MD, FPCR
+    Radiologist
   `);
 
   assert.deepEqual(findingsPreferredResult, {
     date: null,
-    findings: null,
+    findings: 'Dr. JUAN DELA CRUZ',
     result: null,
   });
 
@@ -83,11 +85,12 @@ function verifyChestXrayParser(parsers) {
     Cardiomediastinal silhouette is within normal limits. No focal lung opacity.
     Conclusion:
     No acute cardiopulmonary abnormality.
+    MARIA CLARA, MD
   `);
 
   assert.deepEqual(observationsHeaderResult, {
     date: null,
-    findings: 'No acute cardiopulmonary abnormality',
+    findings: 'Dr. MARIA CLARA',
     result: 'normal',
   });
 
@@ -96,11 +99,12 @@ function verifyChestXrayParser(parsers) {
     JUN 10, 2025
     Impression:
     Normal chest.
+    JOHN DOE, MD, FPC
   `);
 
   assert.deepEqual(xrayDateResult, {
     date: '2025-06-10',
-    findings: 'Normal chest',
+    findings: 'Dr. JOHN DOE',
     result: 'normal',
   });
 
@@ -114,11 +118,13 @@ function verifyChestXrayParser(parsers) {
     BT and sinuses are negative.
     No other remarkable findings.
     IMPRESSION: ESSENTIALLY NORMAL CHEST FINDINGS.
+    JANE SMITH, MD
+    Radiologist
   `);
 
   assert.deepEqual(biolineGenericDateResult, {
     date: '2025-06-10',
-    findings: 'ESSENTIALLY NORMAL CHEST FINDINGS',
+    findings: 'Dr. JANE SMITH',
     result: 'normal',
   });
 }
@@ -128,16 +134,16 @@ function verifyCbcParser(parsers) {
     CBC RESULT
     DATE OF BIRTH: 03/13/2005
     Released Date: 05/24/2026
-    Hemoglobin 13.5 g/dL
-    Hematocrit 42 %
-    WBC 7.8 x10^9/L
+    Hemoglobin 135 g/L M: 140 - 180 F: 120 - 150
+    Hematocrit 0.42  M: 0.40 - 0.50 F: 0.30 - 0:40
+    WBC 7.8 x10^9/L 5.0-10.0 X 10^9/L
     Platelet Count 250 x10^9/L
-    Blood Type O+
+    Blood Type "O" RH POSITIVE
   `);
 
   assert.deepEqual(fields, {
-    hemoglobin: '13.5',
-    hematocrit: '42',
+    hemoglobin: '135',
+    hematocrit: '0.42',
     wbc: '7.8',
     plateletCount: '250',
     bloodType: 'O+',
@@ -148,18 +154,18 @@ function verifyCbcParser(parsers) {
     CBC RESULT
     DATE OF BIRTH: 03/13/2005
     RELEASED DATE & TIME: 06/10/2025 10:53:55 AM
-    HGB : 13.5 g/dL
-    HCT : 42 %
-    WBC : 7,800 /uL
-    PLATELET COUNT : 250,000 /uL
+    HGB : 135
+    HCT : 0.42
+    WBC : 7.8
+    PLATELET COUNT : ADEQUATE
     ABO/RH : O POSITIVE
   `);
 
   assert.deepEqual(convertedUnitFields, {
-    hemoglobin: '13.5',
-    hematocrit: '42',
+    hemoglobin: '135',
+    hematocrit: '0.42',
     wbc: '7.8',
-    plateletCount: '250',
+    plateletCount: 'Adequate',
     bloodType: 'O+',
     date: '2025-06-10',
   });
@@ -174,7 +180,7 @@ function verifyCbcParser(parsers) {
 
   assert.deepEqual(monthNameDateFields, {
     hemoglobin: '13.5',
-    hematocrit: '42',
+    hematocrit: '0.42',
     date: '2026-02-28',
   });
 
@@ -209,7 +215,7 @@ function verifyCbcParser(parsers) {
   `);
 
   assert.deepEqual(leadingDecimalFields, {
-    hematocrit: '42',
+    hematocrit: '0.42',
     wbc: '0.5',
     date: '2026-05-24',
   });

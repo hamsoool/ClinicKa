@@ -227,6 +227,21 @@ function abbreviateCourseDept(value: string) {
   return text;
 }
 
+function formatRadiologistNameWithDr(fullName?: string | null) {
+  if (!fullName) return '';
+  
+  // Split by comma to separate the name from the suffix (e.g., "Juan Dela Cruz, MD")
+  const [namePart, ...suffixParts] = fullName.split(',');
+  const suffix = suffixParts.join(',').trim();
+  
+  // Get the last word of the name part
+  const words = namePart.trim().split(' ');
+  const lastName = words.length > 0 ? words[words.length - 1] : '';
+  const displayName = lastName.toLowerCase().startsWith('dr.') ? lastName : `Dr. ${lastName}`;
+  
+  return suffix ? `${displayName}, ${suffix}` : displayName;
+}
+
 function formatLocalPhone(value: string) {
   const digitsOnly = String(value || '').replace(/\D/g, '');
   if (!digitsOnly) return '';
@@ -1017,20 +1032,19 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                             padding: '3px 4px',
                           }}
                         >
-                          <div className="min-w-[164px] print:min-w-[164px]">Date: {renderInlineField(y.xrayDate, '52px')}</div>
-                          <div
-                            className="flex items-baseline justify-between gap-1 print:flex print:flex-row print:items-baseline"
-                            style={{
-                              display: 'flex',
-                              alignItems: 'baseline',
-                              justifyContent: 'space-between',
-                              gap: '4px',
-                            }}
-                          >
-                            <span>Abnormal findings</span>
-                            <span>Result: {renderInlineField(formatXrayResult(y.xrayResult), '42px')}</span>
+                          <div className="min-w-[164px] print:min-w-[164px]">
+                            Date: {renderInlineField(y.xrayDate, '52px')} {renderInlineField(formatRadiologistNameWithDr(y.xrayFindings))}
                           </div>
-                          <div>{wrappedField(y.xrayFindings)}</div>
+                          <div className="-mt-1 flex items-center gap-3 print:-mt-1 print:flex print:flex-row print:items-center" style={{ marginTop: '-4px', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '12px' }}>
+                            <div className="flex items-center gap-1 print:flex print:flex-row print:items-center" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>Normal</span>
+                              {renderCheckbox(y.xrayResult === 'normal')}
+                            </div>
+                            <div className="flex items-center gap-1 print:flex print:flex-row print:items-center" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>Abnormal</span>
+                              {renderCheckbox(y.xrayResult === 'abnormal')}
+                            </div>
+                          </div>
                         </td>
                       );
                     })}

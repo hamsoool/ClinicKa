@@ -408,17 +408,45 @@ export function extractChestXrayFields(rawText: string): ChestXrayParsedFields {
   const strictConclusion = cleanupClinicalText(extractSectionText(cleanedText, XRAY_CONCLUSION_LABEL_PATTERN));
   const proximityFindings = strictFindings ? "" : extractXrayFindingsByProximity(cleanedLines);
   const fallbackNarrative = proximityFindings || strictFindings || strictImpression || strictConclusion || getFallbackFindings(cleanedLines);
-  const findings = extractXrayConclusion(
+  const clinicalFindings = extractXrayConclusion(
     strictFindings || proximityFindings,
     strictImpression,
     strictConclusion,
     fallbackNarrative || cleanedText,
   );
 
+  function extractRadiologistName(text: string, lines: string[]): string | null {
+    const explicitMatch = /Radiologist\s*:\s*([^,\n]+)/i.exec(text);
+    if (explicitMatch) {
+      let name = explicitMatch[1].replace(/[,.-]?\s*\b(?:MD|M\.D\.|FPCR|FPC|DPBR|FACR|RRT|RMT)\b.*$/i, '').trim();
+      name = name.replace(/^(?:Dr\.?|Physician)\s+/i, '').trim();
+      if (name) return `Dr. ${name}`;
+    }
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      const titleMatch = /[,.-]\s*(?:MD|M\.D\.|FPCR|FPC|DPBR|FACR)\b.*$/i;
+      if (titleMatch.test(line)) {
+        let name = line.replace(titleMatch, '').replace(/^(?:Radiologist|Physician|Dr\.?)\s*[:.-]?\s*/i, '').trim();
+        name = name.replace(/^(?:Dr\.?)\s+/i, '').trim();
+        if (name) return `Dr. ${name}`;
+      }
+      if (/radiologist/i.test(line) && i > 0) {
+        let prevLine = lines[i - 1].trim();
+        let name = prevLine.replace(/[,.-]?\s*\b(?:MD|M\.D\.|FPCR|FPC|DPBR|FACR)\b.*$/i, '').replace(/^(?:Radiologist|Physician|Dr\.?)\s*[:.-]?\s*/i, '').trim();
+        name = name.replace(/^(?:Dr\.?)\s+/i, '').trim();
+        if (name) return `Dr. ${name}`;
+      }
+    }
+    return null;
+  }
+
+  const radiologistName = extractRadiologistName(cleanedText, cleanedLines);
+
   return {
     date: extractXrayDocumentDate(rawText),
-    findings,
-    result: findings ? inferXrayResult(findings) || null : null,
+    findings: radiologistName,
+    result: clinicalFindings ? inferXrayResult(clinicalFindings) || null : null,
   };
 }
 
@@ -583,77 +611,57 @@ function isStrictNumericLiteral(rawValue: string, allowThousands = false) {
   const trimmed = String(rawValue || "").trim();
   if (!trimmed) return false;
   if (allowThousands) {
-    return /^(?:\d{1,3}(?:,\d{3})*|\d+(?:[.,]\d{1,2})?|\.\d{1,2})$/.test(trimmed);
+    return /^(?:\d{1,3}(?:,\d{3})*|\d+(?:[.,]\d+)?|\.\d+)$/.test(trimmed);
   }
-  return /^(?:\d+(?:[.,]\d{1,2})?|\.\d{1,2})$/.test(trimmed);
+  return /^(?:\d+(?:[.,]\d+)?|\.\d+)$/.test(trimmed);
 }
 
 function normalizeHemoglobinValue(value: number, context: string, rawValue: string) {
   const trimmedRawValue = String(rawValue || "").trim();
   if (!isStrictNumericLiteral(trimmedRawValue)) return "";
-  const unitContext = normalizeCbcUnitContext(context);
-  const normalized = /mmol\/?l|mg\/?(?:dl|l)/.test(unitContext)
-    ? Number.NaN
-    : hasHemoglobinGPerLUnit(context)
-      ? value / 10
-      : value;
-
-  if (normalized < 3 || normalized > 25) return "";
-  return formatNumericValue(normalized, 1);
+  
+  if (value < 10 || value > 300) return "";
+  return formatNumericValue(value, 1);
 }
 
 function normalizeHematocritValue(value: number, context: string, rawValue: string) {
   const trimmedRawValue = String(rawValue || "").trim();
   if (!isStrictNumericLiteral(trimmedRawValue)) return "";
-  let normalized = Number.NaN;
-  const unitContext = normalizeCbcUnitContext(context);
-
-  if (hasHematocritPercentUnit(context)) {
-    normalized = value;
-  } else if (hasHematocritFractionUnit(context)) {
-    normalized = value * 100;
-  } else if (!/mmol|mg\/(?:dl|l)|mg(?:dl|l)|g\/(?:dl|l)|gdl|\/ul|\/mm3|cumm/.test(unitContext)) {
-    normalized = value > 0 && value < 1 ? value * 100 : value;
+  
+  // Extract as is (e.g. 0.44)
+  if (value < 0.05 || value > 1.00) {
+    if (value > 5 && value <= 100) return formatNumericValue(value / 100, 2);
+    return "";
   }
-
-  if (normalized < 10 || normalized > 70) return "";
-  return formatNumericValue(normalized, 1);
+  return formatNumericValue(value, 2);
 }
 
 function normalizeWbcValue(value: number, context: string, rawValue: string) {
   const trimmedRawValue = String(rawValue || "").trim();
   if (!isStrictNumericLiteral(trimmedRawValue, true)) return "";
-  let normalized = Number.NaN;
-  const unitContext = normalizeCbcUnitContext(context);
-
-  if (hasCountTargetUnit(context)) {
-    normalized = value;
-  } else if (hasCountPerMicroliterUnit(context)) {
-    normalized = value / 1000;
-  } else if (!/mmol|mg\/(?:dl|l)|mg(?:dl|l)|g\/(?:dl|l)|gdl|\/ul|\/mm3|cumm|10(?:\^)?[0368]\/?l/.test(unitContext) && isInRange(value, 0.5, 100)) {
-    normalized = value;
+  
+  let normalized = value;
+  // If the value is somehow in thousands (e.g. 5000 instead of 5.0)
+  if (normalized >= 500 && normalized <= 100000) {
+    normalized = normalized / 1000;
   }
-
-  if (normalized < 0.5 || normalized > 100) return "";
+  if (normalized < 0.1 || normalized > 200) return "";
   return formatNumericValue(normalized, 2);
 }
 
 function normalizePlateletValue(value: number, context: string, rawValue: string) {
   const trimmedRawValue = String(rawValue || "").trim();
   if (!isStrictNumericLiteral(trimmedRawValue, true)) return "";
-  let normalized = Number.NaN;
-  const unitContext = normalizeCbcUnitContext(context);
-
-  if (hasCountTargetUnit(context)) {
-    normalized = value;
-  } else if (hasCountPerMicroliterUnit(context)) {
-    normalized = value / 1000;
-  } else if (!/mmol|mg\/(?:dl|l)|mg(?:dl|l)|g\/(?:dl|l)|gdl|\/ul|\/mm3|cumm|10(?:\^)?[0368]\/?l/.test(unitContext) && isInRange(value, 10, 1000)) {
-    normalized = value;
-  }
-
-  if (normalized < 10 || normalized > 1000) return "";
-  return formatNumericValue(Math.round(normalized), 0);
+  
+  let normalized = value;
+  if (normalized > 10000) normalized = normalized / 1000;
+  
+  if (normalized < 10 || normalized > 2000) return "";
+  
+  const num = Math.round(normalized);
+  if (num < 150) return "Thrombocytopenia";
+  if (num > 350) return "Thrombocytosis";
+  return String(num);
 }
 
 function parseOcrNumber(value: string) {
@@ -792,6 +800,17 @@ function extractCbcNumericField(
     const line = lines[index];
     if (!pattern.test(line)) continue;
 
+    // Custom text logic for platelet: ADEQUATE / THROMBOCYTOPENIA / THROMBOCYTOSIS
+    if (pattern.source.includes("platelet")) {
+      const textMatch = /\b(ADEQUATE|THROMBOCYTOPENIA|THROMBOCYTOSIS)\b/i.exec(line);
+      if (textMatch) {
+         const t = textMatch[1].toUpperCase();
+         if (t === "ADEQUATE") return "Adequate";
+         if (t === "THROMBOCYTOPENIA") return "Thrombocytopenia";
+         if (t === "THROMBOCYTOSIS") return "Thrombocytosis";
+      }
+    }
+
     const sameLineValue = extractLabeledNumericValue(line, pattern, normalize);
     if (sameLineValue) return sameLineValue;
     if (getCbcLabelCount(line) > 1) continue;
@@ -799,6 +818,16 @@ function extractCbcNumericField(
     for (const nearbyLine of lines.slice(index + 1, index + 3)) {
       if (/[A-Za-z]{3,}/.test(nearbyLine) && CBC_NUMERIC_FIELDS.some((field) => field.pattern.test(nearbyLine))) {
         break;
+      }
+
+      if (pattern.source.includes("platelet")) {
+        const textMatch = /\b(ADEQUATE|THROMBOCYTOPENIA|THROMBOCYTOSIS)\b/i.exec(nearbyLine);
+        if (textMatch) {
+           const t = textMatch[1].toUpperCase();
+           if (t === "ADEQUATE") return "Adequate";
+           if (t === "THROMBOCYTOPENIA") return "Thrombocytopenia";
+           if (t === "THROMBOCYTOSIS") return "Thrombocytosis";
+        }
       }
 
       for (const token of getNumericTokens(nearbyLine)) {
@@ -830,17 +859,23 @@ function normalizeBloodTypeToken(value: string): BloodTypeValue | "" {
 }
 
 function extractStandaloneBloodTypeValue(value: string) {
-  const text = String(value || "").trim();
+  const text = String(value || "").trim().replace(/["']/g, '');
   if (!text) return "";
 
-  const directMatch = /^\s*(AB|A|B|O)\s*(?:Rh(?:D|\(D\))?\s*)?([+-]|positive|negative|pos|neg|reactive|nonreactive)\s*$/i.exec(text);
+  const directMatch = /^\s*(O|A|B|AB)\s*(?:Rh(?:D|\(D\))?\s*)?([+-]|positive|negative|pos|neg|reactive|nonreactive)\s*$/i.exec(text);
   if (directMatch) {
     return normalizeBloodTypeToken(`${directMatch[1]}${normalizeBloodRh(directMatch[2])}`);
   }
 
-  const rhFirstMatch = /^\s*(?:Rh(?:D|\(D\))?\s*)?([+-]|positive|negative|pos|neg|reactive|nonreactive)\s*(AB|A|B|O)\s*$/i.exec(text);
+  const rhFirstMatch = /^\s*(?:Rh(?:D|\(D\))?\s*)?([+-]|positive|negative|pos|neg|reactive|nonreactive)\s*(O|A|B|AB)\s*$/i.exec(text);
   if (rhFirstMatch) {
     return normalizeBloodTypeToken(`${rhFirstMatch[2]}${normalizeBloodRh(rhFirstMatch[1])}`);
+  }
+
+  // Handle generic mid-string captures
+  const inlineMatch = /\b(O|A|B|AB)\s*(?:Rh(?:D|\(D\))?\s*)?([+-]|positive|negative|pos|neg|reactive|nonreactive)\b/i.exec(text);
+  if (inlineMatch) {
+    return normalizeBloodTypeToken(`${inlineMatch[1]}${normalizeBloodRh(inlineMatch[2])}`);
   }
 
   return "";
@@ -874,7 +909,7 @@ function extractCbcBloodType(lines: string[]) {
     const line = lines[index];
     if (!labelPattern.test(line)) continue;
 
-    const normalizedLine = line.replace(/\b(?:blood\s*(?:type|group|typing)|abo(?:\/?rh)?|abo\s*group|rh(?:esus)?(?:\s*type)?)\b/gi, " ");
+    const normalizedLine = line.replace(/['"]/g, " ").replace(/\b(?:blood\s*(?:type|group|typing)|abo(?:\/?rh)?|abo\s*group|rh(?:esus)?(?:\s*type)?)\b/gi, " ");
     const sameLineBloodType = extractBloodTypeFromTextBlock(normalizedLine);
     if (sameLineBloodType) return sameLineBloodType;
 
