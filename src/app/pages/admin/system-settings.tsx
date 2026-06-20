@@ -126,7 +126,15 @@ export default function AdminSystemSettings() {
     settingValue: academicYearSettingValue,
   } = useAcademicYear();
   const academicYearOptions = useMemo(() => buildUpcomingAcademicYearOptions(), []);
-  const firstAcademicYearOption = academicYearOptions[0]?.value || getDefaultAcademicYear();
+  const filteredAcademicYearOptions = useMemo(() => {
+    if (!activeAcademicYear) return academicYearOptions;
+    const currentStartYear = Number.parseInt(activeAcademicYear.slice(0, 4), 10);
+    return academicYearOptions.filter((option) => {
+      const optionStartYear = Number.parseInt(option.value.slice(0, 4), 10);
+      return optionStartYear >= currentStartYear;
+    });
+  }, [academicYearOptions, activeAcademicYear]);
+  const firstAcademicYearOption = filteredAcademicYearOptions[0]?.value || getDefaultAcademicYear();
 
   useEffect(() => {
     if (!settingsData) return;
@@ -135,11 +143,11 @@ export default function AdminSystemSettings() {
   }, [settingsData]);
 
   useEffect(() => {
-    const nextAcademicYearInput = academicYearOptions.some((option) => option.value === activeAcademicYear)
+    const nextAcademicYearInput = filteredAcademicYearOptions.some((option) => option.value === activeAcademicYear)
       ? activeAcademicYear
       : firstAcademicYearOption;
     setAcademicYearInput(nextAcademicYearInput);
-  }, [activeAcademicYear, academicYearOptions, firstAcademicYearOption]);
+  }, [activeAcademicYear, filteredAcademicYearOptions, firstAcademicYearOption]);
 
   useEffect(() => {
     if (isError) {
@@ -293,7 +301,7 @@ export default function AdminSystemSettings() {
                     <SelectValue placeholder="Select school year" />
                   </SelectTrigger>
                   <SelectContent>
-                    {academicYearOptions.map((option) => (
+                    {filteredAcademicYearOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>
