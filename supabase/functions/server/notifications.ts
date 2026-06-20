@@ -1,7 +1,6 @@
 // @ts-nocheck
 import nodemailer from "npm:nodemailer";
 import { normalizeEmail, supabase } from "./context.ts";
-import { getSafeAdminSystemSettings } from "./settings.ts";
 
 function getYearLevelLabel(yearLevel: unknown) {
   const value = Number(yearLevel);
@@ -53,10 +52,6 @@ export async function sendStatusNotificationEmail(
   status: string,
   staffNotes?: string | null,
 ) {
-  const settings = await getSafeAdminSystemSettings();
-  if (!settings.approvalEmailNotifications) {
-    return { success: true, skipped: true, reason: "notifications_disabled" };
-  }
 
   const smtpHost = String(Deno.env.get("SMTP_HOST") || "").trim();
   const smtpPort = Number(Deno.env.get("SMTP_PORT") || "0");
@@ -176,6 +171,53 @@ export async function sendOtpEmail(recipientEmail: string, userName: string, otp
     `Your 2-Factor Authentication verification code is: ${otpCode}\n\n` +
     "This code will expire in 5 minutes.\n\n" +
     "If you did not request this change, please ignore this email and ensure your account is secure.";
+
+  await transporter.sendMail({
+    from: `"${smtpFromName}" <${smtpFromEmail || smtpUser}>`,
+    to: recipientEmail,
+    subject: subject,
+    text: text,
+    html:
+      '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">' +
+      '<h2 style="color: #006d3c;">Gordon College Clinic</h2>' +
+      `<div style="line-height: 1.6; color: #333;">${text.replace(/\n/g, "<br>")}</div>` +
+      '<hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">' +
+      '<p style="font-size: 12px; color: #888;">This is an automated notification from the Gordon College Clinic System. Please do not reply to this email.</p>' +
+      "</div>",
+  });
+}
+
+export async function sendOtpEmailForSettings(recipientEmail: string, userName: string, otpCode: string) {
+  const smtpHost = String(Deno.env.get("SMTP_HOST") || "").trim();
+  const smtpPort = Number(Deno.env.get("SMTP_PORT") || "0");
+  const smtpUser = String(Deno.env.get("SMTP_USER") || "").trim();
+  const smtpPass = String(Deno.env.get("SMTP_PASS") || "").trim();
+  const smtpFromEmail = String(Deno.env.get("SMTP_FROM_EMAIL") || "").trim();
+  const smtpFromName = String(Deno.env.get("SMTP_FROM_NAME") || "").trim() || "Gordon College Clinic";
+
+  if (!smtpHost || !smtpPort || !smtpUser || !smtpPass) {
+    throw new Error(
+      "Missing SMTP configuration. Set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASS.",
+    );
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+  });
+
+  const subject = "Verification Code for Changing System Settings";
+  const text =
+    `Hi ${userName},\n\n` +
+    `You are receiving this email because a request was made to modify the system settings for the Gordon College Clinic Management System.\n\n` +
+    `Your 2-Factor Authentication verification code is: ${otpCode}\n\n` +
+    "This code will expire in 5 minutes.\n\n" +
+    "If you did not request this change, please contact system administration immediately.";
 
   await transporter.sendMail({
     from: `"${smtpFromName}" <${smtpFromEmail || smtpUser}>`,

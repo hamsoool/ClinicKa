@@ -61,6 +61,12 @@ import {
   type SortConfig,
 } from './user-accounts-helpers';
 
+function deriveStudentIdFromEmail(email: string) {
+  const localPart = (email || '').trim().split('@')[0] || '';
+  const match = localPart.match(/^(\d{9})/);
+  return match?.[1] || '';
+}
+
 export default function AdminUserAccounts() {
   const queryClient = useQueryClient();
   const { data: reportingTermSettings } = useQuery({
@@ -241,9 +247,13 @@ export default function AdminUserAccounts() {
       toast.error(getPasswordPolicyMessage(createPasswordResult));
       return;
     }
-    if (form.role === 'student' && !form.studentId.trim()) {
-      toast.error('Student ID is required for student accounts');
-      return;
+    let derivedId = '';
+    if (form.role === 'student') {
+      derivedId = deriveStudentIdFromEmail(form.email);
+      if (!derivedId) {
+        toast.error('Could not derive a valid 9-digit Student ID from the email');
+        return;
+      }
     }
     if ((form.role === 'staff' || form.role === 'doctor') && (!form.firstName.trim() || !form.lastName.trim())) {
       toast.error('First name and last name are required for clinic staff and clinic doctor accounts');
@@ -267,7 +277,7 @@ export default function AdminUserAccounts() {
           role: form.role,
           firstName: form.firstName.trim() || undefined,
           lastName: form.lastName.trim() || undefined,
-          studentId: form.role === 'student' ? form.studentId.trim() : undefined,
+          studentId: form.role === 'student' ? derivedId.trim() : undefined,
           department: form.department.trim() || undefined,
           course: form.course.trim() || undefined,
         });
@@ -501,9 +511,32 @@ export default function AdminUserAccounts() {
             <DialogTitle>Create Account</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="ua-first">First Name</Label>
+                <Input id="ua-first" value={form.firstName} onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="ua-last">Last Name</Label>
+                <Input id="ua-last" value={form.lastName} onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))} />
+              </div>
+            </div>
             <div className="grid gap-1.5">
               <Label htmlFor="ua-email">Email</Label>
-              <Input id="ua-email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} />
+              <Input
+                id="ua-email"
+                value={form.email}
+                onChange={(e) => {
+                  const email = e.target.value;
+                  setForm((prev) => {
+                    const nextState = { ...prev, email };
+                    if (prev.role === 'student') {
+                      nextState.studentId = deriveStudentIdFromEmail(email);
+                    }
+                    return nextState;
+                  });
+                }}
+              />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="ua-password">Password</Label>
@@ -524,62 +557,60 @@ export default function AdminUserAccounts() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="ua-confirm-password">Confirm Password</Label>
-                <div className="relative">
-                  <Input
-                    id="ua-confirm-password"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={form.confirmPassword}
-                    onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                    onClick={() => setShowConfirmPassword((prev) => !prev)}
-                    aria-label={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'}
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="ua-confirm-password">Confirm Password</Label>
+              <div className="relative">
+                <Input
+                  id="ua-confirm-password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={form.confirmPassword}
+                  onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  aria-label={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
               <PasswordStrengthMeter password={form.password} userInputs={createPasswordInputs} />
             </div>
             <div className="grid gap-1.5">
-              <Label>Role</Label>
-              <Tabs
+              <Label htmlFor="ua-role">Role</Label>
+              <Select
                 value={form.role}
                 onValueChange={(value) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    role: value as 'student' | 'staff' | 'doctor',
-                  }))
+                  setForm((prev) => {
+                    const nextRole = value as 'student' | 'staff' | 'doctor';
+                    const nextState = {
+                      ...prev,
+                      role: nextRole,
+                    };
+                    if (nextRole === 'student') {
+                      nextState.studentId = deriveStudentIdFromEmail(prev.email);
+                    } else {
+                      nextState.studentId = '';
+                    }
+                    return nextState;
+                  })
                 }
               >
-                <TabsList className="w-full">
-                  <TabsTrigger value="student">Student</TabsTrigger>
-                  <TabsTrigger value="staff">Clinic Staff</TabsTrigger>
-                  <TabsTrigger value="doctor">Clinic Doctor</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="ua-first">First Name</Label>
-                <Input id="ua-first" value={form.firstName} onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="ua-last">Last Name</Label>
-                <Input id="ua-last" value={form.lastName} onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))} />
-              </div>
+                <SelectTrigger id="ua-role">
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="student">Student</SelectItem>
+                  <SelectItem value="staff">Clinic Staff</SelectItem>
+                  <SelectItem value="doctor">Clinic Doctor</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {form.role === 'student' ? (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="ua-student-id">Student ID</Label>
-                  <Input id="ua-student-id" value={form.studentId} onChange={(e) => setForm((prev) => ({ ...prev, studentId: e.target.value }))} />
-                </div>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="ua-department">Department</Label>
                   <Input id="ua-department" value={form.department} onChange={(e) => setForm((prev) => ({ ...prev, department: e.target.value }))} />
@@ -743,34 +774,6 @@ export default function AdminUserAccounts() {
               </div>
             )}
 
-            <div className="flex gap-2 md:hidden">
-              <Select value={sortConfig?.key || ''} onValueChange={(val) => setSortConfig({ key: val, direction: sortConfig?.direction || 'asc' })}>
-                <SelectTrigger className="w-full shrink-0">
-                  <SelectValue placeholder="Sort by..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="id">User ID</SelectItem>
-                  <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="role">Role</SelectItem>
-                  <SelectItem value="status">Status</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  {tab === 'archive' ? (
-                    <SelectItem value="archivedAt">Archived On</SelectItem>
-                  ) : (
-                    <SelectItem value="lastActive">Last Active</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                className="shrink-0 px-2.5"
-                disabled={!sortConfig}
-                onClick={() => setSortConfig(prev => prev ? { ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : null)}
-              >
-                <ArrowUpDown className="h-4 w-4" />
-              </Button>
-            </div>
-
             <div className="relative w-full sm:w-[18rem] shrink-0">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -781,18 +784,48 @@ export default function AdminUserAccounts() {
               />
             </div>
 
-            <Select value={roleFilter} onValueChange={applyRoleFilter}>
-              <SelectTrigger className="w-full sm:w-[190px] shrink-0">
-                <SelectValue placeholder="All Roles" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="Student">Student</SelectItem>
-                <SelectItem value={CLINIC_STAFF_ROLE_FILTER}>Clinic Staff</SelectItem>
-                <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
-                <SelectItem value="Administrator">Administrator</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-2 gap-2 w-full md:contents">
+              <div className="flex gap-1.5 md:hidden w-full">
+                <Select value={sortConfig?.key || ''} onValueChange={(val) => setSortConfig({ key: val, direction: sortConfig?.direction || 'asc' })}>
+                  <SelectTrigger className="w-full flex-1 min-w-0">
+                    <SelectValue placeholder="Sort by..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="id">User ID</SelectItem>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="role">Role</SelectItem>
+                    <SelectItem value="status">Status</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    {tab === 'archive' ? (
+                      <SelectItem value="archivedAt">Archived On</SelectItem>
+                    ) : (
+                      <SelectItem value="lastActive">Last Active</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  className="shrink-0 px-2"
+                  disabled={!sortConfig}
+                  onClick={() => setSortConfig(prev => prev ? { ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : null)}
+                >
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <Select value={roleFilter} onValueChange={applyRoleFilter}>
+                <SelectTrigger className="w-full sm:w-[190px] sm:shrink-0">
+                  <SelectValue placeholder="All Roles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="Student">Student</SelectItem>
+                  <SelectItem value={CLINIC_STAFF_ROLE_FILTER}>Clinic Staff</SelectItem>
+                  <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
+                  <SelectItem value="Administrator">Administrator</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex flex-col gap-2 sm:flex-row print:hidden shrink-0">
               <Button variant="outline" size="sm" onClick={exportToPDF} className="w-full sm:w-auto shrink-0 gap-1.5 sm:gap-2">
                 <Printer className="h-4 w-4" />

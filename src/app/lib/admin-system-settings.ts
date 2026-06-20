@@ -4,11 +4,6 @@ export type AdminSystemSettings = {
   academicYear: string;
   semester: 'First Semester' | 'Second Semester' | 'Summer';
   acceptingSubmissions: boolean;
-  requireTwoFactorAuth: boolean;
-  sessionTimeoutMinutes: number;
-  auditLogging: boolean;
-  approvalEmailNotifications: boolean;
-  pendingReviewReminders: boolean;
   autoArchiveAfterMonths: number;
   ocrProvider: OcrProvider;
   ocrCallsCount?: number;
@@ -20,8 +15,7 @@ const ADMIN_SYSTEM_SETTINGS_SEMESTERS = new Set<AdminSystemSettings['semester']>
   'Second Semester',
   'Summer',
 ]);
-const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = new Set([15, 30, 45, 60, 120]);
-const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = new Set([0, 12, 24, 36]);
+const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = new Set([0, 14, 24, 36]);
 const ADMIN_SYSTEM_SETTINGS_OCR_PROVIDERS = new Set<OcrProvider>(['azure', 'ocr-space']);
 const DEFAULT_OCR_PROVIDER: OcrProvider = 'ocr-space';
 const ADMIN_SYSTEM_SETTINGS_ACADEMIC_YEAR_PATTERN = /^(?:sy\s*)?(\d{4})\s*-\s*(\d{4})$/i;
@@ -52,12 +46,7 @@ export function createDefaultAdminSystemSettings(): AdminSystemSettings {
     academicYear: getDefaultAcademicYear(),
     semester: 'Second Semester',
     acceptingSubmissions: true,
-    requireTwoFactorAuth: true,
-    sessionTimeoutMinutes: 30,
-    auditLogging: true,
-    approvalEmailNotifications: true,
-    pendingReviewReminders: true,
-    autoArchiveAfterMonths: 12,
+    autoArchiveAfterMonths: 14,
     ocrProvider: DEFAULT_OCR_PROVIDER,
     ocrCallsCount: 0,
   };
@@ -68,7 +57,6 @@ export function normalizeAdminSystemSettings(
 ): AdminSystemSettings {
   const defaults = createDefaultAdminSystemSettings();
   const academicYearValue = String(value?.academicYear ?? defaults.academicYear).trim();
-  const parsedTimeout = Number(value?.sessionTimeoutMinutes);
   const parsedAutoArchive = Number(value?.autoArchiveAfterMonths);
 
   const academicYearMatch = academicYearValue.match(ADMIN_SYSTEM_SETTINGS_ACADEMIC_YEAR_PATTERN);
@@ -88,23 +76,6 @@ export function normalizeAdminSystemSettings(
       typeof value?.acceptingSubmissions === 'boolean'
         ? value.acceptingSubmissions
         : defaults.acceptingSubmissions,
-    requireTwoFactorAuth:
-      typeof value?.requireTwoFactorAuth === 'boolean'
-        ? value.requireTwoFactorAuth
-        : defaults.requireTwoFactorAuth,
-    sessionTimeoutMinutes: ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS.has(parsedTimeout)
-      ? parsedTimeout
-      : defaults.sessionTimeoutMinutes,
-    auditLogging:
-      typeof value?.auditLogging === 'boolean' ? value.auditLogging : defaults.auditLogging,
-    approvalEmailNotifications:
-      typeof value?.approvalEmailNotifications === 'boolean'
-        ? value.approvalEmailNotifications
-        : defaults.approvalEmailNotifications,
-    pendingReviewReminders:
-      typeof value?.pendingReviewReminders === 'boolean'
-        ? value.pendingReviewReminders
-        : defaults.pendingReviewReminders,
     autoArchiveAfterMonths: ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS.has(parsedAutoArchive)
       ? parsedAutoArchive
       : defaults.autoArchiveAfterMonths,
