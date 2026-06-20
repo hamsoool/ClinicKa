@@ -26,7 +26,6 @@ const navItems = [
 ] as const satisfies readonly PortalNavItem[];
 
 const topActions = [
-  { label: 'System safeguards', icon: ShieldPlus },
   { label: 'System settings', icon: Settings, path: '/admin/settings' },
 ] as const satisfies readonly PortalTopAction[];
 
