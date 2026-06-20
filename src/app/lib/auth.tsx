@@ -23,6 +23,8 @@ import {
   type SupabaseAuthUser,
   updateCurrentSessionPassword,
   updateUserPassword,
+  changePasswordOnServer,
+  sendPasswordChangeOtp,
 } from './api';
 import { flushPendingStudentNotificationSaves } from './student-notification-save-queue';
 import { STAFF_REVIEW_MUTATION_KEY } from './staff-clearance';
@@ -278,7 +280,8 @@ type AuthContextValue = {
   requiresPasswordSetup: boolean;
   completePasswordSetup: (newPassword: string) => Promise<void>;
   completePasswordRecovery: (newPassword: string) => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string, otp?: string) => Promise<void>;
+  sendPasswordChangeOtp: () => Promise<{ success: boolean }>;
   pendingStaffClearanceCount: number;
   pendingUploadCount: number;
 };
@@ -316,22 +319,19 @@ async function applyPasswordChange(
   setRequiresPasswordSetup: (value: boolean) => void,
   currentPassword: string,
   newPassword: string,
+  otp?: string,
 ) {
   const email = session?.user?.email || me?.profile?.email || null;
   if (!session?.access_token || !email) {
     throw new Error('No active session found. Please sign in again.');
   }
 
-  const verifiedSession = await authenticateWithPassword(email, currentPassword);
+  await changePasswordOnServer(currentPassword, newPassword, otp);
+
+  const verifiedSession = await authenticateWithPassword(email, newPassword);
   setStoredSession(verifiedSession);
   setSession(verifiedSession);
 
-  await updateUserPassword(newPassword, verifiedSession.access_token, {
-    email,
-    firstName: me?.profile?.first_name,
-    lastName: me?.profile?.last_name,
-    studentId: me?.profile?.student_id,
-  });
   await markServerPasswordSetupCompleted(verifiedSession.access_token);
   markPasswordSetupComplete(email);
   clearPendingPasswordSetup(email);
@@ -992,9 +992,12 @@ export function AuthProvider({
         setSessionTimeoutMinutes(null);
       }
     },
-    changePassword: async (currentPassword: string, newPassword: string) => {
-      await applyPasswordChange(session, me, setSession, setMe, setRole, setRequiresPasswordSetup, currentPassword, newPassword);
+    changePassword: async (currentPassword: string, newPassword: string, otp?: string) => {
+      await applyPasswordChange(session, me, setSession, setMe, setRole, setRequiresPasswordSetup, currentPassword, newPassword, otp);
       setIsPasswordRecovery(false);
+    },
+    sendPasswordChangeOtp: async () => {
+      return await sendPasswordChangeOtp();
     },
     pendingStaffClearanceCount,
     pendingUploadCount,

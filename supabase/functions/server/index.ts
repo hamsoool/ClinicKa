@@ -17,10 +17,11 @@ import {
   requestLoggingEnabled,
   resolveCorsOrigin,
   supabase,
+  supabaseUrl,
   unauthorized,
 } from "./context.ts";
 import type { Requester } from "./context.ts";
-import { sendStatusNotificationEmail } from "./notifications.ts";
+import { sendStatusNotificationEmail, sendOtpEmail } from "./notifications.ts";
 import {
   archivedAccountsMigrationRequired,
   authenticate,
@@ -90,7 +91,7 @@ import {
   requireSubmissionAccess,
   SUBMISSION_LIST_COLUMNS,
 } from "./submissions.ts";
-import { getCachedData, setCachedData, getOcrCallsHistory } from "./redis.ts";
+import { getCachedData, setCachedData, getOcrCallsHistory, getRedisClient } from "./redis.ts";
 
 const app = new Hono().basePath("/server");
 
@@ -4219,6 +4220,325 @@ app.post("/issue-certificate", async (c) => {
     console.log('Error issuing certificate:', error);
     return internalServerError(c, 'Failed to issue certificate', error);
   }
+});
+
+async function checkRateLimit(ip: string, email: string) {
+  const redis = getRedisClient();
+  if (!redis) {
+    console.log("[RateLimit] Upstash Redis configuration missing or client not initialized. Bypassing rate limit check.");
+    return { allowed: true };
+  }
+
+  let role = "student";
+  try {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("email", email)
+      .maybeSingle();
+    
+    if (!error && profile?.role) {
+      role = profile.role;
+    }
+  } catch (err) {
+    console.log("[RateLimit] Error querying profile role:", err);
+  }
+
+  // Rate limiting parameters depending on the role
+  let maxIpAttempts = 10;
+  let ipWindowSeconds = 60;
+  let maxEmailAttempts = 5;
+  let emailWindowSeconds = 300;
+
+  if (role === "admin" || role === "super_admin" || role === "staff") {
+    maxIpAttempts = 5;
+    maxEmailAttempts = 3;
+  }
+
+  // 1. IP Rate Limiting
+  const ipKey = `rl:ip:${ip}`;
+  let ipCount = 0;
+  try {
+    ipCount = await redis.incr(ipKey);
+    if (ipCount === 1) {
+      await redis.expire(ipKey, ipWindowSeconds);
+    }
+  } catch (err) {
+    console.log("[RateLimit] Redis IP count failed:", err);
+  }
+
+  if (ipCount > maxIpAttempts) {
+    let ttl = 60;
+    try {
+      ttl = await redis.ttl(ipKey);
+      if (ttl < 0) ttl = ipWindowSeconds;
+    } catch {
+      // ignore
+    }
+    return {
+      allowed: false,
+      reason: `Too many login attempts from this IP. Please try again in ${ttl} seconds.`,
+    };
+  }
+
+  // 2. Email Rate Limiting
+  const emailKey = `rl:email:${email}`;
+  let emailCount = 0;
+  try {
+    emailCount = await redis.incr(emailKey);
+    if (emailCount === 1) {
+      await redis.expire(emailKey, emailWindowSeconds);
+    }
+  } catch (err) {
+    console.log("[RateLimit] Redis Email count failed:", err);
+  }
+
+  if (emailCount > maxEmailAttempts) {
+    let ttl = 300;
+    try {
+      ttl = await redis.ttl(emailKey);
+      if (ttl < 0) ttl = emailWindowSeconds;
+    } catch {
+      // ignore
+    }
+    const minutes = Math.ceil(ttl / 60);
+    return {
+      allowed: false,
+      reason: `Too many login attempts for this account. Please try again in ${minutes} minute${minutes > 1 ? "s" : ""}.`,
+    };
+  }
+
+  return { allowed: true };
+}
+
+app.post("/auth/login", async (c) => {
+  let email = "";
+  let password = "";
+  try {
+    const body = await c.req.json();
+    email = normalizeEmail(body?.email);
+    password = body?.password;
+  } catch {
+    return badRequest("Invalid request body");
+  }
+
+  if (!email || !password) {
+    return badRequest("Email and password are required");
+  }
+
+  const clientIp = c.req.header("cf-connecting-ip") || c.req.header("x-real-ip") || c.req.header("x-forwarded-for")?.split(',')[0].trim() || "127.0.0.1";
+
+  // Check rate limits
+  const rateLimitResult = await checkRateLimit(clientIp, email);
+  if (!rateLimitResult.allowed) {
+    return c.json({ error: rateLimitResult.reason }, 429);
+  }
+
+  // Attempt login using the Supabase Auth API
+  try {
+    const anonKey = c.req.header("apikey") || Deno.env.get("SUPABASE_ANON_KEY") || serviceRoleKey;
+    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const rawBody = await response.text();
+    let payload: Record<string, any> = {};
+    try {
+      payload = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      payload = {};
+    }
+
+    if (!response.ok) {
+      const message =
+        payload.msg ||
+        payload.error_description ||
+        payload.error ||
+        `Failed to sign in (${response.status})`;
+
+      if (String(message).trim().toLowerCase().includes("user is banned")) {
+        return forbidden("This account is not available. Contact the administrator for assistance.");
+      }
+
+      return c.json({ error: message }, response.status);
+    }
+
+    // Success! Reset email rate limit
+    const redis = getRedisClient();
+    if (redis) {
+      try {
+        const emailKey = `rl:email:${email}`;
+        await redis.del(emailKey);
+      } catch (err) {
+        console.log("[RateLimit] Failed to reset email counter in Redis:", err);
+      }
+    }
+
+    return c.json(payload);
+  } catch (error) {
+    console.error("Login route error:", error);
+    return internalServerError(c, "An error occurred during sign in", error);
+  }
+});
+
+app.post("/auth/send-password-change-otp", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+
+  const role = requester.profile?.role;
+  if (role !== "admin" && role !== "super_admin" && role !== "staff") {
+    return badRequest("2-Factor Authentication is only required for administrative or staff roles.");
+  }
+
+  const userId = requester.profile?.id;
+  const email = normalizeEmail(requester.profile?.email);
+  if (!email) {
+    return badRequest("Your account does not have a registered email address.");
+  }
+
+  // Generate 6-digit OTP
+  const otpCode = String(Math.floor(100000 + Math.random() * 900000));
+
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const otpKey = `otp:pw-change:${userId}`;
+      await redis.setex(otpKey, 300, otpCode); // 5 minutes TTL
+    } catch (err) {
+      console.error("[2FA] Failed to store OTP in Redis:", err);
+      return internalServerError(c, "Failed to initialize 2-Factor verification", err);
+    }
+  } else {
+    console.warn("[2FA] Redis is bypassed, cannot generate OTP.");
+    return internalServerError(c, "Verification service is currently unavailable.", new Error("Redis bypassed"));
+  }
+
+  // Send the email
+  try {
+    const name = [requester.profile?.first_name, requester.profile?.last_name].filter(Boolean).join(" ").trim() || "User";
+    await sendOtpEmail(email, name, otpCode);
+  } catch (err) {
+    console.error("[2FA] Failed to send OTP email:", err);
+    // Cleanup OTP in Redis if email send fails
+    try {
+      const otpKey = `otp:pw-change:${userId}`;
+      await redis.del(otpKey);
+    } catch {
+      // ignore
+    }
+    return internalServerError(c, "Failed to send verification code email. Please try again.", err);
+  }
+
+  return c.json({ success: true });
+});
+
+app.post("/auth/change-password", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+
+  let currentPassword = "";
+  let newPassword = "";
+  let otp = "";
+  try {
+    const body = await c.req.json();
+    currentPassword = String(body?.currentPassword || "");
+    newPassword = String(body?.newPassword || "");
+    otp = String(body?.otp || "").trim();
+  } catch {
+    return badRequest("Invalid request body");
+  }
+
+  if (!currentPassword || !newPassword) {
+    return badRequest("Current password and new password are required.");
+  }
+
+  const role = requester.profile?.role;
+  const userId = requester.profile?.id;
+  const email = normalizeEmail(requester.profile?.email);
+
+  if (role === "admin" || role === "super_admin" || role === "staff") {
+    if (!otp) {
+      return badRequest("Verification code is required for changing passwords on administrative or staff accounts.");
+    }
+
+    const redis = getRedisClient();
+    if (!redis) {
+      return internalServerError(c, "Verification service is currently unavailable.", new Error("Redis bypassed"));
+    }
+
+    const otpKey = `otp:pw-change:${userId}`;
+    let storedOtp = null;
+    try {
+      storedOtp = await redis.get(otpKey);
+    } catch (err) {
+      console.error("[2FA] Failed to retrieve OTP from Redis:", err);
+      return internalServerError(c, "Verification service error", err);
+    }
+
+    if (!storedOtp || String(storedOtp).trim() !== otp) {
+      return badRequest("Invalid or expired verification code.");
+    }
+
+    // Clean up OTP key on verification success
+    try {
+      await redis.del(otpKey);
+    } catch (err) {
+      console.error("[2FA] Failed to delete verified OTP from Redis:", err);
+    }
+  }
+
+  // 1. Verify current password by exchanging it for a password token
+  try {
+    const anonKey = c.req.header("apikey") || Deno.env.get("SUPABASE_ANON_KEY") || serviceRoleKey;
+    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password: currentPassword }),
+    });
+
+    if (!response.ok) {
+      const rawBody = await response.text();
+      let payload = {};
+      try {
+        payload = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        // ignore
+      }
+      const message = payload.error_description || payload.error || "Incorrect current password.";
+      return badRequest(message);
+    }
+  } catch (error) {
+    console.error("[ChangePassword] Current password verification failed:", error);
+    return internalServerError(c, "Could not verify your current password. Please try again.", error);
+  }
+
+  // 2. Update user password in Supabase Auth via admin interface
+  try {
+    const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    });
+
+    if (updateError) {
+      return badRequest(updateError.message);
+    }
+  } catch (error) {
+    console.error("[ChangePassword] Password update via admin interface failed:", error);
+    return internalServerError(c, "Failed to update password. Please try again.", error);
+  }
+
+  return c.json({ success: true });
 });
 
 Deno.serve(app.fetch);
