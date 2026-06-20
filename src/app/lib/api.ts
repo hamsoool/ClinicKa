@@ -2279,7 +2279,7 @@ export async function authenticateWithPassword(email: string, password: string) 
   if (!supabaseUrl || !publicAnonKey) {
     throw new Error(PUBLIC_SUPABASE_CONFIG_ERROR);
   }
-  const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+  const response = await fetch(`${supabaseUrl}/functions/v1/server/auth/login`, {
     method: 'POST',
     headers: {
       apikey: publicAnonKey,
@@ -6001,4 +6001,20 @@ export async function restoreSuperAdminAdministrator(archiveId: string) {
       },
     );
   }
+}
+
+export async function sendPasswordChangeOtp() {
+  return apiRequest<{ success: boolean }>('/functions/v1/server/auth/send-password-change-otp', {
+    method: 'POST',
+  });
+}
+
+export async function changePasswordOnServer(currentPassword: string, newPassword: string, otp?: string) {
+  return apiRequest<{ success: boolean }>('/functions/v1/server/auth/change-password', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ currentPassword, newPassword, otp }),
+  });
 }
