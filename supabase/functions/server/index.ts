@@ -4543,4 +4543,11 @@ app.post("/auth/change-password", async (c) => {
   return c.json({ success: true });
 });
 
-Deno.serve(app.fetch);
+Deno.serve((req) => {
+  const url = new URL(req.url);
+  if (url.pathname.startsWith("/functions/v1/server")) {
+    url.pathname = url.pathname.replace("/functions/v1/server", "/server");
+    return app.fetch(new Request(url.toString(), req));
+  }
+  return app.fetch(req);
+});
