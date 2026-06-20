@@ -73,15 +73,17 @@ export function AccountSummaryButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'group flex min-h-[6.75rem] w-full items-center justify-between rounded-[18px] border bg-card p-5 text-left text-card-foreground transition-all hover:border-primary/45 hover:bg-primary-container/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2',
+        'group flex min-h-[4.25rem] sm:min-h-[6.75rem] w-full items-center justify-between rounded-lg sm:rounded-[18px] border bg-card p-2 sm:p-5 text-left text-card-foreground transition-all hover:border-primary/45 hover:bg-primary-container/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2',
         active && 'border-primary/45 bg-primary-container/10',
       )}
     >
-      <span>
-        <span className="block text-sm text-muted-foreground">{label}</span>
-        <span className="mt-2 block text-2xl font-bold text-on-surface sm:text-3xl">{value}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[9px] sm:text-sm text-muted-foreground truncate leading-tight">{label}</span>
+        <span className="mt-1 sm:mt-2 block text-base sm:text-3xl font-bold text-on-surface leading-none">{value}</span>
       </span>
-      {children}
+      <span className="hidden sm:inline-flex shrink-0 ml-2">
+        {children}
+      </span>
     </button>
   );
 }

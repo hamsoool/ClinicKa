@@ -38,7 +38,6 @@ const STATUS_FILTER_VALUES = new Set([
   'all',
   'pending',
   'in_review',
-  'physical_exam_done',
   'approved',
   'returned',
   'resubmitted',
@@ -72,8 +71,6 @@ function getStatusFilterLabel(status: string) {
       return 'Pending';
     case 'in_review':
       return 'In Review';
-    case 'physical_exam_done':
-      return 'Physical Exam Done';
     case 'approved':
       return 'Approved';
     case 'returned':
@@ -222,8 +219,6 @@ export default function StaffSubmissions() {
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
       case 'in_review':
         return null;
-      case 'physical_exam_done':
-        return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Physical Exam Done</Badge>;
       case 'approved':
         return <Badge variant="secondary" className="bg-green-100 text-green-800">Approved</Badge>;
       case 'returned':
@@ -345,7 +340,6 @@ export default function StaffSubmissions() {
                   <SelectItem value="action_needed">Needs Action</SelectItem>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="returned">Returned</SelectItem>
                   <SelectItem value="resubmitted">Resubmitted</SelectItem>

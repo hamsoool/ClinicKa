@@ -1,3 +1,5 @@
+export type OcrProvider = 'azure' | 'ocr-space';
+
 export type AdminSystemSettings = {
   academicYear: string;
   semester: 'First Semester' | 'Second Semester' | 'Summer';
@@ -8,6 +10,8 @@ export type AdminSystemSettings = {
   approvalEmailNotifications: boolean;
   pendingReviewReminders: boolean;
   autoArchiveAfterMonths: number;
+  ocrProvider: OcrProvider;
+  ocrCallsCount?: number;
 };
 
 const ADMIN_SYSTEM_SETTINGS_STORAGE_KEY = 'admin_system_settings_v1';
@@ -18,6 +22,8 @@ const ADMIN_SYSTEM_SETTINGS_SEMESTERS = new Set<AdminSystemSettings['semester']>
 ]);
 const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = new Set([15, 30, 45, 60, 120]);
 const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = new Set([0, 12, 24, 36]);
+const ADMIN_SYSTEM_SETTINGS_OCR_PROVIDERS = new Set<OcrProvider>(['azure', 'ocr-space']);
+const DEFAULT_OCR_PROVIDER: OcrProvider = 'ocr-space';
 const ADMIN_SYSTEM_SETTINGS_ACADEMIC_YEAR_PATTERN = /^(?:sy\s*)?(\d{4})\s*-\s*(\d{4})$/i;
 
 export function isMissingKvStoreError(error: unknown) {
@@ -52,6 +58,8 @@ export function createDefaultAdminSystemSettings(): AdminSystemSettings {
     approvalEmailNotifications: true,
     pendingReviewReminders: true,
     autoArchiveAfterMonths: 12,
+    ocrProvider: DEFAULT_OCR_PROVIDER,
+    ocrCallsCount: 0,
   };
 }
 
@@ -100,6 +108,10 @@ export function normalizeAdminSystemSettings(
     autoArchiveAfterMonths: ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS.has(parsedAutoArchive)
       ? parsedAutoArchive
       : defaults.autoArchiveAfterMonths,
+    ocrProvider: ADMIN_SYSTEM_SETTINGS_OCR_PROVIDERS.has(value?.ocrProvider as OcrProvider)
+      ? (value?.ocrProvider as OcrProvider)
+      : defaults.ocrProvider,
+    ocrCallsCount: typeof value?.ocrCallsCount === 'number' ? value.ocrCallsCount : 0,
   };
 }
 

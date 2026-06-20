@@ -173,8 +173,6 @@ export default function StudentClearance() {
         return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending</Badge>;
       case 'approved':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge>;
-      case 'physical_exam_done':
-        return <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200">Physical Exam Done</Badge>;
       case 'returned':
         return <Badge className="bg-red-100 text-red-800 border-red-200">Returned</Badge>;
       case 'resubmitted':
@@ -193,7 +191,6 @@ export default function StudentClearance() {
   const isPending = normalizedStatus === 'pending';
   const isInReview = normalizedStatus === 'in_review';
   const isReturned = normalizedStatus === 'returned';
-  const isPhysicalExamDone = normalizedStatus === 'physical_exam_done';
 
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-6">
@@ -449,20 +446,7 @@ export default function StudentClearance() {
                             </Badge>
                           </div>
                         </>
-                      ) : isPhysicalExamDone ? (
-                        <>
-                          <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
-                          <div>
-                            <p className="font-medium text-amber-900">Physical Exam Completed</p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              Your checkup is complete, but the medical certificate is not yet finalized. Please wait for clinic approval.
-                            </p>
-                            <Badge variant="secondary" className="mt-2 bg-amber-100 text-amber-800">
-                              <Clock className="mr-1 h-3 w-3" /> Awaiting Final Approval
-                            </Badge>
-                          </div>
-                        </>
-                      ) : (
+                       ) : (
                         <>
                           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-yellow-700" />
                           <div>

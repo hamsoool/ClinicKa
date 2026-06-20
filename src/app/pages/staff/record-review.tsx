@@ -876,8 +876,6 @@ function getStatusBadge(status: ReviewStatus) {
       return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
     case 'in_review':
       return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">In Review</Badge>;
-    case 'physical_exam_done':
-      return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Physical Exam Done</Badge>;
     case 'approved':
       return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Issued Medical Certificate</Badge>;
     case 'returned':
@@ -1071,6 +1069,7 @@ export default function StaffRecordReview() {
   const xrayOcrRunRef = useRef(0);
   const cbcOcrRunRef = useRef(0);
   const urinalysisOcrRunRef = useRef(0);
+  const autoFillRunningRef = useRef(false);
   const rawDefaultSignatoryName = [
     me?.staff?.first_name || me?.profile.first_name || '',
     me?.staff?.last_name || me?.profile.last_name || '',
@@ -2286,6 +2285,10 @@ export default function StaffRecordReview() {
       return;
     }
 
+    if (autoFillRunningRef.current) {
+      return;
+    }
+
     const uploadedLabFiles = getUploadedLabOcrTypes();
     if (!uploadedLabFiles.length) {
       toast.error('Upload at least one lab result file before running Auto Fill.');
@@ -2303,26 +2306,31 @@ export default function StaffRecordReview() {
     }
 
     setShowAutoFillReplaceDialog(false);
-    const outcomes = await Promise.all(
-      uploadedLabFiles.map((fileType) => {
-        if (fileType === 'xray') return runChestXrayOcr(false);
-        if (fileType === 'cbc') return runCbcOcr(false);
-        return runUrinalysisOcr(false);
-      }),
-    );
+    autoFillRunningRef.current = true;
+    try {
+      const outcomes = await Promise.all(
+        uploadedLabFiles.map((fileType) => {
+          if (fileType === 'xray') return runChestXrayOcr(false);
+          if (fileType === 'cbc') return runCbcOcr(false);
+          return runUrinalysisOcr(false);
+        }),
+      );
 
-    const filledCount = outcomes.filter((outcome) => outcome === 'filled' || outcome === 'filled_with_warning').length;
-    const warningCount = outcomes.filter((outcome) => outcome === 'warning' || outcome === 'filled_with_warning').length;
-    const errorCount = outcomes.filter((outcome) => outcome === 'error').length;
+      const filledCount = outcomes.filter((outcome) => outcome === 'filled' || outcome === 'filled_with_warning').length;
+      const warningCount = outcomes.filter((outcome) => outcome === 'warning' || outcome === 'filled_with_warning').length;
+      const errorCount = outcomes.filter((outcome) => outcome === 'error').length;
 
-    if (filledCount && !warningCount && !errorCount) {
-      toast.success(`Auto Fill completed for ${filledCount} lab result file${filledCount === 1 ? '' : 's'}.`);
-    } else if (filledCount) {
-      toast.warning('Auto Fill filled some lab result fields. Review the OCR messages below for anything missed.');
-    } else if (warningCount && !errorCount) {
-      toast.warning('Auto Fill finished, but no lab result fields were detected. Review the OCR messages below.');
-    } else {
-      toast.error('Auto Fill could not extract lab result fields. Review the OCR messages below.');
+      if (filledCount && !warningCount && !errorCount) {
+        toast.success(`Auto Fill completed for ${filledCount} lab result file${filledCount === 1 ? '' : 's'}.`);
+      } else if (filledCount) {
+        toast.warning('Auto Fill filled some lab result fields. Review the OCR messages below for anything missed.');
+      } else if (warningCount && !errorCount) {
+        toast.warning('Auto Fill finished, but no lab result fields were detected. Review the OCR messages below.');
+      } else {
+        toast.error('Auto Fill could not extract lab result fields. Review the OCR messages below.');
+      }
+    } finally {
+      autoFillRunningRef.current = false;
     }
   }
 
@@ -2385,9 +2393,6 @@ export default function StaffRecordReview() {
     persistedStatus === 'in_review'
     && Boolean(submission.reviewedByStaffId)
     && submission.reviewedByStaffId !== currentStaffId;
-  const physicalExamStatus = persistedStatus === 'approved' || persistedStatus === 'physical_exam_done'
-    ? 'Completed'
-    : 'Pending';
   const clearanceStatus = persistedStatus === 'approved'
     ? 'Approved'
     : persistedStatus === 'returned'

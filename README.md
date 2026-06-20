@@ -66,7 +66,7 @@ Some staff/admin flows call the Supabase Edge Function at `/functions/v1/server/
 - Radix UI primitives and local UI components
 - Supabase Auth, Postgres, REST API, and Edge Functions
 - Cloudinary for uploaded media
-- OCR.space integration for lab-result extraction
+- Pluggable OCR for lab-result extraction: Azure AI Vision (Read API) and OCR.space, selectable per environment by an admin setting
 - Upstash Redis for high-performance edge caching
 - PWA support through `vite-plugin-pwa` and Workbox
 
@@ -92,7 +92,7 @@ graph TD
   Function --> Database[Supabase Postgres]
   Function --> Redis[Upstash Redis Cache]
   Function --> Cloudinary
-  Function --> OCR[OCR.space]
+  Function --> OCR[OCR: Azure AI Vision or OCR.space]
   Function --> SMTP[SMTP provider]
 ```
 
@@ -116,7 +116,9 @@ Important backend files:
 - [supabase/functions/server/requester.ts](supabase/functions/server/requester.ts) - authentication, role checks, requester profile resolution.
 - [supabase/functions/server/submissions.ts](supabase/functions/server/submissions.ts) - staff dashboards, queues, submission summaries, reports.
 - [supabase/functions/server/cloudinary.ts](supabase/functions/server/cloudinary.ts) - upload ticket generation and Cloudinary verification.
-- [supabase/functions/server/ocr-space-ocr.ts](supabase/functions/server/ocr-space-ocr.ts) - OCR.space parsing and extraction helpers.
+- [supabase/functions/server/ocr.ts](supabase/functions/server/ocr.ts) - Azure AI Vision OCR client and provider-agnostic lab-result parsing/extraction helpers.
+- [supabase/functions/server/ocr-space-ocr.ts](supabase/functions/server/ocr-space-ocr.ts) - OCR.space client with its own copy of the lab-result parsing/extraction helpers.
+- [supabase/functions/server/ocrRouter.ts](supabase/functions/server/ocrRouter.ts) - dispatch layer that reads the admin `ocrProvider` setting and routes each OCR request to Azure or OCR.space.
 - [supabase/functions/server/notifications.ts](supabase/functions/server/notifications.ts) - SMTP notification helpers.
 
 The function is mounted at:
@@ -262,12 +264,23 @@ Used by status notification emails:
 
 ### OCR
 
-Used by lab-result extraction:
+ClinicKa supports two interchangeable OCR providers for lab-result extraction. The active provider is chosen by an admin via **Administrative Settings → OCR Service** (a dropdown in the admin System Settings page). It defaults to **OCR.space**; switching to **Azure AI Vision** takes effect on the next OCR request. The chosen provider's secrets must be set in Edge Function secrets, otherwise that provider returns a configuration error.
 
-- `OCR_SPACE_API_KEY` or `OCRSPACE_API_KEY`
-- `OCR_SPACE_API_URL`
-- `OCR_SPACE_LANGUAGE`
-- `OCR_SPACE_MAX_BYTES`
+**Azure AI Vision** (required only when Azure is selected):
+
+- `AZURE_VISION_KEY` (or `AZURE_CV_KEY`) - subscription key for the Computer Vision / Azure AI services resource.
+- `AZURE_VISION_ENDPOINT` (or `AZURE_CV_ENDPOINT`) - e.g. `https://<resource>.cognitiveservices.azure.com/`.
+- `AZURE_VISION_LANGUAGE` - optional BCP47 hint (e.g. `en`); omit to auto-detect.
+- `AZURE_VISION_API_VERSION` - optional, defaults to `3.2`.
+- `AZURE_VISION_MAX_BYTES` - optional per-file cap, defaults to `52428800` (50 MB).
+
+**OCR.space** (required only when OCR.space is selected):
+
+- `OCR_SPACE_API_KEY` (or `OCRSPACE_API_KEY`) - API key for the OCR.space service.
+- `OCR_SPACE_API_URL` - optional, defaults to `https://api.ocr.space/parse/image`.
+- `OCR_SPACE_LANGUAGE` - optional language hint, defaults to `eng`.
+- `OCR_SPACE_MAX_BYTES` - optional per-file cap, defaults to `1048576` (1 MB).
+
 - `LAB_UPLOAD_MAX_BYTES`
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDINARY_API_SECRET`, or SMTP credentials to frontend code.
@@ -297,7 +310,9 @@ Never expose `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDINARY_API_SECRET`, or SMTP crede
 
 ### Update OCR Parsing
 
-1. Edit [supabase/functions/server/ocr-space-ocr.ts](supabase/functions/server/ocr-space-ocr.ts).
+The field parsers exist in two self-contained copies that must stay in sync: [supabase/functions/server/ocr.ts](supabase/functions/server/ocr.ts) (Azure) and [supabase/functions/server/ocr-space-ocr.ts](supabase/functions/server/ocr-space-ocr.ts) (OCR.space). Which one runs for a given request is decided by [supabase/functions/server/ocrRouter.ts](supabase/functions/server/ocrRouter.ts) based on the admin `ocrProvider` setting.
+
+1. Apply the same parser change to both [supabase/functions/server/ocr.ts](supabase/functions/server/ocr.ts) and [supabase/functions/server/ocr-space-ocr.ts](supabase/functions/server/ocr-space-ocr.ts).
 2. Add or update parser examples in [scripts/verify-ocr-parsers.cjs](scripts/verify-ocr-parsers.cjs).
 3. Run `npm run verify:ocr`.
 
@@ -372,7 +387,12 @@ Check Cloudinary secrets, upload size limits, allowed MIME types, and the upload
 
 ### OCR fails
 
-Check OCR.space secrets, file size/page limits, and run:
+First confirm which provider is active in **Administrative Settings → OCR Service**. Then check the matching provider's secrets:
+
+- Azure AI Vision: `AZURE_VISION_KEY`, `AZURE_VISION_ENDPOINT`
+- OCR.space: `OCR_SPACE_API_KEY`
+
+Also check per-provider file size limits (`AZURE_VISION_MAX_BYTES` / `OCR_SPACE_MAX_BYTES`), and run:
 
 ```bash
 npm run verify:ocr
