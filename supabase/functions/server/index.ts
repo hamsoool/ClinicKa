@@ -21,7 +21,7 @@ import {
   unauthorized,
 } from "./context.ts";
 import type { Requester } from "./context.ts";
-import { sendStatusNotificationEmail, sendOtpEmail, sendOtpEmailForSettings } from "./notifications.ts";
+import { sendStatusNotificationEmail, sendOtpEmail, sendOtpEmailForSettings, sendOtpEmailForCreateAdmin } from "./notifications.ts";
 import {
   archivedAccountsMigrationRequired,
   authenticate,
@@ -3402,6 +3402,7 @@ app.get("/user-accounts", async (c) => {
       { data: profiles, error: profilesError },
       { data: staffUsers, error: staffError },
       archivedState,
+      authUsersResult,
     ] = await Promise.all([
       supabase
         .from('profiles')
@@ -3411,6 +3412,10 @@ app.get("/user-accounts", async (c) => {
         .from('staff_users')
         .select('profile_id,first_name,last_name,email,is_active,position'),
       getArchivedUserIds(),
+      supabase.auth.admin.listUsers({ perPage: 1000 }).catch((err) => {
+        console.error("Error listing auth users:", err);
+        return { data: { users: [] } };
+      }),
     ]);
 
     if (profilesError) throw new Error(profilesError.message);
@@ -3421,6 +3426,14 @@ app.get("/user-accounts", async (c) => {
       return acc;
     }, {} as Record<string, any>);
     const archivedUserIds = archivedState.userIds;
+
+    const authUsers = authUsersResult?.data?.users || [];
+    const lastActiveMap = new Map<string, string>();
+    for (const u of authUsers) {
+      if (u.id && u.last_sign_in_at) {
+        lastActiveMap.set(u.id, u.last_sign_in_at);
+      }
+    }
 
     const responseData = {
       users: (profiles || [])
@@ -3441,7 +3454,7 @@ app.get("/user-accounts", async (c) => {
             roleKey: profile.role,
             position: linkedStaff?.position || null,
             status: linkedStaff?.is_active === false ? 'Inactive' : 'Active',
-            lastActive: profile.updated_at || profile.created_at,
+            lastActive: lastActiveMap.get(profile.id) || profile.updated_at || profile.created_at,
             canArchive: profile.role === 'student' || profile.role === 'staff',
           };
         }),
@@ -3466,13 +3479,17 @@ app.get("/super-admin/administrators", async (c) => {
     const cached = await getCachedData<any>(cacheKey);
     if (cached) return c.json(cached);
 
-    const [{ data: profiles, error }, archiveState] = await Promise.all([
+    const [{ data: profiles, error }, archiveState, authUsersResult] = await Promise.all([
       supabase
         .from('profiles')
         .select('id,first_name,last_name,email,role,created_at,updated_at')
         .eq('role', 'admin')
         .order('created_at', { ascending: false }),
       getArchivedAccountsTableState(),
+      supabase.auth.admin.listUsers({ perPage: 1000 }).catch((err) => {
+        console.error("Error listing auth users:", err);
+        return { data: { users: [] } };
+      }),
     ]);
 
     if (error) throw new Error(error.message);
@@ -3507,6 +3524,14 @@ app.get("/super-admin/administrators", async (c) => {
       );
     }
 
+    const authUsers = authUsersResult?.data?.users || [];
+    const lastActiveMap = new Map<string, string>();
+    for (const u of authUsers) {
+      if (u.id && u.last_sign_in_at) {
+        lastActiveMap.set(u.id, u.last_sign_in_at);
+      }
+    }
+
     const responseData = {
       administrators: (profiles || [])
         .filter((profile) => !archivedUserIds.has(profile.id))
@@ -3524,7 +3549,7 @@ app.get("/super-admin/administrators", async (c) => {
             roleKey: 'admin',
             status: 'Active',
             createdAt: profile.created_at,
-            lastActive: profile.updated_at || profile.created_at,
+            lastActive: lastActiveMap.get(profile.id) || profile.updated_at || profile.created_at,
           };
         }),
       archivedAdministrators,
@@ -3538,6 +3563,53 @@ app.get("/super-admin/administrators", async (c) => {
   }
 });
 
+app.post("/super-admin/send-create-admin-otp", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
+
+  const userId = requester.profile?.id;
+  const email = normalizeEmail(requester.profile?.email);
+  const name = [requester.profile?.first_name, requester.profile?.last_name].filter(Boolean).join(" ").trim() || "Super Admin";
+
+  if (!email) {
+    return badRequest("No email address associated with your profile.");
+  }
+
+  // Generate 6-digit OTP
+  const otpCode = String(Math.floor(100000 + Math.random() * 900000));
+
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const otpKey = `otp:create-admin:${userId}`;
+      await redis.setex(otpKey, 300, otpCode); // 5 minutes TTL
+    } catch (err) {
+      console.error("[2FA] Failed to store OTP in Redis:", err);
+      return internalServerError(c, "Verification service error", err);
+    }
+  } else {
+    console.warn("[2FA] Redis is bypassed, cannot generate OTP.");
+    return internalServerError(c, "Verification service is currently unavailable.", new Error("Redis bypassed"));
+  }
+
+  try {
+    await sendOtpEmailForCreateAdmin(email, name, otpCode);
+  } catch (err) {
+    console.error("[2FA] Failed to send OTP email:", err);
+    try {
+      const otpKey = `otp:create-admin:${userId}`;
+      await redis.del(otpKey);
+    } catch (delErr) {
+      console.error("[2FA] Failed to clean up OTP after email failure:", delErr);
+    }
+    return internalServerError(c, "Failed to send verification email.", err);
+  }
+
+  return c.json({ success: true });
+});
+
 app.post("/super-admin/administrators", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
@@ -3545,15 +3617,41 @@ app.post("/super-admin/administrators", async (c) => {
   if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
 
   try {
-    const { email, password, firstName, lastName } = await c.req.json();
+    const { email, password, firstName, lastName, otp } = await c.req.json();
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail || !password) return badRequest('email and password are required');
+    if (!otp) return badRequest('Verification code (OTP) is required.');
+
     const passwordError = getManagedPasswordPolicyError(password, {
       email: normalizedEmail,
       firstName,
       lastName,
     });
     if (passwordError) return badRequest(passwordError);
+
+    const redis = getRedisClient();
+    if (redis) {
+      const otpKey = `otp:create-admin:${requester.profile.id}`;
+      let storedOtp = null;
+      try {
+        storedOtp = await redis.get(otpKey);
+      } catch (err) {
+        console.error("[2FA] Failed to retrieve OTP from Redis:", err);
+      }
+
+      if (!storedOtp || String(storedOtp).trim() !== String(otp).trim()) {
+        return badRequest("Invalid or expired verification code (OTP).");
+      }
+
+      try {
+        await redis.del(otpKey);
+      } catch (err) {
+        console.error("[2FA] Failed to delete verified OTP from Redis:", err);
+      }
+    } else {
+      console.warn("[2FA] Redis is bypassed, verification code cannot be checked.");
+      return internalServerError(c, "Verification service is currently unavailable.", new Error("Redis bypassed"));
+    }
 
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
       email: normalizedEmail,

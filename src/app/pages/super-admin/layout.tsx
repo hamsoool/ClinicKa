@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import {
-  ShieldCheck,
   ShieldPlus,
   UserRoundCog,
 } from 'lucide-react';
@@ -8,7 +7,6 @@ import PortalShell, {
   formatEmailName,
   getInitials,
   type PortalNavItem,
-  type PortalTopAction,
 } from '../../components/portal-shell';
 import { prefetchPortalRoutes } from '../../route-modules';
 import { useAuth } from '../../lib/auth';
@@ -17,16 +15,11 @@ const navItems = [
   {
     path: '/super-admin',
     label: 'Administrators',
-    subLabel: 'Add, archive, and restore system admins',
     mobileLabel: 'Admins',
     icon: UserRoundCog,
     mobileEmphasis: true,
   },
 ] as const satisfies readonly PortalNavItem[];
-
-const topActions = [
-  { label: 'Administrator access', icon: ShieldCheck, path: '/super-admin' },
-] as const satisfies readonly PortalTopAction[];
 
 export default function SuperAdminLayout() {
   const { me } = useAuth();
@@ -66,7 +59,6 @@ export default function SuperAdminLayout() {
       roleBadge="Administrator Access"
       profileUploadId="super-admin-profile-upload"
       profileUploadLabel="Upload super admin profile picture"
-      topActions={topActions}
     />
   );
 }

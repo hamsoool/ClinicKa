@@ -5907,7 +5907,14 @@ type SuperAdminCreateAdministratorInput = {
   password: string;
   firstName?: string;
   lastName?: string;
+  otp?: string;
 };
+
+export async function sendSuperAdminCreateAdminOtp() {
+  return apiRequest<{ success: boolean }>('/functions/v1/server/super-admin/send-create-admin-otp', {
+    method: 'POST',
+  });
+}
 
 export async function getSuperAdminAdministrators() {
   const data = await apiRequest<{
