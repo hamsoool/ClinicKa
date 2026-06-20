@@ -3430,7 +3430,7 @@ app.get("/user-accounts", async (c) => {
 
     const responseData = {
       users: (profiles || [])
-        .filter((profile) => !archivedUserIds.has(profile.id))
+        .filter((profile) => !archivedUserIds.has(profile.id) && profile.role !== "super_admin")
         .map((profile) => {
           const linkedStaff = staffByProfileId[profile.id];
           const name = [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim()
