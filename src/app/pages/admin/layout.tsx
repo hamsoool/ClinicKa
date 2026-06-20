@@ -20,7 +20,7 @@ import { useAuth } from '../../lib/auth';
 const navItems = [
   { path: '/admin', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
   { path: '/admin/reports', label: 'Reports', mobileLabel: 'Reports', icon: BarChart3 },
-  { path: '/admin/users', label: 'User Accounts', subLabel: 'Clinic Staff included', mobileLabel: 'Users', icon: Users },
+  { path: '/admin/users', label: 'User Accounts', mobileLabel: 'Users', icon: Users },
   { path: '/admin/announcements', label: 'Announcements', mobileLabel: 'Posts', icon: Megaphone },
   { path: '/admin/settings', label: 'System Settings', mobileLabel: 'Settings', icon: Settings },
 ] as const satisfies readonly PortalNavItem[];

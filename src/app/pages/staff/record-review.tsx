@@ -876,8 +876,6 @@ function getStatusBadge(status: ReviewStatus) {
       return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
     case 'in_review':
       return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">In Review</Badge>;
-    case 'physical_exam_done':
-      return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Physical Exam Done</Badge>;
     case 'approved':
       return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Issued Medical Certificate</Badge>;
     case 'returned':
@@ -2395,9 +2393,6 @@ export default function StaffRecordReview() {
     persistedStatus === 'in_review'
     && Boolean(submission.reviewedByStaffId)
     && submission.reviewedByStaffId !== currentStaffId;
-  const physicalExamStatus = persistedStatus === 'approved' || persistedStatus === 'physical_exam_done'
-    ? 'Completed'
-    : 'Pending';
   const clearanceStatus = persistedStatus === 'approved'
     ? 'Approved'
     : persistedStatus === 'returned'

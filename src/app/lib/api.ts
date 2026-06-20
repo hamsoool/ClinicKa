@@ -5137,7 +5137,7 @@ export async function saveSubmissionReview(id: string, review: any) {
   ]);
 
   // Trigger email notification if status is one of the target states
-  if (nextStatus === 'returned' || nextStatus === 'approved' || nextStatus === 'physical_exam_done') {
+  if (nextStatus === 'returned' || nextStatus === 'approved') {
     try {
       await sendStatusEmailNotification(id, nextStatus, review.staffNotes || review.staff_notes || '');
     } catch (error) {
@@ -5213,7 +5213,7 @@ export async function updateSubmissionStatus(id: string, status: string, staffNo
   }
 
   // Trigger email notification
-  if (status === 'returned' || status === 'approved' || status === 'physical_exam_done') {
+  if (status === 'returned' || status === 'approved') {
     try {
       await sendStatusEmailNotification(id, status, staffNotes || '');
     } catch (error) {

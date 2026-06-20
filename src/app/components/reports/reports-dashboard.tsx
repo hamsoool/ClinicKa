@@ -47,6 +47,7 @@ import {
   getSubmissions,
   type AdminSystemSettings,
 } from '../../lib/api';
+import { buildXlsxBlob } from '../../lib/excel-export';
 
 const DEPARTMENTS = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
 const REPORTING_TERM_REFRESH_INTERVAL_MS = 180_000;
@@ -57,7 +58,6 @@ const STATUS_LABELS: Record<string, string> = {
   in_review: 'In Review',
   approved: 'Approved',
   returned: 'Returned',
-  physical_exam_done: 'Physical Exam Done',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -65,7 +65,6 @@ const STATUS_COLORS: Record<string, string> = {
   Pending: '#ba7517',
   'In Review': '#2f6fa3',
   Returned: '#a32d2d',
-  'Exam Done': '#185fa5',
 };
 const DEPARTMENT_COLORS: Record<string, string> = {
   CCS: '#FF7F3F',
@@ -94,7 +93,6 @@ type ReportsSummary = {
   pending: number;
   inReview: number;
   returned: number;
-  physicalExamDone: number;
   firstYears: number;
   firstYearUnderReview: number;
   firstYearNotUnderReview: number;
@@ -269,7 +267,7 @@ function getFullName(submission: Pick<ReportSubmission, 'firstName' | 'middleIni
 }
 
 function hasPhysicalExam(submission: ReportSubmission) {
-  if (submission.status === 'physical_exam_done' || submission.status === 'approved') return true;
+  if (submission.status === 'approved') return true;
 
   const measurements = submission.staffMeasurements;
   if (!measurements) return false;
@@ -374,254 +372,7 @@ function formatCertificateStatus(submission: ReportSubmission) {
   return controlNo ? `Issued ${formatReportDate(issuedDate)} (${controlNo})` : `Issued ${formatReportDate(issuedDate)}`;
 }
 
-function escapeXml(value: unknown) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
 
-function columnName(index: number) {
-  let column = '';
-  let value = index + 1;
-
-  while (value > 0) {
-    const remainder = (value - 1) % 26;
-    column = String.fromCharCode(65 + remainder) + column;
-    value = Math.floor((value - 1) / 26);
-  }
-
-  return column;
-}
-
-function buildSheetRow(rowIndex: number, values: string[], styleIndex: number) {
-  const cells = values.map((value, columnIndex) => {
-    const reference = `${columnName(columnIndex)}${rowIndex}`;
-    return `<c r="${reference}" t="inlineStr" s="${styleIndex}"><is><t>${escapeXml(value)}</t></is></c>`;
-  });
-
-  return `<row r="${rowIndex}">${cells.join('')}</row>`;
-}
-
-function crc32(bytes: Uint8Array) {
-  let crc = 0xffffffff;
-
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-    }
-  }
-
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function writeUint16(target: Uint8Array, offset: number, value: number) {
-  target[offset] = value & 0xff;
-  target[offset + 1] = (value >>> 8) & 0xff;
-}
-
-function writeUint32(target: Uint8Array, offset: number, value: number) {
-  target[offset] = value & 0xff;
-  target[offset + 1] = (value >>> 8) & 0xff;
-  target[offset + 2] = (value >>> 16) & 0xff;
-  target[offset + 3] = (value >>> 24) & 0xff;
-}
-
-function concatBytes(chunks: Uint8Array[]) {
-  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const output = new Uint8Array(total);
-  let offset = 0;
-
-  chunks.forEach((chunk) => {
-    output.set(chunk, offset);
-    offset += chunk.length;
-  });
-
-  return output;
-}
-
-function createZipBlob(files: Array<{ path: string; content: string }>) {
-  const encoder = new TextEncoder();
-  const localChunks: Uint8Array[] = [];
-  const centralChunks: Uint8Array[] = [];
-  let offset = 0;
-  const now = new Date();
-  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
-  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
-
-  files.forEach((file) => {
-    const nameBytes = encoder.encode(file.path);
-    const contentBytes = encoder.encode(file.content);
-    const checksum = crc32(contentBytes);
-
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    writeUint32(localHeader, 0, 0x04034b50);
-    writeUint16(localHeader, 4, 20);
-    writeUint16(localHeader, 6, 0);
-    writeUint16(localHeader, 8, 0);
-    writeUint16(localHeader, 10, dosTime);
-    writeUint16(localHeader, 12, dosDate);
-    writeUint32(localHeader, 14, checksum);
-    writeUint32(localHeader, 18, contentBytes.length);
-    writeUint32(localHeader, 22, contentBytes.length);
-    writeUint16(localHeader, 26, nameBytes.length);
-    writeUint16(localHeader, 28, 0);
-    localHeader.set(nameBytes, 30);
-
-    localChunks.push(localHeader, contentBytes);
-
-    const centralHeader = new Uint8Array(46 + nameBytes.length);
-    writeUint32(centralHeader, 0, 0x02014b50);
-    writeUint16(centralHeader, 4, 20);
-    writeUint16(centralHeader, 6, 20);
-    writeUint16(centralHeader, 8, 0);
-    writeUint16(centralHeader, 10, 0);
-    writeUint16(centralHeader, 12, dosTime);
-    writeUint16(centralHeader, 14, dosDate);
-    writeUint32(centralHeader, 16, checksum);
-    writeUint32(centralHeader, 20, contentBytes.length);
-    writeUint32(centralHeader, 24, contentBytes.length);
-    writeUint16(centralHeader, 28, nameBytes.length);
-    writeUint16(centralHeader, 30, 0);
-    writeUint16(centralHeader, 32, 0);
-    writeUint16(centralHeader, 34, 0);
-    writeUint16(centralHeader, 36, 0);
-    writeUint32(centralHeader, 38, 0);
-    writeUint32(centralHeader, 42, offset);
-    centralHeader.set(nameBytes, 46);
-    centralChunks.push(centralHeader);
-
-    offset += localHeader.length + contentBytes.length;
-  });
-
-  const centralDirectory = concatBytes(centralChunks);
-  const endRecord = new Uint8Array(22);
-  writeUint32(endRecord, 0, 0x06054b50);
-  writeUint16(endRecord, 8, files.length);
-  writeUint16(endRecord, 10, files.length);
-  writeUint32(endRecord, 12, centralDirectory.length);
-  writeUint32(endRecord, 16, offset);
-
-  return new Blob([concatBytes([...localChunks, centralDirectory, endRecord])], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-}
-
-function buildXlsxBlob(rows: string[][]) {
-  const rowXml = rows
-    .map((row, index) => {
-      const rowIndex = index + 1;
-      const styleIndex = rowIndex === 1 ? 1 : rowIndex <= 5 ? 2 : rowIndex === 7 ? 3 : 4;
-      return buildSheetRow(rowIndex, row, styleIndex);
-    })
-    .join('');
-
-  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <cols>
-    <col min="1" max="1" width="18" customWidth="1"/>
-    <col min="2" max="2" width="28" customWidth="1"/>
-    <col min="3" max="3" width="10" customWidth="1"/>
-    <col min="4" max="4" width="14" customWidth="1"/>
-    <col min="5" max="5" width="20" customWidth="1"/>
-    <col min="6" max="6" width="14" customWidth="1"/>
-    <col min="7" max="7" width="18" customWidth="1"/>
-    <col min="8" max="8" width="18" customWidth="1"/>
-    <col min="9" max="9" width="18" customWidth="1"/>
-  </cols>
-  <sheetData>${rowXml}</sheetData>
-  <mergeCells count="1"><mergeCell ref="A1:I1"/></mergeCells>
-</worksheet>`;
-
-  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="4">
-    <font><sz val="11"/><name val="Calibri"/></font>
-    <font><b/><sz val="14"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
-  </fonts>
-  <fills count="3">
-    <fill><patternFill patternType="none"/></fill>
-    <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FF1F5133"/><bgColor indexed="64"/></patternFill></fill>
-  </fills>
-  <borders count="2">
-    <border><left/><right/><top/><bottom/><diagonal/></border>
-    <border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border>
-  </borders>
-  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="5">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center"/></xf>
-    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFill="1"/>
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
-  </cellXfs>
-  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
-</styleSheet>`;
-
-  return createZipBlob([
-    {
-      path: '[Content_Types].xml',
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
-  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
-</Types>`,
-    },
-    {
-      path: '_rels/.rels',
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
-  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
-</Relationships>`,
-    },
-    {
-      path: 'xl/workbook.xml',
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets><sheet name="Medical Report" sheetId="1" r:id="rId1"/></sheets>
-</workbook>`,
-    },
-    {
-      path: 'xl/_rels/workbook.xml.rels',
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`,
-    },
-    { path: 'xl/worksheets/sheet1.xml', content: sheetXml },
-    { path: 'xl/styles.xml', content: stylesXml },
-    {
-      path: 'docProps/core.xml',
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>Gordon College HSU Medical Report</dc:title>
-  <dc:creator>ClinicKa</dc:creator>
-  <dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created>
-</cp:coreProperties>`,
-    },
-    {
-      path: 'docProps/app.xml',
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
-  <Application>ClinicKa</Application>
-</Properties>`,
-    },
-  ]);
-}
 
 // ── Stat Card ──────────────────────────────────────────────────────────────
 function StatCard({
@@ -650,25 +401,25 @@ function StatCard({
 
   return (
     <Card className="flex flex-col h-full overflow-hidden border-outline-variant/30 print:break-inside-avoid print:border print:border-black print:bg-white print:shadow-none">
-      <CardContent className="flex flex-col flex-1 p-3 sm:p-5">
-        <div className="flex items-start justify-between gap-2 sm:gap-3">
+      <CardContent className="flex flex-col flex-1 p-2 sm:p-5">
+        <div className="flex items-start justify-between gap-1 sm:gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-[0.14em] sm:tracking-wider mb-1 leading-tight line-clamp-2 min-h-[1.5rem] sm:min-h-0 print:text-black">
+            <p className="text-[9px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-[0.14em] sm:tracking-wider mb-1 leading-tight line-clamp-2 min-h-[1.5rem] sm:min-h-0 print:text-black">
               {label}
             </p>
-            <p className={`text-lg sm:text-3xl font-bold leading-none print:text-black ${accent}`}>{value}</p>
+            <p className={`text-base sm:text-3xl font-bold leading-none print:text-black ${accent}`}>{value}</p>
             {helper && (
-              <p className="mt-2 text-[11px] sm:text-xs leading-normal sm:leading-5 text-on-surface-variant print:text-black">
+              <p className="hidden sm:block mt-2 text-[11px] sm:text-xs leading-normal sm:leading-5 text-on-surface-variant print:text-black">
                 {helper}
               </p>
             )}
           </div>
-          <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center print:bg-white ${getIconBgClass(accent)}`}>
+          <div className={`hidden sm:flex shrink-0 w-9 h-9 rounded-full items-center justify-center print:bg-white ${getIconBgClass(accent)}`}>
             <Icon className={`w-4.5 h-4.5 print:text-black ${accent}`} strokeWidth={2} />
           </div>
         </div>
         {normalizedProgress !== null && (
-          <div className="mt-auto pt-4">
+          <div className="hidden sm:block mt-auto pt-4">
             <div className="h-1.5 overflow-hidden rounded-full bg-surface-container-high print:hidden">
               <div className="h-full rounded-full bg-primary" style={{ width: `${normalizedProgress}%` }} />
             </div>
@@ -1034,7 +785,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
     const pending = dedupedFilteredSubmissions.filter((s) => s.status === 'pending').length;
     const inReview = dedupedFilteredSubmissions.filter((s) => s.status === 'in_review').length;
     const returned = dedupedFilteredSubmissions.filter((s) => s.status === 'returned').length;
-    const physicalExamDone = dedupedFilteredSubmissions.filter((s) => s.status === 'physical_exam_done').length;
     const firstYears = dedupedFilteredSubmissions.filter((s) => String(s.year) === '1');
     const firstYearUnderReview = firstYears.filter((s) => s.status === 'pending' || s.status === 'in_review').length;
     const firstYearNotUnderReview = firstYears.length - firstYearUnderReview;
@@ -1054,7 +804,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       pending,
       inReview,
       returned,
-      physicalExamDone,
       firstYears: firstYears.length,
       firstYearUnderReview,
       firstYearNotUnderReview,
@@ -1408,8 +1157,9 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
           row.clearanceStatus,
           row.issuanceDate,
         ]),
+        ['Total', '', '', '', '', '', '', '', String(reportTableRows.length)],
       ];
-      const blob = buildXlsxBlob(workbookRows);
+      const blob = buildXlsxBlob(workbookRows, [18, 28, 10, 14, 20, 14, 18, 18, 18]);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1479,7 +1229,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       {/* ── Page Header ───────────────────────────────────────────────── */}
       <PortalPageIntro
         title={`${mode === 'admin' ? 'Admin' : 'Staff'} Reports & Analytics`}
-        description="Review student clinical aggregates, print clean summaries, and export structured Excel reports."
         className="mb-8 print:hidden"
       />
 
@@ -1512,7 +1261,7 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
       </div>
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-1.5 sm:gap-3 xl:grid-cols-4 print:hidden">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-3 print:hidden">
         <StatCard
           label="Total Submissions"
           value={globalSummary.total}
@@ -1640,7 +1389,6 @@ export default function ReportsDashboard({ mode }: { mode: 'staff' | 'admin' }) 
                         <SelectItem value="all">All Statuses</SelectItem>
                         <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="in_review">In Review</SelectItem>
-                        <SelectItem value="physical_exam_done">Physical Exam Done</SelectItem>
                         <SelectItem value="approved">Approved</SelectItem>
                         <SelectItem value="returned">Returned</SelectItem>
                       </LabeledSelect>

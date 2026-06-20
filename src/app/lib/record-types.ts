@@ -103,7 +103,6 @@ export type StudentAccountSummary = {
 export type SubmissionStatus =
   | 'pending'
   | 'in_review'
-  | 'physical_exam_done'
   | 'approved'
   | 'returned'
   | 'resubmitted';

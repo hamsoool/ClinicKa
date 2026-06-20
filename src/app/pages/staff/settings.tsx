@@ -293,7 +293,6 @@ export default function StaffSettings() {
                   <SelectContent>
                     <SelectItem value="action_needed">Needs action</SelectItem>
                     <SelectItem value="pending">Pending review</SelectItem>
-                    <SelectItem value="physical_exam_done">Physical exam done</SelectItem>
                     <SelectItem value="approved">Approved</SelectItem>
                     <SelectItem value="returned">Returned</SelectItem>
                     <SelectItem value="resubmitted">Resubmitted</SelectItem>

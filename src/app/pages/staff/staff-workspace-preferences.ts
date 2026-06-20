@@ -3,7 +3,6 @@ export type StaffReviewQueueStatus =
   | 'action_needed'
   | 'all'
   | 'pending'
-  | 'physical_exam_done'
   | 'approved'
   | 'returned'
   | 'resubmitted';
@@ -38,7 +37,6 @@ const REVIEW_QUEUE_STATUSES = new Set<StaffReviewQueueStatus>([
   'action_needed',
   'all',
   'pending',
-  'physical_exam_done',
   'approved',
   'returned',
   'resubmitted',

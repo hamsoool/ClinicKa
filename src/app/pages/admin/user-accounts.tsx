@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/badge';
 import { Label } from '../../components/ui/label';
 import PasswordStrengthMeter from '../../components/password-strength-meter';
 import PortalPageIntro from '../../components/portal-page-intro';
+import ListPagination from '../../components/list-pagination';
 import { Textarea } from '../../components/ui/textarea';
 import {
   Dialog,
@@ -26,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui/table';
-import { Archive, Download, Printer, Search, UserCog, UserPlus, Users, ArrowUpDown, RefreshCcw, Eye, EyeOff } from 'lucide-react';
+import { Archive, Printer, Search, UserCog, UserPlus, Users, ArrowUpDown, RefreshCcw, Eye, EyeOff, FileSpreadsheet } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import {
@@ -34,10 +35,12 @@ import {
   createAdminAccount,
   createAdminStaff,
   restoreArchivedUserAccount,
+  getReportingTermSettings,
   type AdminUserAccount,
   type ArchivedUserAccount,
 } from '../../lib/api';
 import { getPasswordPolicyMessage, getPasswordStrengthResult } from '../../lib/password-policy';
+import { buildXlsxBlob } from '../../lib/excel-export';
 import {
   invalidateAdminWorkflowQueries,
   useAdminArchivedAccountsQuery,
@@ -46,7 +49,6 @@ import {
 import {
   AccountSummaryButton,
   CLINIC_STAFF_ROLE_FILTER,
-  downloadAccountsCsv,
   formatDateTime,
   getDisplayName,
   isClinicStaffRole,
@@ -61,6 +63,11 @@ import {
 
 export default function AdminUserAccounts() {
   const queryClient = useQueryClient();
+  const { data: reportingTermSettings } = useQuery({
+    queryKey: ['reportingTermSettings'],
+    queryFn: getReportingTermSettings,
+    staleTime: 60_000,
+  });
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState('active');
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,8 +113,8 @@ export default function AdminUserAccounts() {
   const { data: activeData, isError: isErrorActive } = useAdminUserAccountsQuery();
   const { data: archivedData, isError: isErrorArchived } = useAdminArchivedAccountsQuery();
 
-  const userAccounts = activeData?.users || [];
-  const archivedAccounts = archivedData?.users || [];
+  const userAccounts = (activeData?.users || []).filter((user) => user.role !== 'Super Admin');
+  const archivedAccounts = (archivedData?.users || []).filter((user) => user.role !== 'Super Admin');
 
   useEffect(() => {
     if (isErrorActive || isErrorArchived) {
@@ -163,6 +170,21 @@ export default function AdminUserAccounts() {
     () => sortAccountRows(filteredActiveUsers, sortConfig, ['lastActive']),
     [filteredActiveUsers, sortConfig],
   );
+
+  const [activeUsersPage, setActiveUsersPage] = useState(1);
+
+  useEffect(() => {
+    setActiveUsersPage(1);
+  }, [searchQuery, roleFilter, tab]);
+
+  const ACTIVE_USERS_PER_PAGE = 20;
+  const totalActiveUsersPages = Math.max(1, Math.ceil(sortedActiveUsers.length / ACTIVE_USERS_PER_PAGE));
+
+  const paginatedActiveUsers = useMemo(() => {
+    const activePage = Math.min(activeUsersPage, totalActiveUsersPages);
+    const start = (activePage - 1) * ACTIVE_USERS_PER_PAGE;
+    return sortedActiveUsers.slice(start, start + ACTIVE_USERS_PER_PAGE);
+  }, [sortedActiveUsers, activeUsersPage, totalActiveUsersPages]);
 
   const sortedArchivedUsers = useMemo(
     () => sortAccountRows(filteredArchivedUsers, sortConfig, ['archivedAt']),
@@ -356,38 +378,58 @@ export default function AdminUserAccounts() {
     window.print();
   };
 
-  const exportToCSV = () => {
+  const exportToExcel = () => {
     try {
-      if (tab === 'archive') {
-        downloadAccountsCsv(
-          'archive',
-          'Archived At',
-          filteredArchivedUsers.map((user) => ({
-            id: user.id,
-            name: getDisplayName(user),
-            role: user.role,
-            status: user.status,
-            date: user.archivedAt,
-            email: user.email || '',
-          })),
-        );
-      } else {
-        downloadAccountsCsv(
-          'active',
-          'Last Active',
-          filteredActiveUsers.map((user) => ({
-            id: user.id,
-            name: getDisplayName(user),
-            role: user.role,
-            status: user.status,
-            date: user.lastActive || '',
-            email: user.email || '',
-          })),
-        );
-      }
+      const generatedOn = formatDateTime(new Date().toISOString());
+      const academicYear = `SY ${reportingTermSettings?.academicYear || '2026-2027'}`;
+      
+      const title = tab === 'archive' 
+        ? 'GORDON COLLEGE HEALTH SERVICES UNIT - ARCHIVED ACCOUNTS REPORT' 
+        : 'GORDON COLLEGE HEALTH SERVICES UNIT - ACTIVE ACCOUNTS REPORT';
 
-      toast.success('Account list exported successfully');
-    } catch {
+      const headers = ['No.', 'User ID', 'Name', 'Email', 'Role'];
+      const dataRows = tab === 'archive'
+        ? filteredArchivedUsers.map((user, idx) => [
+            String(idx + 1),
+            user.id,
+            getDisplayName(user),
+            user.email || '-',
+            user.role,
+          ])
+        : filteredActiveUsers.map((user, idx) => [
+            String(idx + 1),
+            user.id,
+            getDisplayName(user),
+            user.email || '-',
+            user.role,
+          ]);
+
+      const workbookRows = [
+        [title],
+        [`Academic Year: ${academicYear}`],
+        [`Generated On: ${generatedOn}`],
+        [`Filtered Records: ${dataRows.length}`],
+        [],
+        headers,
+        ...dataRows,
+        ['Total', '', '', '', String(dataRows.length)],
+      ];
+
+      const colWidths = [10, 18, 28, 28, 18];
+      const blob = buildXlsxBlob(workbookRows, colWidths);
+      
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${tab === 'archive' ? 'archived' : 'active'}_accounts_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success('Account list exported successfully as Excel');
+    } catch (error) {
+      console.error('Failed to export Excel:', error);
       toast.error('Failed to export account list');
     }
   };
@@ -403,9 +445,12 @@ export default function AdminUserAccounts() {
         ? 'Search archived accounts'
         : 'Search active accounts';
 
+  const printRows = tab === 'archive' ? sortedArchivedUsers : sortedActiveUsers;
+
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-6">
+    <div className="mx-auto w-full max-w-[100rem] space-y-6 print:space-y-4 print:bg-white print:text-black print:max-w-none">
       <PortalPageIntro
+        className="print:hidden"
         title="User Accounts"
         actions={(
           <Button className="w-full sm:w-fit md:self-auto" onClick={() => setOpenCreate(true)}>
@@ -415,7 +460,7 @@ export default function AdminUserAccounts() {
         )}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-4 print:hidden">
         <AccountSummaryButton
           label="Active Accounts"
           value={userAccounts.length}
@@ -675,23 +720,23 @@ export default function AdminUserAccounts() {
         </DialogContent>
       </Dialog>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <Tabs value={tab} onValueChange={setTab} className="print:hidden">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <TabsList className="w-full sm:w-fit">
             <TabsTrigger value="active">Active Accounts</TabsTrigger>
             <TabsTrigger value="archive">Archive</TabsTrigger>
           </TabsList>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:flex-nowrap sm:items-center">
             {selectedUserIds.size > 0 && (
-              <div className="flex flex-wrap items-center gap-2 rounded-md bg-primary/10 px-3 py-1.5 print:hidden">
-                <span className="text-sm font-medium text-primary">{selectedUserIds.size} selected</span>
+              <div className="flex flex-row flex-shrink-0 items-center gap-2 rounded-md bg-primary/10 px-3 py-1.5 print:hidden">
+                <span className="text-sm font-medium text-primary whitespace-nowrap">{selectedUserIds.size} selected</span>
                 {tab === 'active' ? (
-                  <Button variant="default" size="sm" onClick={() => setBulkArchiveOpen(true)} className="h-8 w-full sm:w-auto">
+                  <Button variant="default" size="sm" onClick={() => setBulkArchiveOpen(true)} className="h-8 shrink-0">
                     <Archive className="mr-2 h-4 w-4" /> Bulk Archive
                   </Button>
                 ) : (
-                  <Button variant="outline" size="sm" onClick={() => setBulkRestoreOpen(true)} className="h-8 w-full sm:w-auto">
+                  <Button variant="outline" size="sm" onClick={() => setBulkRestoreOpen(true)} className="h-8 shrink-0">
                     <RefreshCcw className="mr-2 h-4 w-4" /> Bulk Restore
                   </Button>
                 )}
@@ -700,7 +745,7 @@ export default function AdminUserAccounts() {
 
             <div className="flex gap-2 md:hidden">
               <Select value={sortConfig?.key || ''} onValueChange={(val) => setSortConfig({ key: val, direction: sortConfig?.direction || 'asc' })}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full shrink-0">
                   <SelectValue placeholder="Sort by..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -726,7 +771,7 @@ export default function AdminUserAccounts() {
               </Button>
             </div>
 
-            <div className="relative w-full min-w-0 sm:min-w-[18rem]">
+            <div className="relative w-full sm:w-[18rem] shrink-0">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
@@ -735,17 +780,9 @@ export default function AdminUserAccounts() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Button
-              variant={roleFilter === CLINIC_STAFF_ROLE_FILTER ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => applyRoleFilter(roleFilter === CLINIC_STAFF_ROLE_FILTER ? 'all' : CLINIC_STAFF_ROLE_FILTER)}
-              className="w-full sm:w-auto"
-            >
-              <UserCog className="mr-2 h-4 w-4" />
-              Clinic Staff
-            </Button>
+
             <Select value={roleFilter} onValueChange={applyRoleFilter}>
-              <SelectTrigger className="w-full sm:w-[190px]">
+              <SelectTrigger className="w-full sm:w-[190px] shrink-0">
                 <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>
@@ -754,17 +791,16 @@ export default function AdminUserAccounts() {
                 <SelectItem value={CLINIC_STAFF_ROLE_FILTER}>Clinic Staff</SelectItem>
                 <SelectItem value="Clinic Doctor">Clinic Doctor</SelectItem>
                 <SelectItem value="Administrator">Administrator</SelectItem>
-                <SelectItem value="Super Admin">Super Admin</SelectItem>
               </SelectContent>
             </Select>
-            <div className="flex flex-col gap-2 sm:flex-row print:hidden">
-              <Button variant="outline" size="sm" onClick={exportToPDF} className="w-full sm:w-auto">
-                <Printer className="mr-2 h-4 w-4" />
-                PDF
+            <div className="flex flex-col gap-2 sm:flex-row print:hidden shrink-0">
+              <Button variant="outline" size="sm" onClick={exportToPDF} className="w-full sm:w-auto shrink-0 gap-1.5 sm:gap-2">
+                <Printer className="h-4 w-4" />
+                Print
               </Button>
-              <Button variant="outline" size="sm" onClick={exportToCSV} className="w-full sm:w-auto">
-                <Download className="mr-2 h-4 w-4" />
-                Export Data
+              <Button onClick={exportToExcel} size="sm" className="w-full sm:w-auto shrink-0 gap-1.5 sm:gap-2 bg-primary text-white hover:bg-primary/90">
+                <FileSpreadsheet className="h-4 w-4" />
+                Export Excel
               </Button>
             </div>
           </div>
@@ -776,9 +812,6 @@ export default function AdminUserAccounts() {
               <CardTitle>All Active Users</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
-                Only student and clinic staff accounts can be archived here. Administrator and super admin accounts stay protected.
-              </div>
               {sortedActiveUsers.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
                   No active accounts matched your search.
@@ -786,7 +819,7 @@ export default function AdminUserAccounts() {
               ) : null}
 
               <div className="space-y-3 md:hidden">
-                {sortedActiveUsers.map((user) => (
+                {paginatedActiveUsers.map((user) => (
                   <Card key={user.userId} className="border-outline-variant/40">
                     <CardContent className="space-y-3 p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -883,7 +916,7 @@ export default function AdminUserAccounts() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedActiveUsers.map((user) => (
+                    {paginatedActiveUsers.map((user) => (
                       <TableRow key={user.userId}>
                         <TableCell>
                           {user.canArchive ? (
@@ -927,6 +960,16 @@ export default function AdminUserAccounts() {
                   </TableBody>
                 </Table>
               </div>
+              <ListPagination
+                currentPage={Math.min(activeUsersPage, totalActiveUsersPages)}
+                totalPages={totalActiveUsersPages}
+                totalItems={sortedActiveUsers.length}
+                pageSize={20}
+                pageSizeOptions={[20]}
+                itemLabel="accounts"
+                onPageChange={setActiveUsersPage}
+                onPageSizeChange={() => {}}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1078,6 +1121,134 @@ export default function AdminUserAccounts() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Official Print Header (Gordon College Letterhead) ── */}
+      <div className="hidden print:block mb-5 font-sans">
+        <div className="flex items-center justify-between">
+          <img src="/gordon-college-logo.png" alt="Gordon College Logo" className="w-16 h-16 object-contain" />
+          <div className="text-center flex-1 mx-4">
+            <h1 className="text-[18.5px] font-black tracking-wider uppercase text-black leading-none">
+              GORDON COLLEGE
+            </h1>
+            <p className="text-[11px] font-medium leading-relaxed text-black mt-1">
+              Olongapo City Sports Complex, Donor Street, East Tapinac, Olongapo City
+            </p>
+            <p className="text-[11px] font-medium leading-relaxed text-black">
+              Tel. No.: (047) 222-2089 / (047) 603-7175
+            </p>
+            <p className="text-[11px] font-medium leading-relaxed text-black">
+              Website: www.gordoncollege.edu.ph
+            </p>
+            <div className="mt-1.5 text-[11.5px] font-bold uppercase tracking-wider text-black leading-none">
+              Health Services Unit
+            </div>
+            <div className="mt-4 text-[11px] font-bold text-black">
+              SY {reportingTermSettings?.academicYear || '2026-2027'}
+            </div>
+          </div>
+          <img src="/gordonhsc.png" alt="Health Services Unit Logo" className="w-16 h-16 object-contain" />
+        </div>
+      </div>
+
+      <div className="hidden print:block mb-4 print:-mt-[3.5px]">
+        <h2 className="text-[25px] font-bold text-left text-black leading-none">
+          {tab === 'archive' ? 'Summary of Archived Users' : 'Summary of Active Users'}
+        </h2>
+      </div>
+
+      {/* ── Print-only Table ── */}
+      <div className="hidden print:block overflow-visible rounded-none border-[1.5px] border-black/70">
+        <table className="w-full border-collapse text-left text-sm print:text-[8.5px] print:text-center">
+          <thead className="bg-white text-black print:bg-white print:text-black">
+            <tr className="border-b-[1.5px] border-black/70">
+              <th scope="col" className="border-r-[1.5px] border-black/70 px-3 py-2 font-bold print:border-black/70 print:px-2 print:py-1">
+                No.
+              </th>
+              <th scope="col" className="border-r-[1.5px] border-black/70 px-3 py-2 font-bold print:border-black/70 print:px-2 print:py-1">
+                User ID
+              </th>
+              <th scope="col" className="border-r-[1.5px] border-black/70 px-3 py-2 font-bold print:border-black/70 print:px-2 print:py-1 print:text-left">
+                Name
+              </th>
+              <th scope="col" className="border-r-[1.5px] border-black/70 px-3 py-2 font-bold print:border-black/70 print:px-2 print:py-1 print:text-left">
+                Email
+              </th>
+              <th scope="col" className="px-3 py-2 font-bold print:px-2 print:py-1">
+                Role
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y-[1.5px] divide-black/70">
+            {printRows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground print:border-black/70 print:text-black">
+                  No accounts matched your filters.
+                </td>
+              </tr>
+            ) : (
+              <>
+                {printRows.map((user, idx) => (
+                  <tr key={user.id} className="bg-white text-black break-inside-avoid">
+                    <td className="whitespace-nowrap px-3 py-2 print:border-r-[1.5px] print:border-black/70 print:px-2 print:py-1 print:text-black">
+                      {idx + 1}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 print:border-r-[1.5px] print:border-black/70 print:px-2 print:py-1 print:text-black">
+                      {user.id}
+                    </td>
+                    <td className="px-3 py-2 print:border-r-[1.5px] print:border-black/70 print:px-2 print:py-1 print:text-black print:text-left">
+                      {getDisplayName(user)}
+                    </td>
+                    <td className="px-3 py-2 print:border-r-[1.5px] print:border-black/70 print:px-2 print:py-1 print:text-black print:text-left">
+                      {user.email || '-'}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 print:px-2 print:py-1 print:text-black">
+                      {user.role}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-white font-bold text-black print:bg-white print:text-black print:font-bold">
+                  <td className="whitespace-nowrap px-3 py-2 font-bold print:border-r-[1.5px] print:border-black/70 print:px-2 print:py-1 print:text-black print:font-bold">
+                    Total
+                  </td>
+                  <td className="px-3 py-2 print:border-r-[1.5px] print:border-black/70 print:px-2 print:py-1"></td>
+                  <td className="px-3 py-2 print:border-r-[1.5px] print:border-black/70 print:px-2 print:py-1"></td>
+                  <td className="px-3 py-2 print:border-r-[1.5px] print:border-black/70 print:px-2 print:py-1"></td>
+                  <td className="whitespace-nowrap px-3 py-2 font-bold print:px-2 print:py-1 print:text-black print:font-bold">
+                    {printRows.length}
+                  </td>
+                </tr>
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── Custom Print-Only Styles and Footer ── */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @media print {
+          @page {
+            size: auto;
+            margin: 0;
+          }
+          body {
+            padding: 1.6cm 1.6cm 1.8cm 1.6cm !important;
+            background-color: #fff !important;
+          }
+          tr {
+            break-inside: avoid;
+          }
+          thead {
+            display: table-header-group;
+          }
+        }
+      `}} />
+      <div className="hidden print:flex flex-col fixed bottom-[1.2cm] left-[1.6cm] right-[1.6cm] text-[8.5px] text-black/50 font-sans">
+        <div className="flex justify-between items-end border-t border-black/15 pt-1">
+          <span className="leading-none">https://clinicka.vercel.app</span>
+          <span className="leading-none">ClinicKa!</span>
+        </div>
+      </div>
     </div>
   );
 }

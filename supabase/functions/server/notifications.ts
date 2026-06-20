@@ -45,16 +45,6 @@ function getStatusEmailContent(
     };
   }
 
-  if (status === "physical_exam_done") {
-    return {
-      subject: "Physical Examination Completed",
-      text:
-        `Hi ${studentName},\n\n` +
-        `Your physical examination for ${yearLabel} has been marked as completed by the clinic staff.\n\n` +
-        "Your record is now in the final stage of review. We will notify you once your medical clearance is ready.",
-    };
-  }
-
   return null;
 }
 

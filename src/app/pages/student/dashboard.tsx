@@ -249,7 +249,7 @@ export default function StudentDashboard() {
     }
 
     const latestRecordStatus = String(latestRecord.status || '').toLowerCase();
-    const shouldCheckLatestSubmission = latestRecordStatus !== 'approved' && latestRecordStatus !== 'physical_exam_done';
+    const shouldCheckLatestSubmission = latestRecordStatus !== 'approved';
     const isLegacyJlghSubmission = String(latestRecord.labTestLocation || '').trim().toLowerCase() === 'jlgh';
     const editPath = `/student/privacy-waiver/${latestRecord.year || '1'}?edit=${encodeURIComponent(latestRecord.id)}`;
 

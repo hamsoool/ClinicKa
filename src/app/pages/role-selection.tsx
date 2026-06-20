@@ -73,7 +73,7 @@ const workflowHighlights = [
   {
     title: 'Clear status tracking',
     description:
-      'Follow records as they move through pending, in review, returned, resubmitted, physical exam done, and approved states.',
+      'Follow records as they move through pending, in review, returned, resubmitted, and approved states.',
   },
   {
     title: 'Clinic review workflow',
@@ -99,7 +99,7 @@ const studentFaqs = [
     value: 'faq-statuses',
     question: 'What do the submission statuses mean?',
     answer:
-      'Pending means your submission was received, in review means clinic staff are checking it, returned means corrections are needed, resubmitted means you sent an updated version, physical exam done means your exam was recorded, and approved means your record is cleared for the current workflow.',
+      'Pending means your submission was received, in review means clinic staff are checking it, returned means corrections are needed, resubmitted means you sent an updated version, and approved means your record is cleared for the current workflow.',
   },
   {
     value: 'faq-returned',

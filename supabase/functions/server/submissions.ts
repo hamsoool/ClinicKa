@@ -977,8 +977,7 @@ function normalizeSubmissionStatusFilter(value: unknown) {
   const normalized = String(value || "action_needed").trim().toLowerCase();
   if (normalized === "all" || normalized === "action_needed") return normalized;
   return ACTIONABLE_SUBMISSION_STATUSES.includes(normalized) ||
-    normalized === "approved" ||
-    normalized === "physical_exam_done"
+    normalized === "approved"
     ? normalized
     : "action_needed";
 }
