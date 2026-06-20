@@ -317,15 +317,13 @@ export default function RoleSelection() {
         }
       `}</style>
       <nav
-        className={`fixed inset-x-0 top-0 z-50 border-b transition-colors duration-300 ${
-          isScrolled
-            ? 'border-[#003d2b] bg-[#001d14] text-white'
-            : 'border-transparent bg-transparent'
-        }`}
+        className={`fixed inset-x-0 top-0 z-50 border-b transition-colors duration-300 ${isScrolled
+          ? 'border-[#003d2b] bg-[#001d14] text-white'
+          : 'border-transparent bg-transparent'
+          }`}
       >
-        <div className={`mx-auto flex w-full max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-10 transition-all duration-300 ${
-          isScrolled ? 'h-12 md:h-16' : 'h-14 md:h-20'
-        }`}>
+        <div className={`mx-auto flex w-full max-w-[90rem] items-center justify-between px-5 sm:px-8 lg:px-10 transition-all duration-300 ${isScrolled ? 'h-12 md:h-16' : 'h-14 md:h-20'
+          }`}>
           <button
             type="button"
             onClick={() => scrollToSection('hero')}
@@ -335,40 +333,35 @@ export default function RoleSelection() {
               <img
                 src={LOGO_SRC}
                 alt="ClinicKa logo"
-                className={`rounded-full object-cover transition-all duration-300 ${
-                  isScrolled ? 'h-7 w-7 md:h-8 md:w-8' : 'h-8 w-8 md:h-10 md:w-10'
-                }`}
+                className={`rounded-full object-cover transition-all duration-300 ${isScrolled ? 'h-7 w-7 md:h-8 md:w-8' : 'h-8 w-8 md:h-10 md:w-10'
+                  }`}
                 onError={() => setLogoVisible(false)}
               />
             ) : (
-              <span className={`inline-flex items-center justify-center rounded-full bg-[#d9f3e4] text-[#006d3c] transition-all duration-300 ${
-                isScrolled ? 'h-7 w-7 md:h-8 md:w-8' : 'h-8 w-8 md:h-10 md:w-10'
-              }`}>
+              <span className={`inline-flex items-center justify-center rounded-full bg-[#d9f3e4] text-[#006d3c] transition-all duration-300 ${isScrolled ? 'h-7 w-7 md:h-8 md:w-8' : 'h-8 w-8 md:h-10 md:w-10'
+                }`}>
                 <Stethoscope className={`transition-all duration-300 ${isScrolled ? 'h-4 w-4' : 'h-4 w-4 md:h-5 md:w-5'}`} />
               </span>
             )}
-            <span className={`truncate font-bold tracking-tight transition-all duration-300 ${
-              isScrolled 
-                ? 'text-sm md:text-base text-white' 
-                : 'text-sm md:text-[20px] text-[#161d18]'
-            }`}>
+            <span className={`truncate font-bold tracking-tight transition-all duration-300 ${isScrolled
+              ? 'text-sm md:text-base text-white'
+              : 'text-sm md:text-[20px] text-[#161d18]'
+              }`}>
               ClinicKa!
             </span>
           </button>
 
-          <div className={`hidden items-center font-normal transition-all duration-300 md:flex ${
-            isScrolled 
-              ? 'text-white/78 text-sm gap-7 lg:gap-8' 
-              : 'text-[#3d4a3f] text-[16px] gap-8 lg:gap-10'
-          }`}>
+          <div className={`hidden items-center font-normal transition-all duration-300 md:flex ${isScrolled
+            ? 'text-white/78 text-sm gap-7 lg:gap-8'
+            : 'text-[#3d4a3f] text-[16px] gap-8 lg:gap-10'
+            }`}>
             {navLinks.map((link) => (
               <button
                 key={link.label}
                 type="button"
                 onClick={() => handleNavClick(link.target)}
-                className={`transition-colors duration-200 ${
-                  isScrolled ? 'hover:text-white' : 'hover:text-[#006d3c]'
-                }`}
+                className={`transition-colors duration-200 ${isScrolled ? 'hover:text-white' : 'hover:text-[#006d3c]'
+                  }`}
               >
                 {link.label}
               </button>
@@ -378,22 +371,20 @@ export default function RoleSelection() {
           <div className="flex items-center gap-2">
             <Link
               to="/auth?mode=signin"
-              className={`hidden items-center justify-center rounded-full bg-[#006d3c] text-white transition-all duration-300 active:scale-95 hover:bg-[#005f34] md:inline-flex ${
-                isScrolled 
-                  ? 'h-9 md:h-10 px-4 md:px-5 text-sm font-normal' 
-                  : 'h-10 md:h-11 px-5 md:px-7 text-sm md:text-[15px] font-medium'
-              }`}
+              className={`hidden items-center justify-center rounded-full bg-[#006d3c] text-white transition-all duration-300 active:scale-95 hover:bg-[#005f34] md:inline-flex ${isScrolled
+                ? 'h-9 md:h-10 px-4 md:px-5 text-sm font-normal'
+                : 'h-10 md:h-11 px-5 md:px-7 text-sm md:text-[15px] font-medium'
+                }`}
             >
               Sign In
             </Link>
             <button
               type="button"
               onClick={() => setIsMenuOpen((prev) => !prev)}
-              className={`inline-flex items-center justify-center rounded-full border transition-all duration-300 active:scale-95 md:hidden ${
-                isScrolled
-                  ? 'h-9 w-9 border-white/20 bg-white/10 text-white'
-                  : 'h-10 w-10 border-[#d8e4d7] bg-white text-[#006d3c]'
-              }`}
+              className={`inline-flex items-center justify-center rounded-full border transition-all duration-300 active:scale-95 md:hidden ${isScrolled
+                ? 'h-9 w-9 border-white/20 bg-white/10 text-white'
+                : 'h-10 w-10 border-[#d8e4d7] bg-white text-[#006d3c]'
+                }`}
               aria-expanded={isMenuOpen}
               aria-controls="mobile-dropbar"
               aria-label="Toggle navigation menu"
@@ -405,9 +396,8 @@ export default function RoleSelection() {
 
         <div
           id="mobile-dropbar"
-          className={`overflow-hidden border-t border-[#d8e4d7] bg-[#fffeff]/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 md:hidden ${
-            isMenuOpen ? 'max-h-[22rem] opacity-100' : 'max-h-0 opacity-0'
-          }`}
+          className={`overflow-hidden border-t border-[#d8e4d7] bg-[#fffeff]/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 md:hidden ${isMenuOpen ? 'max-h-[22rem] opacity-100' : 'max-h-0 opacity-0'
+            }`}
         >
           <div className="mx-auto flex w-full max-w-[90rem] flex-col gap-2 px-5 py-4 sm:px-8">
             {navLinks.map((link) => (
@@ -435,16 +425,16 @@ export default function RoleSelection() {
         <section id="hero" ref={heroRef} className="relative overflow-hidden pt-14 md:pt-20 bg-[#fffeff]">
           {/* Base Grid Layer */}
           <div className="absolute inset-0 pointer-events-none" style={baseGridStyle} />
-          
+
           {/* White Overlay to soften the base grid */}
           <div className="absolute inset-0 bg-[#fffeff]/70 pointer-events-none" aria-hidden="true" />
-          
+
           {/* Spotlight Glow Layer */}
           <div className="absolute inset-0 pointer-events-none" style={spotlightStyle} />
-          
+
           {/* Masked Active Grid Layer */}
           <div className="absolute inset-0 pointer-events-none" style={activeGridStyle} />
-          
+
           {/* Animated ECG Heartbeat Line */}
           <div className="ecg-container">
             <svg className="w-full h-full text-[#006d3c]" xmlns="http://www.w3.org/2000/svg">
@@ -486,7 +476,7 @@ export default function RoleSelection() {
             {/* Moving Hover Target synchronized with the sweep window */}
             <div className="resp-hover-box" />
           </div>
-          
+
           <div className="relative mx-auto grid min-h-[calc(100dvh-3.5rem)] md:min-h-[calc(100dvh-5rem)] w-full max-w-[90rem] items-center gap-10 px-5 py-14 sm:px-8 md:py-18 lg:grid-cols-12 lg:px-10 pointer-events-none">
             <div className="space-y-6 lg:col-span-7 -translate-y-8 md:-translate-y-16 lg:-translate-y-24 pointer-events-auto">
               <p className="text-base font-semibold uppercase tracking-[0.18em] text-[#006d3c]">
@@ -494,7 +484,7 @@ export default function RoleSelection() {
               </p>
               <div className="space-y-4">
                 <h1 className="max-w-3xl text-[2.85rem] font-semibold leading-[1.07] tracking-[-0.025em] text-[#161d18] sm:text-[3.75rem] lg:text-[4.25rem]">
-                  <span className="text-[#006d3c]">ClinicKa!</span> <br/>A Student Health <br/>Record Portal
+                  <span className="text-[#006d3c]">ClinicKa!</span> <br />A Student Health <br />Record Portal
                 </h1>
                 <p className="max-w-2xl text-[19px] leading-7 tracking-[-0.01em] text-[#3d4a3f] sm:text-[22px] sm:leading-8">
                   A focused medical clearance and student health record system for submissions, clinic review, and
@@ -745,22 +735,22 @@ export default function RoleSelection() {
         </section>
       </main>
 
-      <footer id="resources" className="border-t border-[#d8e4d7] bg-[#fffeff] py-12">
+      <footer id="resources" className="border-t border-[#003d2b] bg-[#001d14] py-12 text-white/70">
         <div className="mx-auto grid max-w-[90rem] grid-cols-1 gap-8 px-5 text-sm sm:px-8 md:grid-cols-2 md:items-center lg:px-10">
           <div>
-            <div className="text-base font-semibold text-[#006d3c]">ClinicKa!</div>
-            <p className="mt-2 text-[#3d4a3f]">Gordon College Health Services</p>
-            <p className="mt-4 text-xs text-[#6d7b6e]">Copyright 2026 ClinicKa. All rights reserved.</p>
+            <div className="text-base font-semibold text-white">ClinicKa!</div>
+            <p className="mt-2 text-white/70">DigitalDuo</p>
+            <p className="mt-4 text-xs text-white/40">Copyright 2026 ClinicKa. All rights reserved.</p>
           </div>
-          <div className="flex flex-wrap gap-6 text-[#3d4a3f] md:justify-end">
-            <Link className="transition hover:text-[#006d3c]" to="/auth?mode=signup">
+          <div className="flex flex-wrap gap-6 text-white/70 md:justify-end">
+            <Link className="transition hover:text-white" to="/auth?mode=signup">
               Privacy policy
             </Link>
-            <Link className="transition hover:text-[#006d3c]" to="/auth?mode=signup">
+            <Link className="transition hover:text-white" to="/auth?mode=signup">
               Terms of service
             </Link>
-            <Link className="transition hover:text-[#006d3c]" to="/auth?mode=signin">
-              Help desk
+            <Link className="transition hover:text-white" to="/auth?mode=signin">
+              Contact Us
             </Link>
           </div>
         </div>

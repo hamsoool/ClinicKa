@@ -318,7 +318,11 @@ export default function PortalShell({
                           <span
                             className={cn(
                               'mt-0.5 block truncate text-[11px] font-semibold leading-tight',
-                              active ? 'text-emerald-100/90' : 'text-emerald-100/55',
+                              item.subLabel.toLowerCase().includes('danger')
+                                ? 'text-rose-300'
+                                : active
+                                  ? 'text-emerald-100/90'
+                                  : 'text-emerald-100/55',
                             )}
                           >
                             {item.subLabel}

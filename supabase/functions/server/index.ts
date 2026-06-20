@@ -21,7 +21,7 @@ import {
   unauthorized,
 } from "./context.ts";
 import type { Requester } from "./context.ts";
-import { sendStatusNotificationEmail, sendOtpEmail } from "./notifications.ts";
+import { sendStatusNotificationEmail, sendOtpEmail, sendOtpEmailForSettings, sendOtpEmailForCreateAdmin } from "./notifications.ts";
 import {
   archivedAccountsMigrationRequired,
   authenticate,
@@ -2249,15 +2249,9 @@ app.get("/session-policy", async (c) => {
   const authError = requireActiveRequester(requester);
   if (authError) return authError;
 
-  try {
-    const settings = await getSafeAdminSystemSettings();
-    return c.json({
-      sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
-    });
-  } catch (error) {
-    console.log('Error fetching session policy:', error);
-    return internalServerError(c, 'Failed to fetch session policy', error);
-  }
+  return c.json({
+    sessionTimeoutMinutes: 15,
+  });
 });
 
 app.get("/staff/submission-summaries", async (c) => {
@@ -3408,6 +3402,7 @@ app.get("/user-accounts", async (c) => {
       { data: profiles, error: profilesError },
       { data: staffUsers, error: staffError },
       archivedState,
+      authUsersResult,
     ] = await Promise.all([
       supabase
         .from('profiles')
@@ -3417,6 +3412,10 @@ app.get("/user-accounts", async (c) => {
         .from('staff_users')
         .select('profile_id,first_name,last_name,email,is_active,position'),
       getArchivedUserIds(),
+      supabase.auth.admin.listUsers({ perPage: 1000 }).catch((err) => {
+        console.error("Error listing auth users:", err);
+        return { data: { users: [] } };
+      }),
     ]);
 
     if (profilesError) throw new Error(profilesError.message);
@@ -3428,9 +3427,17 @@ app.get("/user-accounts", async (c) => {
     }, {} as Record<string, any>);
     const archivedUserIds = archivedState.userIds;
 
+    const authUsers = authUsersResult?.data?.users || [];
+    const lastActiveMap = new Map<string, string>();
+    for (const u of authUsers) {
+      if (u.id && u.last_sign_in_at) {
+        lastActiveMap.set(u.id, u.last_sign_in_at);
+      }
+    }
+
     const responseData = {
       users: (profiles || [])
-        .filter((profile) => !archivedUserIds.has(profile.id))
+        .filter((profile) => !archivedUserIds.has(profile.id) && profile.role !== "super_admin")
         .map((profile) => {
           const linkedStaff = staffByProfileId[profile.id];
           const name = [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim()
@@ -3447,7 +3454,7 @@ app.get("/user-accounts", async (c) => {
             roleKey: profile.role,
             position: linkedStaff?.position || null,
             status: linkedStaff?.is_active === false ? 'Inactive' : 'Active',
-            lastActive: profile.updated_at || profile.created_at,
+            lastActive: lastActiveMap.get(profile.id) || profile.updated_at || profile.created_at,
             canArchive: profile.role === 'student' || profile.role === 'staff',
           };
         }),
@@ -3472,13 +3479,17 @@ app.get("/super-admin/administrators", async (c) => {
     const cached = await getCachedData<any>(cacheKey);
     if (cached) return c.json(cached);
 
-    const [{ data: profiles, error }, archiveState] = await Promise.all([
+    const [{ data: profiles, error }, archiveState, authUsersResult] = await Promise.all([
       supabase
         .from('profiles')
         .select('id,first_name,last_name,email,role,created_at,updated_at')
         .eq('role', 'admin')
         .order('created_at', { ascending: false }),
       getArchivedAccountsTableState(),
+      supabase.auth.admin.listUsers({ perPage: 1000 }).catch((err) => {
+        console.error("Error listing auth users:", err);
+        return { data: { users: [] } };
+      }),
     ]);
 
     if (error) throw new Error(error.message);
@@ -3513,6 +3524,14 @@ app.get("/super-admin/administrators", async (c) => {
       );
     }
 
+    const authUsers = authUsersResult?.data?.users || [];
+    const lastActiveMap = new Map<string, string>();
+    for (const u of authUsers) {
+      if (u.id && u.last_sign_in_at) {
+        lastActiveMap.set(u.id, u.last_sign_in_at);
+      }
+    }
+
     const responseData = {
       administrators: (profiles || [])
         .filter((profile) => !archivedUserIds.has(profile.id))
@@ -3530,7 +3549,7 @@ app.get("/super-admin/administrators", async (c) => {
             roleKey: 'admin',
             status: 'Active',
             createdAt: profile.created_at,
-            lastActive: profile.updated_at || profile.created_at,
+            lastActive: lastActiveMap.get(profile.id) || profile.updated_at || profile.created_at,
           };
         }),
       archivedAdministrators,
@@ -3544,6 +3563,53 @@ app.get("/super-admin/administrators", async (c) => {
   }
 });
 
+app.post("/super-admin/send-create-admin-otp", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
+
+  const userId = requester.profile?.id;
+  const email = normalizeEmail(requester.profile?.email);
+  const name = [requester.profile?.first_name, requester.profile?.last_name].filter(Boolean).join(" ").trim() || "Super Admin";
+
+  if (!email) {
+    return badRequest("No email address associated with your profile.");
+  }
+
+  // Generate 6-digit OTP
+  const otpCode = String(Math.floor(100000 + Math.random() * 900000));
+
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const otpKey = `otp:create-admin:${userId}`;
+      await redis.setex(otpKey, 300, otpCode); // 5 minutes TTL
+    } catch (err) {
+      console.error("[2FA] Failed to store OTP in Redis:", err);
+      return internalServerError(c, "Verification service error", err);
+    }
+  } else {
+    console.warn("[2FA] Redis is bypassed, cannot generate OTP.");
+    return internalServerError(c, "Verification service is currently unavailable.", new Error("Redis bypassed"));
+  }
+
+  try {
+    await sendOtpEmailForCreateAdmin(email, name, otpCode);
+  } catch (err) {
+    console.error("[2FA] Failed to send OTP email:", err);
+    try {
+      const otpKey = `otp:create-admin:${userId}`;
+      await redis.del(otpKey);
+    } catch (delErr) {
+      console.error("[2FA] Failed to clean up OTP after email failure:", delErr);
+    }
+    return internalServerError(c, "Failed to send verification email.", err);
+  }
+
+  return c.json({ success: true });
+});
+
 app.post("/super-admin/administrators", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
@@ -3551,15 +3617,41 @@ app.post("/super-admin/administrators", async (c) => {
   if (!isSuperAdminRole(requester.profile.role)) return forbidden('Only super administrators can manage administrator accounts.');
 
   try {
-    const { email, password, firstName, lastName } = await c.req.json();
+    const { email, password, firstName, lastName, otp } = await c.req.json();
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail || !password) return badRequest('email and password are required');
+    if (!otp) return badRequest('Verification code (OTP) is required.');
+
     const passwordError = getManagedPasswordPolicyError(password, {
       email: normalizedEmail,
       firstName,
       lastName,
     });
     if (passwordError) return badRequest(passwordError);
+
+    const redis = getRedisClient();
+    if (redis) {
+      const otpKey = `otp:create-admin:${requester.profile.id}`;
+      let storedOtp = null;
+      try {
+        storedOtp = await redis.get(otpKey);
+      } catch (err) {
+        console.error("[2FA] Failed to retrieve OTP from Redis:", err);
+      }
+
+      if (!storedOtp || String(storedOtp).trim() !== String(otp).trim()) {
+        return badRequest("Invalid or expired verification code (OTP).");
+      }
+
+      try {
+        await redis.del(otpKey);
+      } catch (err) {
+        console.error("[2FA] Failed to delete verified OTP from Redis:", err);
+      }
+    } else {
+      console.warn("[2FA] Redis is bypassed, verification code cannot be checked.");
+      return internalServerError(c, "Verification service is currently unavailable.", new Error("Redis bypassed"));
+    }
 
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
       email: normalizedEmail,
@@ -3727,6 +3819,144 @@ app.delete("/super-admin/administrators/:userId", async (c) => {
   return forbidden('Administrator accounts can no longer be deleted. Archive the account instead.');
 });
 
+async function executeAutoArchive() {
+  try {
+    const settings = await getSafeAdminSystemSettings();
+    const months = settings.autoArchiveAfterMonths;
+    if (!months || months <= 0) {
+      return { count: 0 };
+    }
+
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - months);
+    const cutoffStr = cutoff.toISOString();
+
+    // 1. Get all student/staff profiles updated before cutoff
+    const { data: profilesToArchive, error: lookupError } = await supabase
+      .from('profiles')
+      .select(ARCHIVE_PROFILE_SELECT_COLUMNS + ',updated_at')
+      .in('role', ['student', 'staff'])
+      .lt('updated_at', cutoffStr);
+
+    if (lookupError) throw new Error(lookupError.message);
+    if (!profilesToArchive || profilesToArchive.length === 0) {
+      return { count: 0 };
+    }
+
+    // 2. Filter out already archived user IDs
+    const archivedUsers = await getArchivedUserIds();
+    const activeToArchive = profilesToArchive.filter(p => !archivedUsers.userIds.has(p.id));
+    if (activeToArchive.length === 0) {
+      return { count: 0 };
+    }
+
+    console.log(`[Auto-Archive] Found ${activeToArchive.length} inactive accounts to archive.`);
+
+    let archivedCount = 0;
+    for (const profile of activeToArchive) {
+      const userId = profile.id;
+      
+      // Fetch linked student/staff and submissions
+      const [
+        { data: linkedStaff },
+        { data: linkedStudent },
+        { data: submissions, error: submissionsError }
+      ] = await Promise.all([
+        supabase.from('staff_users').select(ARCHIVE_STAFF_SELECT_COLUMNS).eq('profile_id', userId).maybeSingle(),
+        profile.student_id
+          ? supabase.from('students').select(ARCHIVE_STUDENT_SELECT_COLUMNS).eq('student_id', profile.student_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        profile.student_id
+          ? supabase.from('submissions').select('id,submitted_at').eq('student_id', profile.student_id)
+          : Promise.resolve({ data: [] as any[], error: null }),
+      ]);
+
+      if (submissionsError) {
+        console.error(`[Auto-Archive] Failed to fetch submissions for user ${userId}:`, submissionsError);
+        continue;
+      }
+
+      const displayName =
+        [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim()
+        || [linkedStaff?.first_name, linkedStaff?.last_name].filter(Boolean).join(' ').trim()
+        || profile.email
+        || 'Unnamed User';
+
+      const archivePayload = {
+        user_id: userId,
+        role: profile.role,
+        email: profile.email || linkedStaff?.email || null,
+        display_name: displayName,
+        account_identifier: profile.student_id || linkedStaff?.id || profile.id,
+        archived_by: 'system', // Automatically archived by system
+        archive_reason: `System Auto-Archive (inactive for ${months} months)`,
+        snapshot: {
+          profile: {
+            role: profile.role,
+            first_name: profile.first_name || null,
+            last_name: profile.last_name || null,
+            department: profile.department || null,
+            course: profile.course || null,
+            student_id: profile.student_id || null,
+          },
+          student: linkedStudent
+            ? {
+              student_id: linkedStudent.student_id,
+              department: linkedStudent.department || null,
+              course: linkedStudent.course || null,
+              year_level: linkedStudent.year_level || null,
+            }
+            : null,
+          staff: linkedStaff
+            ? {
+              position: linkedStaff.position || null,
+              is_active: linkedStaff.is_active ?? null,
+            }
+            : null,
+          submissions: {
+            count: submissions?.length || 0,
+            last_submitted_at: (submissions || [])
+              .map((entry) => entry.submitted_at)
+              .filter(Boolean)
+              .sort()
+              .slice(-1)[0] || null,
+          },
+        },
+        archived_at: new Date().toISOString(),
+      };
+
+      const { error: archiveError } = await supabase
+        .from('archived_accounts')
+        .upsert(archivePayload, { onConflict: 'user_id' });
+
+      if (archiveError) {
+        console.error(`[Auto-Archive] Failed to insert archive record for user ${userId}:`, archiveError);
+        continue;
+      }
+
+      if (linkedStaff?.profile_id) {
+        await supabase
+          .from('staff_users')
+          .update({ is_active: false })
+          .eq('profile_id', linkedStaff.profile_id);
+      }
+
+      await setArchivedAuthState(userId);
+      archivedCount++;
+    }
+
+    if (archivedCount > 0) {
+      invalidateArchivedCaches();
+      invalidateDashboardReadCaches();
+    }
+
+    return { count: archivedCount };
+  } catch (error) {
+    console.error('[Auto-Archive] Error running auto-archive:', error);
+    return { error };
+  }
+}
+
 app.get("/admin/system-settings", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
@@ -3734,6 +3964,7 @@ app.get("/admin/system-settings", async (c) => {
   if (requester.profile.role !== 'admin') return forbidden();
 
   try {
+    await executeAutoArchive();
     return c.json(await getAdminSystemSettings());
   } catch (error) {
     console.log('Error fetching admin system settings:', error);
@@ -3756,6 +3987,53 @@ app.get("/admin/ocr-analytics", async (c) => {
   }
 });
 
+app.post("/admin/send-settings-change-otp", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  const userId = requester.profile?.id;
+  const email = normalizeEmail(requester.profile?.email);
+  const name = [requester.profile?.first_name, requester.profile?.last_name].filter(Boolean).join(" ").trim() || "Administrator";
+
+  if (!email) {
+    return badRequest("No email address associated with your profile.");
+  }
+
+  // Generate 6-digit OTP
+  const otpCode = String(Math.floor(100000 + Math.random() * 900000));
+
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const otpKey = `otp:settings-change:${userId}`;
+      await redis.setex(otpKey, 300, otpCode); // 5 minutes TTL
+    } catch (err) {
+      console.error("[2FA] Failed to store OTP in Redis:", err);
+      return internalServerError(c, "Verification service error", err);
+    }
+  } else {
+    console.warn("[2FA] Redis is bypassed, cannot generate OTP.");
+    return internalServerError(c, "Verification service is currently unavailable.", new Error("Redis bypassed"));
+  }
+
+  try {
+    await sendOtpEmailForSettings(email, name, otpCode);
+  } catch (err) {
+    console.error("[2FA] Failed to send OTP email:", err);
+    try {
+      const otpKey = `otp:settings-change:${userId}`;
+      await redis.del(otpKey);
+    } catch (delErr) {
+      console.error("[2FA] Failed to clean up OTP after email failure:", delErr);
+    }
+    return internalServerError(c, "Failed to send verification email.", err);
+  }
+
+  return c.json({ success: true });
+});
+
 app.put("/admin/system-settings", async (c) => {
   const requester = await authenticate(c);
   const authError = requireActiveRequester(requester);
@@ -3763,8 +4041,39 @@ app.put("/admin/system-settings", async (c) => {
   if (requester.profile.role !== 'admin') return forbidden();
 
   try {
-    const payload = await c.req.json();
-    return c.json(await saveAdminSystemSettings(payload));
+    const { settings, otp } = await c.req.json();
+    if (!otp) {
+      return badRequest("Verification code is required to modify system settings.");
+    }
+
+    const userId = requester.profile?.id;
+    const redis = getRedisClient();
+    if (!redis) {
+      return internalServerError(c, "Verification service is currently unavailable.", new Error("Redis bypassed"));
+    }
+
+    const otpKey = `otp:settings-change:${userId}`;
+    let storedOtp = null;
+    try {
+      storedOtp = await redis.get(otpKey);
+    } catch (err) {
+      console.error("[2FA] Failed to retrieve OTP from Redis:", err);
+      return internalServerError(c, "Verification service error", err);
+    }
+
+    if (!storedOtp || String(storedOtp).trim() !== String(otp).trim()) {
+      return badRequest("Invalid or expired verification code.");
+    }
+
+    try {
+      await redis.del(otpKey);
+    } catch (err) {
+      console.error("[2FA] Failed to delete verified OTP from Redis:", err);
+    }
+
+    const result = await saveAdminSystemSettings(settings);
+    await executeAutoArchive();
+    return c.json(result);
   } catch (error) {
     console.log('Error saving admin system settings:', error);
     return internalServerError(c, 'Failed to save admin system settings', error);
@@ -3778,6 +4087,8 @@ app.get("/archived-accounts", async (c) => {
   if (!isAdminRole(requester.profile.role) && !isSuperAdminRole(requester.profile.role)) return forbidden();
 
   try {
+    await executeAutoArchive();
+
     const cacheKey = "admin:archived_accounts";
     const cached = await getCachedData<any>(cacheKey);
     if (cached) return c.json(cached);
@@ -4260,7 +4571,8 @@ async function checkRateLimit(ip: string, email: string) {
   let ipCount = 0;
   try {
     ipCount = await redis.incr(ipKey);
-    if (ipCount === 1) {
+    const ttl = await redis.ttl(ipKey);
+    if (ttl < 0) {
       await redis.expire(ipKey, ipWindowSeconds);
     }
   } catch (err) {
@@ -4286,7 +4598,8 @@ async function checkRateLimit(ip: string, email: string) {
   let emailCount = 0;
   try {
     emailCount = await redis.incr(emailKey);
-    if (emailCount === 1) {
+    const ttl = await redis.ttl(emailKey);
+    if (ttl < 0) {
       await redis.expire(emailKey, emailWindowSeconds);
     }
   } catch (err) {
@@ -4541,4 +4854,11 @@ app.post("/auth/change-password", async (c) => {
   return c.json({ success: true });
 });
 
-Deno.serve(app.fetch);
+Deno.serve((req) => {
+  const url = new URL(req.url);
+  if (url.pathname.startsWith("/functions/v1/server")) {
+    url.pathname = url.pathname.replace("/functions/v1/server", "/server");
+    return app.fetch(new Request(url.toString(), req));
+  }
+  return app.fetch(req);
+});

@@ -72,10 +72,13 @@ export async function incrementOcrCount(provider: "azure" | "ocr-space" = "azure
         const rand = Math.random().toString(36).substring(2, 8);
         const member = `${now}:${provider}:${rand}`;
         
+        const ninetyDaysSeconds = 90 * 24 * 60 * 60; // 90 days in seconds
         const [count] = await Promise.all([
             redis.incr("stats:ocr_calls"),
             redis.zadd("stats:ocr_calls_log", { score: now, member }),
-            redis.zremrangebyscore("stats:ocr_calls_log", 0, now - 90 * 24 * 60 * 60 * 1000)
+            redis.zremrangebyscore("stats:ocr_calls_log", 0, now - 90 * 24 * 60 * 60 * 1000),
+            redis.expire("stats:ocr_calls", ninetyDaysSeconds),
+            redis.expire("stats:ocr_calls_log", ninetyDaysSeconds)
         ]);
         return count;
     } catch (err) {

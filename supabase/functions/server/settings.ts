@@ -9,8 +9,7 @@ const ADMIN_SYSTEM_SETTINGS_SEMESTERS = [
   "Second Semester",
   "Summer",
 ];
-const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = [15, 30, 45, 60, 120];
-const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = [0, 12, 24, 36];
+const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = [0, 14, 24, 36];
 const ADMIN_SYSTEM_SETTINGS_OCR_PROVIDERS = ["azure", "ocr-space"];
 export const DEFAULT_OCR_PROVIDER = "ocr-space";
 export type OcrProvider = "azure" | "ocr-space";
@@ -49,12 +48,8 @@ export function getDefaultAdminSystemSettings() {
     academicYear: getCurrentAcademicYear(),
     semester: "Second Semester",
     acceptingSubmissions: true,
-    requireTwoFactorAuth: true,
-    sessionTimeoutMinutes: 30,
-    auditLogging: true,
-    approvalEmailNotifications: true,
-    pendingReviewReminders: true,
-    autoArchiveAfterMonths: 12,
+    sessionTimeoutMinutes: 15,
+    autoArchiveAfterMonths: 14,
     ocrProvider: DEFAULT_OCR_PROVIDER,
   };
 }
@@ -75,25 +70,7 @@ export function normalizeAdminSystemSettings(input: any = {}) {
       typeof input?.acceptingSubmissions === "boolean"
         ? input.acceptingSubmissions
         : defaults.acceptingSubmissions,
-    requireTwoFactorAuth:
-      typeof input?.requireTwoFactorAuth === "boolean"
-        ? input.requireTwoFactorAuth
-        : defaults.requireTwoFactorAuth,
-    sessionTimeoutMinutes: ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS.includes(parsedTimeout)
-      ? parsedTimeout
-      : defaults.sessionTimeoutMinutes,
-    auditLogging:
-      typeof input?.auditLogging === "boolean"
-        ? input.auditLogging
-        : defaults.auditLogging,
-    approvalEmailNotifications:
-      typeof input?.approvalEmailNotifications === "boolean"
-        ? input.approvalEmailNotifications
-        : defaults.approvalEmailNotifications,
-    pendingReviewReminders:
-      typeof input?.pendingReviewReminders === "boolean"
-        ? input.pendingReviewReminders
-        : defaults.pendingReviewReminders,
+    sessionTimeoutMinutes: 15,
     autoArchiveAfterMonths:
       ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS.includes(parsedAutoArchive)
         ? parsedAutoArchive

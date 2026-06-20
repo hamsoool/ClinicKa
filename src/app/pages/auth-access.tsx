@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowRight, CheckCircle2, Eye, EyeOff, Lock, Mail, Stethoscope } from 'lucide-react';
+import { useEffect, useMemo, useState, useRef, type FormEvent, type CSSProperties } from 'react';
+import { ArrowRight, Eye, EyeOff, Lock, Mail, Stethoscope } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import {
   Dialog,
@@ -49,6 +49,65 @@ export default function AuthAccessPage() {
   const resetCompleted = query.get('reset') === '1';
   const googleError = query.get('google_error');
   const authReason = query.get('reason');
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      container.style.setProperty('--mouse-x', `${x}px`);
+      container.style.setProperty('--mouse-y', `${y}px`);
+      container.style.setProperty('--mouse-opacity', '1');
+    };
+
+    const handleMouseLeave = () => {
+      container.style.setProperty('--mouse-opacity', '0');
+    };
+
+    container.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mouseleave', handleMouseLeave);
+    return () => {
+      container.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
+
+  const baseGridStyle: CSSProperties = {
+    backgroundImage: [
+      'linear-gradient(rgba(0, 109, 60, 0.08) 1px, transparent 1px)',
+      'linear-gradient(90deg, rgba(0, 109, 60, 0.08) 1px, transparent 1px)',
+      'linear-gradient(rgba(216, 228, 215, 0.32) 1px, transparent 1px)',
+      'linear-gradient(90deg, rgba(216, 228, 215, 0.32) 1px, transparent 1px)',
+    ].join(', '),
+    backgroundPosition: '-1px -1px, -1px -1px, -1px -1px, -1px -1px',
+    backgroundSize: '96px 96px, 96px 96px, 24px 24px, 24px 24px',
+  };
+
+  const spotlightStyle: CSSProperties = {
+    background: 'radial-gradient(circle 400px at var(--mouse-x, 0px) var(--mouse-y, 0px), rgba(0, 109, 60, 0.09), transparent 80%)',
+    opacity: 'var(--mouse-opacity, 0)',
+    transition: 'opacity 0.4s ease-out',
+  };
+
+  const activeGridStyle: CSSProperties = {
+    backgroundImage: [
+      'linear-gradient(rgba(0, 109, 60, 0.35) 1px, transparent 1px)',
+      'linear-gradient(90deg, rgba(0, 109, 60, 0.35) 1px, transparent 1px)',
+      'linear-gradient(rgba(0, 109, 60, 0.22) 1px, transparent 1px)',
+      'linear-gradient(90deg, rgba(0, 109, 60, 0.22) 1px, transparent 1px)',
+    ].join(', '),
+    backgroundPosition: '-1px -1px, -1px -1px, -1px -1px, -1px -1px',
+    backgroundSize: '96px 96px, 96px 96px, 24px 24px, 24px 24px',
+    maskImage: 'radial-gradient(circle 240px at var(--mouse-x, 0px) var(--mouse-y, 0px), black 20%, transparent 100%)',
+    WebkitMaskImage: 'radial-gradient(circle 240px at var(--mouse-x, 0px) var(--mouse-y, 0px), black 20%, transparent 100%)',
+    opacity: 'var(--mouse-opacity, 0)',
+    transition: 'opacity 0.4s ease-out',
+  };
 
   const [showSignInPassword, setShowSignInPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -258,8 +317,183 @@ export default function AuthAccessPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fffeff] text-[#161d18]">
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-8 sm:py-8 lg:py-10">
+    <div
+      ref={containerRef}
+      className="relative min-h-screen overflow-hidden bg-[#fffeff] text-[#161d18]"
+    >
+      <style>{`
+        .ecg-container {
+          position: absolute;
+          top: 20%;
+          transform: translateY(-50%);
+          left: 0;
+          right: 0;
+          height: 128px;
+          overflow: hidden;
+          pointer-events: none;
+          opacity: 0.2;
+          z-index: 10;
+        }
+
+        .ecg-line {
+          filter: drop-shadow(0 0 3px rgba(0, 109, 60, 0.5));
+          mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,1) 95%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,1) 95%, transparent 100%);
+          mask-size: 500px 100%;
+          -webkit-mask-size: 500px 100%;
+          mask-repeat: no-repeat;
+          -webkit-mask-repeat: no-repeat;
+          animation: ecg-sweep 7s linear infinite;
+        }
+
+        .ecg-hover-box {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 500px;
+          pointer-events: auto;
+          cursor: pointer;
+          animation: ecg-box-sweep 7s linear infinite;
+        }
+
+        .ecg-container:hover .ecg-line,
+        .ecg-container:hover .ecg-hover-box {
+          animation-play-state: paused;
+        }
+
+        @keyframes ecg-sweep {
+          0% {
+            mask-position: -500px 0;
+            -webkit-mask-position: -500px 0;
+          }
+          100% {
+            mask-position: calc(100% + 500px) 0;
+            -webkit-mask-position: calc(100% + 500px) 0;
+          }
+        }
+
+        @keyframes ecg-box-sweep {
+          0% {
+            left: -500px;
+          }
+          100% {
+            left: calc(100% + 500px);
+          }
+        }
+
+        .resp-container {
+          position: absolute;
+          top: 76%;
+          transform: translateY(-50%);
+          left: 0;
+          right: 0;
+          height: 128px;
+          overflow: hidden;
+          pointer-events: none;
+          opacity: 0.2;
+          z-index: 10;
+        }
+
+        .resp-line {
+          filter: drop-shadow(0 0 3px rgba(0, 109, 61, 0.5));
+          mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,1) 95%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,1) 95%, transparent 100%);
+          mask-size: 500px 100%;
+          -webkit-mask-size: 500px 100%;
+          mask-repeat: no-repeat;
+          -webkit-mask-repeat: no-repeat;
+          animation: resp-sweep 9s linear infinite;
+        }
+
+        .resp-hover-box {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 500px;
+          pointer-events: auto;
+          cursor: pointer;
+          animation: resp-box-sweep 9s linear infinite;
+        }
+
+        .resp-container:hover .resp-line,
+        .resp-container:hover .resp-hover-box {
+          animation-play-state: paused;
+        }
+
+        @keyframes resp-sweep {
+          0% {
+            mask-position: -500px 0;
+            -webkit-mask-position: -500px 0;
+          }
+          100% {
+            mask-position: calc(100% + 500px) 0;
+            -webkit-mask-position: calc(100% + 500px) 0;
+          }
+        }
+
+        @keyframes resp-box-sweep {
+          0% {
+            left: -500px;
+          }
+          100% {
+            left: calc(100% + 500px);
+          }
+        }
+      `}</style>
+
+      {/* Base Grid Layer */}
+      <div className="absolute inset-0 pointer-events-none" style={baseGridStyle} />
+
+      {/* White Overlay to soften the base grid */}
+      <div className="absolute inset-0 bg-[#fffeff]/70 pointer-events-none" aria-hidden="true" />
+
+      {/* Spotlight Glow Layer */}
+      <div className="absolute inset-0 pointer-events-none" style={spotlightStyle} />
+
+      {/* Masked Active Grid Layer */}
+      <div className="absolute inset-0 pointer-events-none" style={activeGridStyle} />
+
+      {/* Animated ECG Heartbeat Line */}
+      <div className="ecg-container">
+        <svg className="w-full h-full text-[#006d3c]" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="ecg-pattern-auth" width="480" height="128" patternUnits="userSpaceOnUse">
+              <path
+                d="M 0,64 L 50,64 Q 62,46 74,64 L 79,74 L 95,4 L 111,124 L 119,64 Q 136,36 153,64 L 180,64 Q 192,54 204,64 L 209,69 L 225,34 L 241,94 L 249,64 Q 266,50 283,64 L 480,64"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#ecg-pattern-auth)" className="ecg-line" />
+        </svg>
+        <div className="ecg-hover-box" />
+      </div>
+
+      {/* Animated RESP Wave Line */}
+      <div className="resp-container">
+        <svg className="w-full h-full text-[#006d3c]" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="resp-pattern-auth" width="480" height="128" patternUnits="userSpaceOnUse">
+              <path
+                d="M 0,64 Q 60,16 120,64 T 240,64 Q 300,16 360,64 T 480,64"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#resp-pattern-auth)" className="resp-line" />
+        </svg>
+        <div className="resp-hover-box" />
+      </div>
+
+      <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-8 sm:py-8 lg:py-10 z-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Link to="/" className="inline-flex items-center gap-3">
             {logoVisible ? (
@@ -290,11 +524,6 @@ export default function AuthAccessPage() {
 
         <div className="flex flex-col-reverse gap-8 py-8 sm:gap-10 sm:py-10 lg:grid lg:flex-none lg:grid-cols-[1fr_0.96fr] lg:items-center">
           <div className="space-y-6 sm:space-y-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#d8e4d7] bg-white px-4 py-2 text-xs font-normal text-[#006d3c] sm:text-sm">
-              <CheckCircle2 className="h-4 w-4" />
-              School clinic portal access
-            </div>
-
             <div className="space-y-4 sm:space-y-5">
               <h1 className="max-w-xl text-4xl font-semibold leading-[1.07] tracking-[-0.025em] text-[#161d18] sm:text-5xl lg:text-6xl">
                 Access your clinic workflow with clarity.
@@ -330,12 +559,11 @@ export default function AuthAccessPage() {
 
           <div className="self-start rounded-[18px] border border-[#d8e4d7] bg-white p-4 sm:p-8">
             <div className="border-b border-[#dfebea] pb-6">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Secure account access</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-[#161d18] sm:text-3xl">
+              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-[#161d18] sm:text-3xl">
                 Welcome back
               </h2>
               <p className="mt-2 text-sm leading-7 text-[#3d4a3f]">
-                Sign in to your Gordon College clinic account.
+                Sign in using your Gordon College domain account.
               </p>
             </div>
 

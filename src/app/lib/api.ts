@@ -5804,16 +5804,12 @@ export async function getActiveAcademicYearSettings() {
 export async function getSessionPolicy() {
   try {
     const policy = await apiRequest<{ sessionTimeoutMinutes?: number | null }>('/functions/v1/server/session-policy');
-    const normalized = normalizeAdminSystemSettings({
-      sessionTimeoutMinutes: Number(policy?.sessionTimeoutMinutes),
-    });
     return {
-      sessionTimeoutMinutes: normalized.sessionTimeoutMinutes,
+      sessionTimeoutMinutes: Number(policy?.sessionTimeoutMinutes) || 15,
     };
   } catch {
-    const fallback = readStoredAdminSystemSettings();
     return {
-      sessionTimeoutMinutes: fallback.sessionTimeoutMinutes,
+      sessionTimeoutMinutes: 15,
     };
   }
 }
@@ -5847,7 +5843,16 @@ export async function updateAcademicYearSetting(input: string) {
   }
 }
 
-export async function updateAdminSystemSettings(input: AdminSystemSettings) {
+export async function sendSettingsChangeOtp() {
+  return await apiRequest<{ success: boolean }>('/functions/v1/server/admin/send-settings-change-otp', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+export async function updateAdminSystemSettings(input: AdminSystemSettings, otp: string) {
   const payload = normalizeAdminSystemSettings(input);
 
   try {
@@ -5856,7 +5861,7 @@ export async function updateAdminSystemSettings(input: AdminSystemSettings) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ settings: payload, otp }),
     });
     const normalized = normalizeAdminSystemSettings(settings);
     writeStoredAdminSystemSettings(normalized);
@@ -5902,7 +5907,14 @@ type SuperAdminCreateAdministratorInput = {
   password: string;
   firstName?: string;
   lastName?: string;
+  otp?: string;
 };
+
+export async function sendSuperAdminCreateAdminOtp() {
+  return apiRequest<{ success: boolean }>('/functions/v1/server/super-admin/send-create-admin-otp', {
+    method: 'POST',
+  });
+}
 
 export async function getSuperAdminAdministrators() {
   const data = await apiRequest<{

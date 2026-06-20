@@ -39,7 +39,6 @@ const ACCOUNT_LOAD_ERROR_MESSAGE =
   'We could not load your account from the database. Please try signing in again.';
 const ARCHIVED_ACCOUNT_MESSAGE =
   'This account is not available. Contact the administrator for assistance.';
-const ELEVATED_TIMEOUT_ROLES: UserRole[] = ['admin', 'staff', 'super_admin'];
 const ACTIVITY_THROTTLE_MS = 1000;
 
 function isGCDomain(email?: string | null) {
@@ -476,22 +475,21 @@ export function AuthProvider({
   }, [isPasswordRecovery, me?.profile?.email, requiresPasswordSetup, session]);
 
   useEffect(() => {
-    if (!session?.access_token || !role || !ELEVATED_TIMEOUT_ROLES.includes(role)) {
+    if (!session?.access_token) {
       setSessionTimeoutMinutes(null);
       return;
     }
 
     let cancelled = false;
     (async () => {
-      const defaults = createDefaultAdminSystemSettings();
       try {
         const policy = await getSessionPolicy();
         if (!cancelled) {
-          setSessionTimeoutMinutes(policy.sessionTimeoutMinutes || defaults.sessionTimeoutMinutes);
+          setSessionTimeoutMinutes(policy.sessionTimeoutMinutes || 15);
         }
       } catch {
         if (!cancelled) {
-          setSessionTimeoutMinutes(defaults.sessionTimeoutMinutes);
+          setSessionTimeoutMinutes(15);
         }
       }
     })();
@@ -499,11 +497,11 @@ export function AuthProvider({
     return () => {
       cancelled = true;
     };
-  }, [role, session?.access_token]);
+  }, [session?.access_token]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!session?.access_token || !role || !ELEVATED_TIMEOUT_ROLES.includes(role) || !sessionTimeoutMinutes) {
+    if (!session?.access_token || !sessionTimeoutMinutes) {
       return;
     }
 
