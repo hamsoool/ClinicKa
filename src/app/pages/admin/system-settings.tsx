@@ -277,89 +277,41 @@ export default function AdminSystemSettings() {
         })}
       </div>
 
-      <Card className="overflow-hidden border-outline-variant/55 bg-surface-container-lowest">
-        <CardHeader className="border-b border-outline-variant/20 bg-white/65">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] bg-primary text-primary-foreground">
-                <CalendarRange className="h-5 w-5" />
-              </span>
-              <div>
-                <CardTitle className="text-xl font-semibold text-on-surface">Active School Year</CardTitle>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                  Choose the school year used across student submissions, staff dashboards, and generated clinic documents.
-                </p>
-              </div>
-            </div>
-            <Badge className="w-fit rounded-full bg-white/90 px-3 py-1 text-on-surface">
-              Future years only
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.9fr)]">
-          <div className="rounded-[18px] border border-outline-variant/55 bg-white/88 p-5">
-            <div className="space-y-2">
-              <Label htmlFor="currentAcademicYear" className="text-sm font-semibold text-on-surface">
-                School Year
-              </Label>
-              <Select value={academicYearInput} onValueChange={setAcademicYearInput}>
-                <SelectTrigger
-                  id="currentAcademicYear"
-                  className="h-12 rounded-[18px] border-outline-variant/50 bg-surface-container-lowest text-base font-semibold shadow-none"
-                >
-                  <SelectValue placeholder="Select school year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {academicYearOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Badge className="rounded-full bg-primary-container/35 px-3 py-1 text-on-primary-container">
-                Selected: {selectedAcademicYearLabel}
-              </Badge>
-              <Badge className="rounded-full bg-surface-container px-3 py-1 text-on-surface-variant">
-                Stored as {formatAcademicYearLabel(academicYearInput)}
-              </Badge>
-            </div>
-
-            <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              Past school years automatically drop off this list over time, so administrators only see the current term and upcoming choices.
-            </p>
-          </div>
-
-          <div className="flex flex-col justify-between rounded-[18px] border border-primary/12 bg-surface-container-low p-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/75">Current Value</p>
-              <p className="mt-3 text-3xl font-bold tracking-tight text-on-surface">{academicYearLabel}</p>
-              <p className="mt-2 text-sm text-muted-foreground">{academicYearSettingValue}</p>
-              <div className="mt-5 rounded-[18px] border border-outline-variant/20 bg-white/80 px-4 py-3 text-sm leading-6 text-on-surface-variant">
-                This update takes effect everywhere the active academic year is shown.
-              </div>
-            </div>
-            <Button
-              className="mt-5 h-11 rounded-[18px] bg-primary text-primary-foreground hover:bg-primary/90"
-              disabled={academicYearMutation.isPending || !hasAcademicYearChanges}
-              onClick={() => void handleAcademicYearSave()}
-            >
-              <Save className="mr-2 h-4 w-4" />
-              {academicYearMutation.isPending ? 'Updating...' : 'Update School Year'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.85fr)] xl:items-start">
         <div className="space-y-6">
           <SettingSection
             icon={CalendarRange}
-            title="Student Intake and Clinic Term"
+            title="Academic Term Settings"
           >
+            <SettingRow title="Active academic year">
+              <div className="flex flex-col gap-2 w-full sm:w-[220px]">
+                <Select value={academicYearInput} onValueChange={setAcademicYearInput}>
+                  <SelectTrigger
+                    id="currentAcademicYear"
+                    className="h-10 rounded-lg border-outline-variant/50 bg-surface-container-lowest text-sm font-semibold shadow-none"
+                  >
+                    <SelectValue placeholder="Select school year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {academicYearOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {hasAcademicYearChanges && (
+                  <Button
+                    size="sm"
+                    className="h-8 rounded-lg bg-primary text-xs text-primary-foreground hover:bg-primary/90"
+                    disabled={academicYearMutation.isPending}
+                    onClick={() => void handleAcademicYearSave()}
+                  >
+                    {academicYearMutation.isPending ? 'Updating...' : 'Update School Year'}
+                  </Button>
+                )}
+              </div>
+            </SettingRow>
             <SettingRow
               title="Student medical record submissions"
             >
