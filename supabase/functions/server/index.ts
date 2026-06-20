@@ -65,13 +65,17 @@ import {
   verifyCloudinaryUploadResponse,
 } from "./cloudinary.ts";
 import {
+  OcrConfigurationError,
+  OcrRequestError,
+} from "./ocr.ts";
+import {
   OcrSpaceConfigurationError,
   OcrSpaceRequestError,
-  readCbcWithOcrSpace,
-  readChestXrayWithOcrSpace,
-  readUrinalysisWithOcrSpace,
-  resolveOcrSpaceInputMimeType,
 } from "./ocr-space-ocr.ts";
+import {
+  readLabResult,
+  resolveOcrInputMimeType,
+} from "./ocrRouter.ts";
 import {
   getCachedAnalyticsSummary,
   getCachedApprovedStudents,
@@ -86,11 +90,10 @@ import {
   requireSubmissionAccess,
   SUBMISSION_LIST_COLUMNS,
 } from "./submissions.ts";
-import { getCachedData, setCachedData } from "./redis.ts";
+import { getCachedData, setCachedData, getOcrCallsHistory } from "./redis.ts";
 
 const app = new Hono().basePath("/server");
 
-const OCR_SPACE_DEFAULT_MAX_BYTES = 1 * 1024 * 1024;
 const LAB_UPLOAD_DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const ANNOUNCEMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const STAFF_SIGNATURE_MAX_BYTES = 5 * 1024 * 1024;
@@ -170,18 +173,11 @@ class UploadValidationError extends Error {
 function isSupportedOcrFile(file: any) {
   return Boolean(
     isCloudinaryFile(file) &&
-    resolveOcrSpaceInputMimeType(
+    resolveOcrInputMimeType(
       file?.mime_type,
       file?.file_name || file?.storage_path || file?.url,
     ),
   );
-}
-
-function getOcrSpaceMaxBytes() {
-  const configuredMaxBytes = Number(Deno.env.get("OCR_SPACE_MAX_BYTES") || "");
-  return Number.isFinite(configuredMaxBytes) && configuredMaxBytes > 0
-    ? Math.floor(configuredMaxBytes)
-    : OCR_SPACE_DEFAULT_MAX_BYTES;
 }
 
 function getLabUploadMaxBytes() {
@@ -197,7 +193,7 @@ function formatFileSize(bytes: number) {
 }
 
 function resolveLabUploadMimeType(mimeType?: string | null, fileName?: string | null) {
-  const ocrMimeType = resolveOcrSpaceInputMimeType(mimeType, fileName);
+  const ocrMimeType = resolveOcrInputMimeType(mimeType, fileName);
   if (ocrMimeType) return ocrMimeType;
   const normalized = String(mimeType || "").split(";")[0].trim().toLowerCase();
   const name = String(fileName || "").toLowerCase();
@@ -875,13 +871,8 @@ async function loadChestXrayOcrInput(file: any) {
     throw new Error("The Chest X-Ray result file could not be downloaded from storage.");
   }
 
-  const maxOcrBytes = getOcrSpaceMaxBytes();
-  if (blob.size > maxOcrBytes) {
-    throw new Error(`OCR.space scanning supports files up to ${formatFileSize(maxOcrBytes)} with the configured plan.`);
-  }
-
   const fileName = String(file?.file_name || file?.storage_path || "chest-xray-result").trim();
-  const mimeType = resolveOcrSpaceInputMimeType(file?.mime_type || blob.type, fileName);
+  const mimeType = resolveOcrInputMimeType(file?.mime_type || blob.type, fileName);
   if (!mimeType) {
     throw new Error("Unsupported Chest X-Ray file type. Upload a PDF or image file.");
   }
@@ -899,13 +890,8 @@ async function loadCbcOcrInput(file: any) {
     throw new Error("The CBC result file could not be downloaded from storage.");
   }
 
-  const maxOcrBytes = getOcrSpaceMaxBytes();
-  if (blob.size > maxOcrBytes) {
-    throw new Error(`OCR.space scanning supports files up to ${formatFileSize(maxOcrBytes)} with the configured plan.`);
-  }
-
   const fileName = String(file?.file_name || file?.storage_path || "cbc-result").trim();
-  const mimeType = resolveOcrSpaceInputMimeType(file?.mime_type || blob.type, fileName);
+  const mimeType = resolveOcrInputMimeType(file?.mime_type || blob.type, fileName);
   if (!mimeType) {
     throw new Error("Unsupported CBC file type. Upload a PDF or image file.");
   }
@@ -923,13 +909,8 @@ async function loadUrinalysisOcrInput(file: any) {
     throw new Error("The Urinalysis result file could not be downloaded from storage.");
   }
 
-  const maxOcrBytes = getOcrSpaceMaxBytes();
-  if (blob.size > maxOcrBytes) {
-    throw new Error(`OCR.space scanning supports files up to ${formatFileSize(maxOcrBytes)} with the configured plan.`);
-  }
-
   const fileName = String(file?.file_name || file?.storage_path || "urinalysis-result").trim();
-  const mimeType = resolveOcrSpaceInputMimeType(file?.mime_type || blob.type, fileName);
+  const mimeType = resolveOcrInputMimeType(file?.mime_type || blob.type, fileName);
   if (!mimeType) {
     throw new Error("Unsupported Urinalysis file type. Upload a PDF or image file.");
   }
@@ -2899,19 +2880,19 @@ app.post("/submission/:id/chest-xray-ocr", async (c) => {
     }
 
     const input = await loadChestXrayOcrInput(file);
-    const result = await readChestXrayWithOcrSpace(input);
+    const result = await readLabResult({ documentType: "chest-xray", input });
 
     return c.json({
       success: true,
       ...result,
     });
   } catch (error) {
-    console.log("Error reading Chest X-Ray with OCR.space:", error);
+    console.log("Error reading Chest X-Ray with the configured OCR service:", error);
 
-    if (error instanceof OcrSpaceConfigurationError) {
+    if (error instanceof OcrConfigurationError || error instanceof OcrSpaceConfigurationError) {
       return c.json({ error: error.message }, 503);
     }
-    if (error instanceof OcrSpaceRequestError) {
+    if (error instanceof OcrRequestError || error instanceof OcrSpaceRequestError) {
       return c.json({ error: error.message }, error.status || 502);
     }
 
@@ -2920,7 +2901,7 @@ app.post("/submission/:id/chest-xray-ocr", async (c) => {
       return badRequest(message);
     }
 
-    return internalServerError(c, "Failed to read Chest X-Ray result with OCR.space", error);
+    return internalServerError(c, "Failed to read Chest X-Ray result with the configured OCR service", error);
   }
 });
 
@@ -2941,19 +2922,19 @@ app.post("/submission/:id/cbc-ocr", async (c) => {
     }
 
     const input = await loadCbcOcrInput(file);
-    const result = await readCbcWithOcrSpace(input);
+    const result = await readLabResult({ documentType: "cbc", input });
 
     return c.json({
       success: true,
       ...result,
     });
   } catch (error) {
-    console.log("Error reading CBC with OCR.space:", error);
+    console.log("Error reading CBC with the configured OCR service:", error);
 
-    if (error instanceof OcrSpaceConfigurationError) {
+    if (error instanceof OcrConfigurationError || error instanceof OcrSpaceConfigurationError) {
       return c.json({ error: error.message }, 503);
     }
-    if (error instanceof OcrSpaceRequestError) {
+    if (error instanceof OcrRequestError || error instanceof OcrSpaceRequestError) {
       return c.json({ error: error.message }, error.status || 502);
     }
 
@@ -2962,7 +2943,7 @@ app.post("/submission/:id/cbc-ocr", async (c) => {
       return badRequest(message);
     }
 
-    return internalServerError(c, "Failed to read CBC result with OCR.space", error);
+    return internalServerError(c, "Failed to read CBC result with the configured OCR service", error);
   }
 });
 
@@ -2983,19 +2964,19 @@ app.post("/submission/:id/urinalysis-ocr", async (c) => {
     }
 
     const input = await loadUrinalysisOcrInput(file);
-    const result = await readUrinalysisWithOcrSpace(input);
+    const result = await readLabResult({ documentType: "urinalysis", input });
 
     return c.json({
       success: true,
       ...result,
     });
   } catch (error) {
-    console.log("Error reading Urinalysis with OCR.space:", error);
+    console.log("Error reading Urinalysis with the configured OCR service:", error);
 
-    if (error instanceof OcrSpaceConfigurationError) {
+    if (error instanceof OcrConfigurationError || error instanceof OcrSpaceConfigurationError) {
       return c.json({ error: error.message }, 503);
     }
-    if (error instanceof OcrSpaceRequestError) {
+    if (error instanceof OcrRequestError || error instanceof OcrSpaceRequestError) {
       return c.json({ error: error.message }, error.status || 502);
     }
 
@@ -3004,7 +2985,7 @@ app.post("/submission/:id/urinalysis-ocr", async (c) => {
       return badRequest(message);
     }
 
-    return internalServerError(c, "Failed to read Urinalysis result with OCR.space", error);
+    return internalServerError(c, "Failed to read Urinalysis result with the configured OCR service", error);
   }
 });
 
@@ -3756,6 +3737,21 @@ app.get("/admin/system-settings", async (c) => {
   } catch (error) {
     console.log('Error fetching admin system settings:', error);
     return internalServerError(c, 'Failed to fetch admin system settings', error);
+  }
+});
+
+app.get("/admin/ocr-analytics", async (c) => {
+  const requester = await authenticate(c);
+  const authError = requireActiveRequester(requester);
+  if (authError) return authError;
+  if (requester.profile.role !== 'admin') return forbidden();
+
+  try {
+    const history = await getOcrCallsHistory();
+    return c.json({ history });
+  } catch (error) {
+    console.log('Error fetching admin OCR analytics:', error);
+    return internalServerError(c, 'Failed to fetch admin OCR analytics', error);
   }
 });
 

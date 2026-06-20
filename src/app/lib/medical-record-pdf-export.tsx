@@ -791,11 +791,11 @@ function MedicalRecordPdfPage({
                 </View>
                 <View style={[S.row, { alignItems: 'flex-start', marginTop: 4, gap: 10 }]}>
                   <View style={[S.row, { alignItems: 'center', gap: 4 }]}>
-                    <FormCheckbox checked={lab.xrayResult === 'normal'} />
+                    <Checkbox checked={lab.xrayResult === 'normal'} />
                     <Text style={S.small}>Normal</Text>
                   </View>
                   <View style={[S.row, { alignItems: 'center', gap: 4 }]}>
-                    <FormCheckbox checked={lab.xrayResult === 'abnormal'} />
+                    <Checkbox checked={lab.xrayResult === 'abnormal'} />
                     <Text style={S.small}>Abnormal</Text>
                   </View>
                 </View>

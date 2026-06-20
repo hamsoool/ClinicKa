@@ -11,6 +11,7 @@ import {
   getStaffUsers,
   getSubmissions,
   getUserAccounts,
+  getOcrAnalytics,
 } from '../../lib/api';
 
 const ADMIN_QUERY_STALE_TIME_MS = 60_000;
@@ -155,6 +156,28 @@ export function useAdminSystemSettingsQuery() {
   return useQuery(adminSystemSettingsQueryOptions());
 }
 
+export function adminOcrAnalyticsQueryKey() {
+  return ['adminOcrAnalytics'] as const;
+}
+
+export function adminOcrAnalyticsQueryOptions() {
+  return queryOptions({
+    queryKey: adminOcrAnalyticsQueryKey(),
+    queryFn: getOcrAnalytics,
+    staleTime: ADMIN_QUERY_STALE_TIME_MS,
+    gcTime: ADMIN_QUERY_GC_TIME_MS,
+    refetchInterval: () => getActiveAjaxRefetchInterval(ADMIN_ANALYTICS_REFRESH_INTERVAL_MS),
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
+  });
+}
+
+export function useAdminOcrAnalyticsQuery() {
+  return useQuery(adminOcrAnalyticsQueryOptions());
+}
+
 export async function invalidateAdminWorkflowQueries(
   queryClient: QueryClient,
   options?: { includeSettings?: boolean },
@@ -165,6 +188,7 @@ export async function invalidateAdminWorkflowQueries(
     queryClient.invalidateQueries({ queryKey: adminStaffUsersQueryKey() }),
     queryClient.invalidateQueries({ queryKey: adminUserAccountsQueryKey() }),
     queryClient.invalidateQueries({ queryKey: adminArchivedAccountsQueryKey() }),
+    queryClient.invalidateQueries({ queryKey: adminOcrAnalyticsQueryKey() }),
     options?.includeSettings
       ? queryClient.invalidateQueries({ queryKey: adminSystemSettingsQueryKey() })
       : Promise.resolve(),

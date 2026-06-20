@@ -1,25 +1,27 @@
 // @ts-nocheck
-// OCR provider: OCR.space (parse/image API, engine 2).
+// OCR provider: Azure AI Vision (Read API v3.2).
 // The field parsers below are provider-agnostic and consume the reconstructed
-// raw text; only this client half talks to OCR.space.
+// raw text; only this client half talks to Azure.
 
 import { incrementOcrCount } from "./redis.ts";
 
-const OCR_SPACE_API_URL = Deno.env.get("OCR_SPACE_API_URL") || "https://api.ocr.space/parse/image";
+const AZURE_VISION_DEFAULT_API_VERSION = "3.2";
+const AZURE_VISION_MAX_POLL_ATTEMPTS = 60;
+const AZURE_VISION_POLL_INTERVAL_MS = 500;
 
-export class OcrSpaceConfigurationError extends Error {
+export class OcrConfigurationError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "OcrSpaceConfigurationError";
+    this.name = "OcrConfigurationError";
   }
 }
 
-export class OcrSpaceRequestError extends Error {
+export class OcrRequestError extends Error {
   status: number;
 
   constructor(message: string, status = 502) {
     super(message);
-    this.name = "OcrSpaceRequestError";
+    this.name = "OcrRequestError";
     this.status = status;
   }
 }
@@ -1464,28 +1466,38 @@ export function extractUrinalysisFields(rawText: string): UrinalysisParsedFields
   return fields;
 }
 
-function getOcrSpaceConfig() {
+function getOcrConfig() {
   const apiKey = String(
-    Deno.env.get("OCR_SPACE_API_KEY") ||
-    Deno.env.get("OCRSPACE_API_KEY") ||
+    Deno.env.get("AZURE_VISION_KEY") ||
+    Deno.env.get("AZURE_CV_KEY") ||
     "",
   ).trim();
-  const language = String(Deno.env.get("OCR_SPACE_LANGUAGE") || "eng").trim() || "eng";
+  const endpoint = String(
+    Deno.env.get("AZURE_VISION_ENDPOINT") ||
+    Deno.env.get("AZURE_CV_ENDPOINT") ||
+    "",
+  ).trim().replace(/\/+$/, "");
+  const apiVersion = String(
+    Deno.env.get("AZURE_VISION_API_VERSION") ||
+    AZURE_VISION_DEFAULT_API_VERSION,
+  ).trim() || AZURE_VISION_DEFAULT_API_VERSION;
+  const language = String(Deno.env.get("AZURE_VISION_LANGUAGE") || "").trim();
 
-  if (!apiKey) {
-    throw new OcrSpaceConfigurationError(
-      "OCR.space is not configured. Set OCR_SPACE_API_KEY in Supabase Edge Function secrets.",
+  if (!apiKey || !endpoint) {
+    throw new OcrConfigurationError(
+      "Azure AI Vision OCR is not configured. Set AZURE_VISION_KEY and AZURE_VISION_ENDPOINT in Supabase Edge Function secrets.",
     );
   }
 
   return {
     apiKey,
-    engine: "2",
+    endpoint,
+    apiVersion,
     language,
   };
 }
 
-export function resolveOcrSpaceInputMimeType(mimeType?: string | null, fileName?: string | null) {
+export function resolveOcrInputMimeType(mimeType?: string | null, fileName?: string | null) {
   const normalized = String(mimeType || "").split(";")[0].trim().toLowerCase();
   const name = String(fileName || "").toLowerCase();
 
@@ -1502,7 +1514,7 @@ export function resolveOcrSpaceInputMimeType(mimeType?: string | null, fileName?
   return "";
 }
 
-function getOcrSpaceFileType(mimeType: string, fileName?: string | null) {
+function getOcrFileType(mimeType: string, fileName?: string | null) {
   const name = String(fileName || "").toLowerCase();
   if (mimeType === "application/pdf" || name.endsWith(".pdf")) return "PDF";
   if (mimeType === "image/png" || name.endsWith(".png")) return "PNG";
@@ -1513,81 +1525,151 @@ function getOcrSpaceFileType(mimeType: string, fileName?: string | null) {
   return "";
 }
 
-function normalizeOcrSpaceMessage(value: unknown) {
+function normalizeOcrMessage(value: unknown) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item || "").trim()).filter(Boolean).join(" ");
   }
   return String(value || "").trim();
 }
 
-function getOcrSpaceError(payload: any, responseStatus = 502) {
-  const message = normalizeOcrSpaceMessage(payload?.ErrorMessage || payload?.error);
-  const details = normalizeOcrSpaceMessage(payload?.ErrorDetails);
-  const pageError = normalizeOcrSpaceMessage(
-    (payload?.ParsedResults || [])
-      .map((item: any) => item?.ErrorMessage || item?.ErrorDetails)
-      .filter(Boolean),
-  );
-  const combined = [message, details, pageError].filter(Boolean).join(" ").trim();
-  const normalized = combined.toLowerCase();
+function getAzureOcrError(payload: any, responseStatus = 502) {
+  // Azure error envelope: { error: { code, message } }
+  const errorObj = payload?.error || {};
+  const code = String(errorObj.code || "").trim();
+  const message = normalizeOcrMessage(errorObj.message || payload?.message);
+  const normalized = `${code} ${message}`.toLowerCase().trim();
 
-  if (normalized.includes("apikey") || normalized.includes("api key")) {
+  if (responseStatus === 401 || code === "Unauthorized" || normalized.includes("access denied") || normalized.includes("invalid subscription key")) {
     return {
-      message: "OCR.space API key was rejected. Check OCR_SPACE_API_KEY in Supabase Edge Function secrets.",
+      message: "Azure AI Vision API key was rejected. Check AZURE_VISION_KEY in Supabase Edge Function secrets.",
       status: 503,
     };
   }
-  if (normalized.includes("file size") || normalized.includes("too large") || normalized.includes("maximum")) {
+  if (responseStatus === 403 || normalized.includes("forbidden") || normalized.includes("quota") || normalized.includes("call volume")) {
     return {
-      message: "OCR.space free API rejected the file size. Use a smaller lab result file or upgrade the OCR.space plan.",
-      status: 400,
-    };
-  }
-  if (normalized.includes("pdf") && (normalized.includes("page") || normalized.includes("pages"))) {
-    return {
-      message: "OCR.space free API rejected the PDF page count. Use a PDF with 3 pages or fewer.",
-      status: 400,
-    };
-  }
-  if (normalized.includes("quota") || normalized.includes("rate") || normalized.includes("limit")) {
-    return {
-      message: "OCR.space quota or rate limit was reached. Check the free API request limit or try again later.",
+      message: "Azure AI Vision access was denied or the quota was exceeded. Check the resource tier and try again later.",
       status: 429,
     };
   }
-  if (normalized.includes("not a valid") || normalized.includes("unsupported") || normalized.includes("file type")) {
+  if (responseStatus === 429 || code === "TooManyRequests" || normalized.includes("rate")) {
     return {
-      message: "OCR.space could not read this file type. Use PDF, PNG, JPG, GIF, TIF, or BMP.",
+      message: "Azure AI Vision rate limit was reached. Try again in a moment.",
+      status: 429,
+    };
+  }
+  if (code === "InvalidImageSize" || normalized.includes("file size") || normalized.includes("too large") || normalized.includes("maximum")) {
+    return {
+      message: "Azure AI Vision rejected the file size. Use a smaller lab result file (50 MB image / 4 MB PDF limit per page).",
+      status: 400,
+    };
+  }
+  if (code === "InvalidImageFormat" || code === "InvalidImage" || normalized.includes("not a valid") || normalized.includes("unsupported") || normalized.includes("file type") || normalized.includes("format")) {
+    return {
+      message: "Azure AI Vision could not read this file type. Use PDF, PNG, JPG, GIF, TIF, or BMP.",
       status: 400,
     };
   }
 
   return {
-    message: combined || "OCR.space could not process the lab result file.",
+    message: message || "Azure AI Vision could not process the lab result file.",
     status: responseStatus || 502,
   };
 }
 
 function getPageCount(payload: any) {
-  const parsedResults = Array.isArray(payload?.ParsedResults) ? payload.ParsedResults : [];
-  return parsedResults.length || 0;
+  const readResults = Array.isArray(payload?.analyzeResult?.readResults) ? payload.analyzeResult.readResults : [];
+  return readResults.length || 0;
 }
 
 function extractParsedText(payload: any) {
-  const parsedResults = Array.isArray(payload?.ParsedResults) ? payload.ParsedResults : [];
-  return parsedResults
-    .map((item: any) => String(item?.ParsedText || "").trim())
+  const readResults = Array.isArray(payload?.analyzeResult?.readResults) ? payload.analyzeResult.readResults : [];
+  return readResults
+    .map((page: any) => {
+      const lines = Array.isArray(page?.lines) ? page.lines : [];
+      return lines
+        .map((line: any) => String(line?.text || "").trim())
+        .filter(Boolean)
+        .join("\n");
+    })
     .filter(Boolean)
     .join("\n\n")
     .trim();
 }
 
-export async function readChestXrayWithOcrSpace(input: {
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function submitAzureReadOperation(config: ReturnType<typeof getOcrConfig>, bytes: Uint8Array, mimeType: string) {
+  const params = new URLSearchParams();
+  params.set("api-version", config.apiVersion);
+  if (config.language) params.set("language", config.language);
+
+  const response = await fetch(
+    `${config.endpoint}/vision/v3.2/read/analyze?${params.toString()}`,
+    {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": config.apiKey,
+        "Content-Type": "application/octet-stream",
+      },
+      body: bytes,
+    },
+  ).catch((error) => {
+    throw new OcrRequestError(`Could not reach Azure AI Vision: ${error?.message || error}`, 502);
+  });
+
+  // 202 Accepted with Operation-Location header is the success path.
+  if (response.status === 202) {
+    const operationLocation = response.headers.get("Operation-Location") || response.headers.get("operation-location");
+    if (operationLocation) return operationLocation;
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  const error = getAzureOcrError(payload, response.status || 502);
+  throw new OcrRequestError(error.message, error.status);
+}
+
+async function pollAzureReadOperation(config: ReturnType<typeof getOcrConfig>, operationLocation: string) {
+  for (let attempt = 0; attempt < AZURE_VISION_MAX_POLL_ATTEMPTS; attempt += 1) {
+    await sleep(AZURE_VISION_POLL_INTERVAL_MS);
+
+    const response = await fetch(operationLocation, {
+      method: "GET",
+      headers: {
+        "Ocp-Apim-Subscription-Key": config.apiKey,
+      },
+    }).catch((error) => {
+      throw new OcrRequestError(`Could not reach Azure AI Vision while polling: ${error?.message || error}`, 502);
+    });
+
+    if (response.status === 429) {
+      // Back off and retry the same poll slot.
+      await sleep(AZURE_VISION_POLL_INTERVAL_MS * 2);
+      attempt -= 1;
+      continue;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    const status = String(payload?.status || "").toLowerCase();
+
+    if (status === "succeeded") return payload;
+    if (status === "failed") {
+      const error = getAzureOcrError(payload, 502);
+      throw new OcrRequestError(error.message, error.status);
+    }
+    // "running" / "notStarted" -> keep polling.
+  }
+
+  throw new OcrRequestError("Azure AI Vision OCR timed out while processing the lab result file.", 504);
+}
+
+export async function readChestXrayWithOcr(input: {
   content: ArrayBuffer | Uint8Array;
   fileName?: string | null;
   mimeType: string;
 }) {
-  const result = await readLabResultWithOcrSpace(input, "chest-xray");
+  const result = await readLabResultWithOcr(input, "chest-xray");
   const fields = extractChestXrayFields(result.rawText);
 
   return {
@@ -1596,89 +1678,61 @@ export async function readChestXrayWithOcrSpace(input: {
     pageCount: result.pageCount,
     rawText: result.rawText,
     result: fields.result,
-    source: "ocr-space" as const,
+    source: "azure-vision" as const,
   };
 }
 
-export async function readCbcWithOcrSpace(input: {
+export async function readCbcWithOcr(input: {
   content: ArrayBuffer | Uint8Array;
   fileName?: string | null;
   mimeType: string;
 }) {
-  const result = await readLabResultWithOcrSpace(input, "cbc");
+  const result = await readLabResultWithOcr(input, "cbc");
 
   return {
     fields: extractCbcFields(result.rawText),
     pageCount: result.pageCount,
     rawText: result.rawText,
-    source: "ocr-space" as const,
+    source: "azure-vision" as const,
   };
 }
 
-export async function readUrinalysisWithOcrSpace(input: {
+export async function readUrinalysisWithOcr(input: {
   content: ArrayBuffer | Uint8Array;
   fileName?: string | null;
   mimeType: string;
 }) {
-  const result = await readLabResultWithOcrSpace(input, "urinalysis");
+  const result = await readLabResultWithOcr(input, "urinalysis");
 
   return {
     fields: extractUrinalysisFields(result.rawText),
     pageCount: result.pageCount,
     rawText: result.rawText,
-    source: "ocr-space" as const,
+    source: "azure-vision" as const,
   };
 }
 
-async function readLabResultWithOcrSpace(input: {
+async function readLabResultWithOcr(input: {
   content: ArrayBuffer | Uint8Array;
   fileName?: string | null;
   mimeType: string;
 }, documentType: "chest-xray" | "cbc" | "urinalysis") {
-  const config = getOcrSpaceConfig();
+  const config = getOcrConfig();
   const bytes = input.content instanceof Uint8Array ? input.content : new Uint8Array(input.content);
-  const mimeType = resolveOcrSpaceInputMimeType(input.mimeType, input.fileName);
-  const fileType = getOcrSpaceFileType(mimeType, input.fileName);
+  const mimeType = resolveOcrInputMimeType(input.mimeType, input.fileName);
+  const fileType = getOcrFileType(mimeType, input.fileName);
 
   if (!mimeType || !fileType) {
-    throw new Error("Unsupported lab result file type. OCR.space supports PDF, PNG, JPG, GIF, TIF, and BMP.");
+    throw new Error("Unsupported lab result file type. Azure AI Vision supports PDF, PNG, JPG, GIF, TIF, and BMP.");
   }
 
   // Increment OCR usage counter in Redis
-  await incrementOcrCount("ocr-space").catch((err) => {
+  await incrementOcrCount("azure").catch((err) => {
     console.error("[OCR] Failed to increment usage counter:", err);
   });
 
-  const fileName = String(input.fileName || `${documentType}.${fileType.toLowerCase()}`).trim();
-  const formData = new FormData();
-  formData.set("file", new Blob([bytes], { type: mimeType }), fileName);
-  formData.set("language", config.language);
-  formData.set("isOverlayRequired", "false");
-  formData.set("detectOrientation", "true");
-  formData.set("scale", "true");
-  formData.set("isTable", documentType === "cbc" || documentType === "urinalysis" ? "true" : "false");
-  formData.set("OCREngine", config.engine);
-  formData.set("filetype", fileType);
-
-  const response = await fetch(OCR_SPACE_API_URL, {
-    method: "POST",
-    headers: {
-      apikey: config.apiKey,
-    },
-    body: formData,
-  });
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok || payload?.IsErroredOnProcessing) {
-    const error = getOcrSpaceError(payload, response.status || 502);
-    throw new OcrSpaceRequestError(error.message, error.status);
-  }
-
-  const ocrExitCode = Number(payload?.OCRExitCode);
-  if (ocrExitCode >= 3) {
-    const error = getOcrSpaceError(payload, 502);
-    throw new OcrSpaceRequestError(error.message, error.status);
-  }
+  const operationLocation = await submitAzureReadOperation(config, bytes, mimeType);
+  const payload = await pollAzureReadOperation(config, operationLocation);
 
   const rawText = extractParsedText(payload);
 

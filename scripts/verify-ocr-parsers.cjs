@@ -7,7 +7,7 @@ const path = require('node:path');
 const ts = require('typescript');
 
 const repoRoot = path.resolve(__dirname, '..');
-const parserPath = path.join(repoRoot, 'supabase', 'functions', 'server', 'ocr-space-ocr.ts');
+const parserPath = path.join(repoRoot, 'supabase', 'functions', 'server', 'ocr.ts');
 
 function loadParserModule() {
   const source = fs.readFileSync(parserPath, 'utf8');
@@ -30,6 +30,19 @@ function loadParserModule() {
     const parserModule = new Module(parserPath, module);
     parserModule.filename = parserPath;
     parserModule.paths = Module._nodeModulePaths(path.dirname(parserPath));
+
+    // Mock the redis module since it contains Deno npm: imports unsupported by Node
+    const originalRequire = parserModule.require;
+    parserModule.require = function (id) {
+      if (id === './redis.ts' || id === './redis') {
+        return {
+          incrementOcrCount: async () => 0,
+          getOcrCount: async () => 0,
+        };
+      }
+      return originalRequire.apply(this, arguments);
+    };
+
     parserModule._compile(outputText, parserPath);
     return parserModule.exports;
   } finally {

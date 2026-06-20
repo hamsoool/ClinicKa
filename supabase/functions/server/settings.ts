@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { supabase } from "./context.ts";
+import { getOcrCount } from "./redis.ts";
 
 const ADMIN_SYSTEM_SETTINGS_STORE_KEY = "admin.system-settings";
 export const CURRENT_ACADEMIC_YEAR_SETTING_KEY = "current_academic_year";
@@ -10,6 +11,15 @@ const ADMIN_SYSTEM_SETTINGS_SEMESTERS = [
 ];
 const ADMIN_SYSTEM_SETTINGS_TIMEOUT_OPTIONS = [15, 30, 45, 60, 120];
 const ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS = [0, 12, 24, 36];
+const ADMIN_SYSTEM_SETTINGS_OCR_PROVIDERS = ["azure", "ocr-space"];
+export const DEFAULT_OCR_PROVIDER = "ocr-space";
+export type OcrProvider = "azure" | "ocr-space";
+
+export function resolveOcrProvider(value: unknown): OcrProvider {
+  return ADMIN_SYSTEM_SETTINGS_OCR_PROVIDERS.includes(value)
+    ? (value as OcrProvider)
+    : (DEFAULT_OCR_PROVIDER as OcrProvider);
+}
 const STUDENT_NOTIFICATION_STATE_KEY_PREFIX = "student.notification-state";
 const MAX_STUDENT_NOTIFICATION_ITEMS = 20;
 
@@ -45,6 +55,7 @@ export function getDefaultAdminSystemSettings() {
     approvalEmailNotifications: true,
     pendingReviewReminders: true,
     autoArchiveAfterMonths: 12,
+    ocrProvider: DEFAULT_OCR_PROVIDER,
   };
 }
 
@@ -87,6 +98,7 @@ export function normalizeAdminSystemSettings(input: any = {}) {
       ADMIN_SYSTEM_SETTINGS_ARCHIVE_OPTIONS.includes(parsedAutoArchive)
         ? parsedAutoArchive
         : defaults.autoArchiveAfterMonths,
+    ocrProvider: resolveOcrProvider(input?.ocrProvider),
   };
 }
 
@@ -151,14 +163,22 @@ export async function getAdminSystemSettings() {
     });
   }
 
-  return settings;
+  const ocrCallsCount = await getOcrCount();
+
+  return {
+    ...settings,
+    ocrCallsCount,
+  };
 }
 
 export async function getSafeAdminSystemSettings() {
   try {
     return await getAdminSystemSettings();
   } catch {
-    return getDefaultAdminSystemSettings();
+    return {
+      ...getDefaultAdminSystemSettings(),
+      ocrCallsCount: 0,
+    };
   }
 }
 

@@ -5353,6 +5353,8 @@ export async function updateMeasurements(id: string, measurements: any) {
   return { success: true as const };
 }
 
+export type OcrSource = 'azure-vision' | 'ocr-space';
+
 export type ChestXrayOcrExtraction = {
   confidence?: number;
   date?: string | null;
@@ -5360,7 +5362,8 @@ export type ChestXrayOcrExtraction = {
   pageCount: number;
   rawText: string;
   result?: 'normal' | 'abnormal' | null;
-  source: 'ocr-space';
+  source: OcrSource;
+  provider?: 'azure' | 'ocr-space';
   success: true;
 };
 
@@ -5375,7 +5378,8 @@ export type CbcOcrExtraction = {
   };
   pageCount: number;
   rawText: string;
-  source: 'ocr-space';
+  source: OcrSource;
+  provider?: 'azure' | 'ocr-space';
   success: true;
 };
 
@@ -5387,7 +5391,8 @@ export type UrinalysisOcrExtraction = {
   };
   pageCount: number;
   rawText: string;
-  source: 'ocr-space';
+  source: OcrSource;
+  provider?: 'azure' | 'ocr-space';
   success: true;
 };
 
@@ -6002,3 +6007,17 @@ export async function restoreSuperAdminAdministrator(archiveId: string) {
     );
   }
 }
+
+export interface OcrCallLogEntry {
+  timestamp: number;
+  provider: 'azure' | 'ocr-space';
+}
+
+export interface OcrAnalyticsResponse {
+  history: OcrCallLogEntry[];
+}
+
+export async function getOcrAnalytics(): Promise<OcrAnalyticsResponse> {
+  return apiRequest<OcrAnalyticsResponse>('/functions/v1/server/admin/ocr-analytics');
+}
+

@@ -9,6 +9,7 @@ import {
   MailCheck,
   RotateCcw,
   Save,
+  ScanText,
   ShieldCheck,
   SlidersHorizontal,
   type LucideIcon,
@@ -229,7 +230,17 @@ export default function AdminSystemSettings() {
       value: formatArchiveLabel(draftSettings.autoArchiveAfterMonths),
       icon: FileArchive,
     },
-  ] as const;
+    {
+      label: 'OCR Service',
+      value: draftSettings.ocrProvider === 'azure' ? 'Azure' : 'OCR.space',
+      icon: ScanText,
+    },
+    {
+      label: 'OCR Usage',
+      value: `${draftSettings.ocrCallsCount ?? 0} call${(draftSettings.ocrCallsCount ?? 0) === 1 ? '' : 's'}`,
+      icon: ScanText,
+    },
+  ];
 
   if (isLoading) {
     return <PortalPageSkeleton variant="dashboard" />;
@@ -246,7 +257,7 @@ export default function AdminSystemSettings() {
         )}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {settingsSummary.map((item) => {
           const Icon = item.icon;
           return (
@@ -447,6 +458,28 @@ export default function AdminSystemSettings() {
                   {option.label}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        </SettingRow>
+      </SettingSection>
+
+          <SettingSection
+            icon={ScanText}
+            title="OCR Service"
+          >
+        <SettingRow
+          title="Active OCR provider"
+        >
+          <Select
+            value={draftSettings.ocrProvider}
+            onValueChange={(value) => updateField('ocrProvider', value as 'azure' | 'ocr-space')}
+          >
+            <SelectTrigger className="w-full sm:w-[220px]">
+              <SelectValue placeholder="Select OCR service" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="azure">Azure AI Vision</SelectItem>
+              <SelectItem value="ocr-space">OCR.space</SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>
