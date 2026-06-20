@@ -4260,7 +4260,8 @@ async function checkRateLimit(ip: string, email: string) {
   let ipCount = 0;
   try {
     ipCount = await redis.incr(ipKey);
-    if (ipCount === 1) {
+    const ttl = await redis.ttl(ipKey);
+    if (ttl < 0) {
       await redis.expire(ipKey, ipWindowSeconds);
     }
   } catch (err) {
@@ -4286,7 +4287,8 @@ async function checkRateLimit(ip: string, email: string) {
   let emailCount = 0;
   try {
     emailCount = await redis.incr(emailKey);
-    if (emailCount === 1) {
+    const ttl = await redis.ttl(emailKey);
+    if (ttl < 0) {
       await redis.expire(emailKey, emailWindowSeconds);
     }
   } catch (err) {
