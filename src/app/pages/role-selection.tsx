@@ -138,6 +138,7 @@ export default function RoleSelection() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeHighlightIndex, setActiveHighlightIndex] = useState<number | null>(0);
   const [studentImageIndex, setStudentImageIndex] = useState(0);
+  const [staffWorkflowImageIndex, setStaffWorkflowImageIndex] = useState(0);
 
   const studentPreviews = [
     '/previews/student_preview.png',
@@ -145,9 +146,18 @@ export default function RoleSelection() {
     '/previews/student_preview2.png',
   ];
 
+  const staffWorkflowPreviews = [
+    '/previews/staff_preview1.png',
+    '/previews/staff_preview2.png',
+  ];
+
   let targetImageSrc = FORM_PREVIEW_SRC;
   if (activeHighlightIndex === 0) {
     targetImageSrc = studentPreviews[studentImageIndex];
+  } else if (activeHighlightIndex === 1) {
+    targetImageSrc = '/previews/staff_preview.png';
+  } else if (activeHighlightIndex === 2) {
+    targetImageSrc = staffWorkflowPreviews[staffWorkflowImageIndex];
   }
 
   const [imageSrc, setImageSrc] = useState(targetImageSrc);
@@ -162,6 +172,15 @@ export default function RoleSelection() {
     return () => clearInterval(interval);
   }, [activeHighlightIndex]);
 
+  // Cycle staff workflow images
+  useEffect(() => {
+    if (activeHighlightIndex !== 2) return;
+    const interval = setInterval(() => {
+      setStaffWorkflowImageIndex((prev) => (prev + 1) % staffWorkflowPreviews.length);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [activeHighlightIndex]);
+
   // Smooth fade transition when target image changes
   useEffect(() => {
     setFade(false);
@@ -171,6 +190,8 @@ export default function RoleSelection() {
     }, 200);
     return () => clearTimeout(timer);
   }, [targetImageSrc]);
+
+  const [hoveredRoleIndex, setHoveredRoleIndex] = useState<number | null>(null);
 
   const heroRef = useRef<HTMLDivElement>(null);
 
@@ -782,22 +803,142 @@ export default function RoleSelection() {
                 Students can revisit submitted records and approved clearances, while clinic staff and administrators can
                 monitor submissions, certificates, user accounts, and operational reports.
               </p>
-              <div className="flex flex-wrap gap-3 text-sm text-[#3d4a3f]">
-                <span className="rounded-full border border-[#d8e4d7] bg-[#fffeff] px-4 py-2">Student records</span>
-                <span className="rounded-full border border-[#d8e4d7] bg-[#fffeff] px-4 py-2">Staff review queue</span>
-                <span className="rounded-full border border-[#d8e4d7] bg-[#fffeff] px-4 py-2">Admin reports</span>
+              <div className="space-y-4 pt-2">
+                {[
+                  {
+                    title: 'Student records',
+                    description: 'Access and manage submissions, waivers, and clearances.',
+                    icon: Users,
+                  },
+                  {
+                    title: 'Staff review queue',
+                    description: 'Verify submissions, add notes, and approve clearances.',
+                    icon: ClipboardCheck,
+                  },
+                  {
+                    title: 'Admin reports',
+                    description: 'View dashboard metrics, analytics, and accounts.',
+                    icon: FileText,
+                  },
+                ].map((role, idx) => {
+                  const Icon = role.icon;
+                  const isHovered = hoveredRoleIndex === idx;
+                  return (
+                    <div
+                      key={role.title}
+                      onMouseEnter={() => setHoveredRoleIndex(idx)}
+                      onMouseLeave={() => setHoveredRoleIndex(null)}
+                      className={`group flex items-center gap-4 rounded-xl border p-4 transition-all duration-300 cursor-pointer select-none ${
+                        isHovered
+                          ? 'border-[#006d3c] bg-[#eef6ec]/60 shadow-[0_8px_20px_rgba(0,109,60,0.06)] translate-x-1.5'
+                          : 'border-[#d8e4d7] bg-white hover:border-[#006d3c]/40 hover:bg-[#eef6ec]/10 shadow-sm'
+                      }`}
+                    >
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
+                        isHovered ? 'bg-[#006d3c] text-white rotate-6 scale-110 shadow-sm' : 'bg-[#eef6ec] text-[#006d3c]'
+                      }`}>
+                        <Icon className="h-5.5 w-5.5" />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className={`font-semibold transition-colors duration-300 ${
+                          isHovered ? 'text-[#006d3c]' : 'text-[#161d18]'
+                        }`}>
+                          {role.title}
+                        </p>
+                        <p className="text-sm text-[#3d4a3f]/90 mt-0.5">{role.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            <div className="relative">
+            <div className="relative overflow-hidden rounded-2xl border border-[#d8e4d7]/60 shadow-[0_20px_50px_rgba(0,0,0,0.12)] transform-gpu hover:scale-[1.01] transition-transform duration-500 select-none w-full group">
+              <style>{`
+                @keyframes floatCard0 {
+                  0%, 100% { transform: translateY(0); }
+                  50% { transform: translateY(-6px); }
+                }
+                @keyframes floatCard1 {
+                  0%, 100% { transform: translateY(0); }
+                  50% { transform: translateY(-4px); }
+                }
+                @keyframes floatCard2 {
+                  0%, 100% { transform: translateY(0); }
+                  50% { transform: translateY(-8px); }
+                }
+                .float-card-0 {
+                  animation: floatCard0 4s ease-in-out infinite;
+                }
+                .float-card-1 {
+                  animation: floatCard1 4.8s ease-in-out infinite;
+                }
+                .float-card-2 {
+                  animation: floatCard2 4.4s ease-in-out infinite;
+                }
+              `}</style>
               <img
                 src={CAMPUS_PREVIEW_SRC}
                 alt="Gordon College campus"
-                className="aspect-[4/3] w-full object-cover drop-shadow-[3px_5px_30px_rgba(0,0,0,0.16)]"
+                className="aspect-[4/3] w-full object-cover transition-transform duration-700 hover:scale-[1.03]"
               />
-              <div className="absolute bottom-4 left-4 rounded-full bg-white/92 px-4 py-3 text-sm text-[#3d4a3f] backdrop-blur">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-4 w-4 text-[#006d3c]" />
-                  <span>Unified clinic management dashboard</span>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent pointer-events-none" />
+              
+              {/* Floating glassmorphic cards */}
+              <div className={`absolute top-6 left-6 p-3.5 rounded-xl border backdrop-blur-md transition-all duration-500 flex items-center gap-3.5 float-card-0 ${
+                hoveredRoleIndex === 0
+                  ? 'border-[#006d3c] bg-white/95 shadow-[0_12px_24px_rgba(0,109,60,0.18)] scale-105 z-10'
+                  : 'border-white/40 bg-white/80 shadow-lg scale-100 z-0'
+              }`}>
+                <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500/10 to-emerald-500/20 flex items-center justify-center text-[#006d3c]">
+                  <Users className="h-4.5 w-4.5" />
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-bold text-[#161d18] leading-none">Student Records</p>
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#3d4a3f] mt-1 block font-medium">Clearance & waivers completed</span>
+                </div>
+              </div>
+
+              <div className={`absolute bottom-16 right-6 p-3.5 rounded-xl border backdrop-blur-md transition-all duration-500 flex items-center gap-3.5 float-card-1 ${
+                hoveredRoleIndex === 1
+                  ? 'border-[#006d3c] bg-white/95 shadow-[0_12px_24px_rgba(0,109,60,0.18)] scale-105 z-10'
+                  : 'border-white/40 bg-white/80 shadow-lg scale-100 z-0'
+              }`}>
+                <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-amber-500/10 to-amber-500/20 flex items-center justify-center text-amber-600">
+                  <ClipboardCheck className="h-4.5 w-4.5" />
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-bold text-[#161d18] leading-none">Review Queue</p>
+                    <span className="text-[9px] bg-amber-50 border border-amber-200/50 text-amber-800 px-1.5 py-0.5 rounded-full font-semibold scale-90">
+                      4 pending
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#3d4a3f] mt-1 block font-medium">Pending physician approvals</span>
+                </div>
+              </div>
+
+              <div className={`absolute top-6 right-6 p-3.5 rounded-xl border backdrop-blur-md transition-all duration-500 flex items-center gap-3.5 float-card-2 ${
+                hoveredRoleIndex === 2
+                  ? 'border-[#006d3c] bg-white/95 shadow-[0_12px_24px_rgba(0,109,60,0.18)] scale-105 z-10'
+                  : 'border-white/40 bg-white/80 shadow-lg scale-100 z-0'
+              }`}>
+                <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500/10 to-blue-500/20 flex items-center justify-center text-blue-600">
+                  <FileText className="h-4.5 w-4.5" />
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-bold text-[#161d18] leading-none">Admin Reports</p>
+                    <span className="text-[9px] bg-blue-50 border border-blue-200/50 text-blue-800 px-1.5 py-0.5 rounded-full font-semibold scale-90">
+                      Live
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#3d4a3f] mt-1 block font-medium">System clearance analytics</span>
                 </div>
               </div>
             </div>
@@ -815,9 +956,9 @@ export default function RoleSelection() {
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2">
-                <div className="border border-[#d8e4d7] bg-white p-6">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#eef6ec] text-[#006d3c]">
-                    <ClipboardList className="h-5 w-5" />
+                <div className="border border-[#d8e4d7] bg-white p-6 rounded-2xl shadow-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu group cursor-default">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#eef6ec] text-[#006d3c] transition-[background-color,color] duration-300 group-hover:bg-[#006d3c] group-hover:text-white">
+                    <ClipboardList className="h-5 w-5 transform rotate-0 transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110 transform-gpu" />
                   </span>
                   <h3 className="mt-5 text-xl font-semibold tracking-[-0.02em] text-[#161d18]">Before you begin</h3>
                   <p className="mt-3 text-[15px] leading-6 text-[#3d4a3f]">
@@ -825,14 +966,20 @@ export default function RoleSelection() {
                   </p>
                 </div>
 
-                <div className="bg-[#0b2f21] p-6 text-white">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/12">
-                    <ShieldCheck className="h-5 w-5" />
+                <div className="bg-[#0b2f21] p-6 text-white rounded-2xl shadow-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(11,47,33,0.25)] transform-gpu group cursor-default">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/12 transition-colors duration-300 group-hover:bg-[#00b274]">
+                    <ShieldCheck className="h-5 w-5 transform rotate-0 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110 transform-gpu" />
                   </span>
                   <h3 className="mt-5 text-xl font-semibold tracking-[-0.02em]">Need more help?</h3>
                   <p className="mt-3 text-[15px] leading-6 text-white/78">
-                    Students can sign in to check submission updates, review returned notes, and revisit approved
-                    clearance details.
+                    Contact the Gordon College health services unit at{' '}
+                    <a href="mailto:digitalduo.clinicka@gmail.com" className="underline decoration-white/30 hover:decoration-white hover:text-[#85f6ae] transition-colors font-medium">
+                      digitalduo.clinicka@gmail.com
+                    </a>{' '}
+                    or call us at{' '}
+                    <a href="tel:+639280410729" className="underline decoration-white/30 hover:decoration-white hover:text-[#85f6ae] transition-colors font-medium whitespace-nowrap">
+                      +63 928 041 0729
+                    </a>.
                   </p>
                 </div>
               </div>
