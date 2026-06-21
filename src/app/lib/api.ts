@@ -42,6 +42,13 @@ import {
 } from './academic-year';
 import { beginTrackedUpload } from './upload-activity';
 import type { LabUploadType, StudentProfileAssetUploadType } from './media-upload-types';
+import {
+  getPasswordPolicyMessage,
+  getPasswordStrengthResult,
+  getRegistrationPasswordMessage,
+  isRegistrationPasswordLongEnough,
+} from './password-policy';
+import type { PasswordPolicyUserInputs } from './password-policy';
 
 export { createDefaultAdminSystemSettings } from './admin-system-settings';
 export type { AdminSystemSettings } from './admin-system-settings';

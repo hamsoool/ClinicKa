@@ -2,8 +2,8 @@
 
 :root {
   --font-size: 17px;
-  --clinic-font-text: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --clinic-font-display: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --clinic-font-text: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --clinic-font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --background: #fffeff;
   --foreground: #161d18;
   --card: #ffffff;
