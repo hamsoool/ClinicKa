@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, type FormEvent, type CSSProperties } from 'react';
-import { ArrowRight, Eye, EyeOff, Lock, Mail, Stethoscope } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, Stethoscope } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import {
   Dialog,
@@ -24,7 +24,7 @@ import { CONTACT_EMAIL, POLICY_UPDATED_AT, privacySections, termsSections } from
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 const AUTH_LOGO_SRC = '/logo.png';
-const DASHBOARD_PREVIEW_SRC = '/previews/student-dashboard-preview.png';
+const DASHBOARD_PREVIEW_SRC = '/previews/student_dashboard.png';
 
 function getHomePath(role: UserRole) {
   if (role === 'super_admin') return '/super-admin';
@@ -516,8 +516,9 @@ export default function AuthAccessPage() {
 
           <Link
             to="/"
-            className="inline-flex h-11 w-full items-center justify-center rounded-full border border-[#d8e4d7] bg-white px-5 text-sm font-normal text-[#161d18] transition active:scale-95 hover:bg-[#eef6ec] sm:w-auto"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#d8e4d7] bg-white px-5 text-sm font-normal text-[#161d18] transition active:scale-95 hover:bg-[#eef6ec] sm:w-auto"
           >
+            <ArrowLeft className="h-4 w-4" />
             Back to Homepage
           </Link>
         </div>
