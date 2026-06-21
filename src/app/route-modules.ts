@@ -2,8 +2,6 @@ export type AppRole = 'student' | 'staff' | 'admin' | 'super_admin';
 
 type RouteLoader = () => Promise<unknown>;
 
-export const loadRoleSelection = () => import('./pages/role-selection');
-export const loadAuthAccessPage = () => import('./pages/auth-access');
 export const loadCheckEmailPage = () => import('./pages/check-email');
 export const loadCreatePasswordPage = () => import('./pages/create-password');
 

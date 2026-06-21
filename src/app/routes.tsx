@@ -1,5 +1,7 @@
 import { lazy, Suspense, type ComponentType } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router';
+import RoleSelection from './pages/role-selection';
+import AuthAccessPage from './pages/auth-access';
 import { PortalPageSkeleton, PortalShellSkeleton, PublicPageSkeleton } from './components/project-skeletons';
 import { RedirectIfAuthenticated, RequireAuth } from './lib/auth';
 import {
@@ -9,10 +11,8 @@ import {
   loadAdminReports,
   loadAdminSystemSettings,
   loadAdminUserAccounts,
-  loadAuthAccessPage,
   loadCheckEmailPage,
   loadCreatePasswordPage,
-  loadRoleSelection,
   loadStaffCertificates,
   loadStaffAnnouncements,
   loadStaffDashboard,
@@ -33,9 +33,6 @@ import {
   loadSuperAdminAdministrators,
   loadSuperAdminLayout,
 } from './route-modules';
-
-const RoleSelection = lazy(loadRoleSelection);
-const AuthAccessPage = lazy(loadAuthAccessPage);
 const CheckEmailPage = lazy(loadCheckEmailPage);
 const CreatePasswordPage = lazy(loadCreatePasswordPage);
 const StudentDashboard = lazy(loadStudentDashboard);
@@ -110,7 +107,7 @@ export const router = createBrowserRouter([
     path: "/",
     element: (
       <RedirectIfAuthenticated>
-        {withSuspense(RoleSelection, 'marketing')}
+        <RoleSelection />
       </RedirectIfAuthenticated>
     ),
   },
@@ -118,7 +115,7 @@ export const router = createBrowserRouter([
     path: "/auth",
     element: (
       <RedirectIfAuthenticated>
-        {withSuspense(AuthAccessPage, 'auth')}
+        <AuthAccessPage />
       </RedirectIfAuthenticated>
     ),
   },

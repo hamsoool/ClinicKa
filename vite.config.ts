@@ -66,6 +66,11 @@ export default defineConfig({
           "unused/**",
           "gordon_college_academicaffairs.png",
           "previews/**",
+          "assets/inline-pdf-viewer-*.js",
+          "assets/inline-pdf-viewer-*.css",
+          "assets/pdf.worker.min-*.mjs",
+          "assets/password-strength-meter-*.js",
+          "assets/AreaChart-*.js",
         ],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallback: "index.html",
@@ -90,6 +95,15 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            urlPattern: /\/assets\/(inline-pdf-viewer|pdf\.worker\.min|password-strength-meter|AreaChart)-.*\.(js|css|mjs)$/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "on-demand-assets",
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),
@@ -103,38 +117,7 @@ export default defineConfig({
     include: ["react", "react-dom/client", "react-router", "lucide-react"],
   },
   build: {
-    chunkSizeWarningLimit: 900,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          const normalizedId = id.replace(/\\/g, "/");
-          if (!normalizedId.includes("/node_modules/")) return;
-          if (
-            normalizedId.includes("/node_modules/react/") ||
-            normalizedId.includes("/node_modules/react-dom/") ||
-            normalizedId.includes("/node_modules/react-router/") ||
-            normalizedId.includes("/node_modules/scheduler/")
-          ) {
-            return "vendor-react";
-          }
-          if (normalizedId.includes("/node_modules/@radix-ui/")) return "vendor-radix";
-          if (normalizedId.includes("/node_modules/lucide-react/")) return "vendor-icons";
-          if (normalizedId.includes("/node_modules/recharts/")) return "vendor-charts";
-          if (normalizedId.includes("/node_modules/motion/")) return "vendor-motion";
-          if (
-            normalizedId.includes("/node_modules/jspdf/") ||
-            normalizedId.includes("/node_modules/html2canvas/") ||
-            normalizedId.includes("/node_modules/@react-pdf/") ||
-            normalizedId.includes("/node_modules/react-pdf/") ||
-            normalizedId.includes("/node_modules/pdfjs-dist/")
-          ) {
-            return "vendor-pdf";
-          }
-          if (normalizedId.includes("/node_modules/zxcvbn/")) return "vendor-zxcvbn";
-          if (normalizedId.includes("/node_modules/@supabase/")) return "vendor-supabase";
-        },
-      },
-    },
+    chunkSizeWarningLimit: 1200,
   },
   assetsInclude: ["**/*.svg", "**/*.csv"],
 });

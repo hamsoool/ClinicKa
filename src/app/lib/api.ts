@@ -22,13 +22,6 @@ import {
 } from './admin-system-settings';
 import type { AdminSystemSettings } from './admin-system-settings';
 import {
-  getPasswordPolicyMessage,
-  getRegistrationPasswordMessage,
-  getPasswordStrengthResult,
-  isRegistrationPasswordLongEnough,
-  type PasswordPolicyUserInputs,
-} from './password-policy';
-import {
   assertPublicSupabaseConfig,
   configuredSiteUrl,
   publicAnonKey,
