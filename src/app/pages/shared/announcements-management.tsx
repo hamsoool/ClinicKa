@@ -10,6 +10,7 @@ import {
 } from '../../lib/api';
 import PortalPageIntro from '../../components/portal-page-intro';
 import FilePickerButton from '../../components/file-picker-button';
+import ListPagination from '../../components/list-pagination';
 import { useAuth } from '../../lib/auth';
 
 type ManagementMode = 'staff' | 'admin';
@@ -180,6 +181,17 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
     return rows.filter((item: ManagedAnnouncement) => item.isPublished || String(item.createdBy || '') === authUserId);
   }, [announcementsQuery.data?.announcements, isAdmin, authUserId]);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
+
+  const totalPages = Math.max(1, Math.ceil(announcements.length / pageSize));
+  const activePage = Math.min(currentPage, totalPages);
+
+  const paginatedAnnouncements = useMemo(() => {
+    const start = (activePage - 1) * pageSize;
+    return announcements.slice(start, start + pageSize);
+  }, [announcements, activePage]);
+
   const saveMutation = useMutation({
     mutationFn: async (payload: AnnouncementUpsertInput) => {
       if (form.id) {
@@ -191,6 +203,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
       resetForm();
       setErrorMessage('');
       setIsFormVisible(false);
+      setCurrentPage(1);
       await queryClient.invalidateQueries({ queryKey: ['managedAnnouncements'] });
       await queryClient.invalidateQueries({ queryKey: ['studentAnnouncements'] });
     },
@@ -206,6 +219,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
       setConfirmAction(null);
       setIsConfirmOpen(false);
       setIsFormVisible(false);
+      setCurrentPage(1);
       await queryClient.invalidateQueries({ queryKey: ['managedAnnouncements'] });
       await queryClient.invalidateQueries({ queryKey: ['studentAnnouncements'] });
     },
@@ -477,64 +491,76 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
                 <p className="mt-1 text-xs text-on-surface-variant">Announcements from clinic staff and doctors will appear here.</p>
               </div>
             ) : (
-              <div className="space-y-4 max-h-[calc(100vh-260px)] overflow-y-auto pr-2">
-                {announcements.map((item) => (
-                  <div
-                    key={item.id}
-                    className="overflow-hidden rounded-[18px] border border-outline-variant/55 bg-white transition-colors hover:border-primary/35"
-                  >
-                    {item.imageUrl ? (
-                      <div className="border-b border-outline-variant/35 bg-surface-container-low">
-                        <img
-                          src={item.imageUrl}
-                          alt={item.title}
-                          className="h-auto max-h-[38rem] w-full object-contain"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-3 w-full bg-primary" />
-                    )}
+              <div className="flex flex-col h-full justify-between">
+                <div className="space-y-4 max-h-[calc(100vh-260px)] overflow-y-auto pr-2">
+                  {paginatedAnnouncements.map((item) => (
+                    <div
+                      key={item.id}
+                      className="overflow-hidden rounded-[18px] border border-outline-variant/55 bg-white transition-colors hover:border-primary/35"
+                    >
+                      {item.imageUrl ? (
+                        <div className="border-b border-outline-variant/35 bg-surface-container-low">
+                          <img
+                            src={item.imageUrl}
+                            alt={item.title}
+                            className="h-auto max-h-[38rem] w-full object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-3 w-full bg-primary" />
+                      )}
 
-                    <div className="p-5">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap gap-2">
-                            <span className="inline-flex rounded-full bg-primary/8 px-2.5 py-1 text-xs font-normal text-primary">
-                              {formatDateLabel(item.datePosted)}
-                            </span>
-                            {isOwner(item) ? (
-                              <span className="inline-flex rounded-full bg-surface-container px-2.5 py-1 text-xs font-normal text-on-surface-variant">
-                                Your post
+                      <div className="p-5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap gap-2">
+                              <span className="inline-flex rounded-full bg-primary/8 px-2.5 py-1 text-xs font-normal text-primary">
+                                {formatDateLabel(item.datePosted)}
                               </span>
-                            ) : null}
+                              {isOwner(item) ? (
+                                <span className="inline-flex rounded-full bg-surface-container px-2.5 py-1 text-xs font-normal text-on-surface-variant">
+                                  Your post
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-3 text-base font-semibold text-on-surface">{item.title}</p>
+                            <p className="mt-2 line-clamp-3 text-sm leading-6 text-on-surface-variant">{item.description}</p>
                           </div>
-                          <p className="mt-3 text-base font-semibold text-on-surface">{item.title}</p>
-                          <p className="mt-2 line-clamp-3 text-sm leading-6 text-on-surface-variant">{item.description}</p>
                         </div>
-                      </div>
 
-                      {isOwner(item) ? (
-                        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                          <button
-                            type="button"
-                            onClick={() => handleEditClick(item)}
-                            className="flex-1 rounded-full border border-primary/25 bg-primary/8 px-4 py-2.5 text-sm font-normal text-primary transition-colors hover:bg-primary/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteClick(item)}
-                            disabled={deleteMutation.isPending}
-                            className="flex-1 rounded-full border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-normal text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/20 disabled:opacity-60"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      ) : null}
+                        {isOwner(item) ? (
+                          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                            <button
+                              type="button"
+                              onClick={() => handleEditClick(item)}
+                              className="flex-1 rounded-full border border-primary/25 bg-primary/8 px-4 py-2.5 text-sm font-normal text-primary transition-colors hover:bg-primary/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteClick(item)}
+                              disabled={deleteMutation.isPending}
+                              className="flex-1 rounded-full border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-normal text-rose-700 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/20 disabled:opacity-60"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <ListPagination
+                  currentPage={activePage}
+                  totalPages={totalPages}
+                  totalItems={announcements.length}
+                  pageSize={pageSize}
+                  pageSizeOptions={[pageSize]}
+                  itemLabel="posts"
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={() => undefined}
+                />
               </div>
             )}
           </div>

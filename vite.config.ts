@@ -11,7 +11,7 @@ export default defineConfig({
     VitePWA({
       injectRegister: false,
       registerType: "autoUpdate",
-      includeAssets: ["logo.png", "clinickalogo.png", "clinickamobile.png"],
+      includeAssets: ["logo.png", "clinickalogo.png", "footer.png"],
       manifest: {
         id: "/",
         name: "ClinicKa!",
@@ -26,19 +26,19 @@ export default defineConfig({
         categories: ["medical", "health", "education"],
         icons: [
           {
-            src: "icon-192.png",
+            src: "footer.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "icon-512.png",
+            src: "footer.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "clinickamobile.png",
+            src: "footer.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
@@ -63,9 +63,7 @@ export default defineConfig({
         disableDevLogs: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         globIgnores: [
-          "clinickalogo111.png",
-          "clinickalogo2.png",
-          "clinickalogoo.png",
+          "unused/**",
           "gordon_college_academicaffairs.png",
           "previews/**",
         ],
@@ -123,6 +121,17 @@ export default defineConfig({
           if (normalizedId.includes("/node_modules/lucide-react/")) return "vendor-icons";
           if (normalizedId.includes("/node_modules/recharts/")) return "vendor-charts";
           if (normalizedId.includes("/node_modules/motion/")) return "vendor-motion";
+          if (
+            normalizedId.includes("/node_modules/jspdf/") ||
+            normalizedId.includes("/node_modules/html2canvas/") ||
+            normalizedId.includes("/node_modules/@react-pdf/") ||
+            normalizedId.includes("/node_modules/react-pdf/") ||
+            normalizedId.includes("/node_modules/pdfjs-dist/")
+          ) {
+            return "vendor-pdf";
+          }
+          if (normalizedId.includes("/node_modules/zxcvbn/")) return "vendor-zxcvbn";
+          if (normalizedId.includes("/node_modules/@supabase/")) return "vendor-supabase";
         },
       },
     },

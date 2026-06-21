@@ -19,7 +19,7 @@ import {
   normalizeProfileAssetRows,
   normalizeStaffSignatureRows,
 } from "./storage.ts";
-import { getCachedData, invalidateCache, setCachedData } from "./redis.ts";
+import { getCachedData, invalidateCache, invalidateCachePattern, setCachedData } from "./redis.ts";
 
 const ANALYTICS_CACHE_TTL_MS = 30_000;
 const SUBMISSIONS_CACHE_TTL_MS = 15_000;
@@ -136,16 +136,20 @@ export function invalidateDashboardReadCaches() {
   staffApprovedStudentsCache.clear();
   staffApprovedStudentsPromises.clear();
 
-  const promise = invalidateCache([
-    "analytics:admin_overview",
-    "analytics:staff_dashboard_overview",
-    "analytics:staff_submission_report_summaries",
-    "analytics:staff_submission_status_counts",
-    "analytics:submissions_list",
-    "admin:staff_users",
-    "admin:user_accounts",
-    "admin:super_admin_administrators",
-    "admin:archived_accounts"
+  const promise = Promise.all([
+    invalidateCache([
+      "analytics:admin_overview",
+      "analytics:staff_dashboard_overview",
+      "analytics:staff_submission_report_summaries",
+      "analytics:staff_submission_status_counts",
+      "analytics:submissions_list",
+      "admin:staff_users",
+      "admin:user_accounts",
+      "admin:super_admin_administrators",
+      "admin:archived_accounts"
+    ]),
+    invalidateCachePattern("analytics:submission_summaries:*"),
+    invalidateCachePattern("analytics:approved_students:*")
   ]).catch((error) => console.error("Redis invalidation error:", error));
   const edgeRuntime = (globalThis as any).EdgeRuntime;
   if (typeof edgeRuntime?.waitUntil === "function") {

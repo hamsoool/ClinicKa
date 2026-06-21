@@ -18,6 +18,7 @@ type LegalDialogProps = {
   meta: string[];
   sections: LegalSection[];
   footer?: string;
+  triggerClassName?: string;
 };
 
 export function LegalDialog({
@@ -28,13 +29,14 @@ export function LegalDialog({
   meta,
   sections,
   footer,
+  triggerClassName = "font-semibold text-[#065f46] underline underline-offset-4 transition-colors hover:text-[#004532]",
 }: LegalDialogProps) {
   return (
     <Dialog>
       <DialogTrigger asChild>
         <button
           type="button"
-          className="font-semibold text-[#065f46] underline underline-offset-4 transition-colors hover:text-[#004532]"
+          className={triggerClassName}
         >
           {label}
         </button>

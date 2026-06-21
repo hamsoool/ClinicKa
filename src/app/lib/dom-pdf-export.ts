@@ -38,14 +38,12 @@ async function waitForImages(element: HTMLElement) {
 }
 
 function getCanvasScale() {
-  if (typeof window === 'undefined') return 2;
-  const deviceScale = window.devicePixelRatio || 1;
-  return Math.min(2, Math.max(1.5, deviceScale));
+  return 4;
 }
 
 export async function createPdfFromElement(
   element: HTMLElement | null,
-  options: { pageFormat: DomPdfPageFormat },
+  options: { pageFormat: DomPdfPageFormat; scale?: number },
 ) {
   if (!element) throw new Error('The document preview is not ready yet.');
 
@@ -62,11 +60,13 @@ export async function createPdfFromElement(
   });
   const pages = getPdfPages(element);
 
+  const scale = options.scale ?? getCanvasScale();
+
   for (let index = 0; index < pages.length; index += 1) {
     const page = pages[index];
     const canvas = await html2canvas(page, {
       backgroundColor: '#ffffff',
-      scale: getCanvasScale(),
+      scale: scale,
       useCORS: true,
       allowTaint: false,
       logging: false,

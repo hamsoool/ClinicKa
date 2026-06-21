@@ -121,6 +121,50 @@ function formatReadOnlyYearLevel(value: string) {
   return YEAR_LEVELS.find((option) => option.value === normalized)?.label || normalized;
 }
 
+function formatIsoToMdY(isoString: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoString || '').trim());
+  if (!match) return isoString;
+  const year = match[1];
+  const month = match[2];
+  const day = match[3];
+  return `${month}-${day}-${year}`;
+}
+
+function parseUserTypedDate(input: string): Date | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  // Try matching MM-DD-YYYY or MM/DD/YYYY
+  const numericMatch = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+  if (numericMatch) {
+    const month = Number.parseInt(numericMatch[1], 10);
+    const day = Number.parseInt(numericMatch[2], 10);
+    const year = Number.parseInt(numericMatch[3], 10);
+    
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+      const d = new Date(year, month - 1, day);
+      if (d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day) {
+        return d;
+      }
+    }
+  }
+
+  // Try standard date parsing for textual dates
+  const hasMonthName = /[a-zA-Z]/.test(trimmed);
+  const hasFourDigitYear = /\b\d{4}\b/.test(trimmed);
+  if (hasMonthName || hasFourDigitYear) {
+    const timestamp = Date.parse(trimmed);
+    if (!Number.isNaN(timestamp)) {
+      const d = new Date(timestamp);
+      if (d.getFullYear() >= 1900 && d.getFullYear() <= 2100) {
+        return d;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function StudentProfileFormCard({
   value,
   onChange,
@@ -133,6 +177,14 @@ export function StudentProfileFormCard({
   yearLevelLabel = 'Year Level',
 }: StudentProfileFormCardProps) {
   const [birthdayPickerOpen, setBirthdayPickerOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(() => formatIsoToMdY(value.birthday));
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setInputValue(formatIsoToMdY(value.birthday));
+    }
+  }, [value.birthday, isFocused]);
   const maxBirthdate = useMemo(() => getMaxBirthdateIso(16), []);
   const selectedBirthday = useMemo(() => parseDateInputValue(value.birthday), [value.birthday]);
   const maxBirthdateDate = useMemo(() => parseDateInputValue(maxBirthdate), [maxBirthdate]);
@@ -241,22 +293,46 @@ export function StudentProfileFormCard({
             <>
               <Popover open={birthdayPickerOpen} onOpenChange={setBirthdayPickerOpen}>
                 <PopoverTrigger asChild>
-                  <Button
-                    id="birthday"
-                    type="button"
-                    variant="outline"
-                    className={cn(
-                      'border-input bg-input-background hover:bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 w-full justify-between rounded-md border px-3 py-2 text-left font-normal text-foreground shadow-none focus-visible:ring-[3px]',
-                      !selectedBirthday && 'text-muted-foreground',
-                      'data-[state=open]:bg-input-background',
-                      requiredFieldClass(!value.birthday.trim() || !hasValidBirthday),
-                    )}
-                  >
-                    {selectedBirthday ? format(selectedBirthday, 'MMMM d, yyyy') : 'Select birthday'}
-                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                  </Button>
+                  <div className="relative w-full">
+                    <Input
+                      id="birthday"
+                      type="text"
+                      placeholder="MM-DD-YYYY or e.g., January 20 2005"
+                      value={inputValue}
+                      onChange={(event) => {
+                        const val = event.target.value;
+                        setInputValue(val);
+                        
+                        const parsed = parseUserTypedDate(val);
+                        if (parsed) {
+                          handleChange('birthday', formatDateInputValue(parsed));
+                        } else {
+                          handleChange('birthday', '');
+                        }
+                      }}
+                      onFocus={() => {
+                        setIsFocused(true);
+                        setBirthdayPickerOpen(true);
+                      }}
+                      onBlur={() => {
+                        setIsFocused(false);
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                      className={cn(
+                        'w-full pr-10',
+                        requiredFieldClass(!value.birthday.trim() || !hasValidBirthday)
+                      )}
+                    />
+                    <CalendarIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  </div>
                 </PopoverTrigger>
-                <PopoverContent className="w-[min(92vw,24rem)] rounded-[18px] p-0" align="start">
+                <PopoverContent 
+                  className="w-[min(92vw,24rem)] rounded-[18px] p-0" 
+                  align="start"
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                >
                   <div className="border-b border-border/60 px-3 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Button
