@@ -42,12 +42,6 @@ import {
 } from './academic-year';
 import { beginTrackedUpload } from './upload-activity';
 import type { LabUploadType, StudentProfileAssetUploadType } from './media-upload-types';
-import {
-  getPasswordPolicyMessage,
-  getPasswordStrengthResult,
-  getRegistrationPasswordMessage,
-  isRegistrationPasswordLongEnough,
-} from './password-policy';
 import type { PasswordPolicyUserInputs } from './password-policy';
 
 export { createDefaultAdminSystemSettings } from './admin-system-settings';
@@ -1279,6 +1273,7 @@ export async function updateCurrentSessionPassword(
   newPassword: string,
   userInputs?: PasswordPolicyUserInputs,
 ) {
+  const { getPasswordStrengthResult, getPasswordPolicyMessage } = await import('./password-policy');
   const password = String(newPassword || '');
   const result = getPasswordStrengthResult(password, userInputs);
   if (!result.isStrongEnough) {
@@ -1302,6 +1297,7 @@ export async function updateUserPassword(
   token?: string | null,
   userInputs?: PasswordPolicyUserInputs,
 ) {
+  const { getPasswordStrengthResult, getPasswordPolicyMessage } = await import('./password-policy');
   const password = String(newPassword || '');
   const result = getPasswordStrengthResult(password, userInputs);
   if (!result.isStrongEnough) {
@@ -2363,6 +2359,7 @@ export async function signUpWithPassword(
     throw new Error(`Use your 9-digit student email, for example 202311165@${GC_DOMAIN}.`);
   }
 
+  const { isRegistrationPasswordLongEnough, getRegistrationPasswordMessage } = await import('./password-policy');
   if (!isRegistrationPasswordLongEnough(password)) {
     throw new Error(getRegistrationPasswordMessage());
   }
@@ -5702,6 +5699,7 @@ type AdminCreateAccountInput = {
 };
 
 export async function createAdminAccount(input: AdminCreateAccountInput) {
+  const { getPasswordStrengthResult, getPasswordPolicyMessage } = await import('./password-policy');
   const passwordResult = getPasswordStrengthResult(input.password, {
     email: input.email,
     firstName: input.firstName,
@@ -5730,6 +5728,7 @@ type AdminCreateStaffInput = {
 };
 
 export async function createAdminStaff(input: AdminCreateStaffInput) {
+  const { getPasswordStrengthResult, getPasswordPolicyMessage } = await import('./password-policy');
   const passwordResult = getPasswordStrengthResult(input.password, {
     email: input.email,
     firstName: input.firstName,
@@ -5947,6 +5946,7 @@ export async function getSuperAdminAdministrators() {
 }
 
 export async function createSuperAdminAdministrator(input: SuperAdminCreateAdministratorInput) {
+  const { getPasswordStrengthResult, getPasswordPolicyMessage } = await import('./password-policy');
   const passwordResult = getPasswordStrengthResult(input.password, {
     email: input.email,
     firstName: input.firstName,
