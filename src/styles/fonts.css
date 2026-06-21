@@ -1,1 +1,31 @@
-/* Local fonts removed to optimize page speed. Using Google Fonts Inter and system fallbacks instead. */
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf-pro/SF-Pro.ttf") format("truetype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf-pro/SF-Pro-Italic.ttf") format("truetype");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf-pro/SF-Pro.ttf") format("truetype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf-pro/SF-Pro-Italic.ttf") format("truetype");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 100 900;
+}
