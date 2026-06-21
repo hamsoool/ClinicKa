@@ -59,6 +59,20 @@ export async function invalidateCache(keys: string | string[]): Promise<void> {
     } catch (err) { console.error(`[Redis] DEL error:`, err); }
 }
 
+// Delete keys by pattern to invalidate dynamic caches
+export async function invalidateCachePattern(pattern: string): Promise<void> {
+    const redis = getRedisClient();
+    if (!redis) return;
+    try {
+        const keys = await redis.keys(pattern);
+        if (keys && keys.length > 0) {
+            await redis.del(...keys);
+        }
+    } catch (err) {
+        console.error(`[Redis] Pattern invalidation error for ${pattern}:`, err);
+    }
+}
+
 export interface OcrCallLogEntry {
     timestamp: number;
     provider: "azure" | "ocr-space";

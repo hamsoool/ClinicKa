@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, BadgeCheck, ChevronRight, FileText, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ChevronRight, FileText, ShieldCheck } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
@@ -82,114 +82,120 @@ export default function StudentPrivacyWaiver() {
       />
 
       <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
-        <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
+        <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest py-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-2">
-              <CardTitle className="text-2xl font-bold tracking-tight text-on-surface">Consent and Privacy Notice</CardTitle>
-            </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary-container/20 px-3 py-1.5 text-sm font-medium text-on-primary-container">
-              <BadgeCheck className="h-4 w-4" />
-              Required before submission
+            <div className="space-y-1">
+              <CardTitle className="text-xl font-bold tracking-tight text-on-surface">Consent and Privacy Notice</CardTitle>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6 pt-6">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.9fr)]">
-            <div className="space-y-4">
-              <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-5">
-                <div className="mb-4 flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-surface-container-lowest text-primary">
-                    <ShieldCheck className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="font-semibold text-on-surface">What you are consenting to</p>
-                    <p className="text-sm text-on-surface-variant">
-                      Your information is used only for your clinic record, review, and related student health services.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-5 text-sm leading-7 text-on-surface">
-                  <p>{DATA_PRIVACY_CONSENT_BODY}</p>
+        <CardContent className="space-y-6 pt-4">
+          {/* Stacked details */}
+          <div className="space-y-6">
+            <div className="rounded-[22px] border border-outline-variant/30 bg-gradient-to-br from-surface-container-lowest to-surface-container-low p-6 shadow-sm space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                  <ShieldCheck className="h-6 w-6" />
+                </span>
+                <div>
+                  <p className="font-bold text-lg text-on-surface">What you are consenting to</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Your information is used only for your clinic record, review, and related student health services.
+                  </p>
                 </div>
               </div>
 
-              <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-5">
-                <div className="mb-4 flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-surface-container-lowest text-primary">
-                    <FileText className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="font-semibold text-on-surface">Your rights as a data subject</p>
-                    <p className="text-sm text-on-surface-variant">
-                      You may ask questions, request access, or raise concerns through the proper Gordon College office.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-5 text-sm leading-7 text-on-surface">
-                  <p>{DATA_PRIVACY_RIGHTS_NOTICE}</p>
-                </div>
+              <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 p-5 text-sm leading-relaxed text-on-surface-variant font-medium">
+                <p className="leading-7">{DATA_PRIVACY_CONSENT_BODY}</p>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-5">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-surface-container-low text-primary">
-                    <ChevronRight className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="font-semibold text-on-surface">Before you continue</p>
-                    <p className="text-sm text-on-surface-variant">Confirm this waiver, then proceed to the full medical form.</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4">
-                    <p className="text-sm font-medium text-on-surface">1. Review the consent details</p>
-                    <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-                      Read how Gordon College Clinic stores and uses your personal and medical information.
-                    </p>
-                  </div>
-                  <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4">
-                    <p className="text-sm font-medium text-on-surface">2. Tick the acknowledgment box</p>
-                    <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-                      This unlocks the medical form for the active school year.
-                    </p>
-                  </div>
-                  <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4">
-                    <p className="text-sm font-medium text-on-surface">3. Continue to the record form</p>
-                    <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-                      Your progress in the next step is saved automatically while you complete it.
-                    </p>
-                  </div>
+            <div className="rounded-[22px] border border-outline-variant/30 bg-gradient-to-br from-surface-container-lowest to-surface-container-low p-6 shadow-sm space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                  <FileText className="h-6 w-6" />
+                </span>
+                <div>
+                  <p className="font-bold text-lg text-on-surface">Your rights as a data subject</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    You may ask questions, request access, or raise concerns through the proper Gordon College office.
+                  </p>
                 </div>
               </div>
 
-              <div
-                className={`rounded-[18px] border p-5 transition-colors ${
-                  dataPrivacyConsent
-                    ? 'border-primary/20 bg-primary-container/10'
-                    : 'border-amber-200/80 bg-amber-50/60'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="dataPrivacyConsent"
-                    checked={dataPrivacyConsent}
-                    onCheckedChange={(checked) => setDataPrivacyConsent(checked === true)}
-                    className="mt-1"
-                  />
-                  <div className="space-y-2">
-                    <Label htmlFor="dataPrivacyConsent" className="text-sm font-medium leading-6 text-on-surface">
-                      {DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT}
-                    </Label>
-                    <p className={`text-sm ${dataPrivacyConsent ? 'text-on-primary-container' : 'text-amber-800'}`}>
-                      {dataPrivacyConsent ? 'Consent recorded. You can now continue to the medical form.' : 'Please confirm this waiver to proceed to the medical form.'}
-                    </p>
-                  </div>
+              <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 p-5 text-sm leading-relaxed text-on-surface-variant font-medium">
+                <p className="leading-7">{DATA_PRIVACY_RIGHTS_NOTICE}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[22px] border border-outline-variant/30 bg-gradient-to-br from-surface-container-lowest to-surface-container-low p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+                <ChevronRight className="h-6 w-6" />
+              </span>
+              <div>
+                <p className="font-bold text-lg text-on-surface">Before you continue</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Confirm this waiver, then proceed to the full medical form.</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="group relative rounded-xl border border-outline-variant/20 bg-surface-container-low/30 p-5 transition-all duration-300 hover:border-primary/20 hover:bg-surface-container-low/60">
+                <div className="absolute top-4 right-4 text-xs font-bold text-primary/30 group-hover:text-primary/50 transition-colors">
+                  STEP 01
                 </div>
+                <p className="text-sm font-bold text-on-surface">Review the consent details</p>
+                <p className="mt-2 text-xs leading-relaxed text-on-surface-variant">
+                  Read how Gordon College Clinic stores and uses your personal and medical information.
+                </p>
+              </div>
+              <div className="group relative rounded-xl border border-outline-variant/20 bg-surface-container-low/30 p-5 transition-all duration-300 hover:border-primary/20 hover:bg-surface-container-low/60">
+                <div className="absolute top-4 right-4 text-xs font-bold text-primary/30 group-hover:text-primary/50 transition-colors">
+                  STEP 02
+                </div>
+                <p className="text-sm font-bold text-on-surface">Continue to the record form</p>
+                <p className="mt-2 text-xs leading-relaxed text-on-surface-variant">
+                  Your progress in the next step is saved automatically while you complete it.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className={`group relative rounded-[22px] border p-6 transition-all duration-300 ${
+              dataPrivacyConsent
+                ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/80 to-teal-50/30 shadow-[0_4px_16px_rgba(16,185,129,0.04)]'
+                : 'border-amber-200 bg-gradient-to-br from-amber-50/60 to-orange-50/20 shadow-[0_4px_16px_rgba(245,158,11,0.02)]'
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              <div className="mt-1">
+                <Checkbox
+                  id="dataPrivacyConsent"
+                  checked={dataPrivacyConsent}
+                  onCheckedChange={(checked) => setDataPrivacyConsent(checked === true)}
+                  className="h-5 w-5 rounded-md transition-all duration-300"
+                />
+              </div>
+              <div className="space-y-2.5">
+                <Label
+                  htmlFor="dataPrivacyConsent"
+                  className={`text-sm font-bold leading-relaxed cursor-pointer transition-colors ${
+                    dataPrivacyConsent ? 'text-emerald-950' : 'text-amber-950'
+                  }`}
+                >
+                  {DATA_PRIVACY_CONSENT_ACKNOWLEDGEMENT}
+                </Label>
+                <p
+                  className={`text-xs font-medium leading-relaxed transition-colors ${
+                    dataPrivacyConsent ? 'text-emerald-800' : 'text-amber-800'
+                  }`}
+                >
+                  {dataPrivacyConsent
+                    ? 'Consent recorded. You can now continue to the medical form.'
+                    : 'Please confirm this waiver to proceed to the medical form.'}
+                </p>
               </div>
             </div>
           </div>

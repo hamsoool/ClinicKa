@@ -51,6 +51,8 @@ export default function InlinePdfViewer({
   const [containerWidth, setContainerWidth] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState('');
   const [error, setError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -81,7 +83,7 @@ export default function InlinePdfViewer({
 
     const generate = async () => {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const blob = await createPdfFromElement(sourceRef.current, { pageFormat });
+      const blob = await createPdfFromElement(sourceRef.current, { pageFormat, scale: 1.5 });
       if (cancelled) return;
       setPdfBlob(blob);
     };
@@ -109,56 +111,19 @@ export default function InlinePdfViewer({
 
   const isFullyRendered = numPages > 0 && renderedPages.size >= numPages;
 
-  const handlePrint = useCallback(() => {
+  const handlePrint = useCallback(async () => {
     try {
-      const canvases = Array.from(pagesRef.current?.querySelectorAll('canvas') || []);
-      if (!canvases.length || canvases.length < numPages) {
-        throw new Error('PDF pages are still rendering.');
-      }
-
-      const pageImages = canvases
-        .slice(0, numPages)
-        .map((canvas) => canvas.toDataURL('image/png'))
-        .map((src, index) => `<img class="print-page" src="${src}" alt="Page ${index + 1}">`)
-        .join('');
-
+      setActionLoading(true);
+      setActionMessage('Generating print files...');
+      
+      const highResBlob = await createPdfFromElement(sourceRef.current, { pageFormat, scale: 4 });
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const url = URL.createObjectURL(highResBlob);
 
       if (isMobile) {
-        const printWindow = window.open('', '_blank');
+        const printWindow = window.open(url, '_blank');
         if (!printWindow) throw new Error('Could not open print window.');
-
-        printWindow.document.write(`<!doctype html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(fileName)}</title>
-  <style>
-    @page { size: ${getPrintPageSize(pageFormat)} portrait; margin: 0; }
-    html, body { margin: 0; padding: 0; background: #fff; }
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .print-page { display: block; width: 100%; height: auto; page-break-after: always; break-after: page; }
-    .print-page:last-child { page-break-after: auto; break-after: auto; }
-  </style>
-</head>
-<body>
-  ${pageImages}
-  <script>
-    window.onload = function() {
-      window.focus();
-      setTimeout(function() {
-        window.print();
-      }, 300);
-    };
-    window.onafterprint = function() {
-      window.close();
-    };
-  </script>
-</body>
-</html>`);
-        printWindow.document.close();
       } else {
-        // Create a temporary hidden iframe to trigger the print dialog in the background
         const iframe = document.createElement('iframe');
         iframe.style.position = 'fixed';
         iframe.style.right = '0';
@@ -167,70 +132,67 @@ export default function InlinePdfViewer({
         iframe.style.height = '0';
         iframe.style.border = '0';
         iframe.style.pointerEvents = 'none';
+        iframe.src = url;
         document.body.appendChild(iframe);
 
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (!iframeDoc) throw new Error('Could not access iframe document.');
+        iframe.onload = () => {
+          setTimeout(() => {
+            try {
+              iframe.contentWindow?.focus();
+              iframe.contentWindow?.print();
+            } catch (err) {
+              console.error('Error triggering iframe print:', err);
+            }
+          }, 300);
+        };
 
-        iframeDoc.open();
-        iframeDoc.write(`<!doctype html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(fileName)}</title>
-  <style>
-    @page { size: ${getPrintPageSize(pageFormat)} portrait; margin: 0; }
-    html, body { margin: 0; padding: 0; background: #fff; }
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .print-page { display: block; width: 100%; height: auto; page-break-after: always; break-after: page; }
-    .print-page:last-child { page-break-after: auto; break-after: auto; }
-  </style>
-</head>
-<body>
-  ${pageImages}
-  <script>
-    window.onload = function() {
-      window.focus();
-      window.print();
-    };
-  </script>
-</body>
-</html>`);
-        iframeDoc.close();
-
-        // Clean up the iframe from the document once print dialog closes
         if (iframe.contentWindow) {
           iframe.contentWindow.addEventListener('afterprint', () => {
             document.body.removeChild(iframe);
+            URL.revokeObjectURL(url);
           });
         } else {
           setTimeout(() => {
             if (iframe.parentNode) {
               document.body.removeChild(iframe);
             }
-          }, 5000);
+            URL.revokeObjectURL(url);
+          }, 10000);
         }
       }
     } catch (printError) {
-      console.error('Failed to print inline PDF:', printError);
-      setError('The PDF is still preparing. Wait for the pages to finish rendering, then print again.');
+      console.error('Failed to print PDF:', printError);
+      setError('Failed to trigger printer dialog. Please download the PDF and print it directly.');
+    } finally {
+      setActionLoading(false);
+      setActionMessage('');
     }
-  }, [fileName, numPages, pageFormat]);
+  }, [pageFormat]);
 
-  const handleDownload = useCallback(() => {
-    if (!pdfBlob) return;
-    const url = URL.createObjectURL(pdfBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    // Delay revocation to let the browser process the download action
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    }, 150);
-  }, [pdfBlob, fileName]);
+  const handleDownload = useCallback(async () => {
+    try {
+      setActionLoading(true);
+      setActionMessage('Generating PDF...');
+      
+      const highResBlob = await createPdfFromElement(sourceRef.current, { pageFormat, scale: 4 });
+      const url = URL.createObjectURL(highResBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 150);
+    } catch (err) {
+      console.error('Failed to download PDF:', err);
+      setError('Failed to generate PDF download. Please try again.');
+    } finally {
+      setActionLoading(false);
+      setActionMessage('');
+    }
+  }, [fileName, pageFormat]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-outline-variant/50 bg-white shadow-sm">
@@ -264,7 +226,7 @@ export default function InlinePdfViewer({
             size="sm"
             className="h-9 gap-1.5 px-3"
             onClick={handleDownload}
-            disabled={!pdfBlob || loading}
+            disabled={!pdfBlob || loading || actionLoading}
             title="Download PDF"
           >
             <Download className="h-4 w-4" />
@@ -277,7 +239,7 @@ export default function InlinePdfViewer({
             size="sm"
             className="hidden h-9 px-3 sm:inline-flex"
             onClick={handlePrint}
-            disabled={!isFullyRendered || loading}
+            disabled={!pdfBlob || loading || actionLoading}
             title="Print PDF"
           >
             <Printer className="h-4 w-4" />
@@ -327,9 +289,18 @@ export default function InlinePdfViewer({
 
       <div ref={viewerRef} className="relative min-h-[70vh] bg-neutral-800">
         {loading ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-neutral-900 text-white">
-            <Loader2 className="h-6 w-6 animate-spin" />
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-neutral-900/90 text-white">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
             <p className="text-sm">Preparing PDF preview...</p>
+          </div>
+        ) : null}
+
+        {actionLoading ? (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-neutral-950/70 text-white backdrop-blur-[1px]">
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-neutral-900/90 p-5 shadow-2xl border border-white/5 animate-in fade-in zoom-in-95 duration-200">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <p className="text-sm font-medium">{actionMessage}</p>
+            </div>
           </div>
         ) : null}
 

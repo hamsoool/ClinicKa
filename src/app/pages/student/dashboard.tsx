@@ -317,17 +317,19 @@ export default function StudentDashboard() {
                     key={`${item.title}-${item.actionPath}`}
                     type="button"
                     onClick={() => navigate(item.actionPath)}
-                    className="flex min-h-[5.25rem] w-full items-start gap-3 rounded-[18px] border border-amber-200/70 bg-amber-50/80 p-3 text-left transition-colors hover:bg-amber-100/80"
+                    className="group relative flex min-h-[5.25rem] w-full items-start gap-4 rounded-[18px] border border-amber-200/60 bg-gradient-to-br from-amber-50/90 via-amber-50/40 to-orange-50/50 p-4 text-left shadow-[0_2px_8px_rgba(245,158,11,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-amber-300 hover:bg-gradient-to-br hover:from-amber-100/90 hover:to-orange-50/80 hover:shadow-[0_12px_20px_rgba(245,158,11,0.08)]"
                   >
-                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-                      <AlertCircle className="h-4 w-4" />
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 transition-all duration-300 group-hover:scale-110 group-hover:bg-amber-200">
+                      <AlertCircle className="h-5 w-5" />
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-amber-950">{item.title}</span>
-                      <span className="mt-0.5 line-clamp-2 block text-xs leading-5 text-amber-800">{item.detail}</span>
-                      <span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">
+                    <span className="min-w-0 flex-1 flex flex-col h-full justify-between">
+                      <div>
+                        <span className="block text-sm font-semibold text-amber-950 transition-colors group-hover:text-amber-900">{item.title}</span>
+                        <span className="mt-1 line-clamp-2 block text-xs leading-relaxed text-amber-800/80">{item.detail}</span>
+                      </div>
+                      <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary transition-all group-hover:text-primary-hover">
                         {item.actionLabel}
-                        <ArrowRight className="h-3.5 w-3.5" />
+                        <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1" />
                       </span>
                     </span>
                   </button>
@@ -338,25 +340,25 @@ export default function StudentDashboard() {
                 {[0, 1].map((item) => (
                   <div
                     key={item}
-                    className="flex min-h-[5.25rem] items-start gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-3"
+                    className="flex min-h-[5.25rem] items-start gap-4 rounded-[18px] border border-amber-200/30 bg-gradient-to-br from-amber-50/30 to-orange-50/20 p-4"
                   >
-                    <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-surface-container" />
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="h-4 w-32 animate-pulse rounded bg-surface-container" />
-                      <div className="h-3 w-full animate-pulse rounded bg-surface-container" />
-                      <div className="h-3 w-24 animate-pulse rounded bg-surface-container" />
+                    <div className="h-9 w-9 shrink-0 animate-pulse rounded-xl bg-amber-100" />
+                    <div className="min-w-0 flex-1 space-y-2.5">
+                      <div className="h-4 w-32 animate-pulse rounded bg-amber-200/50" />
+                      <div className="h-3.5 w-full animate-pulse rounded bg-amber-100/60" />
+                      <div className="h-3 w-24 animate-pulse rounded bg-amber-100/60" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="mt-4 flex items-start gap-3 rounded-[18px] border border-primary/15 bg-primary-container/10 p-3">
-                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-container/30 text-primary">
-                  <CheckCircle2 className="h-4 w-4" />
+              <div className="mt-4 flex items-start gap-4 rounded-[18px] border border-emerald-200/50 bg-gradient-to-br from-emerald-50/80 to-teal-50/40 p-4 shadow-[0_2px_8px_rgba(16,185,129,0.04)]">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                  <CheckCircle2 className="h-5 w-5" />
                 </span>
                 <div>
-                  <p className="text-sm font-semibold text-on-surface">No missing profile information or required uploads found.</p>
-                  <p className="mt-0.5 text-xs leading-5 text-on-surface-variant">
+                  <p className="text-sm font-semibold text-emerald-950">No missing profile information or required uploads found.</p>
+                  <p className="mt-1 text-xs leading-relaxed text-emerald-800/80">
                     Keep an eye on clinic updates if your submission is still under review.
                   </p>
                 </div>

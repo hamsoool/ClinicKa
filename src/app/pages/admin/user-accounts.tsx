@@ -46,6 +46,7 @@ import {
   useAdminArchivedAccountsQuery,
   useAdminUserAccountsQuery,
 } from './admin-workflow-query';
+import { DEPARTMENT_OPTIONS, getProgramOptionsForSelect } from '../student/medical-form/constants';
 import {
   AccountSummaryButton,
   CLINIC_STAFF_ROLE_FILTER,
@@ -613,11 +614,51 @@ export default function AdminUserAccounts() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="ua-department">Department</Label>
-                  <Input id="ua-department" value={form.department} onChange={(e) => setForm((prev) => ({ ...prev, department: e.target.value }))} />
+                  <Select
+                    value={form.department}
+                    onValueChange={(value) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        department: value,
+                        course: '',
+                      }))
+                    }
+                  >
+                    <SelectTrigger id="ua-department">
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEPARTMENT_OPTIONS.map((dept) => (
+                        <SelectItem key={dept.value} value={dept.value}>
+                          {dept.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="ua-course">Course</Label>
-                  <Input id="ua-course" value={form.course} onChange={(e) => setForm((prev) => ({ ...prev, course: e.target.value }))} />
+                  <Label htmlFor="ua-course">Program</Label>
+                  <Select
+                    value={form.course}
+                    onValueChange={(value) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        course: value,
+                      }))
+                    }
+                    disabled={!form.department}
+                  >
+                    <SelectTrigger id="ua-course">
+                      <SelectValue placeholder={form.department ? 'Select program' : 'Select department first'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getProgramOptionsForSelect(form.department, form.course).map((program) => (
+                        <SelectItem key={program} value={program}>
+                          {program}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             ) : null}
