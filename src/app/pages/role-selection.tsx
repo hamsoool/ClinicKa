@@ -735,10 +735,19 @@ export default function RoleSelection() {
 
       <footer id="resources" className="border-t border-[#003d2b] bg-[#001d14] py-12 text-white/70">
         <div className="mx-auto grid max-w-[90rem] grid-cols-1 gap-8 px-5 text-sm sm:px-8 md:grid-cols-2 md:items-center lg:px-10">
-          <div>
-            <div className="text-base font-semibold text-white">ClinicKa!</div>
-            <p className="mt-2 text-white/70">DigitalDuo</p>
-            <p className="mt-4 text-xs text-white/40">Copyright 2026 ClinicKa. All rights reserved.</p>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <img
+                src="/footer.png"
+                alt="ClinicKa logo"
+                className="h-10 w-10 object-contain"
+              />
+              <div className="text-base font-semibold text-white">ClinicKa!</div>
+            </div>
+            <div>
+              <p className="text-white/70">DigitalDuo</p>
+              <p className="mt-2 text-xs text-white/40">Copyright 2026 ClinicKa. All rights reserved.</p>
+            </div>
           </div>
           <div className="flex flex-wrap gap-6 text-white/70 md:justify-end">
             <Link className="transition hover:text-white" to="/auth?mode=signup">
