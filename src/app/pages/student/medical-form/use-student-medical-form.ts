@@ -37,6 +37,7 @@ type UseStudentMedicalFormArgs = {
   me?: AuthMe | null;
   editSubmissionId?: string | null;
   initialDataPrivacyConsent?: boolean;
+  isReview?: boolean;
 };
 
 const TOTAL_STEPS = 5;
@@ -437,11 +438,12 @@ export function useStudentMedicalForm({
   me,
   editSubmissionId = null,
   initialDataPrivacyConsent = false,
+  isReview = false,
 }: UseStudentMedicalFormArgs) {
   const queryClient = useQueryClient();
   const student = me?.student;
   const { academicYear: activeAcademicYear } = useAcademicYear();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(isReview ? 5 : 1);
   const [uploading, setUploading] = useState(false);
   const [uploadingLabFile, setUploadingLabFile] = useState<Record<LabUploadKind, boolean>>({
     cbc: false,
@@ -511,7 +513,7 @@ export function useStudentMedicalForm({
 
   useEffect(() => {
     setSubmitted(false);
-    setStep(1);
+    setStep(isReview ? 5 : 1);
     setUploading(false);
     setUploadingLabFile({
       cbc: false,
@@ -522,7 +524,7 @@ export function useStudentMedicalForm({
     setOriginalSubmissionStatus(null);
     setIsEmergencyAddressSameAsStudent(false);
     setFormData(buildInitialFormData(year, me, initialDataPrivacyConsent));
-  }, [year, me, editSubmissionId, initialDataPrivacyConsent]);
+  }, [year, me, editSubmissionId, initialDataPrivacyConsent, isReview]);
 
   useEffect(() => {
     if (!editSubmissionId) return;

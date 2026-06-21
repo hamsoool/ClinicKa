@@ -123,6 +123,17 @@ export default defineConfig({
           if (normalizedId.includes("/node_modules/lucide-react/")) return "vendor-icons";
           if (normalizedId.includes("/node_modules/recharts/")) return "vendor-charts";
           if (normalizedId.includes("/node_modules/motion/")) return "vendor-motion";
+          if (
+            normalizedId.includes("/node_modules/jspdf/") ||
+            normalizedId.includes("/node_modules/html2canvas/") ||
+            normalizedId.includes("/node_modules/@react-pdf/") ||
+            normalizedId.includes("/node_modules/react-pdf/") ||
+            normalizedId.includes("/node_modules/pdfjs-dist/")
+          ) {
+            return "vendor-pdf";
+          }
+          if (normalizedId.includes("/node_modules/zxcvbn/")) return "vendor-zxcvbn";
+          if (normalizedId.includes("/node_modules/@supabase/")) return "vendor-supabase";
         },
       },
     },

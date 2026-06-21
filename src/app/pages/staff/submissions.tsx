@@ -218,7 +218,7 @@ export default function StaffSubmissions() {
       case 'pending':
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
       case 'in_review':
-        return null;
+        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">In Review</Badge>;
       case 'approved':
         return <Badge variant="secondary" className="bg-green-100 text-green-800">Approved</Badge>;
       case 'returned':

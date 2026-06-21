@@ -27,6 +27,7 @@ export default function StudentMedicalForm() {
   const [searchParams] = useSearchParams();
   const { me } = useAuth();
   const editSubmissionId = searchParams.get('edit');
+  const isReviewMode = searchParams.get('review') === '1';
   const hasDataPrivacyConsent = searchParams.get('consent') === '1';
   const studentId = me?.student?.student_id || me?.profile.student_id || '';
   const { data: records = [], isLoading: recordsLoading } = useStudentRecordsQuery(studentId, 'summary');
@@ -42,11 +43,13 @@ export default function StudentMedicalForm() {
   const canOpenCurrentAcademicYearRecord = !currentAcademicYearRecord || currentAcademicYearStatus === 'returned';
   const canAccessSelectedYear = Boolean(
     selectedSlot &&
-      (editRecord
-        ? String(editRecord.status || '').toLowerCase() === 'returned' &&
-          String(editRecord.year || '') === String(selectedSlot)
-        : canOpenCurrentAcademicYearRecord &&
-          String(currentAcademicYearRecord?.year || expectedSlot || '') === String(selectedSlot)),
+      (isReviewMode
+        ? editRecord && String(editRecord.year || '') === String(selectedSlot)
+        : editRecord
+          ? String(editRecord.status || '').toLowerCase() === 'returned' &&
+            String(editRecord.year || '') === String(selectedSlot)
+          : canOpenCurrentAcademicYearRecord &&
+            String(currentAcademicYearRecord?.year || expectedSlot || '') === String(selectedSlot)),
   );
 
   const {
@@ -79,7 +82,13 @@ export default function StudentMedicalForm() {
     requiresUrinalysisFile,
     requiresXrayFile,
     submit,
-  } = useStudentMedicalForm({ year, me, editSubmissionId, initialDataPrivacyConsent: hasDataPrivacyConsent });
+  } = useStudentMedicalForm({
+    year,
+    me,
+    editSubmissionId,
+    initialDataPrivacyConsent: hasDataPrivacyConsent,
+    isReview: isReviewMode,
+  });
 
   useEffect(() => {
     if (!submitted) return;
@@ -115,13 +124,19 @@ export default function StudentMedicalForm() {
           title={`${formatAcademicYearLabel(formAcademicYear)} Medical Submission Form`}
         />
 
-        <div className="space-y-2">
-          <div className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant sm:flex-row sm:items-center sm:justify-between">
-            <span>Submission progress</span>
-            <span>Step {step} of {totalSteps}</span>
+        {!isReviewMode ? (
+          <div className="space-y-2">
+            <div className="flex flex-col gap-1 text-sm font-medium text-on-surface-variant sm:flex-row sm:items-center sm:justify-between">
+              <span>Submission progress</span>
+              <span>Step {step} of {totalSteps}</span>
+            </div>
+            <Progress value={(step / totalSteps) * 100} className="h-2" />
           </div>
-          <Progress value={(step / totalSteps) * 100} className="h-2" />
-        </div>
+        ) : (
+          <div className="rounded-[18px] bg-surface-container-low border border-outline-variant/20 px-4 py-3 text-sm text-on-surface-variant">
+            You are currently reviewing your submitted medical record. Editing is disabled during review.
+          </div>
+        )}
 
         <Card className="border-border/70 bg-white/90">
           <CardContent className="flex flex-col px-4 py-5 sm:px-5 sm:py-6 md:px-8 md:py-8 xl:px-10">
@@ -150,35 +165,49 @@ export default function StudentMedicalForm() {
                 submitBlockers={submitBlockers}
                 onGoToProfile={() => navigate('/student/profile')}
                 onLabFileChange={updateLabFile}
+                isReview={isReviewMode}
               />
             </div>
 
             <div className="mt-10 flex flex-col gap-2 border-t border-border/70 pt-6 sm:flex-row sm:justify-between sm:gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setStep((value) => Math.max(1, value - 1))}
-                disabled={step === 1}
-                className="w-full sm:w-auto"
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Previous
-              </Button>
-
-              {step < totalSteps ? (
-                <Button onClick={() => setStep((value) => value + 1)} disabled={!canProceed} className="w-full sm:w-auto">
-                  Next
-                  <ArrowRight className="ml-2 h-4 w-4" />
+              {isReviewMode ? (
+                <Button
+                  variant="outline"
+                  onClick={() => navigate('/student/year-selection')}
+                  className="w-full sm:w-auto"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Year Selection
                 </Button>
               ) : (
-                <Button
-                  onClick={submit}
-                  disabled={!canProceed || !canSubmit || uploading}
-                  loading={uploading}
-                  className="w-full bg-primary hover:bg-primary/90 sm:w-auto"
-                >
-                  {uploading ? 'Submitting...' : 'Submit Medical Record'}
-                  {!uploading && <Upload className="ml-2 h-4 w-4" />}
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setStep((value) => Math.max(1, value - 1))}
+                    disabled={step === 1}
+                    className="w-full sm:w-auto"
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Previous
+                  </Button>
+
+                  {step < totalSteps ? (
+                    <Button onClick={() => setStep((value) => value + 1)} disabled={!canProceed} className="w-full sm:w-auto">
+                      Next
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={submit}
+                      disabled={!canProceed || !canSubmit || uploading}
+                      loading={uploading}
+                      className="w-full bg-primary hover:bg-primary/90 sm:w-auto"
+                    >
+                      {uploading ? 'Submitting...' : 'Submit Medical Record'}
+                      {!uploading && <Upload className="ml-2 h-4 w-4" />}
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </CardContent>

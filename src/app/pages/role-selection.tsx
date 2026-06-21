@@ -333,6 +333,7 @@ export default function RoleSelection() {
               <img
                 src={LOGO_SRC}
                 alt="ClinicKa logo"
+                fetchPriority="high"
                 className={`rounded-full object-cover transition-all duration-300 ${isScrolled ? 'h-7 w-7 md:h-8 md:w-8' : 'h-8 w-8 md:h-10 md:w-10'
                   }`}
                 onError={() => setLogoVisible(false)}
@@ -477,8 +478,8 @@ export default function RoleSelection() {
             <div className="resp-hover-box" />
           </div>
 
-          <div className="relative mx-auto grid min-h-[calc(100dvh-3.5rem)] md:min-h-[calc(100dvh-5rem)] w-full max-w-[90rem] items-center gap-10 px-5 py-14 sm:px-8 md:py-18 lg:grid-cols-12 lg:px-10 pointer-events-none">
-            <div className="space-y-6 lg:col-span-7 -translate-y-8 md:-translate-y-16 lg:-translate-y-24 pointer-events-auto">
+          <div className="relative mx-auto grid min-h-[calc(100dvh-3.5rem)] md:min-h-[calc(100dvh-5rem)] w-full max-w-[90rem] items-center gap-10 px-5 py-14 sm:px-8 md:py-18 lg:grid-cols-12 lg:px-10 pointer-events-none -translate-y-8 md:-translate-y-16 lg:-translate-y-24">
+            <div className="space-y-6 lg:col-span-7 pointer-events-auto">
               <p className="text-base font-semibold uppercase tracking-[0.18em] text-[#006d3c]">
                 Gordon College Health Services
               </p>
@@ -510,10 +511,11 @@ export default function RoleSelection() {
               </div>
             </div>
 
-            <div className="flex justify-center lg:col-span-5 -translate-y-8 md:-translate-y-16 lg:-translate-y-24 pointer-events-auto">
+            <div className="flex justify-center lg:col-span-5 pointer-events-auto">
               <img
                 src={LANDING_PREVIEW_SRC}
                 alt="ClinicKa logo"
+                fetchPriority="high"
                 className="w-full max-w-[500px] object-contain drop-shadow-[3px_5px_30px_rgba(0,0,0,0.18)] logo-interactive"
               />
             </div>
@@ -687,10 +689,6 @@ export default function RoleSelection() {
                 <h2 className="max-w-xl text-3xl font-semibold tracking-[-0.02em] text-[#161d18] md:text-[2.5rem]">
                   Questions students usually ask before they submit.
                 </h2>
-                <p className="max-w-xl text-[17px] leading-7 text-[#3d4a3f]">
-                  Quick answers about starting a submission, preparing requirements, tracking status updates, and
-                  checking approved records in ClinicKa!.
-                </p>
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2">

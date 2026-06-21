@@ -43,6 +43,7 @@ type Props = {
   submitBlockers: string[];
   onGoToProfile: () => void;
   onLabFileChange: (kind: LabUploadKind, file: File | null) => void | Promise<void>;
+  isReview?: boolean;
 };
 
 export const MedicalFormStepContent = memo(function MedicalFormStepContent({
@@ -69,6 +70,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
   submitBlockers,
   onGoToProfile,
   onLabFileChange,
+  isReview = false,
 }: Props) {
   const todayDateInput = new Date().toISOString().split('T')[0];
   const requiresOperationDetails = formData.hadOperation === 'yes';
@@ -730,7 +732,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </div>
             </CardContent>
           </Card>
-          {!formData.dataPrivacyConsent ? (
+          {!isReview && !formData.dataPrivacyConsent ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm text-amber-900">
                 Data Privacy Consent is still required. Please return to <span className="font-semibold">Before You Continue</span> and check the consent box before submitting.
@@ -743,6 +745,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 id="submissionConfirmed"
                 checked={formData.submissionConfirmed}
                 onCheckedChange={(checked) => onFieldChange('submissionConfirmed', checked === true)}
+                disabled={isReview}
                 className="mt-1"
               />
               <Label htmlFor="submissionConfirmed" className="text-sm leading-6 font-normal">
@@ -751,12 +754,20 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </Label>
             </div>
           </div>
-          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-            <p className="text-sm text-yellow-800">
-              Please review all information carefully before submitting. Once submitted, your medical record will be reviewed by clinic staff.
-            </p>
-          </div>
-          {submitBlockers.length ? (
+          {isReview ? (
+            <div className="rounded-lg border border-primary/20 bg-primary-container/10 p-4">
+              <p className="text-sm text-on-primary-container">
+                This medical record is currently under review by the clinic staff.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+              <p className="text-sm text-yellow-800">
+                Please review all information carefully before submitting. Once submitted, your medical record will be reviewed by clinic staff.
+              </p>
+            </div>
+          )}
+          {!isReview && submitBlockers.length ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-4">
               <p className="text-sm font-semibold text-red-800">Submission is currently blocked due to:</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-700">

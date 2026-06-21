@@ -1,9 +1,12 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, CalendarDays, CheckCircle2, Lock } from 'lucide-react';
+import { ArrowRight, CalendarDays, CheckCircle2, FileText, Lock } from 'lucide-react';
 import StudentPageIntro from '../../components/student-page-intro';
 import { useAuth } from '../../lib/auth';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
+import { Card, CardContent } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
 import {
   formatAcademicYearLabel,
   getLatestRecordForAcademicYear,
@@ -43,14 +46,16 @@ export default function StudentYearSelection() {
   const isBlocked = isCurrentAcademicYearBlocked(currentAcademicYearRecord);
   const isPending = isBlocked && !isApproved;
   const canStartSubmission = Boolean(!currentAcademicYearRecord && nextSlot);
-  const canOpen = Boolean(isApproved || isReturned || canStartSubmission);
+  const canOpen = Boolean(isApproved || isReturned || canStartSubmission || isPending);
   const destination = isApproved
     ? `/student/clearance?tab=medical-clearance&year=${selectedSlot || '1'}`
     : isReturned
       ? `/student/privacy-waiver/${selectedSlot || '1'}?edit=${encodeURIComponent(currentAcademicYearRecord?.id || '')}`
-      : selectedSlot
-        ? `/student/privacy-waiver/${selectedSlot}`
-        : '/student/clearance?tab=history';
+      : isPending
+        ? `/student/medical-form/${selectedSlot || '1'}?edit=${encodeURIComponent(currentAcademicYearRecord?.id || '')}&review=1`
+        : selectedSlot
+          ? `/student/privacy-waiver/${selectedSlot}`
+          : '/student/clearance?tab=history';
 
   if ((recordsLoading && studentId) || academicYearLoading) {
     return <PortalPageSkeleton variant="year-selection" />;
@@ -72,9 +77,9 @@ export default function StudentYearSelection() {
       : canStartSubmission
         ? 'Start medical record'
         : isPending
-          ? 'Unavailable right now'
+          ? 'Review Submission'
           : 'View records';
-  const isActionable = canOpen && !isPending;
+  const isActionable = canOpen;
   const introCopy = currentAcademicYearRecord
     ? isApproved
       ? 'Your submission for this school year is already approved. Open your medical certificate to review or download it.'
@@ -84,18 +89,33 @@ export default function StudentYearSelection() {
     : nextSlot
       ? `Begin your clinic submission for ${academicYearLabel}. This will be filed under ${selectedSlotLabel}.`
       : `You have already used all ${MAX_SUBMISSION_CYCLE} record cycles.`;
-  const cardStyles = isActionable
-    ? 'cursor-pointer border-outline-variant/30 bg-surface-container-lowest hover:bg-surface-container-low'
-    : 'cursor-not-allowed border-outline-variant/30 bg-surface-container-lowest/80';
-  const actionButtonStyles = isActionable
-    ? 'bg-primary text-on-primary'
-    : 'bg-surface-container text-on-surface-variant';
   const summaryCardStyles = isActionable
     ? 'border-primary/10 bg-primary-container/10'
     : 'border-outline-variant/20 bg-surface-container-low';
   const pageDescription = nextSlot
     ? `Start or continue your clinic submission for ${academicYearLabel}.`
     : `All ${MAX_SUBMISSION_CYCLE} submission cycles have already been used.`;
+
+  const getStatusBadge = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'approved':
+        return <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100">Approved</Badge>;
+      case 'returned':
+        return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100">Returned</Badge>;
+      case 'in review':
+      case 'in_review':
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100">In Review</Badge>;
+      case 'open':
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100">Open</Badge>;
+      default:
+        return <Badge className="bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-100">{status}</Badge>;
+    }
+  };
+
+  const summaryInnerBoxStyles = isActionable
+    ? 'bg-primary-container/20 text-on-primary-container'
+    : 'bg-surface-container-lowest text-on-surface-variant';
 
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
@@ -106,80 +126,89 @@ export default function StudentYearSelection() {
       />
 
       <div className="mx-auto max-w-[78rem]">
-        <button
-          type="button"
-          disabled={!canOpen || isPending}
-          onClick={() => canOpen && !isPending && navigate(destination)}
-          className={`group block w-full rounded-[18px] border p-5 text-left transition-all duration-200 sm:p-8 ${cardStyles}`}
-        >
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.8fr)] lg:items-center">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-full bg-primary-container/15 px-3 py-1 text-xs font-semibold text-primary">
-                  {selectedSlotLabel}
-                </span>
-                <span className="inline-flex items-center rounded-full bg-surface-container px-3 py-1 text-xs font-semibold text-on-surface-variant">
-                  {statusLabel}
-                </span>
-              </div>
+        <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-sm">
+          <CardContent className="p-5 sm:p-8">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.8fr)] lg:items-stretch">
+              <div className="min-w-0 flex flex-col justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary" className="bg-primary/10 text-primary border-transparent hover:bg-primary/15 font-semibold">
+                      {selectedSlotLabel}
+                    </Badge>
+                    {getStatusBadge(statusLabel)}
+                  </div>
 
-              <div className="mt-5 flex items-start gap-4">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] bg-primary/10 text-primary">
-                  <CalendarDays className="h-6 w-6" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
-                    {academicYearLabel}
-                  </p>
-                  <h1 className="mt-2 text-2xl font-bold tracking-tight text-on-surface sm:text-3xl">
+                  <div className="mt-5 flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <CalendarDays className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
+                        {academicYearLabel}
+                      </p>
+                    </div>
+                  </div>
+
+                  <h2 className="mt-4 text-xl font-bold text-on-surface sm:text-2xl leading-tight">
                     {isApproved
                       ? 'Open your medical certificate'
                       : isReturned
                         ? 'Continue your returned submission'
                         : canStartSubmission
                           ? 'Start your medical record submission'
-                          : 'Submission currently unavailable'}
-                  </h1>
+                          : 'Submission under review'}
+                  </h2>
+
+                  <p className="mt-3 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
+                    {introCopy}
+                  </p>
+                </div>
+
+                <div className="mt-8">
+                  <Button
+                    onClick={() => navigate(destination)}
+                    className="gap-2"
+                  >
+                    {isApproved ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : isPending ? (
+                      <FileText className="h-4 w-4" />
+                    ) : (
+                      <ArrowRight className="h-4 w-4" />
+                    )}
+                    {actionLabel}
+                  </Button>
                 </div>
               </div>
 
-              <p className="mt-5 max-w-3xl text-sm leading-7 text-on-surface-variant sm:text-base">
-                {introCopy}
-              </p>
-
-              <span className={`mt-7 inline-flex items-center gap-2 rounded-[18px] px-4 py-3 text-sm font-semibold transition-colors duration-200 sm:px-5 ${actionButtonStyles}`}>
-                {isPending ? <Lock className="h-4 w-4" /> : isApproved ? <CheckCircle2 className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
-                {actionLabel}
-              </span>
-            </div>
-
-            <div className={`rounded-[18px] border p-5 sm:p-6 ${summaryCardStyles}`}>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
-                Submission Details
-              </p>
-              <dl className="mt-4 space-y-4">
+              <div className={`rounded-[18px] border p-5 sm:p-6 flex flex-col justify-between ${summaryCardStyles}`}>
                 <div>
-                  <dt className="text-sm text-on-surface-variant">School Year</dt>
-                  <dd className="mt-1 text-base font-semibold text-on-surface">
-                    {academicYearLabel}
-                  </dd>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-on-surface-variant">
+                    Submission Details
+                  </h3>
+                  <dl className="mt-4 space-y-3">
+                    <div className="flex justify-between border-b border-outline-variant/10 pb-2">
+                      <dt className="text-sm text-on-surface-variant">School Year</dt>
+                      <dd className="text-sm font-semibold text-on-surface">{academicYearLabel}</dd>
+                    </div>
+                    <div className="flex justify-between border-b border-outline-variant/10 pb-2">
+                      <dt className="text-sm text-on-surface-variant">Record Slot</dt>
+                      <dd className="text-sm font-semibold text-on-surface">{selectedSlotLabel || 'Unavailable'}</dd>
+                    </div>
+                    <div className="flex justify-between pb-1">
+                      <dt className="text-sm text-on-surface-variant">Status</dt>
+                      <dd className="text-sm font-semibold text-on-surface">{statusLabel}</dd>
+                    </div>
+                  </dl>
                 </div>
-                <div>
-                  <dt className="text-sm text-on-surface-variant">Record Slot</dt>
-                  <dd className="mt-1 text-base font-semibold text-on-surface">{selectedSlotLabel || 'Unavailable'}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-on-surface-variant">Status</dt>
-                  <dd className="mt-1 text-base font-semibold text-on-surface">{statusLabel}</dd>
-                </div>
-              </dl>
 
-              <div className="mt-6 rounded-[18px] bg-surface-container-low px-4 py-3 text-sm leading-6 text-on-surface-variant">
-                {nextSlot ? 'You can submit relevant requirements again next year.' : 'No additional record cycles are available.'}
+                <div className={`mt-5 rounded-lg px-4 py-3 text-xs leading-relaxed ${summaryInnerBoxStyles}`}>
+                  {nextSlot ? 'You can submit relevant requirements again next year.' : 'No additional record cycles are available.'}
+                </div>
               </div>
             </div>
-          </div>
-        </button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

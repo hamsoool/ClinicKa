@@ -27,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui/table';
-import { Archive, Printer, Search, UserCog, UserPlus, Users, ArrowUpDown, RefreshCcw, Eye, EyeOff, FileSpreadsheet } from 'lucide-react';
+import { Archive, Printer, Search, UserCog, UserPlus, Users, ArrowUpDown, RefreshCcw, Eye, EyeOff, FileSpreadsheet, Shield } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { toast } from 'sonner';
 import {
@@ -496,12 +496,12 @@ export default function AdminUserAccounts() {
           <Archive className="h-8 w-8 text-amber-600 transition-transform group-hover:scale-110" />
         </AccountSummaryButton>
         <AccountSummaryButton
-          label="Protected Admins"
+          label="Administrators"
           value={administratorCount}
           active={tab === 'active' && roleFilter === 'Administrator'}
           onClick={() => showAccounts('active', 'Administrator')}
         >
-          <Badge className="bg-purple-100 px-3 py-1 text-purple-700 transition-transform group-hover:scale-105">Protected</Badge>
+          <Shield className="h-8 w-8 text-purple-600 transition-transform group-hover:scale-110" />
         </AccountSummaryButton>
       </div>
 

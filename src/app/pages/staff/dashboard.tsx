@@ -53,6 +53,8 @@ function getStatusLabel(status: SubmissionSummaryRecord['status']) {
   switch (status) {
     case 'pending':
       return 'Pending review';
+    case 'in_review':
+      return 'In Review';
     case 'approved':
       return 'Approved';
     case 'returned':
@@ -69,6 +71,7 @@ function getStatusStyles(status: SubmissionSummaryRecord['status']) {
     case 'approved':
       return 'bg-primary-container/20 text-on-primary-container';
     case 'pending':
+    case 'in_review':
       return 'bg-amber-100 text-amber-800';
     case 'returned':
       return 'bg-error-container/70 text-on-error-container';
@@ -320,7 +323,7 @@ export default function StaffDashboard() {
           fullName,
           deptCode,
           courseCode,
-          yearLevel: sub.studentYearLevel || student?.year || 'Unspecified',
+          yearLevel: student?.studentYearLevel || student?.year || sub.studentYearLevel || 'Unspecified',
         };
       })
       .sort((a, b) => {
