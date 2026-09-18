@@ -244,7 +244,7 @@ export default function PortalShell({
       <aside
         id="portal-sidebar"
         className={cn(
-          'fixed inset-y-0 left-0 z-40 w-72 overflow-y-auto border-r border-emerald-950/25 bg-sidebar text-sidebar-foreground transition-transform duration-200 print:hidden',
+          'fixed inset-y-0 left-0 z-40 w-80 overflow-y-auto border-r border-emerald-950/25 bg-sidebar text-sidebar-foreground transition-transform duration-200 print:hidden',
           menuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
         aria-label={`${portalLabel} navigation`}
@@ -264,7 +264,7 @@ export default function PortalShell({
 
             <div className="rounded-[18px] border border-white/10 bg-white/[0.06] p-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-visible text-primary">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-visible text-primary">
                   {brandImageSrc && !brandImageFailed ? (
                     <img
                       src={brandImageSrc}
@@ -273,21 +273,21 @@ export default function PortalShell({
                       onError={() => setBrandImageFailed(true)}
                     />
                   ) : (
-                    <BrandIcon className="h-5 w-5" />
+                    <BrandIcon className="h-6 w-6" />
                   )}
                 </div>
                 <div className="min-w-0">
-                  <h2 className="truncate text-lg font-semibold tracking-[-0.02em] text-white">{brandTitle}</h2>
-                  <p className="text-[10px] font-medium leading-tight tracking-[0.12em] text-emerald-200/80 whitespace-normal">
+                  <h2 className="truncate text-xl font-bold tracking-[-0.02em] text-white">{brandTitle}</h2>
+                  <p className="text-xs font-semibold leading-tight tracking-[0.08em] text-emerald-200/90 whitespace-normal">
                     {brandSubtitle}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[14px] bg-black/10 p-3">
-                <p className="truncate text-sm font-semibold text-white">{displayName}</p>
-                <p className="mt-1 truncate text-xs text-emerald-100/80">{profileSubtitle}</p>
-                {email ? <p className="mt-1 truncate text-xs text-emerald-100/60">{email}</p> : null}
+              <div className="mt-4 rounded-[14px] bg-black/10 p-3.5">
+                <p className="truncate text-base font-bold text-white">{displayName}</p>
+                <p className="mt-1 truncate text-sm text-emerald-100/80">{profileSubtitle}</p>
+                {email ? <p className="mt-1 truncate text-xs sm:text-sm text-emerald-100/70">{email}</p> : null}
               </div>
             </div>
           </div>
@@ -305,10 +305,10 @@ export default function PortalShell({
                       onClick={() => goTo(item.path)}
                       aria-current={active ? 'page' : undefined}
                       className={cn(
-                        "relative flex min-h-12 w-full items-center gap-3 rounded-full px-4 py-3 text-sm font-normal tracking-[-0.01em] outline-none transition-all active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset",
+                        "relative flex min-h-13 w-full items-center gap-3 rounded-full px-4 py-3 text-base font-medium tracking-[-0.01em] outline-none transition-all active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset",
                         active
-                          ? "bg-white/14 text-white before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-r-full before:bg-emerald-200 before:content-['']"
-                          : 'text-emerald-100/70 hover:bg-emerald-800/50 hover:text-white',
+                          ? "bg-white/14 text-white before:absolute before:inset-y-3 before:left-0 before:w-1.5 before:rounded-r-full before:bg-emerald-200 before:content-['']"
+                          : 'text-emerald-100/75 hover:bg-emerald-800/50 hover:text-white',
                       )}
                     >
                       <Icon className="h-5 w-5 shrink-0" />
@@ -317,12 +317,12 @@ export default function PortalShell({
                         {item.subLabel ? (
                           <span
                             className={cn(
-                              'mt-0.5 block truncate text-[11px] font-semibold leading-tight',
+                              'mt-0.5 block truncate text-xs font-semibold leading-tight',
                               item.subLabel.toLowerCase().includes('danger')
                                 ? 'text-rose-300'
                                 : active
                                   ? 'text-emerald-100/90'
-                                  : 'text-emerald-100/55',
+                                  : 'text-emerald-100/65',
                             )}
                           >
                             {item.subLabel}
@@ -340,7 +340,7 @@ export default function PortalShell({
             <div className="space-y-1.5 border-t border-white/10 pt-4">
               <button
                 type="button"
-                className="flex min-h-12 w-full items-center gap-3 rounded-full px-4 py-3 text-sm font-normal text-emerald-100/70 outline-none transition-all active:scale-[0.98] hover:bg-emerald-800/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset"
+                className="flex min-h-13 w-full items-center gap-3 rounded-full px-4 py-3 text-base font-medium text-emerald-100/75 outline-none transition-all active:scale-[0.98] hover:bg-emerald-800/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-inset"
                 onClick={() => setConfirmSignOutOpen(true)}
               >
                 <LogOut className="h-5 w-5 shrink-0" />
@@ -360,34 +360,34 @@ export default function PortalShell({
         />
       ) : null}
 
-      <header className="fixed left-0 right-0 top-0 z-30 h-[4.5rem] border-b border-outline-variant/55 bg-background/85 backdrop-blur-xl md:left-72 md:h-16 print:hidden">
+      <header className="fixed left-0 right-0 top-0 z-30 h-[4.75rem] border-b border-outline-variant/55 bg-background/85 backdrop-blur-xl md:left-80 md:h-18 print:hidden">
         <div className="flex h-full items-center justify-between gap-2 px-4 md:gap-3 md:px-8">
 
 
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-on-surface-variant sm:text-xs sm:tracking-[0.18em]">
+              <p className="truncate text-xs font-semibold tracking-wider text-on-surface-variant sm:text-sm">
                 <span className="uppercase">Medical Clearance and Health Record Management System</span>
               </p>
             </div>
             <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-sm font-semibold leading-tight text-on-surface sm:text-[15px]">{currentPage}</p>
+              <p className="truncate text-base font-bold leading-tight text-on-surface sm:text-xl">{currentPage}</p>
               {roleBadge ? (
-                <span className="hidden rounded-full bg-primary-container/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-on-primary-container sm:inline-flex">
+                <span className="hidden rounded-full bg-primary-container/40 px-3 py-1 text-xs font-bold uppercase tracking-wider text-on-primary-container sm:inline-flex">
                   {roleBadge}
                 </span>
               ) : null}
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             {topActions.map((action) => {
               const Icon = action.icon;
               return (
                 <button
                   key={action.label}
                   type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant transition-all active:scale-95 hover:bg-surface-container-low hover:text-on-surface sm:h-10 sm:w-10"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-on-surface-variant transition-all active:scale-95 hover:bg-surface-container-low hover:text-on-surface sm:h-11 sm:w-11"
                   onClick={() => {
                     if (action.path) navigate(action.path);
                     action.onClick?.();
@@ -395,7 +395,7 @@ export default function PortalShell({
                   aria-label={action.label}
                   title={action.label}
                 >
-                  <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </button>
               );
             })}
@@ -406,7 +406,7 @@ export default function PortalShell({
               <button
                 type="button"
                 onClick={() => setProfileOpen((prev) => !prev)}
-                className="ml-0.5 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-outline-variant/70 bg-surface-container-lowest sm:ml-1 sm:h-10 sm:w-10"
+                className="ml-0.5 flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-outline-variant/70 bg-surface-container-lowest sm:ml-1 sm:h-11 sm:w-11"
                 aria-haspopup="dialog"
                 aria-expanded={profileOpen}
                 aria-label="Open profile menu"
@@ -416,13 +416,13 @@ export default function PortalShell({
 
               {profileOpen ? (
                 <div
-                  className="absolute right-0 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-4"
+                  className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-5"
                   role="dialog"
                   aria-label="Profile menu"
                 >
                   <div className="flex items-center gap-3">
                     <div className="group relative">
-                      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface-container-low">
+                      <div className="flex h-15 w-15 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface-container-low">
                         {profileAvatar}
                       </div>
                       <FilePickerButton
@@ -436,9 +436,9 @@ export default function PortalShell({
                       </FilePickerButton>
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-on-surface">{displayName}</p>
-                      {email ? <p className="truncate text-xs text-on-surface-variant">{email}</p> : null}
-                      <p className="mt-1 truncate text-xs text-on-surface-variant">{profileSubtitle}</p>
+                      <p className="truncate text-base font-bold text-on-surface">{displayName}</p>
+                      {email ? <p className="truncate text-sm text-on-surface-variant">{email}</p> : null}
+                      <p className="mt-1 truncate text-sm text-on-surface-variant">{profileSubtitle}</p>
                     </div>
                   </div>
                   <button
@@ -447,7 +447,7 @@ export default function PortalShell({
                       setProfileOpen(false);
                       navigate(getPasswordSettingsPath());
                     }}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-outline-variant/40 px-3 py-2 text-sm font-normal transition-colors hover:bg-surface-container-low"
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-outline-variant/40 px-4 py-2.5 text-base font-medium transition-colors hover:bg-surface-container-low"
                   >
                     <KeyRound className="h-4 w-4" />
                     Change Password
@@ -455,7 +455,7 @@ export default function PortalShell({
                   <button
                     type="button"
                     onClick={() => setConfirmSignOutOpen(true)}
-                    className="mt-2 w-full rounded-full border border-outline-variant/40 px-3 py-2 text-sm font-normal transition-colors hover:bg-surface-container-low"
+                    className="mt-2 w-full rounded-full border border-outline-variant/40 px-4 py-2.5 text-base font-medium transition-colors hover:bg-surface-container-low"
                   >
                     Sign out
                   </button>
@@ -466,7 +466,7 @@ export default function PortalShell({
         </div>
       </header>
 
-      <main id="portal-content" className="pt-20 outline-none md:pl-72 print:p-0" tabIndex={-1}>
+      <main id="portal-content" className="pt-24 outline-none md:pl-80 print:p-0" tabIndex={-1}>
         <div className="px-4 pb-24 sm:pb-28 md:px-8 md:pb-24 print:p-0">
           <Outlet />
         </div>
@@ -495,7 +495,7 @@ export default function PortalShell({
                 onClick={() => goTo(item.path)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-[10px] leading-tight transition-all active:scale-95 sm:text-xs',
+                  'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-xs font-medium leading-tight transition-all active:scale-95',
                   emphasized
                     ? 'bg-primary text-white hover:bg-primary/90'
                     : active
@@ -512,7 +512,7 @@ export default function PortalShell({
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
-              className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-[10px] leading-tight text-on-surface-variant transition-all active:scale-95 hover:bg-surface-container-low sm:text-xs"
+              className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-xs font-medium leading-tight text-on-surface-variant transition-all active:scale-95 hover:bg-surface-container-low"
             >
               <Menu className="h-5 w-5 shrink-0" />
               <span className="w-full truncate text-center">More</span>

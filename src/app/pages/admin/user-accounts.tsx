@@ -1319,7 +1319,7 @@ export default function AdminUserAccounts() {
       `}} />
       <div className="hidden print:flex flex-col fixed bottom-[1.2cm] left-[1.6cm] right-[1.6cm] text-[8.5px] text-black/50 font-sans">
         <div className="flex justify-between items-end border-t border-black/15 pt-1">
-          <span className="leading-none">https://clinicka.vercel.app</span>
+          <span className="leading-none">DigitalDuo</span>
           <span className="leading-none">ClinicKa!</span>
         </div>
       </div>

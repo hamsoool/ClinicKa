@@ -1,10 +1,10 @@
-
-import {
-  type AuthChangeEvent,
-  createClient,
-  type Session as SupabaseSession,
-  type SupabaseClient,
-} from '@supabase/supabase-js';
+export type AuthChangeEvent =
+  | 'SIGNED_IN'
+  | 'SIGNED_OUT'
+  | 'TOKEN_REFRESHED'
+  | 'USER_UPDATED'
+  | 'PASSWORD_RECOVERY'
+  | 'INITIAL_SESSION';
 import type {
   ApprovedStudentSummary,
   StaffDashboardOverview,
@@ -28,6 +28,7 @@ import {
   PUBLIC_SUPABASE_CONFIG_ERROR,
   supabaseUrl,
 } from './supabase-config';
+import { encryptPayload, decryptPayload, isEncryptedEnvelope } from './crypto';
 import { normalizeYearLevel } from './student-year';
 import {
   getAcademicYearRange,
@@ -117,22 +118,49 @@ const CERTIFICATE_SELECT_COLUMNS = 'submission_id,findings_normal,diagnosis,rema
 const FILE_SELECT_COLUMNS = 'id,submission_id,type,file_name,mime_type,url,storage_bucket,storage_path,storage_provider,cloudinary_public_id,cloudinary_resource_type,cloudinary_version,cloudinary_folder,uploaded_at,uploaded_by';
 const ANNOUNCEMENT_SELECT_COLUMNS = 'id,title,description,date_posted,image_path,is_published,created_at,updated_at,created_by';
 let studentProfileAssetsRouteUnavailable = false;
-let authClient: SupabaseClient | null = null;
+type AuthStateChangeCallback = (
+  event: SupabaseAuthStateChangeEvent,
+  session: AuthSession | null,
+  user: SupabaseAuthUser | null,
+) => void;
 
-function getAuthClient() {
-  assertPublicSupabaseConfig();
+const authStateListeners = new Set<AuthStateChangeCallback>();
 
-  if (!authClient) {
-    authClient = createClient(supabaseUrl, publicAnonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: true,
-      },
-    });
+export function notifyAuthStateChange(
+  event: SupabaseAuthStateChangeEvent,
+  session: AuthSession | null,
+  user?: SupabaseAuthUser | null,
+) {
+  const resolvedUser = user !== undefined ? user : (session?.user ? (session.user as unknown as SupabaseAuthUser) : null);
+  for (const listener of authStateListeners) {
+    try {
+      listener(event, session, resolvedUser);
+    } catch (e) {
+      console.error('Error in auth state change listener:', e);
+    }
   }
+}
 
-  return authClient;
+function parseSessionFromUrlHash(): AuthSession | null {
+  if (typeof window === 'undefined' || !window.location.hash) return null;
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  if (!hash.includes('access_token=')) return null;
+
+  const params = new URLSearchParams(hash);
+  const access_token = params.get('access_token');
+  if (!access_token) return null;
+
+  const refresh_token = params.get('refresh_token') || '';
+  const expires_in = Number(params.get('expires_in')) || 3600;
+  const token_type = params.get('token_type') || 'bearer';
+
+  return normalizeSessionTimestamps({
+    access_token,
+    refresh_token,
+    expires_in,
+    expires_at: Math.floor(Date.now() / 1000) + expires_in,
+    token_type,
+  });
 }
 
 function getCanvasUploadFileName(fileName: string) {
@@ -289,6 +317,11 @@ async function prepareLabFileForUpload(file: File) {
 async function prepareImageFileForUpload(file: File, label: string) {
   if (!isSupportedImageUpload(file)) {
     throw new Error(`${label} must be an image file.`);
+  }
+  // Signatures preserve PNG alpha transparency and should not be converted to lossy JPEG
+  if (label.toLowerCase().includes('signature')) {
+    assertUploadFileSize(file, IMAGE_UPLOAD_MAX_BYTES, label);
+    return file;
   }
   const optimizedFile = await optimizeProfileImageInBrowser(file);
   assertUploadFileSize(optimizedFile, IMAGE_UPLOAD_MAX_BYTES, label);
@@ -913,43 +946,23 @@ async function refreshSession(): Promise<AuthSession | null> {
   _refreshPromise = (async () => {
     try {
       const current = getStoredSession();
-      if (!current?.refresh_token || !supabaseUrl || !publicAnonKey) return null;
+      if (!current?.access_token || !supabaseUrl) return null;
 
-      const response = await fetch(
-        `${supabaseUrl}/auth/v1/token?grant_type=refresh_token`,
-        {
-          method: 'POST',
-          headers: {
-            apikey: publicAnonKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ refresh_token: current.refresh_token }),
-        },
-      );
-
-      if (!response.ok) {
-        if (response.status >= 400 && response.status < 500) {
-          clearStoredSession();
-          if (typeof window !== 'undefined') {
-            window.location.href = '/auth?mode=signin';
-          }
+      try {
+        await apiRequest('/functions/v1/server/me', { token: current.access_token });
+        const refreshed = normalizeSessionTimestamps({
+          ...current,
+          expires_at: Math.floor(Date.now() / 1000) + 86400,
+        });
+        setStoredSession(refreshed);
+        return refreshed;
+      } catch {
+        clearStoredSession();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth?mode=signin';
         }
         return null;
       }
-
-      const payload = await response.json();
-      if (!payload?.access_token) return null;
-
-      const refreshed = normalizeSessionTimestamps({
-        access_token: payload.access_token,
-        refresh_token: payload.refresh_token ?? current.refresh_token,
-        expires_in: payload.expires_in,
-        expires_at: payload.expires_at,
-        token_type: payload.token_type,
-        user: payload.user ?? current.user,
-      });
-      setStoredSession(refreshed);
-      return refreshed;
     } catch {
       return null;
     } finally {
@@ -983,7 +996,7 @@ class ApiRequestError extends Error {
 }
 
 async function apiRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
-  if (!supabaseUrl || !publicAnonKey) {
+  if (!supabaseUrl) {
     throw new Error(PUBLIC_SUPABASE_CONFIG_ERROR);
   }
 
@@ -991,13 +1004,35 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}, _retrie
   const headers: Record<string, string> = {
     apikey: publicAnonKey,
     Authorization: `Bearer ${token || publicAnonKey}`,
+    Accept: 'application/json',
     ...options.headers,
   };
+
+  let body = options.body;
+  if (body && !(body instanceof FormData) && headers['X-Skip-Encryption'] !== 'true') {
+    try {
+      let parsedBody: unknown = body;
+      if (typeof body === 'string') {
+        try {
+          parsedBody = JSON.parse(body);
+        } catch {
+          parsedBody = body;
+        }
+      }
+      if (!isEncryptedEnvelope(parsedBody)) {
+        const envelope = await encryptPayload(parsedBody);
+        body = JSON.stringify(envelope);
+        headers['Content-Type'] = 'application/json';
+      }
+    } catch (e) {
+      console.warn('Failed to encrypt outgoing payload:', e);
+    }
+  }
 
   const response = await fetch(`${supabaseUrl}${path}`, {
     method: options.method || 'GET',
     headers,
-    body: options.body,
+    body,
   });
 
   const rawBody = await response.text();
@@ -1015,7 +1050,10 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}, _retrie
 
     if (rawBody) {
       try {
-        const parsedError = JSON.parse(rawBody);
+        let parsedError = JSON.parse(rawBody);
+        if (isEncryptedEnvelope(parsedError)) {
+          parsedError = await decryptPayload(parsedError);
+        }
         message = parsedError.details || parsedError.error || parsedError.message || message;
       } catch {
         message = rawBody;
@@ -1030,10 +1068,54 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}, _retrie
   }
 
   try {
-    return JSON.parse(rawBody) as T;
+    let parsed = JSON.parse(rawBody);
+    if (isEncryptedEnvelope(parsed)) {
+      parsed = await decryptPayload(parsed);
+    }
+    return parsed as T;
   } catch {
     return {} as T;
   }
+}
+
+async function uploadToHardenedStorage(
+  file: File,
+  type: string,
+  extra: { submissionId?: string; studentId?: string } = {},
+) {
+  const token = await getValidAccessToken();
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('type', type);
+  if (extra.submissionId) formData.append('submission_id', extra.submissionId);
+  if (extra.studentId) formData.append('student_id', extra.studentId);
+
+  const base = supabaseUrl.replace(/\/api\/?$/, '');
+  const response = await fetch(`${base}/api/v1/storage/upload`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token || publicAnonKey}`,
+      'X-Skip-Encryption': 'true',
+    },
+    body: formData,
+  });
+
+  const rawBody = await response.text();
+  let payload: any = null;
+  try {
+    payload = JSON.parse(rawBody);
+    if (isEncryptedEnvelope(payload)) {
+      payload = await decryptPayload(payload);
+    }
+  } catch {
+    payload = { error: rawBody };
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || `File upload failed (${response.status})`);
+  }
+
+  return payload;
 }
 
 async function restRequest<T>(
@@ -1200,24 +1282,6 @@ export async function getUserByToken(token: string | null) {
   return authRequest<SupabaseAuthUser>('/auth/v1/user', { token });
 }
 
-function toAuthSession(session: SupabaseSession | null): AuthSession | null {
-  if (!session?.access_token) return null;
-
-  return normalizeSessionTimestamps({
-    access_token: session.access_token,
-    refresh_token: session.refresh_token,
-    expires_in: session.expires_in,
-    expires_at: session.expires_at,
-    token_type: session.token_type,
-    user: session.user
-      ? {
-        id: session.user.id,
-        email: session.user.email || undefined,
-      }
-      : undefined,
-  });
-}
-
 export type SupabaseAuthStateChangeEvent = AuthChangeEvent;
 
 export function onSupabaseAuthStateChange(
@@ -1227,52 +1291,63 @@ export function onSupabaseAuthStateChange(
     user: SupabaseAuthUser | null,
   ) => void,
 ) {
-  return getAuthClient().auth.onAuthStateChange((event, session) => {
-    callback(
-      event,
-      toAuthSession(session),
-      session?.user ? (session.user as unknown as SupabaseAuthUser) : null,
-    );
-  });
-}
+  authStateListeners.add(callback);
 
-export async function getSupabaseAuthSession() {
-  const { data, error } = await getAuthClient().auth.getSession();
-
-  if (error) {
-    throw new Error(error.message);
+  const hashSession = parseSessionFromUrlHash();
+  const session = hashSession || getStoredSession();
+  if (session) {
+    setTimeout(() => {
+      callback('INITIAL_SESSION', session, session.user ? (session.user as unknown as SupabaseAuthUser) : null);
+    }, 0);
   }
 
   return {
-    session: toAuthSession(data.session),
-    user: data.session?.user ? (data.session.user as unknown as SupabaseAuthUser) : null,
+    data: {
+      subscription: {
+        unsubscribe: () => {
+          authStateListeners.delete(callback);
+        },
+      },
+    },
+  };
+}
+
+export async function getSupabaseAuthSession() {
+  const hashSession = parseSessionFromUrlHash();
+  if (hashSession) {
+    setStoredSession(hashSession);
+  }
+
+  const session = getStoredSession();
+  let user: SupabaseAuthUser | null = null;
+
+  if (session?.access_token) {
+    try {
+      user = await getUserByToken(session.access_token);
+    } catch {
+      user = session.user ? (session.user as unknown as SupabaseAuthUser) : null;
+    }
+  }
+
+  return {
+    session,
+    user,
   };
 }
 
 export async function clearSupabaseAuthSession() {
-  const { error } = await getAuthClient().auth.signOut();
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  clearStoredSession();
+  notifyAuthStateChange('SIGNED_OUT', null, null);
 }
 
 export async function syncSupabaseAuthSession(session: AuthSession | null) {
-  if (!session?.access_token || !session.refresh_token) {
+  if (!session?.access_token) {
     return null;
   }
 
-  const supabase = getAuthClient();
-  const { data, error } = await supabase.auth.setSession({
-    access_token: session.access_token,
-    refresh_token: session.refresh_token,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return toAuthSession(data.session);
+  setStoredSession(session);
+  notifyAuthStateChange('SIGNED_IN', session);
+  return session;
 }
 
 export async function updateCurrentSessionPassword(
@@ -1285,16 +1360,8 @@ export async function updateCurrentSessionPassword(
     throw new Error(getPasswordPolicyMessage(result));
   }
 
-  const supabase = getAuthClient();
-  const { data, error } = await supabase.auth.updateUser({
-    password,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data.user;
+  const session = getStoredSession();
+  return updateUserPassword(password, session?.access_token, userInputs);
 }
 
 export async function updateUserPassword(
@@ -1626,15 +1693,23 @@ function findGenericLabFile(files: any[]) {
 function normalizeStorageFileUrl(url?: string | null) {
   const trimmed = String(url || '').trim();
   if (!trimmed) return undefined;
-  if (!/^https?:\/\//i.test(trimmed)) return undefined;
-  try {
-    const hostname = new URL(trimmed).hostname.toLowerCase();
-    return hostname === 'res.cloudinary.com' || hostname.endsWith('.cloudinary.com')
-      ? trimmed
-      : undefined;
-  } catch {
-    return undefined;
+  let fullUrl = trimmed;
+  if (/^https?:\/\//i.test(trimmed)) {
+    fullUrl = trimmed;
+  } else if (trimmed.startsWith('/')) {
+    const base = supabaseUrl.replace(/\/api\/?$/, '');
+    fullUrl = `${base}${trimmed.startsWith('/api') ? trimmed : `/api${trimmed}`}`;
   }
+
+  if (fullUrl.includes('/storage/file/') && !fullUrl.includes('token=') && !fullUrl.includes('ticket=')) {
+    const token = getAccessToken();
+    if (token) {
+      const sep = fullUrl.includes('?') ? '&' : '?';
+      fullUrl = `${fullUrl}${sep}token=${encodeURIComponent(token)}`;
+    }
+  }
+
+  return fullUrl;
 }
 
 const cloudinaryCloudName = String(import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '').trim();
@@ -2276,46 +2351,28 @@ async function getMappedSubmissions(query: string) {
 }
 
 export async function authenticateWithPassword(email: string, password: string) {
-  if (!supabaseUrl || !publicAnonKey) {
+  if (!supabaseUrl) {
     throw new Error(PUBLIC_SUPABASE_CONFIG_ERROR);
   }
-  const response = await fetch(`${supabaseUrl}/functions/v1/server/auth/login`, {
-    method: 'POST',
-    headers: {
-      apikey: publicAnonKey,
-      Authorization: `Bearer ${publicAnonKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, password }),
-  });
 
-  const rawBody = await response.text();
-  let payload: Record<string, any> = {};
   try {
-    payload = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    payload = {};
-  }
+    const payload = await apiRequest<AuthSession>('/functions/v1/server/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
 
-  if (!response.ok) {
-    const message =
-      payload.msg ||
-      payload.error_description ||
-      payload.error ||
-      `Failed to sign in (${response.status})`;
+    if (!payload?.access_token) {
+      throw new Error('Sign in succeeded but no session token was returned.');
+    }
 
+    return payload;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     if (String(message).trim().toLowerCase().includes('user is banned')) {
       throw new Error('This account is not available. Contact the administrator for assistance.');
     }
-
-    throw new Error(message);
+    throw error;
   }
-
-  if (!payload?.access_token) {
-    throw new Error('Sign in succeeded but no session token was returned.');
-  }
-
-  return payload as AuthSession;
 }
 
 export async function signInWithPassword(email: string, password: string) {
@@ -2355,7 +2412,6 @@ export async function signUpWithPassword(
   email: string,
   password: string,
 ) {
-  const supabase = getAuthClient();
   if (!isGCDomainEmail(email)) {
     throw new Error(`Please use your @${GC_DOMAIN} email address to register.`);
   }
@@ -2371,41 +2427,43 @@ export async function signUpWithPassword(
   const normalizedLastName = normalizeNamePart(lastName);
   const fullName = [normalizedFirstName, normalizedLastName].filter(Boolean).join(' ').trim();
   const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin&verified=1');
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo,
+
+  const payload = await authRequest<{
+    user?: any;
+    session?: any;
+    error?: string;
+    message?: string;
+  }>('/auth/v1/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      password,
       data: {
         full_name: fullName,
         first_name: normalizedFirstName,
         last_name: normalizedLastName,
         student_id: deriveStudentIdFromEmail(email),
       },
-    },
+    }),
   });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const session: AuthSession | null =
-    data.session
-      ? {
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-        expires_in: data.session.expires_in,
-        expires_at: data.session.expires_at,
-        token_type: data.session.token_type,
-        user: data.session.user
+  const session: AuthSession | null = payload?.session
+    ? normalizeSessionTimestamps({
+        access_token: payload.session.access_token,
+        refresh_token: payload.session.refresh_token,
+        expires_in: payload.session.expires_in,
+        expires_at: payload.session.expires_at,
+        token_type: payload.session.token_type,
+        user: payload.session.user
           ? {
-            id: data.session.user.id,
-            email: data.session.user.email || undefined,
-          }
+              id: payload.session.user.id,
+              email: payload.session.user.email || undefined,
+            }
           : undefined,
-      }
-      : null;
-  const user = (data.user || null) as SupabaseAuthUser | null;
+      })
+    : null;
+
+  const user = (payload?.user || null) as SupabaseAuthUser | null;
   const hasNoIdentity = Array.isArray(user?.identities) && user.identities.length === 0;
   if (!session && hasNoIdentity) {
     throw new Error('This email may already be registered. Try Sign In or reset your password.');
@@ -2413,6 +2471,7 @@ export async function signUpWithPassword(
 
   if (session) {
     setStoredSession(session);
+    notifyAuthStateChange('SIGNED_IN', session, user);
   } else {
     clearStoredSession();
   }
@@ -2425,28 +2484,18 @@ export async function signUpWithPassword(
 }
 
 export async function resendVerificationEmail(email: string) {
-  const supabase = getAuthClient();
-
-  const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin&verified=1');
-
-  const { error } = await supabase.auth.resend({
-    type: 'signup',
-    email,
-    options: {
-      emailRedirectTo,
-    },
+  await authRequest('/auth/v1/resend', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'signup',
+      email,
+    }),
   });
-
-  if (error) {
-    throw new Error(error.message);
-  }
 
   return { success: true as const };
 }
 
 export async function sendPasswordResetEmail(email: string) {
-  const supabase = getAuthClient();
-
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) {
     throw new Error('Please enter your email first.');
@@ -2460,13 +2509,16 @@ export async function sendPasswordResetEmail(email: string) {
     throw new Error(`Please wait ${formatted} before requesting another password reset email.`);
   }
 
-  const emailRedirectTo = buildAuthRedirectUrl('/auth?mode=signin&recovery=1');
-  const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-    redirectTo: emailRedirectTo,
-  });
-
-  if (error) {
-    throw new Error(error.message);
+  try {
+    await apiRequest('/functions/v1/server/auth/send-password-change-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email: normalizedEmail }),
+    });
+  } catch (error) {
+    await authRequest('/auth/v1/recover', {
+      method: 'POST',
+      body: JSON.stringify({ email: normalizedEmail }),
+    });
   }
 
   if (typeof window !== 'undefined') {
@@ -2478,36 +2530,18 @@ export async function sendPasswordResetEmail(email: string) {
 }
 
 export async function signOut() {
-  const supabase = supabaseUrl && publicAnonKey ? getAuthClient() : null;
-  if (!supabaseUrl || !publicAnonKey) {
-    try {
-      await supabase?.auth.signOut();
-    } catch {
-      // Best effort clear for the in-memory client session.
-    }
-    clearStoredSession();
-    return;
-  }
-
   const session = getStoredSession();
 
   try {
     if (session?.access_token) {
-      await fetch(`${supabaseUrl}/auth/v1/logout`, {
+      await apiRequest('/functions/v1/server/auth/logout', {
         method: 'POST',
-        headers: {
-          apikey: publicAnonKey,
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+        token: session.access_token,
+      }).catch(() => {});
     }
   } finally {
-    try {
-      await supabase?.auth.signOut();
-    } catch {
-      // Best effort clear for the in-memory client session.
-    }
     clearStoredSession();
+    notifyAuthStateChange('SIGNED_OUT', null, null);
   }
 }
 
@@ -2702,7 +2736,13 @@ async function normalizeFileRows(files: any[] | null | undefined, _token?: strin
         };
       }
 
-      return { ...file, url: null };
+      const localUrl = file?.url || (file?.id ? `/api/v1/storage/file/${file.id}` : null);
+      return {
+        ...file,
+        storage_provider: file?.storage_provider || 'local',
+        storage_bucket: file?.storage_bucket || null,
+        url: localUrl,
+      };
     }),
   );
 }
@@ -3052,47 +3092,16 @@ export async function getStaffSignature(): Promise<StaffSignatureAsset> {
 
 export async function uploadStaffSignature(file: File) {
   const token = getAccessToken();
-  if (!token || !supabaseUrl || !publicAnonKey) {
+  if (!token || !supabaseUrl) {
     throw new Error('You must be signed in to upload files.');
   }
   const transportFile = await prepareImageFileForUpload(file, 'Staff signature');
-
-  const prepare = await apiRequest<CloudinaryUploadTicket>(
-    '/functions/v1/server/staff-signature/prepare',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        fileName: transportFile.name,
-        mimeType: transportFile.type || file.type || 'application/octet-stream',
-        size: transportFile.size,
-      }),
-    },
-  );
-  assertCloudinaryUploadTicket(prepare, 'Staff signature upload');
-
-  const cloudinary = await uploadToCloudinary(prepare, transportFile);
-  const payload = await apiRequest<{ success: true; signatureUrl?: string | null; signatureFileName?: string | null }>(
-    '/functions/v1/server/staff-signature/complete',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        fileName: transportFile.name,
-        mimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
-        cloudinary,
-      }),
-    },
-  );
+  const payload = await uploadToHardenedStorage(transportFile, 'signature');
 
   return {
     success: true as const,
-    signatureUrl: normalizeStorageFileUrl(payload.signatureUrl || null) || undefined,
-    signatureFileName: payload.signatureFileName || undefined,
+    signatureUrl: normalizeStorageFileUrl(payload.url || null) || undefined,
+    signatureFileName: payload.fileName || undefined,
   };
 }
 
@@ -3723,10 +3732,12 @@ export async function getStudentRecords(studentId?: string, options: GetStudentR
     return { records: await attachProfileAssetsFallback(records as SubmissionRecord[]) };
   } catch (restError) {
     try {
-      const response = await apiRequest<{ records: SubmissionRecord[] }>(
+      const response = await apiRequest<any>(
         `/functions/v1/server/student-records/${encodeURIComponent(fallbackStudentId)}`,
       );
-      const records = Array.isArray(response?.records) ? response.records : [];
+      const records = Array.isArray(response?.records)
+        ? response.records
+        : (Array.isArray(response) ? response : []);
       return { records: await attachProfileAssetsFallback(records) };
     } catch (routeError) {
       if (!shouldFallbackToRest(routeError) && routeError instanceof Error) {
@@ -3738,9 +3749,13 @@ export async function getStudentRecords(studentId?: string, options: GetStudentR
 }
 
 export async function getStudentAnnouncements() {
-  return apiRequest<{ announcements: StudentAnnouncement[] }>(
+  const res = await apiRequest<any>(
     '/functions/v1/server/student-announcements'
   );
+  if (Array.isArray(res)) {
+    return { announcements: res };
+  }
+  return res || { announcements: [] };
 }
 
 export async function getManagedAnnouncements() {
@@ -3847,48 +3862,14 @@ export async function deleteAnnouncement(id: string) {
 export async function uploadAnnouncementImage(file: File, ownerId: string) {
   const token = getAccessToken();
   const cleanedOwnerId = String(ownerId || '').trim();
-  if (!token || !supabaseUrl || !publicAnonKey || !cleanedOwnerId) {
+  if (!token || !supabaseUrl || !cleanedOwnerId) {
     throw new Error('You must be signed in to upload announcement images.');
   }
   const transportFile = await prepareImageFileForUpload(file, 'Announcement image');
-
-  const prepare = await apiRequest<CloudinaryUploadTicket>(
-    '/functions/v1/server/announcement-image/prepare',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        ownerId: cleanedOwnerId,
-        fileName: transportFile.name,
-        mimeType: transportFile.type || file.type || 'application/octet-stream',
-        size: transportFile.size,
-      }),
-    },
-  );
-  assertCloudinaryUploadTicket(prepare, 'Announcement image upload');
-
-  const cloudinary = await uploadToCloudinary(prepare, transportFile);
-  const payload = await apiRequest<{ success: true; imagePath?: string | null; imageUrl?: string | null }>(
-    '/functions/v1/server/announcement-image/complete',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        ownerId: cleanedOwnerId,
-        fileName: transportFile.name,
-        mimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
-        cloudinary,
-      }),
-    },
-  );
-
-  const imagePath = normalizeStorageFileUrl(payload.imagePath || payload.imageUrl || cloudinary?.secure_url || null);
+  const payload = await uploadToHardenedStorage(transportFile, 'announcement');
+  const imagePath = normalizeStorageFileUrl(payload.url || null);
   if (!imagePath) {
-    throw new Error('Cloudinary upload did not return an image URL.');
+    throw new Error('Storage upload did not return an image URL.');
   }
 
   return { imagePath };
@@ -4202,7 +4183,9 @@ export async function getStaffCertificateRecords(studentId?: string) {
         `/functions/v1/server/staff/certificate-records/${encodeURIComponent(targetStudentId)}`,
       );
       return {
-        records: Array.isArray(response?.records) ? response.records : [],
+        records: Array.isArray(response?.records)
+          ? response.records
+          : (Array.isArray(response) ? response : []),
       };
     } catch (routeError) {
       if (!shouldFallbackToRest(routeError)) {
@@ -4396,7 +4379,7 @@ export async function getStudentProfileAssets(studentId?: string, profileId?: st
       }
     }
 
-    if (!resolvedAssets) {
+    if (!resolvedAssets || !resolvedAssets.photoUrl || !resolvedAssets.signatureUrl) {
       let assetRows: any[] = [];
       if (resolvedProfileId) {
         assetRows = await restRequest<any[]>(
@@ -5447,82 +5430,16 @@ export async function extractUrinalysisFields(id: string) {
   );
 }
 
-type CloudinaryUploadTicket = {
-  success?: boolean;
-  provider: 'cloudinary';
-  cloudName: string;
-  uploadUrl: string;
-  timestamp: number;
-  signature: string;
-  apiKey: string;
-  folder?: string | null;
-  assetFolder?: string | null;
-  publicId: string;
-  resourceType?: string | null;
-  mimeType?: string | null;
-  context?: Record<string, unknown> | null;
-  contextString?: string | null;
-  tags?: string | null;
-  overwrite?: boolean;
-  useAssetFolderAsPublicIdPrefix?: boolean;
-};
-
-function isCloudinaryUploadTicket(ticket: unknown): ticket is CloudinaryUploadTicket {
-  return String((ticket as CloudinaryUploadTicket)?.provider || '').toLowerCase() === 'cloudinary';
-}
-
-function assertCloudinaryUploadTicket(ticket: unknown, label: string): asserts ticket is CloudinaryUploadTicket {
-  if (!isCloudinaryUploadTicket(ticket)) {
-    throw new Error(`${label} did not receive a Cloudinary upload ticket.`);
-  }
-}
-
-async function uploadToCloudinary(ticket: CloudinaryUploadTicket, file: File) {
-  const formData = new FormData();
-  formData.set('file', file);
-  formData.set('api_key', ticket.apiKey);
-  formData.set('timestamp', String(ticket.timestamp));
-  formData.set('signature', ticket.signature);
-  formData.set('public_id', ticket.publicId);
-  if (ticket.assetFolder) formData.set('asset_folder', ticket.assetFolder);
-  if (ticket.contextString) formData.set('context', ticket.contextString);
-  if (ticket.tags) formData.set('tags', ticket.tags);
-  if (ticket.overwrite !== undefined) formData.set('overwrite', String(Boolean(ticket.overwrite)));
-  if (ticket.useAssetFolderAsPublicIdPrefix !== undefined) {
-    formData.set(
-      'use_asset_folder_as_public_id_prefix',
-      String(Boolean(ticket.useAssetFolderAsPublicIdPrefix)),
-    );
-  }
-
-  const response = await fetch(ticket.uploadUrl, {
-    method: 'POST',
-    body: formData,
-  });
-  const raw = await response.text().catch(() => '');
-  let payload: any = null;
-  try {
-    payload = raw ? JSON.parse(raw) : null;
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const message =
-      payload?.error?.message ||
-      payload?.message ||
-      payload?.error ||
-      raw ||
-      `Cloudinary upload failed (${response.status})`;
-    throw new Error(String(message));
-  }
-
-  return payload;
+export async function getSecureStreamingTicket(fileId: string): Promise<string> {
+  const payload = await apiRequest<{ success: boolean; ticket: string; url: string }>(
+    `/storage/ticket/${encodeURIComponent(fileId)}`,
+  );
+  return payload.url;
 }
 
 export async function uploadFile(file: File, recordId: string, fileType: LabUploadType) {
   const token = getAccessToken();
-  if (!token || !supabaseUrl || !publicAnonKey) {
+  if (!token || !supabaseUrl) {
     throw new Error('You must be signed in to upload files.');
   }
 
@@ -5530,49 +5447,12 @@ export async function uploadFile(file: File, recordId: string, fileType: LabUplo
 
   try {
     const transportFile = await prepareLabFileForUpload(file);
-    const originalFileSize = file.size;
     const normalizedRecordId = String(recordId || '').trim();
     const normalizedFileType = String(fileType || '').trim().toLowerCase();
-    const prepare = await apiRequest<CloudinaryUploadTicket>(
-      '/functions/v1/server/upload-file/prepare',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          recordId: normalizedRecordId,
-          fileType: normalizedFileType,
-          fileName: transportFile.name,
-          mimeType: transportFile.type || file.type || 'application/octet-stream',
-          size: transportFile.size,
-          originalFileSize,
-        }),
-      },
-    );
-    assertCloudinaryUploadTicket(prepare, 'Laboratory file upload');
 
-    const cloudinary = await uploadToCloudinary(prepare, transportFile);
-    const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
-      '/functions/v1/server/upload-file/complete',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          recordId: normalizedRecordId,
-          fileType: normalizedFileType,
-          fileName: transportFile.name,
-          mimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
-          originalFileSize,
-          uploadedFileSize: transportFile.size,
-          uploadedFileName: transportFile.name,
-          uploadedMimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
-          cloudinary,
-        }),
-      },
-    );
+    const payload = await uploadToHardenedStorage(transportFile, normalizedFileType, {
+      submissionId: normalizedRecordId,
+    });
 
     return {
       success: true as const,
@@ -5595,49 +5475,21 @@ export async function uploadStudentProfileAsset(
   }
 
   const token = getAccessToken();
-  if (!token || !supabaseUrl || !publicAnonKey) {
+  if (!token || !supabaseUrl) {
     throw new Error('You must be signed in to upload files.');
   }
 
   const finishTrackedUpload = beginTrackedUpload();
 
   try {
-    const transportFile = await prepareImageFileForUpload(file, fileType === 'photo' ? 'Profile photo' : 'Profile signature');
-    const prepare = await apiRequest<CloudinaryUploadTicket>(
-      '/functions/v1/server/student-profile-asset/prepare',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileType,
-          studentId: targetStudentId,
-          fileName: transportFile.name,
-          mimeType: transportFile.type || file.type || 'application/octet-stream',
-          size: transportFile.size,
-        }),
-      },
+    const transportFile = await prepareImageFileForUpload(
+      file,
+      fileType === 'photo' ? 'Profile photo' : 'Profile signature',
     );
-    assertCloudinaryUploadTicket(prepare, 'Student profile asset upload');
 
-    const cloudinary = await uploadToCloudinary(prepare, transportFile);
-    const payload = await apiRequest<{ success: true; url?: string | null; fileName?: string | null }>(
-      '/functions/v1/server/student-profile-asset/complete',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileType,
-          studentId: targetStudentId,
-          fileName: transportFile.name,
-          mimeType: prepare.mimeType || transportFile.type || file.type || 'application/octet-stream',
-          cloudinary,
-        }),
-      },
-    );
+    const payload = await uploadToHardenedStorage(transportFile, fileType, {
+      studentId: targetStudentId,
+    });
     invalidateStudentProfileAssetsCache();
 
     return {

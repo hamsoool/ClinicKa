@@ -9,20 +9,12 @@ import {
 } from '../components/ui/accordion';
 import {
   ArrowRight,
-  ClipboardCheck,
-  ClipboardList,
-  CornerDownRight,
   Facebook,
-  FileText,
-  FolderOpen,
   Instagram,
   Mail,
   MapPin,
   Menu,
   Phone,
-  ShieldCheck,
-  Stethoscope,
-  Users,
   X,
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
@@ -129,6 +121,95 @@ const studentFaqs = [
       'ClinicKa! uses role-based access, so students, clinic staff, and administrators only see the parts of the system needed for their responsibilities inside the Gordon College clinic workflow.',
   },
 ];
+
+interface TiltCardProps {
+  children: React.ReactNode;
+  className?: string;
+  maxTilt?: number;
+  perspective?: number;
+  scale?: number;
+  shadowIntensity?: number;
+}
+
+function TiltCard({
+  children,
+  className = '',
+  maxTilt = 10,
+  perspective = 1200,
+  scale = 1.025,
+  shadowIntensity = 0.22,
+}: TiltCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [transform, setTransform] = useState({
+    rotateX: 0,
+    rotateY: 0,
+    shadowX: 0,
+    shadowY: 15,
+  });
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = cardRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const normX = (x / rect.width - 0.5) * 2;
+    const normY = (y / rect.height - 0.5) * 2;
+
+    const rotateX = -normY * maxTilt;
+    const rotateY = normX * maxTilt;
+
+    setTransform({
+      rotateX,
+      rotateY,
+      shadowX: -normX * 18,
+      shadowY: -normY * 18 + 20,
+    });
+  };
+
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    setTransform({
+      rotateX: 0,
+      rotateY: 0,
+      shadowX: 0,
+      shadowY: 15,
+    });
+  };
+
+  return (
+    <div style={{ perspective }} className="w-full select-none">
+      <div
+        ref={cardRef}
+        onMouseMove={handleMouseMove}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        style={{
+          transform: isHovered
+            ? `rotateX(${transform.rotateX.toFixed(2)}deg) rotateY(${transform.rotateY.toFixed(2)}deg) scale3d(${scale}, ${scale}, ${scale})`
+            : 'rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)',
+          filter: isHovered
+            ? `drop-shadow(${transform.shadowX.toFixed(1)}px ${transform.shadowY.toFixed(1)}px 30px rgba(0, 45, 25, ${shadowIntensity}))`
+            : 'drop-shadow(0 12px 28px rgba(0, 0, 0, 0.14))',
+          transition: isHovered
+            ? 'transform 0.1s ease-out, filter 0.1s ease-out'
+            : 'transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), filter 0.6s cubic-bezier(0.23, 1, 0.32, 1)',
+          transformStyle: 'preserve-3d',
+        }}
+        className={`relative cursor-pointer will-change-transform ${className}`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function RoleSelection() {
   const navigate = useNavigate();
@@ -393,34 +474,29 @@ export default function RoleSelection() {
           <button
             type="button"
             onClick={() => scrollToSection('hero')}
-            className="flex min-w-0 items-center gap-2 md:gap-3 text-left"
+            className="flex min-w-0 items-center gap-2.5 md:gap-3.5 text-left"
           >
             {logoVisible ? (
               <img
                 src={LOGO_SRC}
                 alt="ClinicKa logo"
-                fetchPriority="high"
-                className={`rounded-full object-cover transition-all duration-300 ${isScrolled ? 'h-7 w-7 md:h-8 md:w-8' : 'h-8 w-8 md:h-10 md:w-10'
+                fetchpriority="high"
+                className={`rounded-full object-cover transition-all duration-300 ${isScrolled ? 'h-8 w-8 md:h-10 md:w-10' : 'h-9 w-9 md:h-12 md:w-12'
                   }`}
                 onError={() => setLogoVisible(false)}
               />
-            ) : (
-              <span className={`inline-flex items-center justify-center rounded-full bg-[#d9f3e4] text-[#006d3c] transition-all duration-300 ${isScrolled ? 'h-7 w-7 md:h-8 md:w-8' : 'h-8 w-8 md:h-10 md:w-10'
-                }`}>
-                <Stethoscope className={`transition-all duration-300 ${isScrolled ? 'h-4 w-4' : 'h-4 w-4 md:h-5 md:w-5'}`} />
-              </span>
-            )}
-            <span className={`truncate font-bold tracking-tight transition-all duration-300 ${isScrolled
-              ? 'text-sm md:text-base text-white'
-              : 'text-sm md:text-[20px] text-[#161d18]'
+            ) : null}
+            <span className={`truncate font-extrabold tracking-tight transition-all duration-300 ${isScrolled
+              ? 'text-lg md:text-xl text-white'
+              : 'text-lg md:text-2xl text-[#161d18]'
               }`}>
               ClinicKa!
             </span>
           </button>
 
-          <div className={`hidden items-center font-normal transition-all duration-300 md:flex ${isScrolled
-            ? 'text-white/78 text-sm gap-7 lg:gap-8'
-            : 'text-[#3d4a3f] text-[16px] gap-8 lg:gap-10'
+          <div className={`hidden items-center font-medium transition-all duration-300 md:flex ${isScrolled
+            ? 'text-white/85 text-base md:text-lg gap-8 lg:gap-10'
+            : 'text-[#2d3a2f] text-base md:text-xl gap-8 lg:gap-12'
             }`}>
             {navLinks.map((link) => (
               <button
@@ -435,12 +511,12 @@ export default function RoleSelection() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Link
               to="/auth?mode=signin"
               className={`hidden items-center justify-center rounded-full bg-[#006d3c] text-white transition-all duration-300 active:scale-95 hover:bg-[#005f34] md:inline-flex ${isScrolled
-                ? 'h-9 md:h-10 px-4 md:px-5 text-sm font-normal'
-                : 'h-10 md:h-11 px-5 md:px-7 text-sm md:text-[15px] font-medium'
+                ? 'h-10 md:h-11 px-5 md:px-7 text-base font-semibold'
+                : 'h-11 md:h-12 px-6 md:px-8 text-base md:text-lg font-semibold'
                 }`}
             >
               Sign In
@@ -449,30 +525,30 @@ export default function RoleSelection() {
               type="button"
               onClick={() => setIsMenuOpen((prev) => !prev)}
               className={`inline-flex items-center justify-center rounded-full border transition-all duration-300 active:scale-95 md:hidden ${isScrolled
-                ? 'h-9 w-9 border-white/20 bg-white/10 text-white'
-                : 'h-10 w-10 border-[#d8e4d7] bg-white text-[#006d3c]'
+                ? 'h-10 w-10 border-white/20 bg-white/10 text-white'
+                : 'h-11 w-11 border-[#d8e4d7] bg-white text-[#006d3c]'
                 }`}
               aria-expanded={isMenuOpen}
               aria-controls="mobile-dropbar"
               aria-label="Toggle navigation menu"
             >
-              {isMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
         </div>
 
         <div
           id="mobile-dropbar"
-          className={`overflow-hidden border-t border-[#d8e4d7] bg-[#fffeff]/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 md:hidden ${isMenuOpen ? 'max-h-[22rem] opacity-100' : 'max-h-0 opacity-0'
+          className={`overflow-hidden border-t border-[#d8e4d7] bg-[#fffeff]/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 md:hidden ${isMenuOpen ? 'max-h-[26rem] opacity-100' : 'max-h-0 opacity-0'
             }`}
         >
-          <div className="mx-auto flex w-full max-w-[90rem] flex-col gap-2 px-5 py-4 sm:px-8">
+          <div className="mx-auto flex w-full max-w-[90rem] flex-col gap-2.5 px-5 py-4 sm:px-8">
             {navLinks.map((link) => (
               <button
                 key={link.label}
                 type="button"
                 onClick={() => handleNavClick(link.target)}
-                className="rounded-full px-4 py-3 text-left text-sm text-[#161d18] transition hover:bg-white"
+                className="rounded-full px-4 py-3 text-left text-base sm:text-lg text-[#161d18] transition hover:bg-white"
               >
                 {link.label}
               </button>
@@ -480,7 +556,7 @@ export default function RoleSelection() {
             <Link
               to="/auth?mode=signin"
               onClick={() => setIsMenuOpen(false)}
-              className="mt-1 inline-flex h-11 w-full items-center justify-center rounded-full bg-[#006d3c] px-5 text-sm text-white transition active:scale-95 hover:bg-[#005f34]"
+              className="mt-1 inline-flex h-12 w-full items-center justify-center rounded-full bg-[#006d3c] px-6 text-base sm:text-lg font-semibold text-white transition active:scale-95 hover:bg-[#005f34]"
             >
               Sign In
             </Link>
@@ -546,14 +622,14 @@ export default function RoleSelection() {
 
           <div className="relative mx-auto grid min-h-[calc(100dvh-3.5rem)] md:min-h-[calc(100dvh-5rem)] w-full max-w-[90rem] items-center gap-10 px-5 py-14 sm:px-8 md:py-18 lg:grid-cols-12 lg:px-10 pointer-events-none -translate-y-8 md:-translate-y-16 lg:-translate-y-24">
             <div className="space-y-6 lg:col-span-7 pointer-events-auto">
-              <p className="text-base font-semibold uppercase tracking-[0.18em] text-[#006d3c]">
+              <p className="text-sm sm:text-base font-bold uppercase tracking-[0.2em] text-[#006d3c]">
                 Gordon College Health Services
               </p>
               <div className="space-y-4">
-                <h1 className="max-w-3xl text-[2.85rem] font-semibold leading-[1.07] tracking-[-0.025em] text-[#161d18] sm:text-[3.75rem] lg:text-[4.25rem]">
+                <h1 className="max-w-3xl text-[3rem] font-bold leading-[1.08] tracking-[-0.025em] text-[#161d18] sm:text-[4rem] lg:text-[4.5rem]">
                   <span className="text-[#006d3c]">ClinicKa!</span> <br />A Student Health <br />Record Portal
                 </h1>
-                <p className="max-w-2xl text-[19px] leading-7 tracking-[-0.01em] text-[#3d4a3f] sm:text-[22px] sm:leading-8">
+                <p className="max-w-2xl text-xl sm:text-2xl leading-relaxed tracking-[-0.01em] text-[#3d4a3f]">
                   A focused medical clearance and student health record system for submissions, clinic review, and
                   administrative workflows in one Gordon College portal.
                 </p>
@@ -581,7 +657,7 @@ export default function RoleSelection() {
               <img
                 src={LANDING_PREVIEW_SRC}
                 alt="ClinicKa logo"
-                fetchPriority="high"
+                fetchpriority="high"
                 className="w-full max-w-[500px] object-contain drop-shadow-[3px_5px_30px_rgba(0,0,0,0.18)] logo-interactive"
               />
             </div>
@@ -590,45 +666,35 @@ export default function RoleSelection() {
 
         <section id="features" className="bg-[#fffeff] py-16 md:py-20">
           <div className="mx-auto max-w-[90rem] px-5 sm:px-8 lg:px-10">
-            <div className="mx-auto mb-10 max-w-3xl text-center">
-              <h2 className="text-3xl font-semibold tracking-[-0.02em] text-[#161d18] md:text-[2.5rem]">
+            <div className="mx-auto mb-12 max-w-3xl text-center">
+              <h2 className="text-3xl font-bold tracking-tight text-[#161d18] sm:text-4xl md:text-5xl">
                 Services available in ClinicKa!
               </h2>
-              <p className="mt-4 text-[17px] leading-7 text-[#3d4a3f]">
+              <p className="mt-4 text-lg sm:text-xl leading-relaxed text-[#3d4a3f]">
                 The portal supports the clinic record services Gordon College users need from submission to approval.
               </p>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-              <div className="group relative overflow-hidden rounded-2xl border border-[#d8e4d7] bg-white p-6 lg:col-span-2 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu">
-                <div className="absolute -right-16 -top-16 h-32 w-32 rounded-full bg-[#eef6ec]/10 blur-2xl transition-all duration-500 group-hover:bg-[#eef6ec]/40 pointer-events-none" />
-                <div className="relative flex flex-col sm:flex-row items-start gap-5">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#eef6ec] text-[#006d3c] shadow-sm transform scale-100 transition-[background-color,color,transform] duration-300 group-hover:bg-[#006d3c] group-hover:text-white group-hover:scale-110 transform-gpu">
-                    <Users className="h-5 w-5 transform rotate-0 transition-transform duration-300 group-hover:rotate-3 transform-gpu" />
-                  </span>
-                  <div>
-                    <h3 className="text-2xl font-semibold tracking-[-0.02em] text-[#161d18] transition-colors group-hover:text-[#006d3c]">
-                      Student medical requirement submission
-                    </h3>
-                    <p className="mt-3 text-[17px] leading-7 text-[#3d4a3f]">
-                      Students can manage their profile, complete the privacy waiver and yearly medical form, and upload
-                      required files such as chest X-ray, CBC, urinalysis, signatures, and supporting documents.
-                    </p>
-                  </div>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="group relative overflow-hidden rounded-2xl border border-[#d8e4d7] bg-white p-8 lg:col-span-2 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu">
+                <div className="relative">
+                  <h3 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#161d18] transition-colors group-hover:text-[#006d3c]">
+                    Student medical requirement submission
+                  </h3>
+                  <p className="mt-3 text-lg sm:text-xl leading-relaxed text-[#3d4a3f]">
+                    Students can manage their profile, complete the privacy waiver and yearly medical form, and upload
+                    required files such as chest X-ray, CBC, urinalysis, signatures, and supporting documents.
+                  </p>
                 </div>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl bg-[#0b2f21] p-6 text-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition-[transform,box-shadow] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(11,47,33,0.25)] transform-gpu">
-                <div className="absolute -left-16 -bottom-16 h-36 w-36 rounded-full bg-white/2 blur-2xl transition-all duration-500 group-hover:bg-white/8 pointer-events-none" />
+              <div className="group relative overflow-hidden rounded-2xl bg-[#0b2f21] p-8 text-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition-[transform,box-shadow] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(11,47,33,0.25)] transform-gpu">
                 <div className="relative flex flex-col h-full justify-between gap-6">
                   <div>
-                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/12 text-white shadow-inner transform scale-100 transition-[background-color,transform] duration-300 group-hover:bg-[#00b274] group-hover:scale-110 transform-gpu">
-                      <ShieldCheck className="h-5 w-5 transform rotate-0 transition-transform duration-300 group-hover:rotate-12 transform-gpu" />
-                    </span>
-                    <h3 className="mt-6 text-2xl font-semibold tracking-[-0.02em] transition-colors group-hover:text-[#85f6ae]">
+                    <h3 className="text-2xl sm:text-3xl font-bold tracking-tight transition-colors group-hover:text-[#85f6ae]">
                       Medical certificate processing
                     </h3>
-                    <p className="mt-3 text-[17px] leading-7 text-white/78">
+                    <p className="mt-3 text-lg sm:text-xl leading-relaxed text-white/85">
                       Clinic staff and doctors review submitted health records, complete assessment requirements, and
                       prepare student medical certificates for approved submissions.
                     </p>
@@ -636,79 +702,72 @@ export default function RoleSelection() {
                 </div>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-[#d8e4d7] bg-white p-6 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu">
-                <div className="absolute -right-16 -bottom-16 h-32 w-32 rounded-full bg-[#eef6ec]/10 blur-2xl transition-all duration-500 group-hover:bg-[#eef6ec]/40 pointer-events-none" />
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eef6ec] text-[#006d3c] shadow-sm transform scale-100 transition-[background-color,color,transform] duration-300 group-hover:bg-[#006d3c] group-hover:text-white group-hover:scale-110 transform-gpu">
-                  <ClipboardList className="h-5 w-5 transform translate-y-0 transition-transform duration-300 group-hover:-translate-y-0.5 transform-gpu" />
-                </span>
-                <h3 className="mt-6 text-2xl font-semibold tracking-[-0.02em] text-[#161d18] transition-colors group-hover:text-[#006d3c]">
+              <div className="group relative overflow-hidden rounded-2xl border border-[#d8e4d7] bg-white p-8 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu">
+                <h3 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#161d18] transition-colors group-hover:text-[#006d3c]">
                   Status updates and corrections
                 </h3>
-                <p className="mt-3 text-[17px] leading-7 text-[#3d4a3f]">
+                <p className="mt-3 text-lg sm:text-xl leading-relaxed text-[#3d4a3f]">
                   Students can track pending, in-review, returned, resubmitted, physical-exam-done, and approved records
                   while clinic staff request corrections when needed.
                 </p>
               </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-[#d8e4d7] bg-white p-6 lg:col-span-2 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu">
+              <div className="group relative overflow-hidden rounded-2xl border border-[#d8e4d7] bg-white p-8 lg:col-span-2 shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu">
                 <div className="relative flex flex-col gap-8 md:flex-row">
                   <div className="flex-1">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#eef6ec] text-[#006d3c] shadow-sm transform scale-100 transition-[background-color,color,transform] duration-300 group-hover:bg-[#006d3c] group-hover:text-white group-hover:scale-110 transform-gpu">
-                      <FolderOpen className="h-5 w-5 transform rotate-0 transition-transform duration-300 group-hover:rotate-[-6deg] transform-gpu" />
-                    </span>
-                    <h3 className="mt-6 text-2xl font-semibold tracking-[-0.02em] text-[#161d18] transition-colors group-hover:text-[#006d3c]">
+                    <h3 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#161d18] transition-colors group-hover:text-[#006d3c]">
                       Records, certificates, and reports
                     </h3>
-                    <p className="mt-3 text-[17px] leading-7 text-[#3d4a3f]">
+                    <p className="mt-3 text-lg sm:text-xl leading-relaxed text-[#3d4a3f]">
                       Approved medical records can be accessed through student and staff portals, certificates can be
                       managed by clinic staff, and reports help administrators monitor clinic activity.
                     </p>
                   </div>
                   <div className="hidden flex-1 rounded-xl border border-[#dfebea] bg-[#f8fcf9] p-5 md:block transition-all duration-300 group-hover:border-[#006d3c]/20 group-hover:shadow-[inset_0_1px_3px_rgba(0,109,60,0.02)]">
                     <div className="flex items-center justify-between pb-3 border-b border-[#dfebea]/60">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-[#065f46]">Submission Queue</span>
-                      <span className="text-[9px] text-[#70808b]">Action Needed</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#065f46]">Submission Queue</span>
+                      <span className="text-xs text-[#70808b]">Action Needed</span>
                     </div>
                     <div className="mt-4 space-y-2.5">
-                      <div className="flex items-center justify-between rounded-lg border border-[#e4eeea]/80 bg-white p-2.5 shadow-sm transition-all duration-300 group-hover:translate-x-1 group-hover:shadow-md">
+                      <div className="flex items-center justify-between rounded-lg border border-[#e4eeea]/80 bg-white p-3 shadow-sm transition-all duration-300 group-hover:translate-x-1 group-hover:shadow-md">
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-6 w-6 items-center justify-center rounded bg-[#eef6ec] text-[#006d3c] transition-colors duration-300 group-hover:bg-[#006d3c] group-hover:text-white">
-                            <ClipboardCheck className="h-3.5 w-3.5" />
+                          <div className="flex h-7 w-7 items-center justify-center rounded bg-[#eef6ec] text-xs font-bold text-[#006d3c]">
+                            JD
                           </div>
                           <div className="flex flex-col text-left">
-                            <span className="text-[11px] font-semibold text-[#161d18]">Dela Cruz, Juan</span>
-                            <span className="text-[9px] text-[#70808b]">22-01230 | 1st Year | BSIT</span>
+                            <span className="text-xs sm:text-sm font-semibold text-[#161d18]">Dela Cruz, Juan</span>
+                            <span className="text-[11px] text-[#70808b]">22-01230 | 1st Year | BSIT</span>
                           </div>
                         </div>
-                        <div className="h-5 px-2 rounded-full bg-amber-50 border border-amber-200/50 text-amber-800 text-[9px] font-semibold flex items-center justify-center transition-all duration-300 group-hover:bg-amber-100">
+                        <div className="h-6 px-2.5 rounded-full bg-amber-50 border border-amber-200/50 text-amber-800 text-xs font-semibold flex items-center justify-center transition-all duration-300 group-hover:bg-amber-100">
                           Pending review
                         </div>
                       </div>
-                      <div className="flex items-center justify-between rounded-lg border border-[#e4eeea]/80 bg-white p-2.5 shadow-sm transition-all duration-300 group-hover:translate-x-1 group-hover:shadow-md">
+                      <div className="flex items-center justify-between rounded-lg border border-[#e4eeea]/80 bg-white p-3 shadow-sm transition-all duration-300 group-hover:translate-x-1 group-hover:shadow-md">
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-6 w-6 items-center justify-center rounded bg-[#eef6ec] text-[#006d3c] transition-colors duration-300 group-hover:bg-[#006d3c] group-hover:text-white">
-                            <ClipboardCheck className="h-3.5 w-3.5" />
+                          <div className="flex h-7 w-7 items-center justify-center rounded bg-[#eef6ec] text-xs font-bold text-[#006d3c]">
+                            MS
                           </div>
                           <div className="flex flex-col text-left">
-                            <span className="text-[11px] font-semibold text-[#161d18]">Santos, Maria</span>
-                            <span className="text-[9px] text-[#70808b]">21-04562 | 2nd Year | BSN</span>
+                            <span className="text-xs sm:text-sm font-semibold text-[#161d18]">Santos, Maria</span>
+                            <span className="text-[11px] text-[#70808b]">21-04562 | 2nd Year | BSN</span>
                           </div>
                         </div>
-                        <div className="h-5 px-2 rounded-full bg-red-50 border border-red-200/50 text-red-800 text-[9px] font-semibold flex items-center justify-center transition-all duration-300 group-hover:bg-red-100">
+                        <div className="h-6 px-2.5 rounded-full bg-red-50 border border-red-200/50 text-red-800 text-xs font-semibold flex items-center justify-center transition-all duration-300 group-hover:bg-red-100">
                           Returned
                         </div>
                       </div>
-                      <div className="flex items-center justify-between rounded-lg border border-[#e4eeea]/80 bg-white p-2.5 shadow-sm transition-all duration-300 group-hover:translate-x-1 group-hover:shadow-md">
+                      <div className="flex items-center justify-between rounded-lg border border-[#e4eeea]/80 bg-white p-3 shadow-sm transition-all duration-300 group-hover:translate-x-1 group-hover:shadow-md">
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-6 w-6 items-center justify-center rounded bg-[#eef6ec] text-[#006d3c] transition-colors duration-300 group-hover:bg-[#006d3c] group-hover:text-white">
-                            <ClipboardCheck className="h-3.5 w-3.5" />
+                          <div className="flex h-7 w-7 items-center justify-center rounded bg-[#eef6ec] text-xs font-bold text-[#006d3c]">
+                            JA
                           </div>
                           <div className="flex flex-col text-left">
-                            <span className="text-[11px] font-semibold text-[#161d18]">Alvarez, Jose</span>
-                            <span className="text-[9px] text-[#70808b]">20-07891 | 3rd Year | BSCS</span>
+                            <span className="text-xs sm:text-sm font-semibold text-[#161d18]">Alvarez, Jose</span>
+                            <span className="text-[11px] text-[#70808b]">20-07891 | 3rd Year | BSCS</span>
                           </div>
                         </div>
-                        <div className="h-5 px-2 rounded-full bg-blue-50 border border-blue-200/50 text-blue-800 text-[9px] font-semibold flex items-center justify-center transition-all duration-300 group-hover:bg-blue-100">
+                        <div className="h-6 px-2.5 rounded-full bg-blue-50 border border-blue-200/50 text-blue-800 text-xs font-semibold flex items-center justify-center transition-all duration-300 group-hover:bg-blue-100">
                           Resubmitted
                         </div>
                       </div>
@@ -720,31 +779,31 @@ export default function RoleSelection() {
           </div>
         </section>
 
-        <section id="workflow" className="relative overflow-hidden bg-gradient-to-br from-[#0c2419] via-[#12251b] to-[#081510] py-16 text-white md:py-20">
+        <section id="workflow" className="relative overflow-hidden bg-[#0d2a1c] py-16 text-white md:py-20">
           {/* Subtle background glows */}
           <div className="pointer-events-none absolute right-0 top-1/4 h-[30rem] w-[30rem] -translate-y-1/2 rounded-full bg-[#00b274]/5 blur-[120px]" />
           <div className="pointer-events-none absolute left-0 bottom-1/4 h-[30rem] w-[30rem] translate-y-1/2 rounded-full bg-[#eef6ec]/3 blur-[120px]" />
 
           <div className="mx-auto grid max-w-[90rem] items-center gap-10 px-5 sm:px-8 md:gap-16 lg:grid-cols-2 lg:px-10">
             <div className="group/img order-2 relative lg:order-1 select-none">
-              <div className="absolute inset-0 bg-[#00b274]/10 opacity-0 blur-xl transition-opacity duration-500 group-hover/img:opacity-100 pointer-events-none" />
-              <div className="relative overflow-hidden rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.35)] transition-all duration-500 group-hover/img:scale-[1.015] group-hover/img:border-[#00b274]/30 transform-gpu">
-                <img
-                  src={imageSrc}
-                  alt="Student medical form workflow preview"
-                  className={`w-full object-cover transition-all duration-300 transform-gpu group-hover/img:scale-[1.01] ${
-                    fade ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-                  }`}
-                />
-                <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 opacity-0 group-hover/img:opacity-100 transition-opacity duration-500 pointer-events-none" />
-              </div>
+              <TiltCard className="rounded-2xl" maxTilt={11} scale={1.025}>
+                <div className="relative overflow-hidden rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
+                  <img
+                    src={imageSrc}
+                    alt="Student medical form workflow preview"
+                    className={`w-full object-cover transition-all duration-300 transform-gpu ${
+                      fade ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                    }`}
+                  />
+                </div>
+              </TiltCard>
             </div>
 
             <div className="order-1 space-y-6 lg:order-2">
-              <h2 className="text-3xl font-semibold tracking-[-0.02em] md:text-[2.5rem]">
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
                 From student submission to clinic decision.
               </h2>
-              <p className="max-w-xl text-[17px] leading-7 text-white/76 sm:text-xl sm:leading-8">
+              <p className="max-w-xl text-lg sm:text-2xl leading-relaxed text-white/80">
                 ClinicKa! guides students through medical record submission, then gives clinic staff the tools to review,
                 return, approve, and document each record with a visible status history.
               </p>
@@ -755,19 +814,21 @@ export default function RoleSelection() {
                     <div
                       key={item.title}
                       onClick={() => setActiveHighlightIndex(isActive ? null : index)}
-                      className={`group/item flex items-start gap-4 p-4 rounded-2xl border transition-all duration-300 transform-gpu cursor-pointer ${
+                      className={`group/item flex items-start gap-4 p-5 rounded-2xl border transition-all duration-300 transform-gpu cursor-pointer ${
                         isActive
                           ? 'border-[#00b274]/30 bg-white/5 shadow-[0_10px_30px_rgba(0,109,60,0.1)]'
                           : 'border-transparent hover:border-white/10 hover:bg-white/4'
                       }`}
                     >
-                      <CornerDownRight className={`mt-0.5 h-6 w-6 shrink-0 transform transition-all duration-300 transform-gpu ${
+                      <span className={`mt-0.5 text-sm font-mono font-bold transition-all duration-300 ${
                         isActive
-                          ? 'text-[#85f6ae] scale-110 translate-x-0.5'
-                          : 'text-white/40 group-hover/item:text-[#85f6ae] group-hover/item:scale-110 group-hover/item:translate-x-0.5'
-                      }`} />
+                          ? 'text-[#85f6ae]'
+                          : 'text-white/40 group-hover/item:text-[#85f6ae]'
+                      }`}>
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
                       <div className="flex-1">
-                        <h4 className={`text-lg md:text-xl font-semibold transition-colors duration-300 ${
+                        <h4 className={`text-xl md:text-2xl font-bold transition-colors duration-300 ${
                           isActive ? 'text-[#85f6ae]' : 'text-white group-hover/item:text-[#85f6ae]'
                         }`}>
                           {item.title}
@@ -778,7 +839,7 @@ export default function RoleSelection() {
                           }`}
                         >
                           <div className="overflow-hidden">
-                            <p className="text-[15px] leading-relaxed text-white/70">
+                            <p className="text-base sm:text-lg leading-relaxed text-white/75">
                               {item.description}
                             </p>
                           </div>
@@ -794,184 +855,88 @@ export default function RoleSelection() {
 
         <section id="clearance" className="bg-white py-16 md:py-20">
           <div className="mx-auto grid max-w-[90rem] items-center gap-10 px-5 sm:px-8 md:gap-12 lg:grid-cols-2 lg:px-10">
-            <div className="space-y-5">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#006d3c]">Role-based access</p>
-              <h2 className="text-3xl font-semibold tracking-[-0.02em] text-[#161d18] md:text-[2.5rem]">
+            <div className="space-y-6">
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#006d3c]">Role-based access</p>
+              <h2 className="text-3xl font-bold tracking-tight text-[#161d18] sm:text-4xl md:text-5xl">
                 Clinic records, clearances, and reports in one system.
               </h2>
-              <p className="text-[17px] leading-7 text-[#3d4a3f] sm:text-xl sm:leading-8">
+              <p className="text-lg sm:text-2xl leading-relaxed text-[#3d4a3f]">
                 Students can revisit submitted records and approved clearances, while clinic staff and administrators can
                 monitor submissions, certificates, user accounts, and operational reports.
               </p>
-              <div className="space-y-4 pt-2">
+              <div className="space-y-3.5 pt-2">
                 {[
                   {
                     title: 'Student records',
                     description: 'Access and manage submissions, waivers, and clearances.',
-                    icon: Users,
                   },
                   {
                     title: 'Staff review queue',
                     description: 'Verify submissions, add notes, and approve clearances.',
-                    icon: ClipboardCheck,
                   },
                   {
                     title: 'Admin reports',
                     description: 'View dashboard metrics, analytics, and accounts.',
-                    icon: FileText,
                   },
                 ].map((role, idx) => {
-                  const Icon = role.icon;
                   const isHovered = hoveredRoleIndex === idx;
                   return (
                     <div
                       key={role.title}
                       onMouseEnter={() => setHoveredRoleIndex(idx)}
                       onMouseLeave={() => setHoveredRoleIndex(null)}
-                      className={`group flex items-center gap-4 rounded-xl border p-4 transition-all duration-300 cursor-pointer select-none ${
+                      className={`group flex items-start gap-4 rounded-xl border p-5 transition-all duration-300 cursor-pointer select-none ${
                         isHovered
                           ? 'border-[#006d3c] bg-[#eef6ec]/60 shadow-[0_8px_20px_rgba(0,109,60,0.06)] translate-x-1.5'
                           : 'border-[#d8e4d7] bg-white hover:border-[#006d3c]/40 hover:bg-[#eef6ec]/10 shadow-sm'
                       }`}
                     >
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
-                        isHovered ? 'bg-[#006d3c] text-white rotate-6 scale-110 shadow-sm' : 'bg-[#eef6ec] text-[#006d3c]'
-                      }`}>
-                        <Icon className="h-5.5 w-5.5" />
-                      </div>
                       <div className="flex-1 text-left">
-                        <p className={`font-semibold transition-colors duration-300 ${
+                        <p className={`text-lg sm:text-xl font-bold transition-colors duration-300 ${
                           isHovered ? 'text-[#006d3c]' : 'text-[#161d18]'
                         }`}>
                           {role.title}
                         </p>
-                        <p className="text-sm text-[#3d4a3f]/90 mt-0.5">{role.description}</p>
+                        <p className="text-base sm:text-lg leading-relaxed text-[#3d4a3f] mt-1">{role.description}</p>
                       </div>
                     </div>
                   );
                 })}
               </div>
             </div>
-            <div className="relative overflow-hidden rounded-2xl border border-[#d8e4d7]/60 shadow-[0_20px_50px_rgba(0,0,0,0.12)] transform-gpu hover:scale-[1.01] transition-transform duration-500 select-none w-full group">
-              <style>{`
-                @keyframes floatCard0 {
-                  0%, 100% { transform: translateY(0); }
-                  50% { transform: translateY(-6px); }
-                }
-                @keyframes floatCard1 {
-                  0%, 100% { transform: translateY(0); }
-                  50% { transform: translateY(-4px); }
-                }
-                @keyframes floatCard2 {
-                  0%, 100% { transform: translateY(0); }
-                  50% { transform: translateY(-8px); }
-                }
-                .float-card-0 {
-                  animation: floatCard0 4s ease-in-out infinite;
-                }
-                .float-card-1 {
-                  animation: floatCard1 4.8s ease-in-out infinite;
-                }
-                .float-card-2 {
-                  animation: floatCard2 4.4s ease-in-out infinite;
-                }
-              `}</style>
-              <img
-                src={CAMPUS_PREVIEW_SRC}
-                alt="Gordon College campus"
-                className="aspect-[4/3] w-full object-cover transition-transform duration-700 hover:scale-[1.03]"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent pointer-events-none" />
-              
-              {/* Floating glassmorphic cards */}
-              <div className={`absolute top-6 left-6 p-3.5 rounded-xl border backdrop-blur-md transition-all duration-500 flex items-center gap-3.5 float-card-0 ${
-                hoveredRoleIndex === 0
-                  ? 'border-[#006d3c] bg-white/95 shadow-[0_12px_24px_rgba(0,109,60,0.18)] scale-105 z-10'
-                  : 'border-white/40 bg-white/80 shadow-lg scale-100 z-0'
-              }`}>
-                <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500/10 to-emerald-500/20 flex items-center justify-center text-[#006d3c]">
-                  <Users className="h-4.5 w-4.5" />
-                </div>
-                <div className="text-left">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-bold text-[#161d18] leading-none">Student Records</p>
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-[#3d4a3f] mt-1 block font-medium">Clearance & waivers completed</span>
-                </div>
+            <TiltCard className="w-full rounded-2xl" maxTilt={9} scale={1.02}>
+              <div className="relative overflow-hidden rounded-2xl border border-[#d8e4d7]/60 shadow-[0_20px_50px_rgba(0,0,0,0.12)] select-none w-full">
+                <img
+                  src={CAMPUS_PREVIEW_SRC}
+                  alt="Gordon College campus"
+                  className="aspect-[4/3] w-full object-cover transition-transform duration-700 hover:scale-[1.03]"
+                />
               </div>
-
-              <div className={`absolute bottom-16 right-6 p-3.5 rounded-xl border backdrop-blur-md transition-all duration-500 flex items-center gap-3.5 float-card-1 ${
-                hoveredRoleIndex === 1
-                  ? 'border-[#006d3c] bg-white/95 shadow-[0_12px_24px_rgba(0,109,60,0.18)] scale-105 z-10'
-                  : 'border-white/40 bg-white/80 shadow-lg scale-100 z-0'
-              }`}>
-                <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-amber-500/10 to-amber-500/20 flex items-center justify-center text-amber-600">
-                  <ClipboardCheck className="h-4.5 w-4.5" />
-                </div>
-                <div className="text-left">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-bold text-[#161d18] leading-none">Review Queue</p>
-                    <span className="text-[9px] bg-amber-50 border border-amber-200/50 text-amber-800 px-1.5 py-0.5 rounded-full font-semibold scale-90">
-                      4 pending
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-[#3d4a3f] mt-1 block font-medium">Pending physician approvals</span>
-                </div>
-              </div>
-
-              <div className={`absolute top-6 right-6 p-3.5 rounded-xl border backdrop-blur-md transition-all duration-500 flex items-center gap-3.5 float-card-2 ${
-                hoveredRoleIndex === 2
-                  ? 'border-[#006d3c] bg-white/95 shadow-[0_12px_24px_rgba(0,109,60,0.18)] scale-105 z-10'
-                  : 'border-white/40 bg-white/80 shadow-lg scale-100 z-0'
-              }`}>
-                <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-blue-500/10 to-blue-500/20 flex items-center justify-center text-blue-600">
-                  <FileText className="h-4.5 w-4.5" />
-                </div>
-                <div className="text-left">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-bold text-[#161d18] leading-none">Admin Reports</p>
-                    <span className="text-[9px] bg-blue-50 border border-blue-200/50 text-blue-800 px-1.5 py-0.5 rounded-full font-semibold scale-90">
-                      Live
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-[#3d4a3f] mt-1 block font-medium">System clearance analytics</span>
-                </div>
-              </div>
-            </div>
+            </TiltCard>
           </div>
         </section>
 
         <section id="faq" className="bg-[#fffeff] py-16 md:py-20">
           <div className="mx-auto grid max-w-[90rem] gap-10 px-5 sm:px-8 md:gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:px-10">
             <div className="space-y-6">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#006d3c]">Student FAQ</p>
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#006d3c]">Student FAQ</p>
               <div className="space-y-4">
-                <h2 className="max-w-xl text-3xl font-semibold tracking-[-0.02em] text-[#161d18] md:text-[2.5rem]">
+                <h2 className="max-w-xl text-3xl font-bold tracking-tight text-[#161d18] sm:text-4xl md:text-5xl">
                   Questions students usually ask before they submit.
                 </h2>
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2">
-                <div className="border border-[#d8e4d7] bg-white p-6 rounded-2xl shadow-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu group cursor-default">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#eef6ec] text-[#006d3c] transition-[background-color,color] duration-300 group-hover:bg-[#006d3c] group-hover:text-white">
-                    <ClipboardList className="h-5 w-5 transform rotate-0 transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110 transform-gpu" />
-                  </span>
-                  <h3 className="mt-5 text-xl font-semibold tracking-[-0.02em] text-[#161d18]">Before you begin</h3>
-                  <p className="mt-3 text-[15px] leading-6 text-[#3d4a3f]">
+                <div className="border border-[#d8e4d7] bg-white p-7 rounded-2xl shadow-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu cursor-default">
+                  <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-[#161d18]">Before you begin</h3>
+                  <p className="mt-3 text-base sm:text-lg leading-relaxed text-[#3d4a3f]">
                     Prepare your school year selection, medical history details, and files required by the clinic.
                   </p>
                 </div>
 
-                <div className="bg-[#0b2f21] p-6 text-white rounded-2xl shadow-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(11,47,33,0.25)] transform-gpu group cursor-default">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/12 transition-colors duration-300 group-hover:bg-[#00b274]">
-                    <ShieldCheck className="h-5 w-5 transform rotate-0 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110 transform-gpu" />
-                  </span>
-                  <h3 className="mt-5 text-xl font-semibold tracking-[-0.02em]">Need more help?</h3>
-                  <p className="mt-3 text-[15px] leading-6 text-white/78">
+                <div className="bg-[#0b2f21] p-7 text-white rounded-2xl shadow-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(11,47,33,0.25)] transform-gpu cursor-default">
+                  <h3 className="text-xl sm:text-2xl font-bold tracking-tight">Need more help?</h3>
+                  <p className="mt-3 text-base sm:text-lg leading-relaxed text-white/85">
                     Contact the Gordon College health services unit at{' '}
                     <a href="mailto:digitalduo.clinicka@gmail.com" className="underline decoration-white/30 hover:decoration-white hover:text-[#85f6ae] transition-colors font-medium">
                       digitalduo.clinicka@gmail.com
@@ -985,14 +950,14 @@ export default function RoleSelection() {
               </div>
             </div>
 
-            <div className="border border-[#d8e4d7] bg-white p-5 md:p-7">
+            <div className="border border-[#d8e4d7] bg-white p-6 md:p-8 rounded-2xl">
               <Accordion type="single" collapsible defaultValue={studentFaqs[0]?.value}>
                 {studentFaqs.map((item) => (
                   <AccordionItem key={item.value} value={item.value} className="border-[#d8e4d7]">
-                    <AccordionTrigger className="py-5 text-left text-[17px] font-semibold text-[#161d18] hover:no-underline">
+                    <AccordionTrigger className="py-6 text-left text-lg sm:text-xl font-bold text-[#161d18] hover:no-underline">
                       {item.question}
                     </AccordionTrigger>
-                    <AccordionContent className="pb-5 pr-6 text-[15px] leading-7 text-[#3d4a3f] md:pr-10">
+                    <AccordionContent className="pb-6 pr-6 text-base sm:text-lg leading-relaxed text-[#3d4a3f] md:pr-10">
                       {item.answer}
                     </AccordionContent>
                   </AccordionItem>

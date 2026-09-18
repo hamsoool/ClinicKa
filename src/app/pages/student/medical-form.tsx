@@ -133,7 +133,7 @@ export default function StudentMedicalForm() {
             <Progress value={(step / totalSteps) * 100} className="h-2" />
           </div>
         ) : (
-          <div className="rounded-[18px] bg-surface-container-low border border-outline-variant/20 px-4 py-3 text-sm text-on-surface-variant">
+          <div className="rounded-[18px] bg-card border border-border px-5 py-3.5 text-base font-medium text-on-surface-variant">
             You are currently reviewing your submitted medical record. Editing is disabled during review.
           </div>
         )}

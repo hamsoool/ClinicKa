@@ -92,70 +92,70 @@ export default function StudentPrivacyWaiver() {
         <CardContent className="space-y-6 pt-4">
           {/* Stacked details */}
           <div className="space-y-6">
-            <div className="rounded-[22px] border border-outline-variant/30 bg-gradient-to-br from-surface-container-lowest to-surface-container-low p-6 shadow-sm space-y-4">
+            <div className="rounded-[22px] border border-outline-variant/50 bg-card p-6 shadow-sm space-y-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
                   <ShieldCheck className="h-6 w-6" />
                 </span>
                 <div>
-                  <p className="font-bold text-lg text-on-surface">What you are consenting to</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p className="font-bold text-xl text-on-surface">What you are consenting to</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
                     Your information is used only for your clinic record, review, and related student health services.
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 p-5 text-sm leading-relaxed text-on-surface-variant font-medium">
+              <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low/60 p-5 text-base leading-relaxed text-on-surface-variant font-medium">
                 <p className="leading-7">{DATA_PRIVACY_CONSENT_BODY}</p>
               </div>
             </div>
 
-            <div className="rounded-[22px] border border-outline-variant/30 bg-gradient-to-br from-surface-container-lowest to-surface-container-low p-6 shadow-sm space-y-4">
+            <div className="rounded-[22px] border border-outline-variant/50 bg-card p-6 shadow-sm space-y-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
                   <FileText className="h-6 w-6" />
                 </span>
                 <div>
-                  <p className="font-bold text-lg text-on-surface">Your rights as a data subject</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p className="font-bold text-xl text-on-surface">Your rights as a data subject</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
                     You may ask questions, request access, or raise concerns through the proper Gordon College office.
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low/50 p-5 text-sm leading-relaxed text-on-surface-variant font-medium">
+              <div className="rounded-xl border border-outline-variant/30 bg-surface-container-low/60 p-5 text-base leading-relaxed text-on-surface-variant font-medium">
                 <p className="leading-7">{DATA_PRIVACY_RIGHTS_NOTICE}</p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[22px] border border-outline-variant/30 bg-gradient-to-br from-surface-container-lowest to-surface-container-low p-6 shadow-sm">
+          <div className="rounded-[22px] border border-outline-variant/50 bg-card p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-6">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
                 <ChevronRight className="h-6 w-6" />
               </span>
               <div>
-                <p className="font-bold text-lg text-on-surface">Before you continue</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Confirm this waiver, then proceed to the full medical form.</p>
+                <p className="font-bold text-xl text-on-surface">Before you continue</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Confirm this waiver, then proceed to the full medical form.</p>
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="group relative rounded-xl border border-outline-variant/20 bg-surface-container-low/30 p-5 transition-all duration-300 hover:border-primary/20 hover:bg-surface-container-low/60">
-                <div className="absolute top-4 right-4 text-xs font-bold text-primary/30 group-hover:text-primary/50 transition-colors">
+              <div className="group relative rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-5 transition-all duration-200 hover:border-primary/40 hover:bg-surface-container-low">
+                <div className="absolute top-4 right-4 text-xs font-bold text-primary/50 group-hover:text-primary transition-colors">
                   STEP 01
                 </div>
-                <p className="text-sm font-bold text-on-surface">Review the consent details</p>
-                <p className="mt-2 text-xs leading-relaxed text-on-surface-variant">
+                <p className="text-base font-bold text-on-surface">Review the consent details</p>
+                <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
                   Read how Gordon College Clinic stores and uses your personal and medical information.
                 </p>
               </div>
-              <div className="group relative rounded-xl border border-outline-variant/20 bg-surface-container-low/30 p-5 transition-all duration-300 hover:border-primary/20 hover:bg-surface-container-low/60">
-                <div className="absolute top-4 right-4 text-xs font-bold text-primary/30 group-hover:text-primary/50 transition-colors">
+              <div className="group relative rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-5 transition-all duration-200 hover:border-primary/40 hover:bg-surface-container-low">
+                <div className="absolute top-4 right-4 text-xs font-bold text-primary/50 group-hover:text-primary transition-colors">
                   STEP 02
                 </div>
-                <p className="text-sm font-bold text-on-surface">Continue to the record form</p>
-                <p className="mt-2 text-xs leading-relaxed text-on-surface-variant">
+                <p className="text-base font-bold text-on-surface">Continue to the record form</p>
+                <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
                   Your progress in the next step is saved automatically while you complete it.
                 </p>
               </div>
@@ -163,10 +163,10 @@ export default function StudentPrivacyWaiver() {
           </div>
 
           <div
-            className={`group relative rounded-[22px] border p-6 transition-all duration-300 ${
+            className={`group relative rounded-[22px] border p-6 transition-all duration-200 ${
               dataPrivacyConsent
-                ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/80 to-teal-50/30 shadow-[0_4px_16px_rgba(16,185,129,0.04)]'
-                : 'border-amber-200 bg-gradient-to-br from-amber-50/60 to-orange-50/20 shadow-[0_4px_16px_rgba(245,158,11,0.02)]'
+                ? 'border-emerald-300 bg-emerald-50/70 shadow-sm'
+                : 'border-amber-300 bg-amber-50/70 shadow-sm'
             }`}
           >
             <div className="flex items-start gap-4">

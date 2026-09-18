@@ -1,22 +1,43 @@
-.DS_Store
+# Dependencies
+node_modules/
+backend/vendor/
+
+# Environment
 .env
 .env.*
 !.env.example
-*.crdownload
-"GC General Privacy Notice_files"/
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/auth.json
 
-node_modules/
+# Builds & Outputs
 dist/
-*.log
-
-# React Router
-.react-router/
 build/
+.react-router/
+backend/public/build
+backend/public/hot
+backend/public/storage
 
+# Logs & Temporary Files
+*.log
+backend/storage/*.key
+backend/storage/pail/
+backend/storage/backups/
+.phpunit.result.cache
+backend/.phpunit.cache
 
+# Database Seeders & Dumps
+database/seeders.sql
+*seeders*.sql
+*.sql.gz
+*.dump
 
-g.image/
-gemini.md
-
-
+# OS & IDE
+.DS_Store
+Thumbs.db
+*.crdownload
 .agents
+_ide_helper.php
+Homestead.json
+Homestead.yaml

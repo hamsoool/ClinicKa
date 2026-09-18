@@ -16,11 +16,13 @@ import {
 type PasswordChangeCardProps = {
   title?: string;
   description?: string;
+  variant?: 'card' | 'plain';
 };
 
 export default function PasswordChangeCard({
   title = 'Password',
   description,
+  variant = 'card',
 }: PasswordChangeCardProps) {
   const { changePassword, sendPasswordChangeOtp, me } = useAuth();
   const [form, setForm] = useState({
@@ -144,6 +146,146 @@ export default function PasswordChangeCard({
     }
   };
 
+  const isPlain = variant === 'plain';
+  const gridClass = isPlain
+    ? 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3'
+    : 'grid gap-5 md:grid-cols-2';
+  const currentPasswordColClass = isPlain ? 'min-w-0 sm:col-span-2 lg:col-span-1' : 'min-w-0 md:col-span-2';
+  const fullWidthColClass = isPlain ? 'min-w-0 sm:col-span-2 lg:col-span-3' : 'min-w-0 md:col-span-2';
+
+  const formContent = (
+    <form onSubmit={handleSubmit} className={gridClass}>
+      <div className={currentPasswordColClass}>
+        <Label htmlFor="currentPassword">Current Password</Label>
+        <Input
+          id="currentPassword"
+          type="password"
+          value={form.currentPassword}
+          onChange={(event) => setForm((prev) => ({ ...prev, currentPassword: event.target.value }))}
+          placeholder="Enter your current password"
+        />
+      </div>
+      <div className="min-w-0">
+        <Label htmlFor="newPassword">New Password</Label>
+        <div className="relative mt-1">
+          <Input
+            id="newPassword"
+            type={showPassword ? 'text' : 'password'}
+            value={form.newPassword}
+            onChange={(event) => setForm((prev) => ({ ...prev, newPassword: event.target.value }))}
+            placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+            className="pr-12"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-full text-[#60717e] transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+      <div className="min-w-0">
+        <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
+        <div className="relative mt-1">
+          <Input
+            id="confirmNewPassword"
+            type={showPassword ? 'text' : 'password'}
+            value={form.confirmPassword}
+            onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+            placeholder="Re-enter your new password"
+            className="pr-12"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-full text-[#60717e] transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+            aria-label={showPassword ? 'Hide confirmed password' : 'Show confirmed password'}
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+      <div className={fullWidthColClass}>
+        <PasswordStrengthMeter
+          password={form.newPassword}
+          userInputs={{
+            email: me?.profile?.email,
+            firstName: me?.profile?.first_name,
+            lastName: me?.profile?.last_name,
+            studentId: me?.profile?.student_id,
+          }}
+        />
+      </div>
+      {requires2FA && showOtpSection && (
+        <div className={`${fullWidthColClass} flex flex-col gap-2 mt-2`}>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="otp" className="text-sm font-semibold text-on-surface">
+              Two-Factor Authentication Code
+            </Label>
+            <span className="text-xs text-on-surface-variant leading-relaxed">
+              A 6-digit verification code will be sent to your registered email: <strong>{me?.profile?.email}</strong>.
+            </span>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center mt-1">
+            <div className="relative flex-1 w-full max-w-[280px]">
+              <Input
+                id="otp"
+                type="text"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={otp}
+                onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
+                placeholder="Enter 6-digit OTP"
+                className="text-center font-mono text-base tracking-widest h-11"
+                disabled={saving}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSendOtp}
+              disabled={sendingOtp || cooldown > 0}
+              className="h-11 px-5"
+            >
+              {cooldown > 0
+                ? `Resend in ${cooldown}s`
+                : sendingOtp
+                ? 'Sending OTP...'
+                : 'Send Code'}
+            </Button>
+          </div>
+        </div>
+      )}
+      <div className={fullWidthColClass}>
+        <Button type="submit" disabled={saving} className="w-full sm:w-auto px-6">
+          {saving
+            ? 'Changing Password...'
+            : requires2FA && showOtpSection
+            ? 'Verify & Change Password'
+            : 'Change Password'}
+        </Button>
+      </div>
+    </form>
+  );
+
+  if (isPlain) {
+    return (
+      <div id="password" className="scroll-mt-24 w-full min-w-0 space-y-4">
+        <div className="border-b border-border/40 pb-2">
+          <h4 className="text-base font-semibold text-foreground">{title}</h4>
+          {description ? (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">Update your password to keep your account secure.</p>
+          )}
+        </div>
+        {formContent}
+      </div>
+    );
+  }
+
   return (
     <Card id="password" className="scroll-mt-24 overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest !gap-0">
       <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
@@ -156,120 +298,7 @@ export default function PasswordChangeCard({
         </div>
       </CardHeader>
       <CardContent className="pt-4">
-        <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
-          <div className="min-w-0 md:col-span-2">
-            <Label htmlFor="currentPassword">Current Password</Label>
-            <Input
-              id="currentPassword"
-              type="password"
-              value={form.currentPassword}
-              onChange={(event) => setForm((prev) => ({ ...prev, currentPassword: event.target.value }))}
-              placeholder="Enter your current password"
-            />
-          </div>
-          <div className="min-w-0">
-            <Label htmlFor="newPassword">New Password</Label>
-            <div className="relative mt-1">
-              <Input
-                id="newPassword"
-                type={showPassword ? 'text' : 'password'}
-                value={form.newPassword}
-                onChange={(event) => setForm((prev) => ({ ...prev, newPassword: event.target.value }))}
-                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-                className="pr-12"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-full text-[#60717e] transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <div className="min-w-0">
-            <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
-            <div className="relative mt-1">
-              <Input
-                id="confirmNewPassword"
-                type={showPassword ? 'text' : 'password'}
-                value={form.confirmPassword}
-                onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
-                placeholder="Re-enter your new password"
-                className="pr-12"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-full text-[#60717e] transition hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
-                aria-label={showPassword ? 'Hide confirmed password' : 'Show confirmed password'}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <div className="min-w-0 md:col-span-2">
-            <PasswordStrengthMeter
-              password={form.newPassword}
-              userInputs={{
-                email: me?.profile?.email,
-                firstName: me?.profile?.first_name,
-                lastName: me?.profile?.last_name,
-                studentId: me?.profile?.student_id,
-              }}
-            />
-          </div>
-          {requires2FA && showOtpSection && (
-            <div className="min-w-0 md:col-span-2 flex flex-col gap-2 mt-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="otp" className="text-sm font-semibold text-on-surface">
-                  Two-Factor Authentication Code
-                </Label>
-                <span className="text-xs text-on-surface-variant leading-relaxed">
-                  A 6-digit verification code will be sent to your registered email: <strong>{me?.profile?.email}</strong>.
-                </span>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center mt-1">
-                <div className="relative flex-1 w-full max-w-[280px]">
-                  <Input
-                    id="otp"
-                    type="text"
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    value={otp}
-                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
-                    placeholder="Enter 6-digit OTP"
-                    className="text-center font-mono text-base tracking-widest h-11"
-                    disabled={saving}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSendOtp}
-                  disabled={sendingOtp || cooldown > 0}
-                  className="h-11 px-5"
-                >
-                  {cooldown > 0
-                    ? `Resend in ${cooldown}s`
-                    : sendingOtp
-                    ? 'Sending OTP...'
-                    : 'Send Code'}
-                </Button>
-              </div>
-            </div>
-          )}
-          <div className="md:col-span-2">
-            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
-              {saving
-                ? 'Changing Password...'
-                : requires2FA && showOtpSection
-                ? 'Verify & Change Password'
-                : 'Change Password'}
-            </Button>
-          </div>
-        </form>
+        {formContent}
       </CardContent>
     </Card>
   );

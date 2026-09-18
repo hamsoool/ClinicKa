@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { AuthMe } from '../../../lib/api';
@@ -243,7 +243,8 @@ function getMaxBirthdateIso(minAge: number) {
 function calculateAgeFromBirthdate(dateValue: string) {
   if (!dateValue) return null;
 
-  const birthdate = new Date(`${dateValue}T00:00:00`);
+  const cleanValue = dateValue.split('T')[0];
+  const birthdate = new Date(`${cleanValue}T00:00:00`);
   if (Number.isNaN(birthdate.getTime())) return null;
 
   const today = new Date();
@@ -433,6 +434,55 @@ function calculateBmi(weight: string, height: string): string {
   return '';
 }
 
+const DRAFT_STORAGE_PREFIX = 'clinicka_student_medical_form_draft_v1_';
+
+function getDraftStorageKey(studentId: string, year: string | undefined, editSubmissionId: string | null): string {
+  const resolvedStudent = (studentId || 'unknown').trim();
+  const resolvedYear = (year || '1').trim();
+  const resolvedEdit = editSubmissionId ? `_edit_${editSubmissionId}` : '';
+  return `${DRAFT_STORAGE_PREFIX}${resolvedStudent}_${resolvedYear}${resolvedEdit}`;
+}
+
+type FormDraftPayload = {
+  step: number;
+  formData: Omit<MedicalFormData, 'cbcFile' | 'urinalysisFile' | 'xrayFile'>;
+  isEmergencyAddressSameAsStudent: boolean;
+  savedAt: number;
+};
+
+function loadFormDraft(key: string): FormDraftPayload | null {
+  if (typeof window === 'undefined' || !key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed.formData) {
+      return parsed as FormDraftPayload;
+    }
+  } catch {
+    // Ignore storage/JSON errors
+  }
+  return null;
+}
+
+function saveFormDraft(key: string, draft: FormDraftPayload): void {
+  if (typeof window === 'undefined' || !key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(draft));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+function removeFormDraft(key: string): void {
+  if (typeof window === 'undefined' || !key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export function useStudentMedicalForm({
   year,
   me,
@@ -442,8 +492,25 @@ export function useStudentMedicalForm({
 }: UseStudentMedicalFormArgs) {
   const queryClient = useQueryClient();
   const student = me?.student;
+  const currentStudentId = student?.student_id || me?.profile?.student_id || me?.profile?.id || '';
   const { academicYear: activeAcademicYear } = useAcademicYear();
-  const [step, setStep] = useState(isReview ? 5 : 1);
+
+  const draftKey = useMemo(() => {
+    if (isReview || !currentStudentId) return '';
+    return getDraftStorageKey(currentStudentId, year, editSubmissionId);
+  }, [currentStudentId, year, editSubmissionId, isReview]);
+
+  const initialDraft = useMemo(() => {
+    return draftKey ? loadFormDraft(draftKey) : null;
+  }, [draftKey]);
+
+  const [step, setStep] = useState<number>(() => {
+    if (isReview) return 5;
+    if (initialDraft?.step && initialDraft.step >= 1 && initialDraft.step <= 5) {
+      return initialDraft.step;
+    }
+    return 1;
+  });
   const [uploading, setUploading] = useState(false);
   const [uploadingLabFile, setUploadingLabFile] = useState<Record<LabUploadKind, boolean>>({
     cbc: false,
@@ -453,8 +520,22 @@ export function useStudentMedicalForm({
   const [submitted, setSubmitted] = useState(false);
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [originalSubmissionStatus, setOriginalSubmissionStatus] = useState<string | null>(null);
-  const [isEmergencyAddressSameAsStudent, setIsEmergencyAddressSameAsStudent] = useState(false);
-  const [formData, setFormData] = useState<MedicalFormData>(() => buildInitialFormData(year, me, initialDataPrivacyConsent));
+  const [isEmergencyAddressSameAsStudent, setIsEmergencyAddressSameAsStudent] = useState<boolean>(() => {
+    return initialDraft?.isEmergencyAddressSameAsStudent ?? false;
+  });
+  const [formData, setFormData] = useState<MedicalFormData>(() => {
+    const base = buildInitialFormData(year, me, initialDataPrivacyConsent);
+    if (initialDraft?.formData) {
+      return {
+        ...base,
+        ...initialDraft.formData,
+        cbcFile: null,
+        urinalysisFile: null,
+        xrayFile: null,
+      };
+    }
+    return base;
+  });
   const maxBirthdate = useMemo(() => getMaxBirthdateIso(MIN_AGE), []);
   const profileAssetStudentId = me?.student?.student_id || me?.profile.student_id || '';
   const profileAssetProfileId = me?.student?.profile_id || me?.profile.id || '';
@@ -468,6 +549,46 @@ export function useStudentMedicalForm({
       profileAssetProfileId &&
       (profileAssetsQuery.isLoading || (profileAssetsQuery.isFetching && !profileAssetsQuery.data)),
   );
+
+  const hasLoadedDraftKeyRef = useRef<string>(draftKey);
+
+  // Restore draft if draftKey resolves after initial render
+  useEffect(() => {
+    if (!draftKey || isReview) return;
+    if (hasLoadedDraftKeyRef.current !== draftKey) {
+      hasLoadedDraftKeyRef.current = draftKey;
+      const draft = loadFormDraft(draftKey);
+      if (draft?.formData) {
+        setStep(isReview ? 5 : (draft.step || 1));
+        setIsEmergencyAddressSameAsStudent(draft.isEmergencyAddressSameAsStudent ?? false);
+        setFormData((prev) => ({
+          ...prev,
+          ...draft.formData,
+          cbcFile: null,
+          urinalysisFile: null,
+          xrayFile: null,
+        }));
+      }
+    }
+  }, [draftKey, isReview]);
+
+  // Auto-save form draft whenever fields or step change
+  useEffect(() => {
+    if (!draftKey || isReview || submitted) return;
+    if (hasLoadedDraftKeyRef.current !== draftKey) return;
+
+    try {
+      const { cbcFile, urinalysisFile, xrayFile, ...serializable } = formData;
+      saveFormDraft(draftKey, {
+        step,
+        formData: serializable,
+        isEmergencyAddressSameAsStudent,
+        savedAt: Date.now(),
+      });
+    } catch {
+      // Ignore storage errors
+    }
+  }, [draftKey, formData, isEmergencyAddressSameAsStudent, isReview, step, submitted]);
 
   useEffect(() => {
     let active = true;
@@ -513,7 +634,6 @@ export function useStudentMedicalForm({
 
   useEffect(() => {
     setSubmitted(false);
-    setStep(isReview ? 5 : 1);
     setUploading(false);
     setUploadingLabFile({
       cbc: false,
@@ -522,9 +642,7 @@ export function useStudentMedicalForm({
     });
     setActiveSubmissionId(null);
     setOriginalSubmissionStatus(null);
-    setIsEmergencyAddressSameAsStudent(false);
-    setFormData(buildInitialFormData(year, me, initialDataPrivacyConsent));
-  }, [year, me, editSubmissionId, initialDataPrivacyConsent, isReview]);
+  }, [year, currentStudentId, editSubmissionId, isReview]);
 
   useEffect(() => {
     if (!editSubmissionId) return;
@@ -541,69 +659,87 @@ export function useStudentMedicalForm({
         setIsEmergencyAddressSameAsStudent(
           addressesMatch(submission.address || '', submission.emergencyContact?.address || ''),
         );
+        const activeDraft = draftKey ? loadFormDraft(draftKey) : null;
+        if (activeDraft?.step) {
+          setStep(isReview ? 5 : activeDraft.step);
+        }
+        if (typeof activeDraft?.isEmergencyAddressSameAsStudent === 'boolean') {
+          setIsEmergencyAddressSameAsStudent(activeDraft.isEmergencyAddressSameAsStudent);
+        }
+
         setFormData((prev) => {
           const parsedOperation = parseOperationDetails(submission.operationDetails || prev.operationDetails);
 
-          return {
-          ...syncLegacyLabSourceFields({
+          const fromSubmission = syncLegacyLabSourceFields({
             ...prev,
-          studentId: normalizeStudentId(prev.studentId || submission.studentId),
-          firstName: sanitizeName(prev.firstName || submission.firstName || ''),
-          lastName: sanitizeName(prev.lastName || submission.lastName || ''),
-          middleInitial: normalizeMiddleInitial(prev.middleInitial || submission.middleInitial || ''),
-          department: resolveDepartmentValue(prev.department || submission.department || ''),
-          course: normalizeProgramForDepartment(
-            prev.department || submission.department || '',
-            prev.course || submission.course || '',
-          ),
-          yearLevel: resolveAcademicYearLevelValue(me),
-          year: submission.year || prev.year,
-          age: (() => {
-            const chosenBirthday = prev.birthday || submission.birthday || '';
-            const derivedAge = calculateAgeFromBirthdate(chosenBirthday);
-            return derivedAge !== null
-              ? sanitizeDigits(String(derivedAge), 2)
-              : sanitizeDigits(prev.age || submission.age || '', 2);
-          })(),
-          sex: prev.sex || submission.sex || '',
-          birthday: prev.birthday || submission.birthday || '',
-          civilStatus: prev.civilStatus || submission.civilStatus || '',
-          contactNumber: formatPhilippinePhoneInput(prev.contactNumber || submission.contactNumber || ''),
-          address: sanitizeAddress(prev.address || submission.address || ''),
-          medicalHistory: {
-            ...DEFAULT_MEDICAL_HISTORY,
-            ...(submission.medicalHistory || {}),
-          },
-          otherMedicalHistory: sanitizeOtherMedicalHistory((submission as any).otherMedicalHistory || ''),
-          allergyDetails: sanitizeSafeText(submission.allergyDetails || prev.allergyDetails, 120),
-          hadOperation: submission.hadOperation || prev.hadOperation,
-          ...parsedOperation,
-          emergencyContact: {
-            ...prev.emergencyContact,
-            ...(submission.emergencyContact || {}),
-            name: sanitizeName(submission.emergencyContact?.name || prev.emergencyContact.name),
-            relationship: sanitizeEmergencyRelationship(submission.emergencyContact?.relationship || prev.emergencyContact.relationship),
-            phone: formatPhilippinePhoneInput(submission.emergencyContact?.phone || prev.emergencyContact.phone),
-            address: sanitizeAddress(submission.emergencyContact?.address || prev.emergencyContact.address),
-          },
-          weight: submission.weight || prev.weight,
-          height: submission.height || prev.height,
-          bmi: submission.bmi || prev.bmi,
-          cbcTestSite: resolveLabTestSiteFields((submission as any).cbcTestClinic || '').primary,
-          urinalysisTestSite: resolveLabTestSiteFields((submission as any).urinalysisTestClinic || '').primary,
-          xrayTestSite: resolveLabTestSiteFields((submission as any).xrayTestClinic || '').primary,
-          cbcTestSiteOther: resolveLabTestSiteFields((submission as any).cbcTestClinic || '').other,
-          urinalysisTestSiteOther: resolveLabTestSiteFields((submission as any).urinalysisTestClinic || '').other,
-          xrayTestSiteOther: resolveLabTestSiteFields((submission as any).xrayTestClinic || '').other,
-          cbcFile: null,
-          urinalysisFile: null,
-          xrayFile: null,
-          existingCbcFileUrl: submission.cbcFileUrl || '',
-          existingUrinalysisFileUrl: submission.urinalysisFileUrl || '',
-          existingXrayFileUrl: submission.xrayFileUrl || '',
-          submissionConfirmed: false,
-          }),
-        };
+            studentId: normalizeStudentId(prev.studentId || submission.studentId),
+            firstName: sanitizeName(prev.firstName || submission.firstName || ''),
+            lastName: sanitizeName(prev.lastName || submission.lastName || ''),
+            middleInitial: normalizeMiddleInitial(prev.middleInitial || submission.middleInitial || ''),
+            department: resolveDepartmentValue(prev.department || submission.department || ''),
+            course: normalizeProgramForDepartment(
+              prev.department || submission.department || '',
+              prev.course || submission.course || '',
+            ),
+            yearLevel: resolveAcademicYearLevelValue(me),
+            year: submission.year || prev.year,
+            age: (() => {
+              const chosenBirthday = prev.birthday || submission.birthday || '';
+              const derivedAge = calculateAgeFromBirthdate(chosenBirthday);
+              return derivedAge !== null
+                ? sanitizeDigits(String(derivedAge), 2)
+                : sanitizeDigits(prev.age || submission.age || '', 2);
+            })(),
+            sex: prev.sex || submission.sex || '',
+            birthday: prev.birthday || submission.birthday || '',
+            civilStatus: prev.civilStatus || submission.civilStatus || '',
+            contactNumber: formatPhilippinePhoneInput(prev.contactNumber || submission.contactNumber || ''),
+            address: sanitizeAddress(prev.address || submission.address || ''),
+            medicalHistory: {
+              ...DEFAULT_MEDICAL_HISTORY,
+              ...(submission.medicalHistory || {}),
+            },
+            otherMedicalHistory: sanitizeOtherMedicalHistory((submission as any).otherMedicalHistory || ''),
+            allergyDetails: sanitizeSafeText(submission.allergyDetails || prev.allergyDetails, 120),
+            hadOperation: submission.hadOperation || prev.hadOperation,
+            ...parsedOperation,
+            emergencyContact: {
+              ...prev.emergencyContact,
+              ...(submission.emergencyContact || {}),
+              name: sanitizeName(submission.emergencyContact?.name || prev.emergencyContact.name),
+              relationship: sanitizeEmergencyRelationship(submission.emergencyContact?.relationship || prev.emergencyContact.relationship),
+              phone: formatPhilippinePhoneInput(submission.emergencyContact?.phone || prev.emergencyContact.phone),
+              address: sanitizeAddress(submission.emergencyContact?.address || prev.emergencyContact.address),
+            },
+            weight: submission.weight || prev.weight,
+            height: submission.height || prev.height,
+            bmi: submission.bmi || prev.bmi,
+            cbcTestSite: resolveLabTestSiteFields((submission as any).cbcTestClinic || '').primary,
+            urinalysisTestSite: resolveLabTestSiteFields((submission as any).urinalysisTestClinic || '').primary,
+            xrayTestSite: resolveLabTestSiteFields((submission as any).xrayTestClinic || '').primary,
+            cbcTestSiteOther: resolveLabTestSiteFields((submission as any).cbcTestClinic || '').other,
+            urinalysisTestSiteOther: resolveLabTestSiteFields((submission as any).urinalysisTestClinic || '').other,
+            xrayTestSiteOther: resolveLabTestSiteFields((submission as any).xrayTestClinic || '').other,
+            cbcFile: null,
+            urinalysisFile: null,
+            xrayFile: null,
+            existingCbcFileUrl: submission.cbcFileUrl || '',
+            existingUrinalysisFileUrl: submission.urinalysisFileUrl || '',
+            existingXrayFileUrl: submission.xrayFileUrl || '',
+            submissionConfirmed: false,
+          });
+
+          if (activeDraft?.formData) {
+            return {
+              ...fromSubmission,
+              ...activeDraft.formData,
+              cbcFile: null,
+              urinalysisFile: null,
+              xrayFile: null,
+            };
+          }
+
+          return fromSubmission;
         });
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to load returned record for editing');
@@ -624,6 +760,10 @@ export function useStudentMedicalForm({
 
     const resolveCategoryAndPrefill = async () => {
       try {
+        if (draftKey && loadFormDraft(draftKey)) {
+          return;
+        }
+
         const response = await getStudentRecords(studentId, { includeProfileAssetsFallback: false });
         const records = (response?.records || []) as SubmissionRecord[];
         const hasAnyRecords = records.length > 0;
@@ -1355,6 +1495,9 @@ export function useStudentMedicalForm({
 
       await invalidateStudentRecordsQuery(queryClient, formData.studentId);
       toast.success(isResubmission ? 'Medical record and laboratory files resubmitted successfully!' : 'Medical record and laboratory files submitted successfully!');
+      if (draftKey) {
+        removeFormDraft(draftKey);
+      }
       setSubmitted(true);
       setActiveSubmissionId(null);
     } catch (error) {
@@ -1363,7 +1506,16 @@ export function useStudentMedicalForm({
     } finally {
       setUploading(false);
     }
-  }, [activeAcademicYear, activeSubmissionId, canSubmit, formData, hasCbcFile, hasUrinalysisFile, hasXrayFile, isUploadingAnyLabFile, originalSubmissionStatus, queryClient, requiresPhysicalCopyAgreement, uploading]);
+  }, [activeAcademicYear, activeSubmissionId, canSubmit, draftKey, formData, hasCbcFile, hasUrinalysisFile, hasXrayFile, isUploadingAnyLabFile, originalSubmissionStatus, queryClient, requiresPhysicalCopyAgreement, uploading]);
+
+  const clearDraft = useCallback(() => {
+    if (draftKey) {
+      removeFormDraft(draftKey);
+    }
+    setFormData(buildInitialFormData(year, me, initialDataPrivacyConsent));
+    setStep(isReview ? 5 : 1);
+    setIsEmergencyAddressSameAsStudent(false);
+  }, [draftKey, initialDataPrivacyConsent, isReview, me, year]);
 
   return {
     step,
@@ -1399,5 +1551,6 @@ export function useStudentMedicalForm({
     getBmiCategory,
     maxBirthdate,
     submit,
+    clearDraft,
   };
 }

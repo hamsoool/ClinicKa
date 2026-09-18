@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
 import { Download, FileText } from 'lucide-react';
@@ -7,13 +7,37 @@ type Props = {
   title: string;
   fileUrl?: string;
   alt?: string;
+  fileName?: string;
+  mimeType?: string;
 };
 
-function getFilePreviewType(fileUrl: string) {
-  const normalizedUrl = fileUrl.split('?')[0].toLowerCase();
+function getFilePreviewType(fileUrl?: string, fileName?: string, mimeType?: string): 'pdf' | 'image' | 'other' {
+  if (!fileUrl) return 'other';
 
+  const normMime = String(mimeType || '').toLowerCase();
+  if (normMime.includes('pdf')) return 'pdf';
+  if (normMime.includes('image')) return 'image';
+
+  const normName = String(fileName || '').toLowerCase();
+  if (normName.endsWith('.pdf')) return 'pdf';
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(normName)) return 'image';
+
+  const normalizedUrl = fileUrl.split('?')[0].toLowerCase();
   if (normalizedUrl.endsWith('.pdf')) return 'pdf';
-  if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(normalizedUrl)) return 'image';
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(normalizedUrl)) return 'image';
+
+  try {
+    const urlObj = new URL(fileUrl, 'http://dummy.local');
+    const qMime = (urlObj.searchParams.get('mime') || '').toLowerCase();
+    if (qMime.includes('pdf')) return 'pdf';
+    if (qMime.includes('image')) return 'image';
+
+    const qName = (urlObj.searchParams.get('name') || urlObj.searchParams.get('filename') || '').toLowerCase();
+    if (qName.endsWith('.pdf')) return 'pdf';
+    if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(qName)) return 'image';
+  } catch {
+    // Ignore URL parse error
+  }
 
   return 'other';
 }
@@ -38,7 +62,7 @@ function buildPdfPreviewUrl(fileUrl: string, view: 'Fit' | 'FitH' | 'FitV' = 'Fi
   return `${fileUrl}#${hashParams.toString()}`;
 }
 
-export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, fileUrl, alt }: Props) {
+export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, fileUrl, alt, fileName, mimeType }: Props) {
   if (!fileUrl) {
     return (
       <div className="mb-4 flex items-center gap-3 rounded-lg border bg-muted/50 p-4 text-muted-foreground">
@@ -48,14 +72,75 @@ export const SubmittedFilePreview = memo(function SubmittedFilePreview({ title, 
     );
   }
 
-  const previewType = getFilePreviewType(fileUrl);
+  const initialType = getFilePreviewType(fileUrl, fileName, mimeType);
+  const [previewType, setPreviewType] = useState<'pdf' | 'image' | 'other'>(initialType);
+
+  useEffect(() => {
+    const directType = getFilePreviewType(fileUrl, fileName, mimeType);
+    if (directType !== 'other') {
+      setPreviewType(directType);
+      return;
+    }
+
+    let active = true;
+    fetch(fileUrl, { method: 'HEAD' })
+      .then((res) => {
+        if (!active) return;
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        if (contentType.includes('pdf')) {
+          setPreviewType('pdf');
+        } else if (contentType.includes('image')) {
+          setPreviewType('image');
+        } else {
+          // Probe via Image load fallback
+          const img = new Image();
+          img.onload = () => {
+            if (active) setPreviewType('image');
+          };
+          img.onerror = () => {
+            if (active) setPreviewType('other');
+          };
+          img.src = fileUrl;
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        const img = new Image();
+        img.onload = () => {
+          if (active) setPreviewType('image');
+        };
+        img.onerror = () => {
+          if (active) setPreviewType('other');
+        };
+        img.src = fileUrl;
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [fileUrl, fileName, mimeType]);
+
   const previewTitle = `${title} preview`;
   const previewAlt = alt || title;
   const pdfPreviewUrl = previewType === 'pdf' ? buildPdfPreviewUrl(fileUrl) : fileUrl;
 
   const handleDownloadOriginal = () => {
     const basePath = fileUrl.split('?')[0];
-    const ext = (basePath.split('.').pop() || 'file').toLowerCase();
+    let ext = (basePath.split('.').pop() || '').toLowerCase();
+
+    // If no clean extension was in the URL path (e.g. UUID), use fileName or previewType
+    if (!ext || ext.length > 5 || ext.includes('/')) {
+      if (fileName && fileName.includes('.')) {
+        ext = (fileName.split('.').pop() || '').toLowerCase();
+      } else if (previewType === 'pdf') {
+        ext = 'pdf';
+      } else if (previewType === 'image') {
+        ext = 'png';
+      } else {
+        ext = 'file';
+      }
+    }
+
     const link = document.createElement('a');
     link.href = fileUrl;
     link.download = getDownloadFileName(title, ext);

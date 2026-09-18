@@ -396,7 +396,7 @@ export default function StudentClearance() {
           ) : (
             <>
               {!isApproved && (
-                <Card className="mb-1 border-l-4 border-l-yellow-500 sm:mb-3">
+                <Card className="mb-1 sm:mb-3">
                   <CardContent className="pt-6">
                     <div className="flex items-start gap-3">
                       {isPending || isInReview ? (

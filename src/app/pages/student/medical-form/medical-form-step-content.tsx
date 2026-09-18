@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, FileUp, Loader2, PenLine, ShieldCheck, UserRound, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, FileUp, Loader2, XCircle } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Checkbox } from '../../../components/ui/checkbox';
@@ -102,10 +102,8 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
     formData.urinalysisTestSite.trim() && (formData.urinalysisTestSite !== 'Others' || formData.urinalysisTestSiteOther.trim()),
   );
   const shouldShowXrayUpload = Boolean(formData.xrayTestSite.trim() && (formData.xrayTestSite !== 'Others' || formData.xrayTestSiteOther.trim()));
-  const getProfileAssetStatusLabel = (isReady: boolean) => (isReady ? 'Ready' : profileAssetsLoading ? 'Loadding' : 'Missing');
+  const getProfileAssetStatusLabel = (isReady: boolean) => (isReady ? 'Ready' : profileAssetsLoading ? 'Loading' : 'Missing');
   const getProfileAssetStatusClass = (isReady: boolean) => (isReady ? 'text-green-700' : 'text-amber-700');
-  const getProfileAssetIconClass = (isReady: boolean) =>
-    isReady ? 'text-green-600' : profileAssetsLoading ? 'text-amber-600' : 'text-muted-foreground';
   const getLabFileReviewLabel = (
     selectedFile: File | null | undefined,
     existingUrl: string | undefined,
@@ -154,11 +152,11 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
 
     return (
       <div
-        className={`rounded-lg border p-4 ${
+        className={`rounded-xl border p-4 ${
           isUploading || isReplacingSubmittedFile
             ? 'border-amber-300 bg-amber-50/80'
             : isReady
-              ? 'border-outline-variant/40 bg-surface-container-low'
+              ? 'border-border bg-card'
               : 'border-red-200 bg-red-50/60'
         }`}
       >
@@ -247,31 +245,22 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </p>
           </div>
 
-          <div className="space-y-3 rounded-[18px] border border-outline-variant/40 bg-surface-container-low p-4">
-            <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <UserRound className={`h-5 w-5 ${hasRequiredProfileFields ? 'text-green-600' : 'text-muted-foreground'}`} />
-                <span className="text-sm font-medium text-on-surface">Required Profile Fields</span>
-              </div>
-              <span className={`text-sm ${hasRequiredProfileFields ? 'text-green-700' : 'text-amber-700'}`}>
+          <div className="space-y-3 rounded-[18px] border border-border bg-card p-4">
+            <div className="flex items-center justify-between rounded-xl border border-border bg-white px-5 py-3.5">
+              <span className="text-base font-semibold text-on-surface">Required Profile Fields</span>
+              <span className={`text-base font-semibold ${hasRequiredProfileFields ? 'text-green-700' : 'text-amber-700'}`}>
                 {hasRequiredProfileFields ? 'Complete' : 'Incomplete'}
               </span>
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className={`h-5 w-5 ${getProfileAssetIconClass(hasProfilePhoto)}`} />
-                <span className="text-sm font-medium text-on-surface">1x1 Student Photo</span>
-              </div>
-              <span className={`text-sm ${getProfileAssetStatusClass(hasProfilePhoto)}`}>
+            <div className="flex items-center justify-between rounded-xl border border-border bg-white px-5 py-3.5">
+              <span className="text-base font-semibold text-on-surface">1x1 Student Photo</span>
+              <span className={`text-base font-semibold ${getProfileAssetStatusClass(hasProfilePhoto)}`}>
                 {getProfileAssetStatusLabel(hasProfilePhoto)}
               </span>
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-outline-variant/30 bg-white/70 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <PenLine className={`h-5 w-5 ${getProfileAssetIconClass(hasProfileSignature)}`} />
-                <span className="text-sm font-medium text-on-surface">Student Signature</span>
-              </div>
-              <span className={`text-sm ${getProfileAssetStatusClass(hasProfileSignature)}`}>
+            <div className="flex items-center justify-between rounded-xl border border-border bg-white px-5 py-3.5">
+              <span className="text-base font-semibold text-on-surface">Student Signature</span>
+              <span className={`text-base font-semibold ${getProfileAssetStatusClass(hasProfileSignature)}`}>
                 {getProfileAssetStatusLabel(hasProfileSignature)}
               </span>
             </div>
@@ -354,10 +343,10 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               <span className="font-semibold">*</span>.
             </div>
           ) : null}
-          <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-low p-5">
+          <div className="rounded-[18px] border border-border bg-card p-6">
             <div className="space-y-4">
               <div>
-                <h4 className="font-semibold text-on-surface">Operation History</h4>
+                <h4 className="text-lg font-bold text-on-surface">Operation History</h4>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Let the clinic know if you have undergone any operation before.
                 </p>
@@ -371,10 +360,10 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 >
                   <Label
                     htmlFor="op-yes"
-                    className={`flex cursor-pointer items-center gap-3 rounded-[18px] border px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`flex cursor-pointer items-center gap-3 rounded-[18px] border px-5 py-3.5 text-base font-semibold transition-colors ${
                       formData.hadOperation === 'yes'
-                        ? 'border-primary bg-primary/5 text-primary'
-                        : 'border-outline-variant/40 bg-white/80 text-on-surface hover:border-primary/40'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-white text-on-surface hover:border-primary/40'
                     }`}
                   >
                     <RadioGroupItem value="yes" id="op-yes" />
@@ -382,10 +371,10 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   </Label>
                   <Label
                     htmlFor="op-no"
-                    className={`flex cursor-pointer items-center gap-3 rounded-[18px] border px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`flex cursor-pointer items-center gap-3 rounded-[18px] border px-5 py-3.5 text-base font-semibold transition-colors ${
                       formData.hadOperation === 'no'
-                        ? 'border-primary bg-primary/5 text-primary'
-                        : 'border-outline-variant/40 bg-white/80 text-on-surface hover:border-primary/40'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-white text-on-surface hover:border-primary/40'
                     }`}
                   >
                     <RadioGroupItem value="no" id="op-no" />
@@ -396,9 +385,9 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
           </div>
           {formData.hadOperation === 'yes' && (
-            <div className="rounded-[18px] border border-outline-variant/40 bg-white/80 p-5">
+            <div className="rounded-[18px] border border-border bg-card p-6">
               <div className="space-y-1">
-                <h4 className="font-semibold text-on-surface">Surgical History Details</h4>
+                <h4 className="text-lg font-bold text-on-surface">Surgical History Details</h4>
                 <p className="text-sm text-muted-foreground">
                   Enter the nature of the operation and the date it happened.
                 </p>
@@ -432,10 +421,10 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </div>
             </div>
           )}
-          <div className="rounded-[18px] border border-outline-variant/40 bg-surface-container-low p-5">
-            <div className="border-b border-outline-variant/30 pb-4">
+          <div className="rounded-[18px] border border-border bg-card p-6">
+            <div className="border-b border-border/80 pb-4">
               <div>
-                <h4 className="font-semibold text-on-surface">Emergency Contact Person</h4>
+                <h4 className="text-lg font-bold text-on-surface">Emergency Contact Person</h4>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Add someone the clinic can contact quickly if urgent care is needed.
                 </p>
@@ -527,14 +516,9 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
           <p className="text-sm text-muted-foreground">
             Select where each test was performed. Choose <span className="font-medium">Others</span> to type a custom clinic/lab name (max 50 letters and numbers).
           </p>
-          <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />
-              <p className="text-sm leading-6 text-on-surface-variant">
-                Upload the laboratory result files here. Attachments are kept in private storage and opened through signed access for authorized clinic staff only.
-              </p>
-            </div>
-          </div>
+          <p className="text-base leading-relaxed text-muted-foreground">
+            Upload the laboratory result files here. Attachments are kept in private storage and opened through signed access for authorized clinic staff only.
+          </p>
           <div className="grid gap-4">
             <div>
               <Label>Where did you do your CBC test? *</Label>
@@ -637,7 +621,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
             </div>
           </div>
           {requiresPhysicalCopyAgreement ? (
-            <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
+            <div className="rounded-xl border border-border bg-card p-4.5">
               <div className="flex items-start gap-3">
                 <Checkbox
                   id="physicalCopyAgreement"
@@ -645,15 +629,15 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                   onCheckedChange={(checked) => onFieldChange('physicalCopyAgreement', checked === true)}
                   className="mt-1"
                 />
-                <Label htmlFor="physicalCopyAgreement" className="text-sm leading-6 font-normal">
+                <Label htmlFor="physicalCopyAgreement" className="text-base leading-relaxed font-medium">
                   I agree to bring the physical copies of my CBC, Urinalysis, and X-ray test results during the day of my physical examination for verification and encoding by the clinic staff.
                 </Label>
               </div>
             </div>
           ) : (
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+            <p className="text-base leading-relaxed text-muted-foreground">
               Physical-copy confirmation is not needed when your CBC, Urinalysis, and X-ray were all done at James L. Gordon Memorial Hospital.
-            </div>
+            </p>
           )}
           {!stepFourReady ? (
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -739,7 +723,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
               </p>
             </div>
           ) : null}
-          <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-4">
+          <div className="rounded-xl border border-border bg-card p-4.5">
             <div className="flex items-start gap-3">
               <Checkbox
                 id="submissionConfirmed"
@@ -748,7 +732,7 @@ export const MedicalFormStepContent = memo(function MedicalFormStepContent({
                 disabled={isReview}
                 className="mt-1"
               />
-              <Label htmlFor="submissionConfirmed" className="text-sm leading-6 font-normal">
+              <Label htmlFor="submissionConfirmed" className="text-base leading-relaxed font-medium">
                 I confirm that all details and laboratory test source information are complete and true. I understand that
                 inaccurate information may delay medical certificate issuance.
               </Label>

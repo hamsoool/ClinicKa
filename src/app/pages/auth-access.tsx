@@ -12,7 +12,6 @@ import {
   getPasswordResetCooldownRemaining,
   PASSWORD_RESET_COOLDOWN_SECONDS,
   sendPasswordResetEmail,
-  signInWithGoogle,
   type UserRole,
 } from '../lib/api';
 import { inferRoleFromEmail, prefetchLikelyPortalRoutes, prefetchPortalExperience } from '../lib/login-prefetch';
@@ -31,6 +30,87 @@ function getHomePath(role: UserRole) {
   if (role === 'staff') return '/staff';
   if (role === 'admin') return '/admin';
   return '/student';
+}
+
+function InteractiveDashboardPreview({ src, alt }: { src: string; alt: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [transform, setTransform] = useState({
+    rotateX: 0,
+    rotateY: 0,
+    shadowX: 0,
+    shadowY: 15,
+  });
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const normX = (x / rect.width - 0.5) * 2;
+    const normY = (y / rect.height - 0.5) * 2;
+
+    const maxRotation = 12;
+    const rotateX = -normY * maxRotation;
+    const rotateY = normX * maxRotation;
+
+    setTransform({
+      rotateX,
+      rotateY,
+      shadowX: -normX * 18,
+      shadowY: -normY * 18 + 20,
+    });
+  };
+
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    setTransform({
+      rotateX: 0,
+      rotateY: 0,
+      shadowX: 0,
+      shadowY: 15,
+    });
+  };
+
+  return (
+    <div style={{ perspective: 1200 }} className="w-full select-none">
+      <div
+        ref={containerRef}
+        onMouseMove={handleMouseMove}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        style={{
+          transform: isHovered
+            ? `rotateX(${transform.rotateX.toFixed(2)}deg) rotateY(${transform.rotateY.toFixed(2)}deg) scale3d(1.03, 1.03, 1.03)`
+            : 'rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)',
+          filter: isHovered
+            ? `drop-shadow(${transform.shadowX.toFixed(1)}px ${transform.shadowY.toFixed(1)}px 30px rgba(0, 45, 25, 0.22))`
+            : 'drop-shadow(3px 8px 30px rgba(0, 0, 0, 0.16))',
+          transition: isHovered
+            ? 'transform 0.1s ease-out, filter 0.1s ease-out'
+            : 'transform 0.6s cubic-bezier(0.23, 1, 0.32, 1), filter 0.6s cubic-bezier(0.23, 1, 0.32, 1)',
+          transformStyle: 'preserve-3d',
+        }}
+        className="relative cursor-pointer will-change-transform"
+      >
+        <div className="overflow-hidden rounded-[24px]">
+          <img
+            src={src}
+            alt={alt}
+            className="pointer-events-none h-full w-full rounded-[24px] object-contain"
+            draggable={false}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function AuthAccessPage() {
@@ -205,12 +285,6 @@ export default function AuthAccessPage() {
     }
   }
 
-  function handleGoogleAuth() {
-    setError(null);
-    setSuccessMessage(null);
-    prefetchLikelyPortalRoutes(signInForm.email);
-    signInWithGoogle();
-  }
 
   function openForgotPasswordDialog() {
     setError(null);
@@ -291,7 +365,7 @@ export default function AuthAccessPage() {
             : null;
 
   const iconInputClassName =
-    'h-12 w-full rounded-full border border-[#d8e4d7] bg-white pl-11 pr-4 text-sm text-[#161d18] outline-none transition focus:border-[#006d3c] focus:ring-2 focus:ring-[#006d3c]/18';
+    'h-13 w-full rounded-full border border-[#d8e4d7] bg-white pl-12 pr-4 text-base text-[#161d18] outline-none transition focus:border-[#006d3c] focus:ring-2 focus:ring-[#006d3c]/18 placeholder:text-neutral-400';
 
   if (requiresPasswordSetup) {
     return <Navigate to="/create-password" replace />;
@@ -509,14 +583,14 @@ export default function AuthAccessPage() {
               </div>
             )}
             <div>
-              <p className="text-lg font-semibold tracking-[-0.02em] text-[#161d18]">ClinicKa!</p>
-              <p className="text-xs uppercase tracking-[0.18em] text-[#60717e]">Gordon College Health Services</p>
+              <p className="text-xl md:text-2xl font-extrabold tracking-tight text-[#161d18]">ClinicKa!</p>
+              <p className="text-xs sm:text-sm font-semibold uppercase tracking-[0.18em] text-[#60717e]">Gordon College Health Services</p>
             </div>
           </Link>
 
           <Link
             to="/"
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#d8e4d7] bg-white px-5 text-sm font-normal text-[#161d18] transition active:scale-95 hover:bg-[#eef6ec] sm:w-auto"
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border border-[#d8e4d7] bg-white px-6 text-base font-semibold text-[#161d18] transition active:scale-95 hover:bg-[#eef6ec] sm:w-auto"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Homepage
@@ -526,44 +600,26 @@ export default function AuthAccessPage() {
         <div className="flex flex-col-reverse gap-8 py-8 sm:gap-10 sm:py-10 lg:grid lg:flex-none lg:grid-cols-[1fr_0.96fr] lg:items-center">
           <div className="space-y-6 sm:space-y-8">
             <div className="space-y-4 sm:space-y-5">
-              <h1 className="max-w-xl text-4xl font-semibold leading-[1.07] tracking-[-0.025em] text-[#161d18] sm:text-5xl lg:text-6xl">
+              <h1 className="max-w-xl text-4xl sm:text-5xl lg:text-[4rem] font-bold leading-[1.08] tracking-[-0.025em] text-[#161d18]">
                 Access your clinic workflow with clarity.
               </h1>
-              <p className="max-w-xl text-[17px] leading-7 text-[#3d4a3f] sm:text-xl sm:leading-8">
-                Sign in with your Gordon College email and password. First-time account creation starts with your Gordon College Google sign-in.
+              <p className="max-w-xl text-xl sm:text-2xl leading-relaxed text-[#3d4a3f]">
+                Sign in with your Gordon College email and password to access your student health records and clinic workflows.
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-[18px] border border-[#d8e4d7] bg-white p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Students</p>
-                <p className="mt-3 text-sm leading-7 text-[#3d4a3f]">Submit requirements, track status, and manage records.</p>
-              </div>
-              <div className="rounded-[18px] border border-[#d8e4d7] bg-white p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Clinic Staff</p>
-                <p className="mt-3 text-sm leading-7 text-[#3d4a3f]">Review submissions and maintain the clinic workflow.</p>
-              </div>
-              <div className="rounded-[18px] border border-[#d8e4d7] bg-white p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60717e]">Administrators</p>
-                <p className="mt-3 text-sm leading-7 text-[#3d4a3f]">Manage access, reports, and system oversight.</p>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-[18px] border border-[#d8e4d7] bg-white p-3 sm:p-4">
-              <img
-                src={DASHBOARD_PREVIEW_SRC}
-                alt="ClinicKa! student dashboard preview"
-                className="h-full w-full rounded-[12px] border border-[#d8e4d7] object-cover object-left-top drop-shadow-[3px_5px_30px_rgba(0,0,0,0.16)]"
-              />
-            </div>
+            <InteractiveDashboardPreview
+              src={DASHBOARD_PREVIEW_SRC}
+              alt="ClinicKa! student dashboard preview"
+            />
           </div>
 
-          <div className="self-start rounded-[18px] border border-[#d8e4d7] bg-white p-4 sm:p-8">
+          <div className="self-start rounded-3xl border border-[#d8e4d7] bg-white p-6 sm:p-10 shadow-sm">
             <div className="border-b border-[#dfebea] pb-6">
-              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-[#161d18] sm:text-3xl">
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#161d18]">
                 Welcome back
               </h2>
-              <p className="mt-2 text-sm leading-7 text-[#3d4a3f]">
+              <p className="mt-2 text-base sm:text-lg leading-relaxed text-[#3d4a3f]">
                 Sign in using your Gordon College domain account.
               </p>
             </div>
@@ -571,11 +627,11 @@ export default function AuthAccessPage() {
             <div className="flex min-h-0 flex-col gap-8 pt-5 sm:pt-6">
               <form className="space-y-4" onSubmit={handleSignIn}>
                 <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
+                  <label className="mb-2.5 block text-xs sm:text-sm font-bold uppercase tracking-wider text-[#425468]">
                     Gordon College email
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#70808b]" />
+                    <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#70808b]" />
                     <input
                       type="email"
                       required
@@ -590,11 +646,11 @@ export default function AuthAccessPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-[#425468]">
+                  <label className="mb-2.5 block text-xs sm:text-sm font-bold uppercase tracking-wider text-[#425468]">
                     Password
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#70808b]" />
+                    <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#70808b]" />
                     <input
                       type={showSignInPassword ? 'text' : 'password'}
                       required
@@ -611,13 +667,13 @@ export default function AuthAccessPage() {
                       onClick={() => setShowSignInPassword((prev) => !prev)}
                       aria-label={showSignInPassword ? 'Hide password' : 'Show password'}
                     >
-                      {showSignInPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showSignInPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-[#4a5b68]">
-                  <label className="flex items-center gap-2">
+                <div className="flex items-center justify-between text-sm sm:text-base text-[#4a5b68] pt-1">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={signInForm.remember}
@@ -634,7 +690,7 @@ export default function AuthAccessPage() {
                       openForgotPasswordDialog();
                     }}
                     disabled={loading || sendingResetEmail}
-                    className="font-normal text-[#006d3c] hover:text-[#004532] disabled:cursor-not-allowed disabled:opacity-70"
+                    className="font-semibold text-[#006d3c] hover:text-[#004532] disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     Forgot password?
                   </button>
@@ -659,12 +715,12 @@ export default function AuthAccessPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#006d3c] text-sm font-normal text-white transition active:scale-95 hover:bg-[#005f34] disabled:opacity-70"
+                  className="flex h-13 w-full items-center justify-center gap-2.5 rounded-full bg-[#006d3c] text-base sm:text-lg font-bold text-white transition active:scale-95 hover:bg-[#005f34] disabled:opacity-70"
                 >
                   {loading ? 'Signing in...' : 'Sign in'}
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-5 w-5" />
                 </button>
-                <p className="text-xs leading-6 text-[#60717e]">
+                <p className="text-xs sm:text-sm leading-6 text-[#60717e]">
                   By signing in, you agree to our{' '}
                   <LegalDialog
                     label="Terms & Conditions"
@@ -754,32 +810,7 @@ export default function AuthAccessPage() {
                 </DialogContent>
               </Dialog>
 
-              <div className="space-y-4">
-                <div className="relative py-1">
-                  <div className="h-px bg-[#dbe5e4]" />
-                  <span className="absolute inset-x-0 -top-2 mx-auto w-fit bg-white px-3 text-xs text-[#60717e]">
-                    Or continue with
-                  </span>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={handleGoogleAuth}
-                  className="flex h-12 w-full items-center justify-center gap-3 rounded-full border border-[#d8e4d7] bg-white text-sm font-normal text-[#161d18] transition active:scale-95 hover:bg-[#eef6ec]"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                  </svg>
-                  Sign in with Google
-                </button>
-
-                <p className="text-center text-sm text-[#4a5b68]">
-                  New to ClinicKa!? Use your Gordon College Domain to sign up and create your account.
-                </p>
-              </div>
             </div>
           </div>
         </div>

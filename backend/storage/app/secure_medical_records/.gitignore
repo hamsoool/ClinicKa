@@ -1,0 +1,14 @@
+*
+!.gitignore
+!xrays/
+!cbc/
+!urinalysis/
+!signatures/
+!photos/
+!certificates/
+!xrays/.gitkeep
+!cbc/.gitkeep
+!urinalysis/.gitkeep
+!signatures/.gitkeep
+!photos/.gitkeep
+!certificates/.gitkeep

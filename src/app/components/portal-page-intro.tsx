@@ -43,13 +43,13 @@ export default function PortalPageIntro({
         <div className={cn('space-y-4', headingClassName)}>
           {eyebrow ? <div>{eyebrow}</div> : null}
           <div>
-            <h1 className={cn('text-2xl font-semibold leading-tight tracking-[-0.02em] text-on-surface sm:text-3xl', titleClassName)}>
+            <h1 className={cn('text-3xl font-bold leading-tight tracking-[-0.02em] text-on-surface sm:text-4xl lg:text-[2.75rem]', titleClassName)}>
               {title}
             </h1>
             {description ? (
               <p
                 className={cn(
-                  'mt-2 max-w-2xl text-sm leading-6 tracking-[-0.01em] text-on-surface-variant sm:text-[17px] sm:leading-7',
+                  'mt-2.5 max-w-3xl text-base leading-relaxed tracking-[-0.01em] text-on-surface-variant sm:text-xl',
                   descriptionClassName,
                 )}
               >
