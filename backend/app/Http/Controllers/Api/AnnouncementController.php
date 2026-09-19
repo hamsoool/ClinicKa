@@ -31,6 +31,8 @@ class AnnouncementController extends Controller
                     'date_posted' => $a->date_posted ? $a->date_posted->format('Y-m-d') : null,
                     'imagePath' => $a->image_path,
                     'image_path' => $a->image_path,
+                    'imageUrl' => $a->image_path,
+                    'image_url' => $a->image_path,
                     'isPublished' => (bool) $a->is_published,
                     'is_published' => (bool) $a->is_published,
                     'createdAt' => $a->created_at ? $a->created_at->toIso8601String() : null,
@@ -66,6 +68,8 @@ class AnnouncementController extends Controller
                 'date_posted' => $a->date_posted ? $a->date_posted->format('Y-m-d') : null,
                 'imagePath' => $a->image_path,
                 'image_path' => $a->image_path,
+                'imageUrl' => $a->image_path,
+                'image_url' => $a->image_path,
                 'isPublished' => (bool) $a->is_published,
                 'is_published' => (bool) $a->is_published,
                 'createdBy' => $a->created_by,
@@ -188,5 +192,56 @@ class AnnouncementController extends Controller
         }
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Stream public announcement banner/image.
+     * GET /api/storage/announcements/{filename}
+     */
+    public function streamAnnouncementImage(Request $request, string $filename): \Symfony\Component\HttpFoundation\Response
+    {
+        $origin = $request->header('Origin');
+        if ($request->isMethod('OPTIONS')) {
+            return response('', 204, [
+                'Access-Control-Allow-Origin' => $origin ?: '*',
+                'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+                'Access-Control-Allow-Headers' => 'Authorization, Content-Type, X-Requested-With, Range',
+                'Access-Control-Allow-Credentials' => $origin ? 'true' : 'false',
+                'Cross-Origin-Resource-Policy' => 'cross-origin',
+            ]);
+        }
+
+        $cleanFilename = basename(str_replace("\0", '', $filename));
+        $filePath = storage_path("app/public/announcements/{$cleanFilename}");
+
+        if (! file_exists($filePath)) {
+            $cleanId = preg_replace('/\.[a-zA-Z0-9]+$/', '', $cleanFilename);
+            $file = \App\Models\FileRecord::find($cleanId);
+            if ($file) {
+                $candidatePath = storage_path('app/' . ltrim((string) $file->storage_path, '/\\'));
+                if (file_exists($candidatePath)) {
+                    $filePath = $candidatePath;
+                } else {
+                    $candidatePublic = storage_path('app/public/' . ltrim((string) $file->storage_path, '/\\'));
+                    if (file_exists($candidatePublic)) {
+                        $filePath = $candidatePublic;
+                    }
+                }
+            }
+        }
+
+        if (! file_exists($filePath)) {
+            abort(404, 'Announcement image not found.');
+        }
+
+        $mime = finfo_file(finfo_open(FILEINFO_MIME_TYPE), $filePath) ?: 'image/jpeg';
+
+        return response()->file($filePath, [
+            'Content-Type' => $mime,
+            'Cache-Control' => 'public, max-age=86400',
+            'Cross-Origin-Resource-Policy' => 'cross-origin',
+            'Access-Control-Allow-Origin' => $origin ?: '*',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 }

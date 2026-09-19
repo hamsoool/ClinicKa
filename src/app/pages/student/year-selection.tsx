@@ -118,14 +118,13 @@ export default function StudentYearSelection() {
     : 'bg-surface-container-lowest text-on-surface-variant';
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
+    <div className="w-full min-w-0 space-y-8">
       <StudentPageIntro
         title="Submit Medical Record"
         description={pageDescription}
-        className="max-w-[78rem]"
       />
 
-      <div className="mx-auto max-w-[78rem]">
+      <div className="w-full min-w-0">
         <Card className="border-outline-variant/30 bg-surface-container-lowest shadow-sm">
           <CardContent className="p-5 sm:p-8">
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.8fr)] lg:items-stretch">

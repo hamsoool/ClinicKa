@@ -261,7 +261,7 @@ export default function SuperAdminAdministrators() {
       : 'Search archived administrators';
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-6">
+    <div className="w-full min-w-0 space-y-8">
       <PortalPageIntro
         title="Administrator Management"
         actions={(
@@ -329,11 +329,11 @@ export default function SuperAdminAdministrators() {
         </Card>
       </div>
 
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.45fr)_minmax(28rem,0.75fr)] 2xl:items-start">
-        <Card className="border-outline-variant/30 bg-surface-container-lowest">
-          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="grid gap-8 2xl:grid-cols-[minmax(0,1.45fr)_minmax(28rem,0.75fr)] 2xl:items-start">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-2">
             <div>
-              <CardTitle className="text-xl font-semibold text-on-surface">System Administrators</CardTitle>
+              <h3 className="text-base font-semibold text-foreground">System Administrators</h3>
             </div>
             <div className="relative w-full sm:w-80">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -344,8 +344,8 @@ export default function SuperAdminAdministrators() {
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
             </div>
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div>
             <Tabs value={tab} onValueChange={(value) => setTab(value as 'active' | 'archived')} className="space-y-4">
               <TabsList className="w-full sm:w-fit">
                 <TabsTrigger value="active">Active</TabsTrigger>
@@ -532,11 +532,11 @@ export default function SuperAdminAdministrators() {
                 </div>
               </TabsContent>
             </Tabs>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         <div className="space-y-6 2xl:sticky 2xl:top-24">
-          <PasswordChangeCard title="Super Admin Password" />
+          <PasswordChangeCard title="Super Admin Password" variant="plain" />
         </div>
       </div>
 

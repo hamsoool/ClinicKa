@@ -113,7 +113,7 @@ export default function StudentMedicalForm() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[100rem]">
+    <div className="w-full min-w-0 space-y-8">
       <div className="flex w-full flex-col gap-5">
         <Button variant="ghost" onClick={() => navigate('/student/year-selection')} className="w-fit">
           <ArrowLeft className="mr-2 h-4 w-4" />

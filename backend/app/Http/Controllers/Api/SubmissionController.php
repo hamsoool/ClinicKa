@@ -40,7 +40,7 @@ class SubmissionController extends Controller
      */
     protected function mapSubmissionDetail(Submission $sub): array
     {
-        $student = $sub->student;
+        $student = $sub->student ?: Student::where('student_id', $sub->student_id)->first();
         $reviewer = $sub->reviewed_by ? StaffUser::where('profile_id', $sub->reviewed_by)->orWhere('id', $sub->reviewed_by)->first() : null;
         $ec = $sub->emergencyContact;
         $mh = $sub->medicalHistory;
@@ -55,6 +55,20 @@ class SubmissionController extends Controller
         $filesByType = [];
         foreach ($files as $f) {
             $filesByType[$f->type] = $f;
+        }
+
+        // Fallback for photo & signature from student profile if not directly on submission
+        if (! isset($filesByType['photo']) && $student?->profile_id) {
+            $profilePhoto = FileRecord::where('uploaded_by', $student->profile_id)->where('type', 'photo')->latest()->first();
+            if ($profilePhoto) {
+                $filesByType['photo'] = $profilePhoto;
+            }
+        }
+        if (! isset($filesByType['signature']) && $student?->profile_id) {
+            $profileSig = FileRecord::where('uploaded_by', $student->profile_id)->where('type', 'signature')->latest()->first();
+            if ($profileSig) {
+                $filesByType['signature'] = $profileSig;
+            }
         }
 
         return [
@@ -161,7 +175,7 @@ class SubmissionController extends Controller
             ] : null,
             'photoUrl' => $filesByType['photo']->url ?? $student->profile_photo_url ?? null,
             'signatureUrl' => $filesByType['signature']->url ?? $student->signature_url ?? null,
-            'xrayFileUrl' => $xray->file_url ?? $filesByType['xray']->url ?? null,
+            'xrayFileUrl' => $xray->file_url ?? $filesByType['xray']->url ?? $filesByType['chest_xray']->url ?? null,
             'cbcFileUrl' => $cbc->file_url ?? $filesByType['cbc']->url ?? null,
             'urinalysisFileUrl' => $uri->file_url ?? $filesByType['urinalysis']->url ?? null,
             'certificatePdfUrl' => $cert->pdf_url ?? $filesByType['certificate']->url ?? null,
@@ -179,16 +193,18 @@ class SubmissionController extends Controller
     protected function mapSubmissionSummary(Submission $sub, array $reviewers = []): array
     {
         $reviewer = $sub->reviewed_by ? ($reviewers[$sub->reviewed_by] ?? null) : null;
+        $student = $sub->relationLoaded('student') ? $sub->student : $sub->student;
+
         return [
             'id' => $sub->id,
             'studentId' => $sub->student_id,
-            'firstName' => $sub->first_name,
-            'lastName' => $sub->last_name,
-            'middleInitial' => $sub->middle_initial ?: '',
-            'course' => $sub->course,
-            'department' => $sub->department,
+            'firstName' => $sub->first_name ?: ($student->first_name ?? ''),
+            'lastName' => $sub->last_name ?: ($student->last_name ?? ''),
+            'middleInitial' => $sub->middle_initial ?: ($student->middle_initial ?? ''),
+            'course' => $sub->course ?: ($student->course ?? ''),
+            'department' => $sub->department ?: ($student->department ?? ''),
             'year' => (string) $sub->year_level,
-            'studentYearLevel' => (string) $sub->year_level,
+            'studentYearLevel' => $student && $student->year_level ? (string) $student->year_level : (string) $sub->year_level,
             'academicYear' => $sub->academic_year,
             'status' => $sub->status,
             'submittedAt' => $sub->submitted_at ? $sub->submitted_at->toIso8601String() : null,
@@ -629,10 +645,10 @@ class SubmissionController extends Controller
         $reviewers = StaffUser::all()->keyBy('profile_id')->all();
         $mapQueue = fn ($rows) => $rows->map(fn ($s) => $this->mapSubmissionSummary($s, $reviewers));
 
-        $pendingQueue = $mapQueue(Submission::where('status', 'pending')->orderByDesc('submitted_at')->limit(20)->get());
-        $inReviewQueue = $mapQueue(Submission::where('status', 'in_review')->orderByDesc('submitted_at')->limit(20)->get());
-        $returnedQueue = $mapQueue(Submission::where('status', 'returned')->orderByDesc('submitted_at')->limit(20)->get());
-        $resubmittedQueue = $mapQueue(Submission::where('status', 'resubmitted')->orderByDesc('submitted_at')->limit(20)->get());
+        $pendingQueue = $mapQueue(Submission::with('student')->where('status', 'pending')->orderByDesc('submitted_at')->limit(20)->get());
+        $inReviewQueue = $mapQueue(Submission::with('student')->where('status', 'in_review')->orderByDesc('submitted_at')->limit(20)->get());
+        $returnedQueue = $mapQueue(Submission::with('student')->where('status', 'returned')->orderByDesc('submitted_at')->limit(20)->get());
+        $resubmittedQueue = $mapQueue(Submission::with('student')->where('status', 'resubmitted')->orderByDesc('submitted_at')->limit(20)->get());
 
         // Department breakdown
         $departments = ['CCS', 'CBA', 'CEAS', 'CHTM', 'CAHS'];
@@ -669,10 +685,10 @@ class SubmissionController extends Controller
      */
     public function getSubmissionSummaries(Request $request): JsonResponse
     {
-        $query = Submission::query();
+        $query = Submission::query()->with('student');
 
         // Filter: Status
-        $status = strtolower(trim($request->query('statusFilter', 'action_needed')));
+        $status = strtolower(trim($request->query('status', $request->query('statusFilter', 'action_needed'))));
         if ($status === 'action_needed') {
             $query->whereIn('status', ['pending', 'in_review', 'returned', 'resubmitted']);
         } elseif ($status !== 'all' && ! empty($status)) {
@@ -680,17 +696,20 @@ class SubmissionController extends Controller
         }
 
         // Filter: Department
-        if ($dept = $request->query('departmentFilter')) {
+        $dept = $request->query('department', $request->query('departmentFilter'));
+        if ($dept && $dept !== 'all') {
             $query->where('department', $dept);
         }
 
         // Filter: Year
-        if ($year = $request->query('yearFilter')) {
+        $year = $request->query('year', $request->query('yearFilter'));
+        if ($year && $year !== 'all') {
             $query->where('year_level', $year);
         }
 
         // Filter: Search Query (Student ID, First Name, Last Name)
-        if ($search = trim($request->query('searchQuery', ''))) {
+        $search = trim($request->query('search', $request->query('searchQuery', '')));
+        if (! empty($search)) {
             $query->where(function ($q) use ($search) {
                 $q->where('student_id', 'LIKE', "%{$search}%")
                   ->orWhere('first_name', 'LIKE', "%{$search}%")
@@ -698,7 +717,7 @@ class SubmissionController extends Controller
             });
         }
 
-        $sortOrder = strtolower($request->query('sortOrder', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $sortOrder = strtolower($request->query('sort', $request->query('sortOrder', 'desc'))) === 'asc' ? 'asc' : 'desc';
         $query->orderBy('submitted_at', $sortOrder);
 
         $page = max(1, (int) $request->query('page', 1));
@@ -709,19 +728,29 @@ class SubmissionController extends Controller
 
         $reviewers = StaffUser::all()->keyBy('profile_id')->all();
 
+        $allCount = Submission::count();
+        $actionNeededCount = Submission::whereIn('status', ['pending', 'in_review', 'returned', 'resubmitted'])->count();
+        $pendingCount = Submission::where('status', 'pending')->count();
+        $inReviewCount = Submission::where('status', 'in_review')->count();
+        $returnedCount = Submission::where('status', 'returned')->count();
+        $resubmittedCount = Submission::where('status', 'resubmitted')->count();
+        $approvedCount = Submission::where('status', 'approved')->count();
+
         return response()->json([
             'items' => $items->map(fn ($s) => $this->mapSubmissionSummary($s, $reviewers)),
             'total' => $total,
             'page' => $page,
             'pageSize' => $pageSize,
             'counts' => [
-                'all' => Submission::count(),
-                'action_needed' => Submission::whereIn('status', ['pending', 'in_review', 'returned', 'resubmitted'])->count(),
-                'pending' => Submission::where('status', 'pending')->count(),
-                'in_review' => Submission::where('status', 'in_review')->count(),
-                'returned' => Submission::where('status', 'returned')->count(),
-                'resubmitted' => Submission::where('status', 'resubmitted')->count(),
-                'approved' => Submission::where('status', 'approved')->count(),
+                'all' => $allCount,
+                'action_needed' => $actionNeededCount,
+                'actionNeeded' => $actionNeededCount,
+                'pending' => $pendingCount,
+                'in_review' => $inReviewCount,
+                'inReview' => $inReviewCount,
+                'returned' => $returnedCount,
+                'resubmitted' => $resubmittedCount,
+                'approved' => $approvedCount,
             ],
         ]);
     }

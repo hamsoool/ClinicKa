@@ -102,6 +102,9 @@ function withSuspense(Component: ComponentType, variant: RouteSkeletonVariant = 
   );
 }
 
+// Subdirectory base path — "/" for dev/root, "/clinicka/" for school deployment
+const basePath = (import.meta.env.VITE_BASE_PATH || '/').replace(/\/$/, '') || '/';
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -158,8 +161,9 @@ export const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: withSuspense(StaffDashboard) },
+      { index: true, element: <Navigate to="/staff/submissions" replace /> },
       { path: "submissions", element: withSuspense(StaffSubmissions) },
+      { path: "dashboard", element: withSuspense(StaffDashboard) },
       { path: "records", element: withSuspense(StaffCertificates) },
       { path: "review/:submissionId", element: withSuspense(StaffRecordReview) },
       { path: "reports", element: withSuspense(StaffReports) },
@@ -195,4 +199,4 @@ export const router = createBrowserRouter([
       { index: true, element: withSuspense(SuperAdminAdministrators, 'portal-table') },
     ],
   },
-]);
+], { basename: basePath });

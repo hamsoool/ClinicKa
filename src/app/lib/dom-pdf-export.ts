@@ -19,22 +19,47 @@ function getPdfPages(element: HTMLElement) {
   return pages.length ? pages : [element];
 }
 
+async function convertImageToDataUrl(image: HTMLImageElement): Promise<void> {
+  const src = image.src;
+  if (!src || src.startsWith('data:')) return;
+
+  try {
+    const response = await fetch(src, { mode: 'cors' });
+    if (response.ok) {
+      const blob = await response.blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      image.src = dataUrl;
+      await new Promise<void>((resolve) => {
+        if (image.complete && image.naturalWidth > 0) return resolve();
+        image.onload = () => resolve();
+        image.onerror = () => resolve();
+      });
+      return;
+    }
+  } catch {
+    // Fall back to native image decode / wait
+  }
+
+  if (!image.crossOrigin) image.crossOrigin = 'anonymous';
+  if (image.complete && image.naturalWidth > 0) return;
+  try {
+    await image.decode();
+  } catch {
+    await new Promise<void>((resolve) => {
+      image.addEventListener('load', () => resolve(), { once: true });
+      image.addEventListener('error', () => resolve(), { once: true });
+    });
+  }
+}
+
 async function waitForImages(element: HTMLElement) {
   const images = Array.from(element.querySelectorAll<HTMLImageElement>('img'));
-  await Promise.all(
-    images.map(async (image) => {
-      if (!image.crossOrigin) image.crossOrigin = 'anonymous';
-      if (image.complete && image.naturalWidth > 0) return;
-      try {
-        await image.decode();
-      } catch {
-        await new Promise<void>((resolve) => {
-          image.addEventListener('load', () => resolve(), { once: true });
-          image.addEventListener('error', () => resolve(), { once: true });
-        });
-      }
-    }),
-  );
+  await Promise.all(images.map((img) => convertImageToDataUrl(img)));
 }
 
 function getCanvasScale() {

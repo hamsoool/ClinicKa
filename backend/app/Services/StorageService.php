@@ -326,7 +326,7 @@ class StorageService
         $ext = pathinfo($originalName, PATHINFO_EXTENSION);
         $extSuffix = $ext ? ".{$ext}" : '';
         $proxyUrl = $disk === self::DISK_PUBLIC
-            ? "/storage/{$storagePath}"
+            ? "/api/storage/{$storagePath}"
             : "/api/v1/storage/file/{$uuid}{$extSuffix}";
 
         // 6. Save in master files registry

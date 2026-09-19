@@ -120,8 +120,18 @@ export default function AdminUserAccounts() {
   const { data: activeData, isError: isErrorActive } = useAdminUserAccountsQuery();
   const { data: archivedData, isError: isErrorArchived } = useAdminArchivedAccountsQuery();
 
-  const userAccounts = (activeData?.users || []).filter((user) => user.role !== 'Super Admin');
-  const archivedAccounts = (archivedData?.users || []).filter((user) => user.role !== 'Super Admin');
+  const isSuperAdminUser = (user: { role?: string; roleKey?: string }) => {
+    const role = String(user.role || '').toLowerCase();
+    const roleKey = String(user.roleKey || '').toLowerCase();
+    return (
+      role.includes('super admin') ||
+      role.includes('super administrator') ||
+      roleKey === 'super_admin'
+    );
+  };
+
+  const userAccounts = (activeData?.users || []).filter((user) => !isSuperAdminUser(user));
+  const archivedAccounts = (archivedData?.users || []).filter((user) => !isSuperAdminUser(user));
 
   useEffect(() => {
     if (isErrorActive || isErrorArchived) {
@@ -459,7 +469,7 @@ export default function AdminUserAccounts() {
   const printRows = tab === 'archive' ? sortedArchivedUsers : sortedActiveUsers;
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-6 print:space-y-4 print:bg-white print:text-black print:max-w-none">
+    <div className="w-full min-w-0 space-y-8 print:space-y-4 print:bg-white print:text-black print:max-w-none">
       <PortalPageIntro
         className="print:hidden"
         title="User Accounts"
@@ -880,13 +890,12 @@ export default function AdminUserAccounts() {
           </div>
         </div>
 
-        <TabsContent value="active">
-          <Card>
-            <CardHeader>
-              <CardTitle>All Active Users</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {sortedActiveUsers.length === 0 ? (
+        <TabsContent value="active" className="space-y-4">
+          <div className="border-b border-border/40 pb-2">
+            <h3 className="text-base font-semibold text-foreground">All Active Users</h3>
+          </div>
+          <div className="space-y-4">
+            {sortedActiveUsers.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-outline-variant/60 px-4 py-8 text-center text-sm text-muted-foreground">
                   No active accounts matched your search.
                 </div>
@@ -1044,17 +1053,15 @@ export default function AdminUserAccounts() {
                 onPageChange={setActiveUsersPage}
                 onPageSizeChange={() => {}}
               />
-            </CardContent>
-          </Card>
+          </div>
         </TabsContent>
 
-        <TabsContent value="archive">
-          <Card>
-            <CardHeader>
-              <CardTitle>Archived Accounts</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        <TabsContent value="archive" className="space-y-4">
+          <div className="border-b border-border/40 pb-2">
+            <h3 className="text-base font-semibold text-foreground">Archived Accounts</h3>
+          </div>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
                 Archived accounts stay inactive until you restore them. Their records remain preserved while they are in the archive.
               </div>
               {sortedArchivedUsers.length === 0 ? (
@@ -1191,8 +1198,7 @@ export default function AdminUserAccounts() {
                   </TableBody>
                 </Table>
               </div>
-            </CardContent>
-          </Card>
+          </div>
         </TabsContent>
       </Tabs>
 

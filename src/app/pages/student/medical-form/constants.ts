@@ -61,29 +61,156 @@ export const DEPARTMENTS = DEPARTMENT_OPTIONS.map((department) => department.val
 
 const PROGRAM_ALIASES: Record<string, Record<string, string>> = {
   CAHS: {
-    'bs nursing': 'Bachelor of Science in Nursing',
-    'bs midwifery': 'Bachelor of Science in Midwifery',
+    'bs nursing': 'Bachelor of Science in Nursing (BSN)',
+    'bsn': 'Bachelor of Science in Nursing (BSN)',
+    'bs midwifery': 'Bachelor of Science in Midwifery (BSM)',
+    'bsm': 'Bachelor of Science in Midwifery (BSM)',
   },
   CBA: {
-    'bs accountancy': 'Bachelor of Science in Accountancy *',
-    'bs customs administration': 'Bachelor of Science in Customs Administration',
+    'bs accountancy': 'Bachelor of Science in Accountancy (BSA)',
+    'bsa': 'Bachelor of Science in Accountancy (BSA)',
+    'bs customs administration': 'Bachelor of Science in Customs Administration (BSCA)',
+    'bsca': 'Bachelor of Science in Customs Administration (BSCA)',
+    'bsba financial management': 'Bachelor of Science in Business Administration major in Financial Management',
+    'bsba human resource management': 'Bachelor of Science in Business Administration major in Human Resource Management',
+    'bsba marketing management': 'Bachelor of Science in Business Administration major in Marketing Management',
   },
   CCS: {
-    'bs computer science': 'Bachelor of Science in Computer Science',
-    'bscs': 'Bachelor of Science in Computer Science',
-    'bs entertainment and multimedia computing': 'Bachelor of Science in Entertainment and Multimedia Computing',
-    'bsemc': 'Bachelor of Science in Entertainment and Multimedia Computing',
-    'bs information technology': 'Bachelor of Science in Information Technology',
-    bsit: 'Bachelor of Science in Information Technology',
+    'bs computer science': 'Bachelor of Science in Computer Science (BSCS)',
+    'bscs': 'Bachelor of Science in Computer Science (BSCS)',
+    'bs entertainment and multimedia computing': 'Bachelor of Science in Entertainment and Multimedia Computing (BSEMC)',
+    'bsemc': 'Bachelor of Science in Entertainment and Multimedia Computing (BSEMC)',
+    'bs information technology': 'Bachelor of Science in Information Technology (BSIT)',
+    'bsit': 'Bachelor of Science in Information Technology (BSIT)',
   },
   CEAS: {
-    'ba communication': 'Bachelor of Arts in Communication',
+    'ba communication': 'Bachelor of Arts in Communication (BA Comm)',
+    'ba comm': 'Bachelor of Arts in Communication (BA Comm)',
+    'early childhood education': 'Bachelor of Early Childhood Education (BECEd)',
+    'beced': 'Bachelor of Early Childhood Education (BECEd)',
+    'culture and arts education': 'Bachelor of Culture and Arts Education',
+    'physical education': 'Bachelor of Physical Education (BPEd)',
+    'bped': 'Bachelor of Physical Education (BPEd)',
+    'elementary education': 'Bachelor of Elementary Education (BEEd)',
+    'beed': 'Bachelor of Elementary Education (BEEd)',
+    'teacher certificate program': 'Teacher Certificate Program (TCP)',
+    'tcp': 'Teacher Certificate Program (TCP)',
   },
   CHTM: {
-    'bs hospitality management': 'Bachelor of Science in Hospitality Management',
-    'bs tourism management': 'Bachelor of Science in Tourism Management',
+    'bs hospitality management': 'Bachelor of Science in Hospitality Management (BSHM)',
+    'bshm': 'Bachelor of Science in Hospitality Management (BSHM)',
+    'bs tourism management': 'Bachelor of Science in Tourism Management (BSTM)',
+    'bstm': 'Bachelor of Science in Tourism Management (BSTM)',
   },
 };
+
+export function abbreviateCourseDept(value?: string | null): string {
+  const text = String(value || '').trim();
+  if (!text) return '';
+
+  // 1. If ending with abbreviation in parentheses, e.g. "... (BSIT)"
+  const parenMatch = text.match(/\(([A-Za-z0-9&.\- ]+)\)\s*$/);
+  if (parenMatch?.[1]) {
+    return parenMatch[1].trim();
+  }
+
+  // 2. Exact match against known full program names or lowercase equivalents
+  const normalized = text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const knownMap: Record<string, string> = {
+    'bachelor of science in information technology': 'BSIT',
+    'bs information technology': 'BSIT',
+    'bsit': 'BSIT',
+    'bachelor of science in computer science': 'BSCS',
+    'bs computer science': 'BSCS',
+    'bscs': 'BSCS',
+    'bachelor of science in entertainment and multimedia computing': 'BSEMC',
+    'bs entertainment and multimedia computing': 'BSEMC',
+    'bsemc': 'BSEMC',
+    'bachelor of science in nursing': 'BSN',
+    'bs nursing': 'BSN',
+    'bsn': 'BSN',
+    'bachelor of science in midwifery': 'BSM',
+    'bs midwifery': 'BSM',
+    'bsm': 'BSM',
+    'bachelor of science in accountancy': 'BSA',
+    'bs accountancy': 'BSA',
+    'bsa': 'BSA',
+    'bachelor of science in customs administration': 'BSCA',
+    'bs customs administration': 'BSCA',
+    'bsca': 'BSCA',
+    'bachelor of science in hospitality management': 'BSHM',
+    'bs hospitality management': 'BSHM',
+    'bshm': 'BSHM',
+    'bachelor of science in tourism management': 'BSTM',
+    'bs tourism management': 'BSTM',
+    'bstm': 'BSTM',
+    'bachelor of science in business administration major in financial management': 'BSBA-FM',
+    'bachelor of science in business administration major in human resource management': 'BSBA-HRM',
+    'bachelor of science in business administration major in marketing management': 'BSBA-MM',
+    'bachelor of science in business administration': 'BSBA',
+    'bs business administration': 'BSBA',
+    'bsba': 'BSBA',
+    'bachelor of science in psychology': 'BSPsych',
+    'bs psychology': 'BSPsych',
+    'bspsych': 'BSPsych',
+    'bachelor of arts in communication': 'BA Comm',
+    'ba communication': 'BA Comm',
+    'ba comm': 'BA Comm',
+    'bachelor of early childhood education': 'BECEd',
+    'beced': 'BECEd',
+    'bachelor of culture and arts education': 'BCAEd',
+    'bcaed': 'BCAEd',
+    'bachelor of physical education': 'BPEd',
+    'bped': 'BPEd',
+    'bachelor of elementary education': 'BEEd',
+    'beed': 'BEEd',
+    'bachelor of secondary education major in english': 'BSEd-Eng',
+    'bachelor of secondary education major in filipino': 'BSEd-Fil',
+    'bachelor of secondary education major in mathematics': 'BSEd-Math',
+    'bachelor of secondary education major in social studies': 'BSEd-Soc',
+    'bachelor of secondary education major in science': 'BSEd-Sci',
+    'bachelor of secondary education': 'BSEd',
+    'bsed': 'BSEd',
+    'teacher certificate program': 'TCP',
+    'tcp': 'TCP',
+  };
+
+  if (knownMap[normalized]) {
+    return knownMap[normalized];
+  }
+
+  // 3. If it's already an uppercase/hyphenated code (e.g., "BSIT", "BSBA-FM")
+  if (/^[A-Za-z0-9\-./]{2,10}$/.test(text)) {
+    return text.toUpperCase();
+  }
+
+  // 4. "Bachelor of Science in X" heuristic
+  const bsInMatch = normalized.match(/^bachelor of science in\s+(.+)$/i);
+  if (bsInMatch?.[1]) {
+    const majorWords = bsInMatch[1]
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((w) => !['and', 'of', 'the', 'in'].includes(w));
+    const majorAcronym = majorWords.map((w) => w[0]).join('').toUpperCase();
+    if (majorAcronym) return `BS${majorAcronym}`;
+  }
+
+  // 5. General acronym of capitalized words or initial letters if still long
+  if (text.length > 10) {
+    const acronym = text
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((part) => !['of', 'in', 'and', 'the', 'major'].includes(part.toLowerCase()))
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase();
+    if (acronym.length >= 2 && acronym.length <= 8) {
+      return acronym;
+    }
+  }
+
+  return text;
+}
 
 const PHILIPPINE_MOBILE_REGEX = /^09\d{9}$/;
 

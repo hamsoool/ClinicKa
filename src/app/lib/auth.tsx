@@ -1036,7 +1036,7 @@ function getHomePath(role: UserRole | null) {
     case 'super_admin':
       return '/super-admin';
     case 'staff':
-      return '/staff';
+      return '/staff/submissions';
     case 'admin':
       return '/admin';
     case 'student':

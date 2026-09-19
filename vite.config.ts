@@ -8,7 +8,11 @@ import { VitePWA } from "vite-plugin-pwa";
 // Load single unified deployment environment configuration
 dotenv.config({ path: path.resolve(__dirname, ".env.deployment") });
 
+// Subdirectory base path — "/" for dev/root, "/clinicka/" for school deployment
+const basePath = process.env.VITE_BASE_PATH || "/";
+
 export default defineConfig({
+  base: basePath,
   plugins: [
     react(),
     tailwindcss(),
@@ -17,15 +21,15 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["logo.png", "clinickalogo.png", "footer.png"],
       manifest: {
-        id: "/",
+        id: basePath,
         name: "ClinicKa!",
         short_name: "ClinicKa!",
         description: "ClinicKa! health records and clinic management for Gordon College",
         theme_color: "#006d3c",
         background_color: "#fffeff",
         display: "standalone",
-        start_url: "/",
-        scope: "/",
+        start_url: basePath,
+        scope: basePath,
         orientation: "portrait",
         categories: ["medical", "health", "education"],
         icons: [
@@ -77,8 +81,8 @@ export default defineConfig({
           "assets/AreaChart-*.js",
         ],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallback: `${basePath}index.html`.replace(/\/\//g, '/'),
+        navigateFallbackDenylist: [/\/api\//],
         skipWaiting: true,
         runtimeCaching: [
           {
@@ -122,12 +126,24 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 1200,
+    // Industry-standard content-hashed filenames — obscures source names & enables cache-busting
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[hash].js',
+        chunkFileNames: 'assets/[hash].js',
+        assetFileNames: 'assets/[hash].[ext]',
+      },
+    },
   },
   server: {
     host: true,
     allowedHosts: true,
     proxy: {
       '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/storage': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },

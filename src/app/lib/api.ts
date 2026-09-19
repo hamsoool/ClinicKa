@@ -1690,12 +1690,19 @@ function findGenericLabFile(files: any[]) {
   }) || null;
 }
 
-function normalizeStorageFileUrl(url?: string | null) {
+export function normalizeStorageFileUrl(url?: string | null) {
   const trimmed = String(url || '').trim();
   if (!trimmed) return undefined;
   let fullUrl = trimmed;
   if (/^https?:\/\//i.test(trimmed)) {
-    fullUrl = trimmed;
+    const match = trimmed.match(/^https?:\/\/[^\/]+(\/(?:api\/)?(?:v1\/)?storage\/.+)$/i);
+    if (match && supabaseUrl) {
+      const base = supabaseUrl.replace(/\/api\/?$/, '');
+      const pathPart = match[1].startsWith('/api') ? match[1] : `/api${match[1]}`;
+      fullUrl = `${base}${pathPart}`;
+    } else {
+      fullUrl = trimmed;
+    }
   } else if (trimmed.startsWith('/')) {
     const base = supabaseUrl.replace(/\/api\/?$/, '');
     fullUrl = `${base}${trimmed.startsWith('/api') ? trimmed : `/api${trimmed}`}`;
@@ -1967,8 +1974,8 @@ async function loadRelatedData(rows: any[]) {
       : Promise.resolve([]),
     reviewerIds.length
       ? restRequestStaffUsers(
-        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
-        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,signature_url`,
+        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position`,
       )
       : Promise.resolve([]),
     submissionIds.length
@@ -2005,8 +2012,8 @@ async function loadRelatedData(rows: any[]) {
   const missingReviewerIdList = missingReviewerIds.map((id) => encodeURIComponent(id)).join(',');
   const extraReviewers = missingReviewerIds.length
     ? await restRequestStaffUsers(
-      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
-      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,signature_url`,
+      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position`,
     ).catch(() => [])
     : [];
   const examinedByNames = [
@@ -2018,8 +2025,8 @@ async function loadRelatedData(rows: any[]) {
   ];
   const examinerDirectory = examinedByNames.length
     ? await restRequestStaffUsers(
-      'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
-      'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
+      'select=id,profile_id,first_name,last_name,middle_initial,position,is_active,signature_url&is_active=eq.true&limit=200',
+      'select=id,profile_id,first_name,last_name,middle_initial,position,is_active&is_active=eq.true&limit=200',
     ).catch(() => [])
     : [];
   const staffRows = Object.values(
@@ -2182,8 +2189,8 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
       : Promise.resolve([]),
     reviewerIds.length
       ? restRequestStaffUsers(
-        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
-        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,signature_url`,
+        `id=in.(${reviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position`,
       ).catch(() => [])
       : Promise.resolve([]),
   ]);
@@ -2206,8 +2213,8 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     .join(',');
   const extraReviewers = missingReviewerIds.length
     ? await restRequestStaffUsers(
-      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name,signature_url`,
-      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,name`,
+      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position,signature_url`,
+      `id=in.(${missingReviewerIdList})&select=id,profile_id,first_name,last_name,middle_initial,position`,
     ).catch(() => [])
     : [];
   const examinedByNames = [
@@ -2219,8 +2226,8 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
   ];
   const examinerDirectory = examinedByNames.length
     ? await restRequestStaffUsers(
-      'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active,signature_url&is_active=eq.true&limit=200',
-      'select=id,profile_id,first_name,last_name,middle_initial,position,name,is_active&is_active=eq.true&limit=200',
+      'select=id,profile_id,first_name,last_name,middle_initial,position,is_active,signature_url&is_active=eq.true&limit=200',
+      'select=id,profile_id,first_name,last_name,middle_initial,position,is_active&is_active=eq.true&limit=200',
     ).catch(() => [])
     : [];
   const staffRows = Object.values(
@@ -3752,10 +3759,25 @@ export async function getStudentAnnouncements() {
   const res = await apiRequest<any>(
     '/functions/v1/server/student-announcements'
   );
-  if (Array.isArray(res)) {
-    return { announcements: res };
-  }
-  return res || { announcements: [] };
+  const rawList = Array.isArray(res) ? res : (res?.announcements || []);
+  const announcements = rawList.map((row: any) => {
+    const rawPath = String(row?.image_path || row?.imagePath || row?.imageUrl || '').trim();
+    const absoluteImageUrl = rawPath ? (normalizeStorageFileUrl(rawPath) || rawPath) : null;
+
+    return {
+      id: String(row?.id || ''),
+      title: String(row?.title || '').trim(),
+      description: String(row?.description || '').trim(),
+      datePosted: String(row?.date_posted || row?.datePosted || row?.created_at || ''),
+      imageUrl: absoluteImageUrl || null,
+      imagePath: rawPath || null,
+      isPublished: Boolean(row?.is_published ?? row?.isPublished ?? true),
+    };
+  });
+
+  return {
+    announcements: announcements.filter((item) => item.id),
+  };
 }
 
 export async function getManagedAnnouncements() {
@@ -3767,7 +3789,7 @@ export async function getManagedAnnouncements() {
   const announcements = await Promise.all(
     (rows || []).map((row) => {
       const rawPath = String(row?.image_path || '').trim();
-      const absoluteImageUrl = /^https?:\/\//i.test(rawPath) ? normalizeStorageFileUrl(rawPath) : null;
+      const absoluteImageUrl = rawPath ? (normalizeStorageFileUrl(rawPath) || rawPath) : null;
 
       return {
         id: String(row?.id || ''),
@@ -3867,7 +3889,7 @@ export async function uploadAnnouncementImage(file: File, ownerId: string) {
   }
   const transportFile = await prepareImageFileForUpload(file, 'Announcement image');
   const payload = await uploadToHardenedStorage(transportFile, 'announcement');
-  const imagePath = normalizeStorageFileUrl(payload.url || null);
+  const imagePath = payload.url || (payload.fileId ? `/api/v1/storage/file/${payload.fileId}` : null) || normalizeStorageFileUrl(payload.url || null);
   if (!imagePath) {
     throw new Error('Storage upload did not return an image URL.');
   }

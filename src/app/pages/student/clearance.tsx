@@ -48,16 +48,14 @@ const styles = `
   @keyframes fadeIn {
     from {
       opacity: 0;
-      transform: translateY(8px);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
     }
   }
 
   .animate-fade-in {
-    animation: fadeIn 0.4s ease-out forwards;
+    animation: fadeIn 0.25s ease-out;
   }
 `;
 
@@ -193,24 +191,40 @@ export default function StudentClearance() {
   const isReturned = normalizedStatus === 'returned';
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-6">
+    <div className="w-full min-w-0 space-y-8">
       <StudentPageIntro
         title="Records & Clearance"
       />
 
       <Tabs className="min-w-0" value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="h-auto w-full grid grid-cols-3 gap-1 p-1">
-          <TabsTrigger value="form" className="min-h-11 justify-center px-3 text-center whitespace-normal">Form</TabsTrigger>
-          <TabsTrigger value="medical-clearance" className="min-h-11 justify-center px-3 text-center whitespace-normal">Medical Certificate</TabsTrigger>
-          <TabsTrigger value="history" className="min-h-11 justify-center px-3 text-center whitespace-normal">History</TabsTrigger>
+        <TabsList className="grid h-12 w-full grid-cols-3 gap-1 rounded-full bg-muted/60 p-1">
+          <TabsTrigger
+            value="form"
+            className="h-10 rounded-full px-1 text-xs font-semibold sm:text-sm"
+          >
+            <span className="sm:hidden">Form</span>
+            <span className="hidden sm:inline">Medical Form</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="medical-clearance"
+            className="h-10 rounded-full px-1 text-xs font-semibold sm:text-sm"
+          >
+            <span className="sm:hidden">Certificate</span>
+            <span className="hidden sm:inline">Medical Certificate</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="history"
+            className="h-10 rounded-full px-1 text-xs font-semibold sm:text-sm"
+          >
+            History
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="history" className="min-w-0 space-y-4 animate-fade-in">
-          <Card>
-            <CardHeader>
-              <CardTitle>Medical Record History</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="border-b border-border/40 pb-2">
+            <h3 className="text-base font-semibold text-foreground">Medical Record History</h3>
+          </div>
+          <div className="space-y-4">
               {records.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground bg-muted/20 rounded-lg border-2 border-dashed">
                   <FileText className="w-12 h-12 mx-auto mb-4 opacity-20" />
@@ -306,8 +320,7 @@ export default function StudentClearance() {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="form" className="min-w-0 space-y-4 animate-fade-in">
@@ -361,6 +374,7 @@ export default function StudentClearance() {
               )}
             </CardContent>
           </Card>
+
         </TabsContent>
 
         <TabsContent value="medical-clearance" className="min-w-0 space-y-4 animate-fade-in">

@@ -927,18 +927,18 @@ export default function RoleSelection() {
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2">
-                <div className="border border-[#d8e4d7] bg-white p-7 rounded-2xl shadow-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu cursor-default">
+                <div className="min-w-0 border border-[#d8e4d7] bg-white p-6 sm:p-7 rounded-2xl shadow-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(0,109,60,0.06)] hover:border-[#006d3c]/30 transform-gpu cursor-default">
                   <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-[#161d18]">Before you begin</h3>
                   <p className="mt-3 text-base sm:text-lg leading-relaxed text-[#3d4a3f]">
                     Prepare your school year selection, medical history details, and files required by the clinic.
                   </p>
                 </div>
 
-                <div className="bg-[#0b2f21] p-7 text-white rounded-2xl shadow-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(11,47,33,0.25)] transform-gpu cursor-default">
+                <div className="min-w-0 bg-[#0b2f21] p-6 sm:p-7 text-white rounded-2xl shadow-sm transition-[transform,box-shadow] duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgba(11,47,33,0.25)] transform-gpu cursor-default">
                   <h3 className="text-xl sm:text-2xl font-bold tracking-tight">Need more help?</h3>
-                  <p className="mt-3 text-base sm:text-lg leading-relaxed text-white/85">
+                  <p className="mt-3 text-base sm:text-lg leading-relaxed text-white/85 break-words [overflow-wrap:anywhere]">
                     Contact the Gordon College health services unit at{' '}
-                    <a href="mailto:digitalduo.clinicka@gmail.com" className="underline decoration-white/30 hover:decoration-white hover:text-[#85f6ae] transition-colors font-medium">
+                    <a href="mailto:digitalduo.clinicka@gmail.com" className="underline decoration-white/30 hover:decoration-white hover:text-[#85f6ae] transition-colors font-medium break-all [overflow-wrap:anywhere]">
                       digitalduo.clinicka@gmail.com
                     </a>{' '}
                     or call us at{' '}
@@ -1032,7 +1032,7 @@ export default function RoleSelection() {
             <div className="flex flex-col gap-2.5">
               <div className="flex items-start gap-2.5 text-white/70">
                 <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#00b274]" />
-                <a href="mailto:digitalduo.clinicka@gmail.com" className="transition-colors hover:text-white">
+                <a href="mailto:digitalduo.clinicka@gmail.com" className="transition-colors hover:text-white break-all sm:break-normal">
                   digitalduo.clinicka@gmail.com
                 </a>
               </div>

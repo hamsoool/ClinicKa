@@ -161,12 +161,15 @@ export function PortalShellSkeleton() {
         </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/55 bg-surface-container-lowest/90 px-1.5 py-2 backdrop-blur-xl md:hidden">
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/55 bg-surface-container-lowest/90 px-2 pt-2.5 backdrop-blur-xl md:hidden"
+        style={{ paddingBottom: 'calc(max(env(safe-area-inset-bottom, 0px), 0.75rem) + 0.5rem)' }}
+      >
         <div className="grid grid-cols-5 gap-1">
           {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="flex flex-col items-center gap-1 rounded-md px-1 py-1.5">
-              <Skeleton className="h-5 w-5 rounded bg-surface-container-high" />
-              <Skeleton className="h-2.5 w-10 bg-surface-container-high" />
+            <div key={index} className="flex min-h-[66px] flex-col items-center justify-center gap-1.5 rounded-2xl px-1.5 py-2">
+              <Skeleton className="h-6 w-6 rounded-lg bg-surface-container-high" />
+              <Skeleton className="h-3 w-10 rounded bg-surface-container-high" />
             </div>
           ))}
         </div>

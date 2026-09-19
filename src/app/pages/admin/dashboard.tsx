@@ -321,7 +321,7 @@ export default function AdminDashboard() {
 
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-8">
+    <div className="w-full min-w-0 space-y-8">
       <PortalPageIntro
         className="border-none bg-transparent p-0 sm:p-0 shadow-none"
         title={`Welcome to ClinicKa! ${displayName}.`}

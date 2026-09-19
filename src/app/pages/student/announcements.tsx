@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Calendar, Maximize2, X } from 'lucide-react';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import StudentPageIntro from '../../components/student-page-intro';
 import ListPagination from '../../components/list-pagination';
@@ -30,6 +31,8 @@ export default function StudentAnnouncements() {
   const announcements = useMemo(() => data?.announcements || [], [data?.announcements]);
   const [selectedId, setSelectedId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const articleRef = useRef<HTMLElement>(null);
   const pageSize = 5;
 
   const totalPages = Math.max(1, Math.ceil(announcements.length / pageSize));
@@ -52,13 +55,20 @@ export default function StudentAnnouncements() {
     return announcements.find((item) => item.id === selectedId) || announcements[0];
   }, [announcements, selectedId]);
 
+  const handleSelectAnnouncement = (id: string) => {
+    setSelectedId(id);
+    if (window.innerWidth < 1280 && articleRef.current) {
+      articleRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   if (isLoading) {
     return <PortalPageSkeleton variant="dashboard" />;
   }
 
   if (isError) {
     return (
-      <div className="mx-auto w-full max-w-[100rem] space-y-4 sm:space-y-5">
+      <div className="w-full min-w-0 space-y-8">
         {pageIntro}
         <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-6 text-sm text-on-surface-variant">
           We could not load announcements right now. Please try again in a moment.
@@ -69,7 +79,7 @@ export default function StudentAnnouncements() {
 
   if (!announcements.length) {
     return (
-      <div className="mx-auto w-full max-w-[100rem] space-y-4 sm:space-y-5">
+      <div className="w-full min-w-0 space-y-8">
         {pageIntro}
         <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-6 text-sm text-on-surface-variant">
           No announcements posted yet.
@@ -79,27 +89,52 @@ export default function StudentAnnouncements() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-4 sm:space-y-5">
+    <div className="w-full min-w-0 space-y-8">
       {pageIntro}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(24rem,0.75fr)] xl:items-start">
-        <article className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.75fr)] xl:items-start">
+        <article
+          ref={articleRef}
+          className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-5 sm:p-7 shadow-sm"
+        >
+          <div className="border-b border-outline-variant/20 pb-4">
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-on-surface-variant">
+              <Calendar className="h-4 w-4 shrink-0 text-primary" />
+              <span>Date Posted: {formatDate(selectedAnnouncement?.datePosted)}</span>
+            </div>
+            <h2 className="mt-2.5 text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-on-surface">
+              {selectedAnnouncement?.title}
+            </h2>
+          </div>
+
           {selectedAnnouncement?.imageUrl ? (
-            <img
-              src={selectedAnnouncement.imageUrl}
-              alt={selectedAnnouncement.title}
-              className="mb-4 h-auto w-full rounded-[18px] border border-outline-variant/20 object-contain"
-            />
+            <div
+              onClick={() => setIsImageModalOpen(true)}
+              className="group relative mt-5 flex max-h-[380px] sm:max-h-[440px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-[14px] border border-outline-variant/20 bg-surface-container-low/40 p-2 transition-colors hover:bg-surface-container-low"
+              title="Click to enlarge image"
+            >
+              <img
+                src={selectedAnnouncement.imageUrl}
+                alt={selectedAnnouncement.title}
+                className="max-h-[360px] sm:max-h-[420px] w-full rounded-lg object-contain"
+              />
+              <div className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs font-medium text-white shadow backdrop-blur-sm transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                <Maximize2 className="h-3.5 w-3.5" />
+                <span>Enlarge</span>
+              </div>
+            </div>
           ) : null}
-          <h2 className="text-2xl font-bold text-on-surface">{selectedAnnouncement?.title}</h2>
-          <p className="mt-1 text-sm font-semibold text-on-surface-variant">
-            Date Posted: {formatDate(selectedAnnouncement?.datePosted)}
-          </p>
-          <p className="mt-5 whitespace-pre-line text-base leading-8 text-on-surface">
-            {selectedAnnouncement?.description}
-          </p>
+
+          <div className="mt-6">
+            <p className="whitespace-pre-line text-sm sm:text-base leading-relaxed text-on-surface">
+              {selectedAnnouncement?.description}
+            </p>
+          </div>
         </article>
 
-        <section className="space-y-3 xl:sticky xl:top-24">
+        <section className="space-y-4 xl:sticky xl:top-24">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">
+            All Announcements
+          </h3>
           <div className="space-y-3">
             {paginatedAnnouncements.map((item) => {
               const isActive = item.id === (selectedAnnouncement?.id || '');
@@ -107,10 +142,10 @@ export default function StudentAnnouncements() {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setSelectedId(item.id)}
-                  className={`flex w-full items-start gap-3 rounded-[18px] border bg-surface-container-lowest p-3 text-left transition-colors ${
+                  onClick={() => handleSelectAnnouncement(item.id)}
+                  className={`flex w-full items-start gap-3 rounded-[18px] border bg-surface-container-lowest p-3 text-left transition-all ${
                     isActive
-                      ? 'border-primary/40 ring-2 ring-primary/20'
+                      ? 'border-primary/50 ring-2 ring-primary/20 bg-primary/[0.03]'
                       : 'border-outline-variant/30 hover:bg-surface-container'
                   }`}
                 >
@@ -118,16 +153,18 @@ export default function StudentAnnouncements() {
                     <img
                       src={item.imageUrl}
                       alt=""
-                      className="h-20 w-20 shrink-0 rounded-lg border border-outline-variant/20 object-cover"
+                      className="h-16 w-16 shrink-0 rounded-lg border border-outline-variant/20 object-cover"
                     />
                   ) : (
-                    <div className="h-20 w-20 shrink-0 rounded-lg border border-outline-variant/20 bg-surface-container" />
+                    <div className="h-16 w-16 shrink-0 rounded-lg border border-outline-variant/20 bg-surface-container" />
                   )}
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-on-surface-variant">
-                      Date Posted: {formatDate(item.datePosted)}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-on-surface-variant">
+                      {formatDate(item.datePosted)}
                     </p>
-                    <p className="mt-1 line-clamp-2 text-xl leading-8 text-on-surface">{item.title}</p>
+                    <p className="mt-1 line-clamp-2 text-sm font-semibold leading-snug text-on-surface">
+                      {item.title}
+                    </p>
                   </div>
                 </button>
               );
@@ -146,6 +183,30 @@ export default function StudentAnnouncements() {
           />
         </section>
       </div>
+
+      {isImageModalOpen && selectedAnnouncement?.imageUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in-0"
+          onClick={() => setIsImageModalOpen(false)}
+        >
+          <div className="relative max-h-[90vh] max-w-5xl">
+            <button
+              type="button"
+              onClick={() => setIsImageModalOpen(false)}
+              className="absolute -top-10 right-0 flex items-center gap-1 text-sm font-medium text-white hover:text-neutral-300"
+            >
+              <X className="h-5 w-5" />
+              <span>Close</span>
+            </button>
+            <img
+              src={selectedAnnouncement.imageUrl}
+              alt={selectedAnnouncement.title}
+              className="max-h-[85vh] w-auto max-w-full rounded-lg object-contain shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

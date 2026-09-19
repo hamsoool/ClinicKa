@@ -30,6 +30,14 @@ class StaffUser extends Model
         'signature_file_name',
     ];
 
+    protected $appends = ['name'];
+
+    public function getNameAttribute(): string
+    {
+        $parts = array_filter([$this->first_name, $this->middle_initial, $this->last_name]);
+        return implode(' ', $parts);
+    }
+
     protected function casts(): array
     {
         return [

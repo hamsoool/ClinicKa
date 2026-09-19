@@ -42,7 +42,7 @@ class StorageController extends Controller
         $submissionId = $request->input('submissionId') ?: $request->input('submission_id');
 
         // Only clinic staff, doctors, and admins can upload announcement banners
-        if ($category === 'announcement' && ! $user->isStaff()) {
+        if (in_array($category, ['announcement', 'announcements', 'announcement_banner', 'announcement-image'], true) && ! $user->isStaff()) {
             return response()->json(['error' => 'Forbidden. Only clinic staff, doctors, and administrators can upload announcement images.'], Response::HTTP_FORBIDDEN);
         }
 
@@ -180,17 +180,19 @@ class StorageController extends Controller
             return true;
         }
 
+        $studentId = $user->student_id ?: ($user->student ? $user->student->student_id : null);
+
         // 3. The student whose medical submission this file is linked to
-        if ($file->submission_id && $user->student_id) {
+        if ($file->submission_id && $studentId) {
             $sub = Submission::find($file->submission_id);
-            if ($sub && $sub->student_id === $user->student_id) {
+            if ($sub && $sub->student_id === $studentId) {
                 return true;
             }
         }
 
         // 4. Student profile identity assets (photo or signature)
-        if ($user->student_id) {
-            $student = Student::where('student_id', $user->student_id)->first();
+        if ($studentId) {
+            $student = Student::where('student_id', $studentId)->first();
             if ($student) {
                 $matchesProfile = ($student->profile_photo_url && str_contains((string) $student->profile_photo_url, $file->id))
                     || ($student->signature_url && str_contains((string) $student->signature_url, $file->id));
@@ -200,20 +202,31 @@ class StorageController extends Controller
             }
 
             // 5. Check if file is referenced in any of the student's submissions (lab reports or certificates)
-            $subIds = Submission::where('student_id', $user->student_id)->pluck('id');
+            $subIds = Submission::where('student_id', $studentId)->pluck('id');
             if ($subIds->isNotEmpty()) {
+                if ($file->submission_id && $subIds->contains($file->submission_id)) {
+                    return true;
+                }
+
                 $hasMatch = LabChestXray::whereIn('submission_id', $subIds)->where(function ($q) use ($file) {
-                        $q->where('file_id', $file->id)->orWhere('file_url', 'like', "%{$file->id}%");
+                        $q->where('file_id', $file->id)
+                            ->orWhere('file_url', 'like', "%{$file->id}%")
+                            ->orWhere('file_name', $file->file_name);
                     })->exists()
                     || LabCbc::whereIn('submission_id', $subIds)->where(function ($q) use ($file) {
-                        $q->where('file_id', $file->id)->orWhere('file_url', 'like', "%{$file->id}%");
+                        $q->where('file_id', $file->id)
+                            ->orWhere('file_url', 'like', "%{$file->id}%")
+                            ->orWhere('file_name', $file->file_name);
                     })->exists()
                     || LabUrinalysis::whereIn('submission_id', $subIds)->where(function ($q) use ($file) {
-                        $q->where('file_id', $file->id)->orWhere('file_url', 'like', "%{$file->id}%");
+                        $q->where('file_id', $file->id)
+                            ->orWhere('file_url', 'like', "%{$file->id}%")
+                            ->orWhere('file_name', $file->file_name);
                     })->exists()
                     || \App\Models\Certificate::whereIn('submission_id', $subIds)->where(function ($q) use ($file) {
                         $q->where('file_id', $file->id)->orWhere('pdf_url', 'like', "%{$file->id}%");
-                    })->exists();
+                    })->exists()
+                    || FileRecord::whereIn('submission_id', $subIds)->where('id', $file->id)->exists();
                 if ($hasMatch) {
                     return true;
                 }
@@ -239,6 +252,14 @@ class StorageController extends Controller
      */
     public function prepareUpload(Request $request): JsonResponse
     {
+        /** @var Profile $user */
+        $user = $request->user();
+        $category = $request->input('category') ?: $request->input('type');
+        $isAnnouncement = str_contains($request->path(), 'announcement') || in_array($category, ['announcement', 'announcements', 'announcement_banner', 'announcement-image'], true);
+        if ($isAnnouncement && (! $user || ! $user->isStaff())) {
+            return response()->json(['error' => 'Forbidden. Only clinic staff, doctors, and administrators can upload announcement images.'], Response::HTTP_FORBIDDEN);
+        }
+
         return response()->json([
             'uploadUrl' => '/api/v1/storage/upload',
             'directUpload' => true,
@@ -299,10 +320,22 @@ class StorageController extends Controller
      */
     public function streamFile(Request $request, string $id): Response
     {
+        $origin = $request->header('Origin');
+        if ($request->isMethod('OPTIONS')) {
+            return response('', Response::HTTP_NO_CONTENT, [
+                'Access-Control-Allow-Origin' => $origin ?: '*',
+                'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+                'Access-Control-Allow-Headers' => 'Authorization, Content-Type, X-Requested-With, Range',
+                'Access-Control-Allow-Credentials' => $origin ? 'true' : 'false',
+                'Cross-Origin-Resource-Policy' => 'cross-origin',
+            ]);
+        }
+
         $cleanId = preg_replace('/\.[a-zA-Z0-9]+$/', '', $id);
         $user = $request->user();
+        $authenticatedViaUrlToken = false;
 
-        // 1. Check for short-lived HMAC ticket first
+        // 1. Check for short-lived HMAC ticket first (tickets are time-limited, safe in URLs)
         if (! $user && $request->filled('ticket')) {
             $ticket = (string) $request->query('ticket');
             $ticketUserId = $this->storageService->verifyStreamingTicket($ticket, $cleanId)
@@ -318,6 +351,8 @@ class StorageController extends Controller
             $pat = \Laravel\Sanctum\PersonalAccessToken::findToken($rawToken);
             if ($pat) {
                 $user = $pat->tokenable;
+                // Track if auth came from URL query param (not Authorization header)
+                $authenticatedViaUrlToken = (bool) $request->query('token');
             }
         }
 
@@ -325,6 +360,23 @@ class StorageController extends Controller
         $file = FileRecord::find($cleanId) ?: FileRecord::find($id);
         if (! $file) {
             return response()->json(['error' => 'File record not found.'], Response::HTTP_NOT_FOUND);
+        }
+
+        // 4. Security: Block direct URL navigation to sensitive files
+        //    Sec-Fetch-Dest and Sec-Fetch-Site are forbidden header names that browsers
+        //    set automatically and JavaScript cannot override. When a user pastes a URL
+        //    in the address bar: Sec-Fetch-Dest=document, Sec-Fetch-Site=none.
+        //    When an <img> tag loads: Sec-Fetch-Dest=image, Sec-Fetch-Site=same-origin.
+        if ($authenticatedViaUrlToken && $file->type !== 'announcement') {
+            $secFetchDest = strtolower((string) $request->header('Sec-Fetch-Dest', ''));
+            $secFetchSite = strtolower((string) $request->header('Sec-Fetch-Site', ''));
+
+            // Block direct navigation (address bar paste, link click, bookmark)
+            if ($secFetchDest === 'document' || $secFetchSite === 'none') {
+                return response()->json([
+                    'error' => 'Direct access to secure medical files is not allowed. Please access files through the application.',
+                ], Response::HTTP_FORBIDDEN);
+            }
         }
 
         // Announcements are public banners visible on login / student board
@@ -337,7 +389,7 @@ class StorageController extends Controller
                 return response()->json(['error' => 'Account is deactivated.'], Response::HTTP_FORBIDDEN);
             }
 
-            // 4. Strict Authorization gate: Clinic staff/nurses OR student owner
+            // 5. Strict Authorization gate: Clinic staff/nurses OR student owner
             if (! $this->isAuthorizedToAccessFile($user, $file)) {
                 return response()->json([
                     'error' => 'Forbidden. You do not have permission to view this medical document.',
@@ -371,10 +423,13 @@ class StorageController extends Controller
             'Cache-Control' => 'private, no-store, no-cache, must-revalidate, max-age=0',
             'Pragma' => 'no-cache',
             'X-Robots-Tag' => 'noindex, nofollow, noarchive',
-            'Cross-Origin-Resource-Policy' => 'same-origin',
+            'Cross-Origin-Resource-Policy' => 'cross-origin',
             'X-Frame-Options' => 'SAMEORIGIN',
             'Content-Security-Policy' => "default-src 'none'; img-src 'self' blob: data:; style-src 'unsafe-inline'; form-action 'none';",
             'Permissions-Policy' => 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+            'Access-Control-Allow-Origin' => $origin ?: '*',
+            'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers' => 'Authorization, Content-Type, X-Requested-With, Range',
         ];
 
         if (! empty($file->file_hash)) {
@@ -383,9 +438,7 @@ class StorageController extends Controller
         }
 
         if ($origin) {
-            $responseHeaders['Access-Control-Allow-Origin'] = $origin;
             $responseHeaders['Access-Control-Allow-Credentials'] = 'true';
-            $responseHeaders['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS';
         }
 
         return response($plaintext, Response::HTTP_OK, $responseHeaders);

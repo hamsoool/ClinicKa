@@ -1,7 +1,19 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
-import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, Megaphone, Plus } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowRight,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Eye,
+  FileCheck,
+  FileText,
+  Megaphone,
+  Plus,
+} from 'lucide-react';
+import { Button } from '../../components/ui/button';
 import { PortalPageSkeleton } from '../../components/project-skeletons';
 import StudentPageIntro from '../../components/student-page-intro';
 import { toast } from 'sonner';
@@ -10,7 +22,13 @@ import { getStudentAnnouncements } from '../../lib/api';
 import { useStudentRecordsQuery } from './student-records-query';
 import { useStudentProfileAssetsQuery } from './student-profile-assets-query';
 import type { SubmissionRecord } from '../../lib/record-types';
-import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel } from '../../lib/academic-year';
+import {
+  formatAcademicYearLabel,
+  getLatestRecordForAcademicYear,
+  getNextSubmissionSlot,
+  getRecordAcademicYear,
+  getSubmissionSlotLabel,
+} from '../../lib/academic-year';
 import { useAcademicYear } from '../../lib/academic-year-query';
 const dashboardDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
@@ -37,7 +55,7 @@ function joinMissingItems(items: string[]) {
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { me } = useAuth();
-  const { academicYearLabel } = useAcademicYear();
+  const { academicYear: activeAcademicYear, academicYearLabel } = useAcademicYear();
   const { displayName, studentId, profileId } = useMemo(() => {
     const name = [
       me?.student?.first_name || me?.profile.first_name || '',
@@ -104,17 +122,16 @@ export default function StudentDashboard() {
   const getStatusStyles = (status?: string) => {
     switch (status) {
       case 'approved':
-        return 'bg-primary-container/20 text-on-primary-container';
+        return 'bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium';
       case 'pending':
-        return 'bg-amber-100 text-amber-800';
       case 'in_review':
-        return 'bg-amber-100 text-amber-800';
+        return 'bg-amber-50 border border-amber-200 text-amber-800 font-medium';
       case 'resubmitted':
-        return 'bg-orange-100 text-orange-800';
+        return 'bg-orange-50 border border-orange-200 text-orange-800 font-medium';
       case 'returned':
-        return 'bg-error-container/70 text-on-error-container';
+        return 'bg-red-50 border border-red-200 text-red-800 font-medium';
       default:
-        return 'bg-surface-variant text-on-surface-variant';
+        return 'bg-neutral-100 border border-neutral-200 text-neutral-700 font-medium';
     }
   };
 
@@ -193,6 +210,19 @@ export default function StudentDashboard() {
         })),
     };
   }, [records]);
+
+  const currentAcademicYearRecord = useMemo(
+    () => getLatestRecordForAcademicYear(records, activeAcademicYear),
+    [activeAcademicYear, records],
+  );
+  const nextSlot = useMemo(
+    () => getNextSubmissionSlot(records, activeAcademicYear),
+    [activeAcademicYear, records],
+  );
+  const canStartSubmission = Boolean(!currentAcademicYearRecord && nextSlot);
+  const editPath = latestRecord
+    ? `/student/privacy-waiver/${latestRecord.year || '1'}?edit=${encodeURIComponent(latestRecord.id)}`
+    : '';
   const completionReminders = useMemo<CompletionReminder[]>(() => {
     const reminders: CompletionReminder[] = [];
     const student = me?.student;
@@ -286,224 +316,200 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-4 sm:space-y-6 lg:space-y-8">
+    <div className="w-full min-w-0 space-y-6 sm:space-y-8">
       <StudentPageIntro
         className="border-none bg-transparent p-0 sm:p-0 shadow-none"
         title={`Welcome to ClinicKa! ${displayName}.`}
+        description="Health Services Unit clearance and medical record portal."
+        actions={
+          (!latestRecord || canStartSubmission) ? (
+            <Button
+              size="lg"
+              className="h-11 px-6 gap-2 font-bold shadow-md"
+              onClick={() => navigate('/student/year-selection')}
+            >
+              <Plus className="h-4 w-4" />
+              Submit Medical Record
+            </Button>
+          ) : latestRecord?.status === 'returned' ? (
+            <Button
+              size="lg"
+              className="h-11 px-6 gap-2 font-bold bg-amber-700 hover:bg-amber-800 text-white shadow-md"
+              onClick={() => navigate(editPath)}
+            >
+              <ArrowRight className="h-4 w-4" />
+              Fix & Resubmit
+            </Button>
+          ) : latestRecord?.status === 'approved' ? (
+            <Button
+              size="lg"
+              className="h-11 px-6 gap-2 font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-md"
+              onClick={() => navigate('/student/clearance?tab=medical-clearance')}
+            >
+              <FileCheck className="h-4 w-4" />
+              View Certificate
+            </Button>
+          ) : null
+        }
       />
+
+      {/* ── Call To Action Hero Banner ── */}
+      {(!latestRecord || canStartSubmission) ? (
+        <div className="relative overflow-hidden rounded-[20px] border border-primary/25 bg-gradient-to-br from-primary/15 via-primary/5 to-surface-container-lowest p-6 sm:p-7 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-0.5 text-xs font-semibold text-primary">
+                  Ready to Submit
+                </span>
+                <span className="rounded-full bg-neutral-100 border border-neutral-200/80 px-2.5 py-0.5 text-xs font-medium text-neutral-700">{academicYearLabel}</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900">
+                Submit Your Medical Record Clearance
+              </h2>
+              <p className="max-w-2xl text-sm sm:text-base leading-relaxed text-neutral-600">
+                Complete your health questionnaire and upload required laboratory test results (Chest X-Ray, CBC, Urinalysis) to receive official clearance from the College Health Services Unit.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <Button
+                size="lg"
+                className="h-11 px-6 gap-2 text-sm sm:text-base font-semibold shadow-sm"
+                onClick={() => navigate('/student/year-selection')}
+              >
+                <Plus className="h-5 w-5" />
+                Start Clearance Submission
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : latestRecord?.status === 'returned' ? (
+        <div className="relative overflow-hidden rounded-[20px] border border-amber-300 bg-gradient-to-br from-amber-100/70 via-amber-50 to-surface-container-lowest p-6 sm:p-7 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-200/80 border border-amber-300 px-3 py-0.5 text-xs font-semibold text-amber-900">
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-800" />
+                  Action Required
+                </span>
+                <span className="rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-medium text-amber-900">{getSubmissionSlotLabel(latestRecord.year)}</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-amber-950">
+                Medical Record Returned for Correction
+              </h2>
+              <p className="max-w-2xl text-sm sm:text-base leading-relaxed text-amber-900/90">
+                The clinic staff requested updates to your medical clearance submission. Please check the note below, correct the needed details, and resubmit.
+              </p>
+              {latestRecord.staffNotes && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-white/90 p-3.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-900">Clinic Staff Note:</p>
+                  <p className="mt-1 text-sm italic text-amber-900">"{latestRecord.staffNotes}"</p>
+                </div>
+              )}
+            </div>
+            <div className="flex shrink-0">
+              <Button
+                size="lg"
+                className="h-11 px-6 gap-2 text-sm sm:text-base font-semibold bg-amber-700 hover:bg-amber-800 text-white shadow-sm"
+                onClick={() => navigate(editPath)}
+              >
+                <ArrowRight className="h-5 w-5" />
+                Fix & Resubmit Record
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : latestRecord?.status === 'approved' ? (
+        <div className="relative overflow-hidden rounded-[20px] border border-emerald-300/80 bg-gradient-to-br from-emerald-50/90 via-emerald-50/30 to-surface-container-lowest p-6 sm:p-7 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-300 px-3 py-0.5 text-xs font-semibold text-emerald-900">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-800" />
+                  Clearance Approved
+                </span>
+                <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-xs font-medium text-emerald-900">
+                  {formatAcademicYearLabel(getRecordAcademicYear(latestRecord))}
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900">
+                You Are Officially Medically Cleared!
+              </h2>
+              <p className="max-w-2xl text-sm sm:text-base leading-relaxed text-neutral-600">
+                Your medical clearance has been approved by the college physician. You can view or download your official certificate for enrolment and school activities.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <Button
+                size="lg"
+                className="h-11 px-6 gap-2 text-sm sm:text-base font-semibold bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
+                onClick={() => navigate('/student/clearance?tab=medical-clearance')}
+              >
+                <FileCheck className="h-5 w-5" />
+                View Medical Certificate
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                className="h-11 px-5 text-sm sm:text-base font-medium border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+                onClick={() => navigate('/student/clearance?tab=form')}
+              >
+                View Record
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="relative overflow-hidden rounded-[20px] border border-amber-300/70 bg-gradient-to-br from-amber-50/80 via-white to-surface-container-lowest p-6 sm:p-7 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-300/70 px-3 py-0.5 text-xs font-semibold text-amber-900">
+                  <Clock className="h-3.5 w-3.5 text-amber-800" />
+                  Under Review
+                </span>
+                <span className="rounded-full bg-neutral-100 border border-neutral-200/80 px-2.5 py-0.5 text-xs font-medium text-neutral-700">
+                  {formatAcademicYearLabel(getRecordAcademicYear(latestRecord))}
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900">
+                Your Medical Clearance Is Under Review
+              </h2>
+              <p className="max-w-2xl text-sm sm:text-base leading-relaxed text-neutral-600">
+                Your health questionnaire and lab test results have been submitted to the clinic team.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <Button
+                size="lg"
+                className="h-11 px-6 gap-2 text-sm sm:text-base font-semibold shadow-sm"
+                onClick={() => navigate('/student/clearance?tab=form')}
+              >
+                <Eye className="h-4 w-4" />
+                View Submitted Form
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                className="h-11 px-5 text-sm sm:text-base font-medium border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+                onClick={() => navigate('/student/clearance?tab=history')}
+              >
+                Clearance History
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.8fr)] xl:items-start">
         <div className="space-y-4 sm:space-y-6 lg:space-y-8">
-          <div className="rounded-[18px] border border-white/70 bg-white/80 p-4 sm:rounded-[18px] sm:p-6 lg:p-8">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
-                  Clearance Checklist
-                </p>
-                <p className="mt-1 text-sm font-semibold text-on-surface">
-                  {completionReminders.length > 0
-                    ? `${completionReminders.length} item${completionReminders.length === 1 ? '' : 's'} need attention`
-                    : isCheckingCompletion
-                      ? 'Checking saved requirements'
-                      : 'Requirements look complete'}
-                </p>
-              </div>
-            </div>
-
-            {completionReminders.length > 0 ? (
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {completionReminders.slice(0, 4).map((item) => (
-                  <button
-                    key={`${item.title}-${item.actionPath}`}
-                    type="button"
-                    onClick={() => navigate(item.actionPath)}
-                    className="group relative flex min-h-[5.5rem] w-full items-start gap-4 rounded-[18px] border border-amber-300 bg-amber-50/70 p-4 text-left transition-all duration-200 hover:border-amber-400 hover:bg-amber-100/70"
-                  >
-                    <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 transition-colors group-hover:bg-amber-200">
-                      <AlertCircle className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0 flex-1 flex flex-col h-full justify-between">
-                      <div>
-                        <span className="block text-base font-bold text-amber-950">{item.title}</span>
-                        <span className="mt-1 line-clamp-2 block text-sm leading-relaxed text-amber-900/90">{item.detail}</span>
-                      </div>
-                      <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold text-primary transition-all group-hover:text-primary-hover">
-                        {item.actionLabel}
-                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : isCheckingCompletion ? (
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {[0, 1].map((item) => (
-                  <div
-                    key={item}
-                    className="flex min-h-[5.5rem] items-start gap-4 rounded-[18px] border border-amber-200 bg-amber-50/40 p-4"
-                  >
-                    <div className="h-10 w-10 shrink-0 animate-pulse rounded-xl bg-amber-100" />
-                    <div className="min-w-0 flex-1 space-y-2.5">
-                      <div className="h-4 w-32 animate-pulse rounded bg-amber-200/50" />
-                      <div className="h-3.5 w-full animate-pulse rounded bg-amber-100/60" />
-                      <div className="h-3 w-24 animate-pulse rounded bg-amber-100/60" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 flex items-start gap-4 rounded-[18px] border border-emerald-200 bg-emerald-50/70 p-4">
-                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
-                  <CheckCircle2 className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-base font-bold text-emerald-950">No missing profile information or required uploads found.</p>
-                  <p className="mt-1 text-sm leading-relaxed text-emerald-900/90">
-                    Keep an eye on clinic updates if your submission is still under review.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {latestRecord?.status === 'returned' && (
-            <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
-              <div className="flex flex-col gap-4">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[18px] bg-amber-100 text-amber-700">
-                  <AlertCircle className="h-5 w-5" />
-                </div>
-                <div className="flex-1 space-y-4">
-                  <div>
-                    <h3 className="text-base font-bold tracking-tight text-amber-900 sm:text-lg">Action Required: Correction Needed</h3>
-                    <p className="mt-1 text-xs text-on-surface-variant sm:text-sm">
-                      Your medical record submission for <span className="font-semibold">{getSubmissionSlotLabel(latestRecord.year)}</span> has been returned by the clinic staff.
-                    </p>
-                  </div>
-
-                  {latestRecord.staffNotes && (
-                    <div className="rounded-[18px] border border-amber-200/80 bg-amber-50/70 p-4">
-                      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-900">Note from Clinic Staff:</p>
-                      <p className="text-sm italic leading-relaxed text-amber-800">"{latestRecord.staffNotes}"</p>
-                    </div>
-                  )}
-
-                  <div className="flex pt-1">
-                    <button
-                      onClick={() =>
-                        navigate(
-                          `/student/privacy-waiver/${latestRecord?.year || '1'}?edit=${encodeURIComponent(
-                            latestRecord?.id || '',
-                          )}`,
-                        )
-                      }
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-[18px] bg-amber-700 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-800 sm:w-auto"
-                    >
-                      Update and Resubmit
-                      <ArrowRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
-            <div className="border-b border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6">
-              <h3 className="text-lg font-semibold text-on-surface">Record Cycle Overview</h3>
-            </div>
-            {cycleRecords.length === 0 ? (
-              <div className="px-4 py-8 text-sm text-on-surface-variant sm:px-6">
-                No submission cycles have been started yet.
-              </div>
-            ) : (
-              <>
-                <div className="sm:hidden">
-                  {cycleRecords.map(({ label, record }) => (
-                    <div
-                      key={`mobile-${label}`}
-                      className="border-b border-outline-variant/20 px-4 py-3 last:border-b-0"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className={`text-sm font-medium ${record ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>{label}</p>
-                          {record ? (
-                            <span className="mt-1 block text-[10px] font-normal tracking-normal text-on-surface-variant/80">
-                              {getRecordAgeSummary(record)}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${getStatusStyles(record?.status)}`}
-                          >
-                            {getStatusBadge(record?.status)}
-                          </span>
-                        </div>
-                      </div>
-                      <p className={`mt-1 text-xs ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
-                        {record ? `${formatAcademicYearLabel(getRecordAcademicYear(record))} - ` : ''}
-                        Last action: {formatDate(record?.updatedAt || record?.submittedAt)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div className="hidden overflow-x-auto sm:block">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="border-b border-outline-variant/30 bg-surface-container-low text-xs uppercase tracking-[0.16em] text-on-surface-variant">
-                        <th className="px-4 py-3 font-semibold sm:px-6">Record Slot</th>
-                        <th className="px-4 py-3 font-semibold sm:px-6">Status</th>
-                        <th className="px-4 py-3 font-semibold sm:px-6">Academic Year</th>
-                        <th className="px-4 py-3 font-semibold sm:px-6">Last Action Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-outline-variant/20">
-                      {cycleRecords.map(({ label, record }) => (
-                        <tr key={label} className="transition-colors hover:bg-surface-container-lowest">
-                          <td className={`px-4 py-4 text-sm sm:px-6 ${record ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
-                            <div className="min-w-0">
-                              <span className="block">{label}</span>
-                              {record ? (
-                                <span className="mt-1 block text-[11px] font-normal text-on-surface-variant/80">
-                                  {getRecordAgeSummary(record)}
-                                </span>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 sm:px-6">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold sm:px-2.5 sm:text-xs ${getStatusStyles(record?.status)}`}
-                            >
-                              {getStatusBadge(record?.status)}
-                            </span>
-                          </td>
-                          <td className={`px-4 py-4 text-sm sm:px-6 ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
-                            {record ? formatAcademicYearLabel(getRecordAcademicYear(record)) : '--'}
-                          </td>
-                          <td
-                            className={`px-4 py-4 text-sm sm:px-6 ${record ? 'text-on-surface-variant' : 'text-on-surface-variant/60'
-                              }`}
-                          >
-                            {formatDate(record?.updatedAt || record?.submittedAt)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </div>
-
-        </div>
-
-        <div className="grid gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-1">
           <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-3 sm:mb-6">
-              <h3 className="text-lg font-semibold text-on-surface">Current Submission</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-neutral-900">Current Submission</h3>
               {records.length > 0 ? (
                 <button
-                  className="shrink-0 text-xs font-semibold text-primary transition-colors hover:text-primary/80 sm:text-sm"
+                  className="shrink-0 text-xs sm:text-sm font-semibold text-primary transition-colors hover:text-primary/80"
                   onClick={() => navigate('/student/clearance?tab=history')}
                 >
                   View records
@@ -516,8 +522,8 @@ export default function StudentDashboard() {
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-container text-outline">
                   <AlertCircle className="h-7 w-7" />
                 </div>
-                <h4 className="text-lg font-semibold text-on-surface">No Active Submissions</h4>
-                <p className="mt-2 max-w-[260px] text-sm text-on-surface-variant">
+                <h4 className="text-base font-semibold text-neutral-900">No Active Submissions</h4>
+                <p className="mt-2 max-w-[260px] text-sm text-neutral-600">
                   You do not have any medical documents currently under review.
                 </p>
                 <button
@@ -533,43 +539,218 @@ export default function StudentDashboard() {
                 <div className="rounded-[18px] border border-outline-variant/20 bg-surface-container-low p-4 sm:p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <p className="text-sm text-on-surface-variant">Latest submission</p>
-                      <p className="text-base font-semibold text-on-surface sm:text-lg">
+                      <p className="text-xs font-medium text-neutral-500">Latest submission</p>
+                      <p className="text-sm sm:text-base font-semibold text-neutral-900">
                         {latestRecord ? formatAcademicYearLabel(getRecordAcademicYear(latestRecord)) : academicYearLabel} Medical Record
                       </p>
                     </div>
                     <span
-                      className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusStyles(latestRecord?.status)}`}
+                      className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusStyles(latestRecord?.status)}`}
                     >
                       {getStatusBadge(latestRecord?.status)}
                     </span>
                   </div>
-                  <div className="mt-4 space-y-1 text-sm text-on-surface-variant">
+                  <div className="mt-3 text-xs sm:text-sm text-neutral-600">
                     <p>Submitted on {formatDate(latestRecord?.submittedAt)}</p>
-                    {latestRecord?.updatedAt && latestRecord?.status !== 'pending' ? (
-                      <p>
-                        Last updated on <span className="font-medium text-on-surface">{formatDate(latestRecord.updatedAt)}</span>
-                      </p>
-                    ) : null}
                   </div>
                 </div>
 
-                <button
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-[18px] border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-surface-container sm:w-auto"
-                  onClick={() => navigate('/student/year-selection')}
-                >
-                  <Plus className="h-4 w-4" />
-                  {`Submit for ${academicYearLabel}`}
-                </button>
+                <div className="pt-2">
+                  {latestRecord?.status === 'returned' ? (
+                    <Button
+                      className="w-full justify-center gap-2 font-semibold text-sm bg-amber-700 hover:bg-amber-800 text-white shadow-sm"
+                      onClick={() => navigate(editPath)}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      Update and Resubmit
+                    </Button>
+                  ) : latestRecord?.status === 'approved' ? (
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        className="w-full justify-center gap-2 font-semibold text-sm bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
+                        onClick={() => navigate('/student/clearance?tab=medical-clearance')}
+                      >
+                        <FileCheck className="h-4 w-4" />
+                        View Medical Certificate
+                      </Button>
+                      {canStartSubmission && (
+                        <Button
+                          variant="outline"
+                          className="w-full justify-center gap-2 font-medium text-sm border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+                          onClick={() => navigate('/student/year-selection')}
+                        >
+                          <Plus className="h-4 w-4" />
+                          Submit for Next Cycle
+                        </Button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
+            <div className="border-b border-outline-variant/30 bg-surface-container-lowest px-4 py-4 sm:px-6">
+              <h3 className="text-base sm:text-lg font-semibold text-neutral-900">Record Cycle Overview</h3>
+            </div>
+            {cycleRecords.length === 0 ? (
+              <div className="px-4 py-8 text-sm font-normal text-neutral-600 sm:px-6">
+                No submission cycles have been started yet.
+              </div>
+            ) : (
+              <>
+                <div className="sm:hidden divide-y divide-neutral-100">
+                  {cycleRecords.map(({ label, record }) => (
+                    <div
+                      key={`mobile-${label}`}
+                      className="px-4 py-3.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className={`text-sm font-semibold ${record ? 'text-neutral-900' : 'text-neutral-400'}`}>{label}</p>
+                          {record ? (
+                            <span className="mt-0.5 block text-xs font-normal text-neutral-500">
+                              {getRecordAgeSummary(record)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusStyles(record?.status)}`}
+                          >
+                            {getStatusBadge(record?.status)}
+                          </span>
+                        </div>
+                      </div>
+                      <p className={`mt-1 text-xs font-normal ${record ? 'text-neutral-600' : 'text-neutral-400'}`}>
+                        {record ? `${formatAcademicYearLabel(getRecordAcademicYear(record))} • ` : ''}
+                        Last action: {formatDate(record?.updatedAt || record?.submittedAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto sm:block">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-neutral-200/80 bg-neutral-50/70 text-xs uppercase tracking-wider text-neutral-600 font-semibold">
+                        <th className="px-4 py-3 font-semibold sm:px-6">Record Slot</th>
+                        <th className="px-4 py-3 font-semibold sm:px-6">Status</th>
+                        <th className="px-4 py-3 font-semibold sm:px-6">Academic Year</th>
+                        <th className="px-4 py-3 font-semibold sm:px-6">Last Action Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100">
+                      {cycleRecords.map(({ label, record }) => (
+                        <tr key={label} className="transition-colors hover:bg-neutral-50/60">
+                          <td className={`px-4 py-3.5 text-sm sm:px-6 ${record ? 'text-neutral-900 font-medium' : 'text-neutral-400 font-normal'}`}>
+                            <div className="min-w-0">
+                              <span className="block">{label}</span>
+                              {record ? (
+                                <span className="mt-0.5 block text-xs font-normal text-neutral-500">
+                                  {getRecordAgeSummary(record)}
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 sm:px-6">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusStyles(record?.status)}`}
+                            >
+                              {getStatusBadge(record?.status)}
+                            </span>
+                          </td>
+                          <td className={`px-4 py-3.5 text-sm sm:px-6 font-normal ${record ? 'text-neutral-700' : 'text-neutral-400'}`}>
+                            {record ? formatAcademicYearLabel(getRecordAcademicYear(record)) : '--'}
+                          </td>
+                          <td
+                            className={`px-4 py-3.5 text-sm sm:px-6 font-normal ${record ? 'text-neutral-700' : 'text-neutral-400'}`}
+                          >
+                            {formatDate(record?.updatedAt || record?.submittedAt)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-1">
+          <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                  Clearance Checklist
+                </p>
+                <p className="mt-1 text-sm sm:text-base font-semibold text-neutral-900">
+                  {completionReminders.length > 0
+                    ? `${completionReminders.length} item${completionReminders.length === 1 ? '' : 's'} need attention`
+                    : isCheckingCompletion
+                      ? 'Checking saved requirements'
+                      : 'Requirements look complete'}
+                </p>
+              </div>
+            </div>
+
+            {completionReminders.length > 0 ? (
+              <div className="mt-4 grid gap-3">
+                {completionReminders.slice(0, 4).map((item) => (
+                  <button
+                    key={`${item.title}-${item.actionPath}`}
+                    type="button"
+                    onClick={() => navigate(item.actionPath)}
+                    className="group relative flex min-h-[5.5rem] w-full items-start gap-4 rounded-[18px] border border-amber-200 bg-amber-50/60 p-4 text-left transition-all duration-200 hover:border-amber-300 hover:bg-amber-100/60"
+                  >
+                    <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 transition-colors group-hover:bg-amber-200">
+                      <AlertCircle className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1 flex flex-col h-full justify-between">
+                      <div>
+                        <span className="block text-sm sm:text-base font-semibold text-amber-950">{item.title}</span>
+                        <span className="mt-1 line-clamp-2 block text-xs sm:text-sm leading-relaxed text-amber-900/80">{item.detail}</span>
+                      </div>
+                      <span className="mt-3 inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-primary transition-all group-hover:text-primary-hover">
+                        {item.actionLabel}
+                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : isCheckingCompletion ? (
+              <div className="mt-4 grid gap-3">
+                {[0, 1].map((item) => (
+                  <div
+                    key={item}
+                    className="flex min-h-[5.5rem] items-start gap-4 rounded-[18px] border border-amber-200 bg-amber-50/40 p-4"
+                  >
+                    <div className="h-10 w-10 shrink-0 animate-pulse rounded-xl bg-amber-100" />
+                    <div className="min-w-0 flex-1 space-y-2.5">
+                      <div className="h-4 w-32 animate-pulse rounded bg-amber-200/50" />
+                      <div className="h-3.5 w-full animate-pulse rounded bg-amber-100/60" />
+                      <div className="h-3 w-24 animate-pulse rounded bg-amber-100/60" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center gap-3 sm:gap-4 rounded-[18px] border border-emerald-200 bg-emerald-50/70 p-4">
+                <span className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
+                  <CheckCircle2 className="h-5 w-5" />
+                </span>
+                <p className="text-sm sm:text-base font-semibold text-emerald-950">All requirements look good!</p>
               </div>
             )}
           </div>
 
           <div className="rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-4 sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-3 sm:mb-6">
-              <h3 className="text-lg font-semibold text-on-surface">Announcements</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-neutral-900">Announcements</h3>
               <button
-                className="shrink-0 text-xs font-semibold text-primary transition-colors hover:text-primary/80 sm:text-sm"
+                className="shrink-0 text-xs sm:text-sm font-semibold text-primary transition-colors hover:text-primary/80"
                 onClick={() => navigate('/student/announcements')}
               >
                 View All
@@ -597,14 +778,14 @@ export default function StudentDashboard() {
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-container text-outline">
                   <Megaphone className="h-5 w-5" />
                 </div>
-                <p className="text-sm text-on-surface-variant">Announcements could not be loaded right now.</p>
+                <p className="text-sm text-neutral-600">Announcements could not be loaded right now.</p>
               </div>
             ) : featuredAnnouncements.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-[18px] border border-outline-variant/20 bg-surface-container-low px-4 py-10 text-center">
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-container text-outline">
                   <Megaphone className="h-5 w-5" />
                 </div>
-                <p className="text-sm text-on-surface-variant">No announcements posted yet.</p>
+                <p className="text-sm text-neutral-600">No announcements posted yet.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -627,12 +808,12 @@ export default function StudentDashboard() {
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant">
+                      <p className="flex items-center gap-1.5 text-xs font-normal text-neutral-500">
                         <CalendarDays className="h-3.5 w-3.5" />
                         {formatDate(announcement.datePosted)}
                       </p>
-                      <p className="mt-1 line-clamp-1 text-sm font-semibold text-on-surface">{announcement.title}</p>
-                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-on-surface-variant">
+                      <p className="mt-1 line-clamp-1 text-sm font-semibold text-neutral-900">{announcement.title}</p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 font-normal text-neutral-600">
                         {announcement.description}
                       </p>
                     </div>

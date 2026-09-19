@@ -13,7 +13,7 @@ import PortalShell, {
   type PortalTopAction,
 } from '../../components/portal-shell';
 import StudentNotificationMenu from '../../components/student-notification-menu';
-import { prefetchPortalRoutes } from '../../route-modules';
+import { prefetchPortalExperience } from '../../lib/login-prefetch';
 import { getStudentProfilePhoto } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useStudentNotifications } from './student-notifications';
@@ -21,7 +21,7 @@ import { useStudentNotifications } from './student-notifications';
 const navItems = [
   { path: '/student', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
   { path: '/student/clearance', label: 'Records & Clearance', mobileLabel: 'Records', icon: ClipboardList },
-  { path: '/student/year-selection', label: 'Submit Record', mobileLabel: 'Submit', icon: FilePlus },
+  { path: '/student/year-selection', label: 'Submit Record', mobileLabel: 'Submit', icon: FilePlus, mobileEmphasis: true },
   { path: '/student/announcements', label: 'Announcements', mobileLabel: 'News', icon: Megaphone },
   { path: '/student/profile', label: 'Profile', mobileLabel: 'Profile', icon: User },
 ] as const satisfies readonly PortalNavItem[];
@@ -55,13 +55,13 @@ export default function StudentLayout() {
     if (typeof window === 'undefined') return;
     if (typeof window.requestIdleCallback === 'function') {
       const callbackId = window.requestIdleCallback(() => {
-        prefetchPortalRoutes('student');
+        prefetchPortalExperience('student', me);
       });
       return () => window.cancelIdleCallback?.(callbackId);
     }
-    const timerId = window.setTimeout(() => prefetchPortalRoutes('student'), 250);
+    const timerId = window.setTimeout(() => prefetchPortalExperience('student', me), 250);
     return () => window.clearTimeout(timerId);
-  }, []);
+  }, [me]);
 
   useEffect(() => {
     const profileStudentId = me?.student?.student_id || me?.profile.student_id || '';

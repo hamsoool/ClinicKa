@@ -18,8 +18,14 @@ Route::middleware('auth:sanctum')->post('/auth/v1/logout', [\App\Http\Controller
 // Public announcement and static storage route
 Route::get('/storage/file/{id}', [\App\Http\Controllers\Api\StorageController::class, 'streamFile']);
 Route::get('/storage/{path}', function (string $path) {
-    // Only allow public assets like announcements, strictly block directory traversal
+    // Security: Only allow the announcements/ subdirectory, block everything else
     $cleanPath = ltrim(str_replace(['..', "\0"], '', $path), '/');
+
+    // Strictly whitelist: only serve files under announcements/
+    if (! str_starts_with($cleanPath, 'announcements/')) {
+        abort(404);
+    }
+
     $filePath = storage_path("app/public/{$cleanPath}");
 
     if (! file_exists($filePath)) {
@@ -27,6 +33,11 @@ Route::get('/storage/{path}', function (string $path) {
     }
 
     $mime = finfo_file(finfo_open(FILEINFO_MIME_TYPE), $filePath) ?: 'application/octet-stream';
+
+    // Only allow image MIME types for announcements
+    if (! str_starts_with($mime, 'image/')) {
+        abort(403);
+    }
 
     return response()->file($filePath, [
         'Content-Type' => $mime,

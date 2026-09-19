@@ -14,7 +14,7 @@ import PortalShell, {
   type PortalNavItem,
   type PortalTopAction,
 } from '../../components/portal-shell';
-import { prefetchPortalRoutes } from '../../route-modules';
+import { prefetchPortalExperience } from '../../lib/login-prefetch';
 import { useAuth } from '../../lib/auth';
 
 const navItems = [
@@ -45,13 +45,13 @@ export default function AdminLayout() {
     if (typeof window === 'undefined') return;
     if (typeof window.requestIdleCallback === 'function') {
       const callbackId = window.requestIdleCallback(() => {
-        prefetchPortalRoutes('admin');
+        prefetchPortalExperience('admin', me);
       });
       return () => window.cancelIdleCallback?.(callbackId);
     }
-    const timerId = window.setTimeout(() => prefetchPortalRoutes('admin'), 250);
+    const timerId = window.setTimeout(() => prefetchPortalExperience('admin', me), 250);
     return () => window.clearTimeout(timerId);
-  }, []);
+  }, [me]);
 
   return (
     <PortalShell

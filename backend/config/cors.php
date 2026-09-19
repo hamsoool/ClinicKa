@@ -25,6 +25,7 @@ return [
         '#^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$#',
         '#^https?://([a-zA-Z0-9-]+\.)?gordoncollege\.edu\.ph(:\d+)?$#',
         '#^https?://([a-zA-Z0-9-]+\.)?ngrok(-free)?\.(app|dev)(:\d+)?$#',
+        '#^https?://([a-zA-Z0-9-]+\.)?trycloudflare\.com(:\d+)?$#',
     ],
 
     'allowed_headers' => ['*'],

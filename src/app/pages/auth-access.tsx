@@ -27,7 +27,7 @@ const DASHBOARD_PREVIEW_SRC = '/previews/student_dashboard.png';
 
 function getHomePath(role: UserRole) {
   if (role === 'super_admin') return '/super-admin';
-  if (role === 'staff') return '/staff';
+  if (role === 'staff') return '/staff/submissions';
   if (role === 'admin') return '/admin';
   return '/student';
 }

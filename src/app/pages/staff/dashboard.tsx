@@ -352,7 +352,7 @@ export default function StaffDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-5 sm:space-y-8">
+    <div className="w-full min-w-0 space-y-8">
       <PortalPageIntro
         className="border-none bg-transparent p-0 sm:p-0 shadow-none"
         title={`Welcome to ClinicKa! ${displayName}.`}
@@ -383,9 +383,11 @@ export default function StaffDashboard() {
               <button
                 type="button"
                 onClick={() => navigate('/staff/submissions')}
-                className="inline-flex h-8 items-center justify-center rounded-[14px] bg-primary px-2 text-[10px] font-semibold text-white transition-colors hover:bg-primary/90 sm:h-10 sm:rounded-[18px] sm:px-4 sm:text-sm"
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 sm:h-10 sm:px-4 sm:text-sm"
               >
-                Open<span className="hidden sm:inline">&nbsp;Queue</span>
+                <ClipboardCheck className="h-4 w-4" />
+                <span>Open Review Queue</span>
+                <ArrowRight className="h-4 w-4 hidden sm:inline" />
               </button>
               <button
                 type="button"
@@ -441,15 +443,15 @@ export default function StaffDashboard() {
                   <button
                     key={submission.id}
                     onClick={() => navigate(`/staff/review/${submission.id}`)}
-                    className="box-border flex w-full min-w-0 flex-col gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-colors hover:bg-surface-container-low md:flex-row md:items-start md:gap-4"
+                    className="group box-border flex w-full min-w-0 flex-col gap-3 rounded-[18px] border border-outline-variant/20 bg-surface-container-lowest p-4 text-left transition-all hover:border-primary/40 hover:bg-surface-container-low hover:shadow-sm md:flex-row md:items-center md:gap-4 cursor-pointer"
                   >
                     <div className="flex items-start gap-4 md:flex-1">
-                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[18px] bg-surface-container text-primary sm:h-12 sm:w-12">
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[18px] bg-primary/10 text-primary sm:h-12 sm:w-12">
                         <ClipboardCheck className="h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-semibold text-on-surface">
+                          <p className="truncate text-sm font-semibold text-on-surface group-hover:text-primary transition-colors">
                             {submission.firstName} {submission.lastName}
                           </p>
                           {submission.status !== 'in_review' ? (
@@ -468,8 +470,11 @@ export default function StaffDashboard() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex w-full items-center justify-end md:w-auto">
-                      <ArrowRight className="h-4 w-4 flex-shrink-0 text-on-surface-variant" />
+                    <div className="flex w-full items-center justify-end md:w-auto mt-2 md:mt-0">
+                      <span className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all group-hover:bg-primary/90">
+                        <span>Review Record</span>
+                        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                      </span>
                     </div>
                   </button>
                 ))}

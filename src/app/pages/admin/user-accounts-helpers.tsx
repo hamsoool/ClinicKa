@@ -44,7 +44,7 @@ export function normalizeRoleFilter(value?: string | null) {
   if (normalized === 'clinic doctor') return 'Clinic Doctor';
   if (normalized === 'administrator') return 'Administrator';
   if (normalized === 'super admin' || normalized === 'super_admin' || normalized === 'super administrator') {
-    return 'Super Admin';
+    return 'all';
   }
   return 'all';
 }

@@ -44,6 +44,7 @@ type StudentProfileFormCardProps = {
   hasValidContactNumber?: boolean;
   yearLevelLabel?: string;
   variant?: 'card' | 'plain';
+  category?: 'all' | 'personal' | 'contact' | 'academic';
 };
 
 const MONTH_OPTIONS = [
@@ -179,6 +180,7 @@ export function StudentProfileFormCard({
   hasValidContactNumber = true,
   yearLevelLabel = 'Year Level',
   variant = 'card',
+  category = 'all',
 }: StudentProfileFormCardProps) {
   const [birthdayPickerOpen, setBirthdayPickerOpen] = useState(false);
   const [inputValue, setInputValue] = useState(() => formatIsoToMdY(value.birthday));
@@ -251,11 +253,12 @@ export function StudentProfileFormCard({
   const categoriesContent = (
     <>
       {/* Category 1: Personal Information */}
-      <div className="space-y-4">
-        <div className="border-b border-border/40 pb-2">
-          <h4 className="text-base font-semibold text-foreground">Personal Information</h4>
-          <p className="text-xs text-muted-foreground">Basic student demographic and identification details.</p>
-        </div>
+      {(category === 'all' || category === 'personal') && (
+        <div className="space-y-4">
+          <div className="border-b border-border/40 pb-2">
+            <h4 className="text-base font-semibold text-foreground">Personal Information</h4>
+            <p className="text-xs text-muted-foreground">Basic student demographic and identification details.</p>
+          </div>
         <div className={personalGridClass}>
             {/* First Name, Last Name */}
             <div className="w-full min-w-0">
@@ -490,9 +493,11 @@ export function StudentProfileFormCard({
             </div>
           </div>
         </div>
+      )}
 
-        {/* Category 2: Contact & Address */}
-        <div className="space-y-4 pt-2">
+      {/* Category 2: Contact & Address */}
+      {(category === 'all' || category === 'contact') && (
+        <div className="space-y-4">
           <div className="border-b border-border/40 pb-2">
             <h4 className="text-base font-semibold text-foreground">Contact & Address</h4>
             <p className="text-xs text-muted-foreground">Active mobile contact and residential address.</p>
@@ -530,9 +535,11 @@ export function StudentProfileFormCard({
             </div>
           </div>
         </div>
+      )}
 
-        {/* Category 3: Academic Information */}
-        <div className="space-y-4 pt-2">
+      {/* Category 3: Academic Information */}
+      {(category === 'all' || category === 'academic') && (
+        <div className="space-y-4">
           <div className="border-b border-border/40 pb-2">
             <h4 className="text-base font-semibold text-foreground">Academic Information</h4>
             <p className="text-xs text-muted-foreground">Enrollment identifiers, department, and academic program.</p>
@@ -618,6 +625,7 @@ export function StudentProfileFormCard({
             ))}
           </div>
         </div>
+      )}
     </>
   );
 

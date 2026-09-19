@@ -594,9 +594,8 @@ export default function StaffRecordsAndCertificates() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] min-w-0">
+    <div className="w-full min-w-0 space-y-8">
       <PortalPageIntro
-        className="mb-8"
         title="Records & Certificates"
       />
 

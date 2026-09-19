@@ -85,3 +85,38 @@ export function prefetchPortalRoutes(role: AppRole) {
     preloadLoader(loader);
   }
 }
+
+const pathToLoaderMap: Record<string, RouteLoader> = {
+  '/student': loadStudentDashboard,
+  '/student/clearance': loadStudentClearance,
+  '/student/year-selection': loadStudentYearSelection,
+  '/student/announcements': loadStudentAnnouncements,
+  '/student/profile': loadStudentProfile,
+  '/student/certificate': loadStudentCertificate,
+  '/student/privacy-waiver': loadStudentPrivacyWaiver,
+  '/student/medical-form': loadStudentMedicalForm,
+  '/staff': loadStaffSubmissions,
+  '/staff/submissions': loadStaffSubmissions,
+  '/staff/dashboard': loadStaffDashboard,
+  '/staff/reports': loadStaffReports,
+  '/staff/records': loadStaffCertificates,
+  '/staff/certificates': loadStaffCertificates,
+  '/staff/announcements': loadStaffAnnouncements,
+  '/staff/settings': loadStaffSettings,
+  '/staff/record-review': loadStaffRecordReview,
+  '/admin': loadAdminDashboard,
+  '/admin/dashboard': loadAdminDashboard,
+  '/admin/user-accounts': loadAdminUserAccounts,
+  '/admin/system-settings': loadAdminSystemSettings,
+  '/admin/reports': loadAdminReports,
+  '/admin/announcements': loadAdminAnnouncements,
+  '/super-admin': loadSuperAdminAdministrators,
+};
+
+export function prefetchRouteByPath(path: string) {
+  const normalized = path.split('?')[0].split('#')[0];
+  const loader = pathToLoaderMap[normalized];
+  if (loader) {
+    preloadLoader(loader);
+  }
+}

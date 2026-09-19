@@ -3,7 +3,8 @@ import type { CSSProperties, ForwardedRef } from 'react';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel, normalizeSubmissionSlot } from '../lib/academic-year';
 import { formatOperationDetailsForDisplay } from '../lib/operation-details';
 import type { SubmissionRecord } from '../lib/record-types';
-import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
+import { abbreviateCourseDept, DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
+import { normalizeStorageFileUrl } from '../lib/api';
 
 const EXAM_ROWS = [
   'BP', 'CR', 'RR', 'Temp.', 'Weight', 'Height', 'BMI',
@@ -217,16 +218,6 @@ interface Props {
   academicYearLabel?: string;
 }
 
-function abbreviateCourseDept(value: string) {
-  const text = String(value || '').trim();
-  if (!text) return '';
-  const acronymInParens = text.match(/\(([A-Za-z0-9&.\- ]+)\)\s*$/);
-  if (acronymInParens?.[1]) return acronymInParens[1].trim();
-  const upperCode = text.match(/\b([A-Z]{2,}(?:[-/][A-Z]{2,})?)\b/);
-  if (upperCode?.[1]) return upperCode[1].trim();
-  return text;
-}
-
 function formatRadiologistNameWithDr(fullName?: string | null) {
   if (!fullName) return '';
   
@@ -356,8 +347,8 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
 ) {
   const history = record.medicalHistory || {};
   const civilStatusNormalized = String(record.civilStatus || '').trim().toLowerCase();
-  const photoUrl = record.photoUrl;
-  const signatureUrl = record.signatureUrl;
+  const photoUrl = normalizeStorageFileUrl(record.photoUrl);
+  const signatureUrl = normalizeStorageFileUrl(record.signatureUrl);
   const dedupedRecords = Array.from(
     new Map(
       [...records, record]
@@ -401,7 +392,7 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
     const sourceExam = getSlotRecord(slot)?.staffMeasurements || {};
     return {
       name: String(sourceExam?.examinedBy || '').trim(),
-      signatureUrl: String(sourceExam?.examinedBySignatureUrl || '').trim(),
+      signatureUrl: normalizeStorageFileUrl(String(sourceExam?.examinedBySignatureUrl || '').trim()) || '',
     };
   };
 
@@ -444,6 +435,13 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
             src={examiner.signatureUrl}
             alt="Examiner signature"
             crossOrigin="anonymous"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (target.getAttribute('crossorigin')) {
+                target.removeAttribute('crossorigin');
+                target.src = examiner.signatureUrl;
+              }
+            }}
             className="block h-8 w-auto max-h-10 max-w-full object-contain"
             style={{
               display: 'block',
@@ -592,6 +590,13 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                     src={photoUrl}
                     alt="1x1 photo"
                     crossOrigin="anonymous"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (target.getAttribute('crossorigin')) {
+                        target.removeAttribute('crossorigin');
+                        target.src = photoUrl;
+                      }
+                    }}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
@@ -917,6 +922,13 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
                     src={signatureUrl}
                     alt="Student signature"
                     crossOrigin="anonymous"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (target.getAttribute('crossorigin')) {
+                        target.removeAttribute('crossorigin');
+                        target.src = signatureUrl;
+                      }
+                    }}
                     style={{
                       maxWidth: '170px',
                       maxHeight: '24px',

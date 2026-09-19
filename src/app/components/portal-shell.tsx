@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useSwipeNavigation } from '../lib/use-swipe-navigation';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { Camera, KeyRound, LogOut, Menu, X, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
@@ -52,8 +53,17 @@ type PortalShellProps = {
 };
 
 function isRouteActive(pathname: string, path: string) {
-  if (path === '/student' || path === '/staff' || path === '/admin') {
+  if (path === '/student' || path === '/staff/dashboard' || path === '/admin') {
     return pathname === path;
+  }
+
+  if (path === '/staff/submissions') {
+    return (
+      pathname === '/staff' ||
+      pathname === '/staff/submissions' ||
+      pathname.startsWith('/staff/submissions') ||
+      pathname.startsWith('/staff/review')
+    );
   }
 
   if (path === '/student/year-selection') {
@@ -111,6 +121,7 @@ export default function PortalShell({
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, pendingStaffClearanceCount, pendingUploadCount } = useAuth();
+  const swipeContentRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profilePic, setProfilePic] = useState<string | null>(initialProfileImageUrl || null);
@@ -120,6 +131,8 @@ export default function PortalShell({
   const [logoutBlockedReason, setLogoutBlockedReason] = useState<'staff_clearance' | 'upload_in_progress'>('staff_clearance');
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const objectUrlRef = useRef<string | null>(null);
+
+  useSwipeNavigation(navItems, swipeContentRef);
 
   const currentPage = navItems.find((item) => isRouteActive(location.pathname, item.path))?.label || portalLabel;
 
@@ -366,12 +379,12 @@ export default function PortalShell({
 
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-xs font-semibold tracking-wider text-on-surface-variant sm:text-sm">
+              <p className="truncate text-xs font-medium tracking-wider text-neutral-500 sm:text-sm">
                 <span className="uppercase">Medical Clearance and Health Record Management System</span>
               </p>
             </div>
             <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-base font-bold leading-tight text-on-surface sm:text-xl">{currentPage}</p>
+              <p className="truncate text-lg font-bold leading-tight text-neutral-900 sm:text-xl">{currentPage}</p>
               {roleBadge ? (
                 <span className="hidden rounded-full bg-primary-container/40 px-3 py-1 text-xs font-bold uppercase tracking-wider text-on-primary-container sm:inline-flex">
                   {roleBadge}
@@ -466,21 +479,21 @@ export default function PortalShell({
         </div>
       </header>
 
-      <main id="portal-content" className="pt-24 outline-none md:pl-80 print:p-0" tabIndex={-1}>
-        <div className="px-4 pb-24 sm:pb-28 md:px-8 md:pb-24 print:p-0">
+      <main id="portal-content" className="relative pt-24 outline-none overflow-x-hidden bg-background md:pl-80 print:p-0" tabIndex={-1}>
+        <div ref={swipeContentRef} className="relative px-4 pb-36 sm:pb-40 md:px-8 md:pb-24 print:p-0">
           <Outlet />
         </div>
       </main>
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/55 bg-surface-container-lowest/90 backdrop-blur-xl md:hidden print:hidden"
+        className="fixed bottom-0 left-0 right-0 z-20 border-t border-outline-variant/60 bg-surface-container-lowest/95 backdrop-blur-xl shadow-lg md:hidden print:hidden"
         aria-label="Mobile navigation"
       >
         <div
-          className="grid gap-1 px-1.5 py-2"
+          className="grid gap-1 px-2 pt-2.5"
           style={{
             gridTemplateColumns: `repeat(${bottomNavItems.length + (showMoreInBottomNav ? 1 : 0)}, minmax(0, 1fr))`,
-            paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)',
+            paddingBottom: 'calc(max(env(safe-area-inset-bottom, 0px), 0.75rem) + 0.5rem)',
           }}
         >
           {bottomNavItems.map((item) => {
@@ -495,16 +508,18 @@ export default function PortalShell({
                 onClick={() => goTo(item.path)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-xs font-medium leading-tight transition-all active:scale-95',
+                  'flex min-h-[66px] min-w-0 select-none touch-manipulation flex-col items-center justify-center gap-1.5 px-1.5 py-2 transition-all active:scale-95',
                   emphasized
-                    ? 'bg-primary text-white hover:bg-primary/90'
+                    ? '-translate-y-3 min-h-[70px] rounded-2xl bg-primary text-white shadow-xl shadow-primary/30 hover:bg-primary/90 font-semibold'
                     : active
-                      ? 'bg-primary-container/25 text-primary'
-                      : 'text-on-surface-variant hover:bg-surface-container-low',
+                      ? 'rounded-2xl bg-primary/10 font-semibold text-primary'
+                      : 'rounded-2xl font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/70',
                 )}
               >
-                <Icon className="h-5 w-5 shrink-0" />
-                <span className="w-full truncate text-center">{item.mobileLabel}</span>
+                <Icon className={cn('h-6 w-6 shrink-0', emphasized ? 'text-white' : active ? 'text-primary' : 'text-neutral-600')} />
+                <span className={cn('w-full truncate text-center text-xs tracking-tight leading-tight', emphasized ? 'font-semibold text-white' : active ? 'font-semibold text-primary' : 'font-medium text-neutral-600')}>
+                  {item.mobileLabel}
+                </span>
               </button>
             );
           })}
@@ -512,9 +527,9 @@ export default function PortalShell({
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
-              className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 text-xs font-medium leading-tight text-on-surface-variant transition-all active:scale-95 hover:bg-surface-container-low"
+              className="flex min-h-[66px] min-w-0 select-none touch-manipulation flex-col items-center justify-center gap-1.5 rounded-2xl px-1.5 py-2 text-xs font-medium leading-tight tracking-tight text-neutral-600 transition-all active:scale-95 hover:bg-neutral-100 hover:text-neutral-900"
             >
-              <Menu className="h-5 w-5 shrink-0" />
+              <Menu className="h-6 w-6 shrink-0 text-neutral-600" />
               <span className="w-full truncate text-center">More</span>
             </button>
           ) : null}

@@ -1,7 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import ListPagination from '../../components/list-pagination';
@@ -145,17 +144,15 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
   };
 
   return (
-    <div className={embedded ? 'min-w-0' : 'mx-auto w-full max-w-[100rem]'}>
+    <div className={cn('w-full min-w-0 space-y-8', embedded && 'space-y-6')}>
       {!embedded ? (
         <PortalPageIntro
-          className="mb-8"
           title="Records Archive"
         />
       ) : null}
 
-      <Card className="mb-6">
-        <CardContent className="space-y-4 p-4 sm:p-6">
-          <div className="flex flex-col gap-4">
+      <div className="space-y-4">
+        <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -287,16 +284,14 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Approved Medical Records ({total} Records)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        <div className="space-y-4">
+          <div className="border-b border-border/40 pb-2">
+            <h3 className="text-base font-semibold text-foreground">
+              Approved Medical Records ({total} Records)
+            </h3>
+          </div>
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">Loading records...</div>
           ) : students.length === 0 ? (
@@ -384,8 +379,7 @@ export default function StaffRecords({ embedded = false }: StaffRecordsProps) {
               onPageSizeChange={setPageSize}
             />
           ) : null}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+        </div>
+      </div>
+    );
+  }

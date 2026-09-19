@@ -67,7 +67,7 @@ export default function StudentPrivacyWaiver() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-8">
+    <div className="w-full min-w-0 space-y-8">
       <button
         type="button"
         onClick={() => navigate('/student/year-selection')}

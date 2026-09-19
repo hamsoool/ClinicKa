@@ -24,6 +24,7 @@ use App\Models\SystemSetting;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\Response;
 
 class PostgrestCompatController extends Controller
@@ -65,28 +66,41 @@ class PostgrestCompatController extends Controller
 
         /** @var class-string<\Illuminate\Database\Eloquent\Model> $modelClass */
         $modelClass = $this->tableModelMap[$normalizedTable];
+        $modelInstance = new $modelClass();
 
-        // 1. Announcements & System Settings are public reads
+        // Resolve authenticated user from Sanctum token if present
+        $user = $request->user();
+        if (! $user && $request->bearerToken()) {
+            $pat = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+            if ($pat) {
+                $user = $pat->tokenable;
+            }
+        }
+
+        if ($user && $user->is_banned) {
+            return response()->json(['error' => 'Account is deactivated.'], Response::HTTP_FORBIDDEN);
+        }
+
+        // 1. Announcements & System Settings
         if ($normalizedTable === 'announcements') {
-            $query = $modelClass::query()->where('is_published', true);
+            // Only clinic staff, doctors, and admins can create/update/delete announcements
+            if (in_array($request->method(), ['POST', 'PATCH', 'PUT', 'DELETE'], true)) {
+                if (! $user || ! $user->isStaff()) {
+                    return response()->json(['error' => 'Forbidden. Only clinic staff, doctors, and admins can manage announcements.'], Response::HTTP_FORBIDDEN);
+                }
+            }
+
+            $query = $modelClass::query();
+            // If it's a student or unauthenticated guest viewing announcements, only show published
+            if (! $user || ! $user->isStaff()) {
+                $query->where('is_published', true);
+            }
         } elseif ($normalizedTable === 'system_settings') {
             $query = $modelClass::query();
         } else {
             // 2. All medical and identity tables require authentication and strict student isolation
-            $user = $request->user();
-            if (! $user && $request->bearerToken()) {
-                $pat = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
-                if ($pat) {
-                    $user = $pat->tokenable;
-                }
-            }
-
             if (! $user) {
                 return response()->json(['error' => 'Unauthenticated.'], Response::HTTP_UNAUTHORIZED);
-            }
-
-            if ($user->is_banned) {
-                return response()->json(['error' => 'Account is deactivated.'], Response::HTTP_FORBIDDEN);
             }
 
             $query = $modelClass::query();
@@ -133,13 +147,6 @@ class PostgrestCompatController extends Controller
                     return response()->json(['error' => 'Forbidden.'], Response::HTTP_FORBIDDEN);
                 }
             }
-
-            // Enforce that only staff, doctors, and admins can modify announcements
-            if ($normalizedTable === 'announcements' && in_array($request->method(), ['POST', 'PATCH', 'PUT', 'DELETE'], true)) {
-                if (! $user->isStaff()) {
-                    return response()->json(['error' => 'Forbidden. Only clinic staff, doctors, and admins can manage announcements.'], Response::HTTP_FORBIDDEN);
-                }
-            }
         }
 
         // Handle POST / Insert
@@ -153,7 +160,7 @@ class PostgrestCompatController extends Controller
             $fillable = $modelInstance->getFillable();
             $primaryKey = $modelInstance->getKeyName();
 
-            $cleanInput = function (array $item) use ($normalizedTable, $fillable) {
+            $cleanInput = function (array $item) use ($normalizedTable, $fillable, $user) {
                 if ($normalizedTable === 'announcements') {
                     if (isset($item['datePosted']) && !isset($item['date_posted'])) {
                         $item['date_posted'] = $item['datePosted'];
@@ -163,6 +170,12 @@ class PostgrestCompatController extends Controller
                     }
                     if (isset($item['isPublished']) && !isset($item['is_published'])) {
                         $item['is_published'] = $item['isPublished'];
+                    }
+                    if (isset($item['createdBy']) && !isset($item['created_by'])) {
+                        $item['created_by'] = $item['createdBy'];
+                    }
+                    if (!isset($item['created_by']) && $user?->id) {
+                        $item['created_by'] = $user->id;
                     }
                 }
                 return !empty($fillable) ? array_intersect_key($item, array_flip($fillable)) : $item;
@@ -229,9 +242,30 @@ class PostgrestCompatController extends Controller
             return response()->json([$record], Response::HTTP_CREATED);
         }
 
+        $tableColumns = Schema::getColumnListing($modelInstance->getTable());
+
         // Parse query params for filtering
         foreach ($request->query() as $key => $rawFilter) {
             if (in_array($key, ['select', 'order', 'limit', 'offset'], true)) {
+                continue;
+            }
+
+            if ($key === 'or') {
+                // Basic or filter parsing e.g. (first_name.ilike.%foo%,last_name.ilike.%foo%)
+                $trimmed = trim((string) $rawFilter, '()');
+                $parts = explode(',', $trimmed);
+                $query->where(function ($subQ) use ($parts, $tableColumns) {
+                    foreach ($parts as $clause) {
+                        $cParts = explode('.ilike.', $clause, 2);
+                        if (count($cParts) === 2 && in_array(trim($cParts[0]), $tableColumns, true)) {
+                            $subQ->orWhere(trim($cParts[0]), 'LIKE', str_replace('*', '%', $cParts[1]));
+                        }
+                    }
+                });
+                continue;
+            }
+
+            if (! in_array($key, $tableColumns, true)) {
                 continue;
             }
 
@@ -279,18 +313,6 @@ class PostgrestCompatController extends Controller
                 $inner = substr($filter, 4, -1);
                 $values = array_map(fn ($v) => trim($v, ' "\''), explode(',', $inner));
                 $query->whereIn($key, $values);
-            } elseif ($key === 'or') {
-                // Basic or filter parsing e.g. (first_name.ilike.%foo%,last_name.ilike.%foo%)
-                $trimmed = trim($filter, '()');
-                $parts = explode(',', $trimmed);
-                $query->where(function ($subQ) use ($parts) {
-                    foreach ($parts as $clause) {
-                        $cParts = explode('.ilike.', $clause, 2);
-                        if (count($cParts) === 2) {
-                            $subQ->orWhere($cParts[0], 'LIKE', str_replace('*', '%', $cParts[1]));
-                        }
-                    }
-                });
             }
         }
 
@@ -353,6 +375,9 @@ class PostgrestCompatController extends Controller
             foreach ($orderParts as $part) {
                 $p = explode('.', trim($part));
                 $column = $p[0];
+                if (! in_array($column, $tableColumns, true)) {
+                    continue;
+                }
                 $direction = (isset($p[1]) && strtolower($p[1]) === 'asc') ? 'asc' : 'desc';
                 $query->orderBy($column, $direction);
             }
@@ -372,7 +397,14 @@ class PostgrestCompatController extends Controller
             // Filter out relation expressions if any
             $plainCols = array_filter($selectCols, fn ($c) => preg_match('/^[a-zA-Z0-9_]+$/', $c));
             if (! empty($plainCols)) {
-                $query->select($plainCols);
+                $validCols = array_values(array_intersect($plainCols, $tableColumns));
+                if (! empty($validCols)) {
+                    $keyName = $modelInstance->getKeyName();
+                    if ($keyName && ! in_array($keyName, $validCols, true) && in_array($keyName, $tableColumns, true)) {
+                        $validCols[] = $keyName;
+                    }
+                    $query->select($validCols);
+                }
             }
         }
 

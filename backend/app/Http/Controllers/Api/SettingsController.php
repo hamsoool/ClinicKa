@@ -35,7 +35,7 @@ class SettingsController extends Controller
     {
         return response()->json([
             'academicYear' => SystemSetting::getVal('current_academic_year', 'SY 2025-2026'),
-            'ocrProvider' => SystemSetting::getVal('ocr_provider', 'ocr-space'),
+            'ocrProvider' => SystemSetting::getVal('ocr_provider', env('OCR_PROVIDER', 'ocr-space')),
             'sessionTimeoutMinutes' => (int) SystemSetting::getVal('session_timeout_minutes', '60'),
             'reportingTerm' => SystemSetting::getVal('reporting_term', '1st Semester'),
             'allowStudentResubmission' => SystemSetting::getVal('allow_student_resubmission', 'true') === 'true',
@@ -123,7 +123,7 @@ class SettingsController extends Controller
             'totalCalls' => $totalCount,
             'azureCalls' => $azureCount,
             'ocrSpaceCalls' => $ocrSpaceCount,
-            'activeProvider' => SystemSetting::getVal('ocr_provider', 'ocr-space'),
+            'activeProvider' => SystemSetting::getVal('ocr_provider', env('OCR_PROVIDER', 'ocr-space')),
         ]);
     }
 }

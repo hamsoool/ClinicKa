@@ -20,7 +20,7 @@ class OcrService
      */
     public function parseDocument(string $documentType, string $content, ?string $fileName = null, ?string $mimeType = 'image/jpeg'): array
     {
-        $provider = SystemSetting::getVal('ocr_provider', 'ocr-space');
+        $provider = SystemSetting::getVal('ocr_provider', env('OCR_PROVIDER', 'ocr-space'));
 
         // Extract raw text using selected provider
         $rawText = '';
@@ -201,19 +201,8 @@ class OcrService
         // Normalize text
         $lower = strtolower($text);
 
-        // Findings extraction
-        $findings = null;
-        if (preg_match('/(?:findings|examination|report|description)\s*[:\-]?\s*(.*?)(?=(?:impression|conclusion|remarks|radiologist|$))/is', $text, $matches)) {
-            $findings = trim($matches[1]);
-        } elseif (preg_match('/(?:impression|conclusion)\s*[:\-]?\s*(.*?)(?=(?:radiologist|physician|license|$))/is', $text, $matches)) {
-            $findings = trim($matches[1]);
-        }
-
-        // Clean up findings string
-        if ($findings) {
-            $findings = preg_replace('/\s+/', ' ', $findings);
-            $findings = substr($findings, 0, 500);
-        }
+        // Radiologist extraction (Dr. Prefix)
+        $radiologist = $this->extractRadiologistName($text);
 
         // Result determination: normal vs abnormal
         $isNormal = false;
@@ -227,6 +216,8 @@ class OcrService
             'normal chest',
             'negative for active',
             'no significant abnormality',
+            'lungs are clear',
+            'lungfields are clear',
         ];
 
         foreach ($normalPatterns as $pattern) {
@@ -237,16 +228,90 @@ class OcrService
         }
 
         $result = $isNormal ? 'normal' : 'abnormal';
-        if (empty($findings) && empty($text)) {
+        if (empty($radiologist) && empty($text)) {
             $result = null;
         }
 
         return [
             'date' => $date,
-            'findings' => $findings ?: ($isNormal ? 'Essentially normal chest findings. Clear lung fields.' : 'Clinical correlation suggested.'),
+            'findings' => $radiologist,
             'result' => $result,
             'rawText' => $text,
         ];
+    }
+
+    /**
+     * Extract Radiologist name with Dr. prefix
+     */
+    public function extractRadiologistName(string $text): ?string
+    {
+        $cleanName = function (string $raw): ?string {
+            $name = trim($raw);
+            // Remove title suffixes (MD, M.D., FPCR, etc.)
+            $name = preg_replace('/[,.-]?\s*\b(?:MD|M\.D\.|FPCR|FPC|DPBR|FACR|RRT|RMT)\b.*$/i', '', $name);
+            // Remove leading labels or prefixes
+            $name = preg_replace('/^(?:Radiologist|Physician|Doctor|Dr\.?)\s*[:.\-]?\s*/i', '', trim($name));
+            $name = preg_replace('/^(?:Dr\.?)\s+/i', '', trim($name));
+            // Remove trailing punctuation
+            $name = trim($name, " \t\n\r\0\x0B,:.-");
+
+            if (empty($name) || strlen($name) < 2) {
+                return null;
+            }
+
+            // Exclude noise or clinical phrases
+            if (preg_match('/\b(?:findings|impression|examination|history|chest|patient|normal|clear|heart|lungs|sinuses|negative|remarkable|laboratory|diagnostic|clinic)\b/i', $name)) {
+                return null;
+            }
+
+            return 'Dr. ' . $name;
+        };
+
+        // 1. Explicit pattern "Radiologist: [Name]"
+        if (preg_match('/Radiologist\s*[:\-]?\s*([^,\n\r]+?)(?=\s*(?:License|Lic|PRC|PTR|Date|Impression|Remarks|History|$))/i', $text, $matches)) {
+            $candidate = $cleanName($matches[1]);
+            if ($candidate) {
+                return $candidate;
+            }
+        }
+
+        // 2. Scan lines from bottom to top
+        $lines = preg_split('/\r\n|\r|\n/', $text);
+        $lines = array_values(array_filter(array_map('trim', $lines)));
+
+        for ($i = count($lines) - 1; $i >= 0; $i--) {
+            $line = $lines[$i];
+
+            // If line is or contains "Radiologist", check previous line:
+            // e.g.
+            // JANE SMITH, MD
+            // Radiologist
+            if (preg_match('/^\s*radiologist\s*$/i', $line) && $i > 0) {
+                $prevLine = $lines[$i - 1];
+                $candidate = $cleanName($prevLine);
+                if ($candidate) {
+                    return $candidate;
+                }
+            }
+
+            // If current line has MD / FPCR suffix: e.g. "JANE SMITH, MD", "JUAN DELA CRUZ, MD, FPCR"
+            if (preg_match('/[,.-]?\s*\b(?:MD|M\.D\.|FPCR|FPC|DPBR|FACR)\b/i', $line)) {
+                $candidate = $cleanName($line);
+                if ($candidate) {
+                    return $candidate;
+                }
+            }
+        }
+
+        // 3. Fallback to Physician: [Name]
+        if (preg_match('/Physician\s*[:\-]?\s*([^,\n\r]+?)(?=\s*(?:History|Date|Age|Sex|Exam|Ref|License|Lic|PRC|PTR|$))/i', $text, $matches)) {
+            $candidate = $cleanName($matches[1]);
+            if ($candidate) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -254,31 +319,15 @@ class OcrService
      */
     public function parseCbc(string $text): array
     {
+        $lines = preg_split('/\r\n|\r|\n/', $text);
+        $lines = array_values(array_filter(array_map('trim', $lines)));
+
         $date = $this->extractDate($text);
-
-        // Blood type extraction
-        $bloodType = null;
-        if (preg_match('/\b(blood\s*type|type|rh\s*type)\s*[:\-]?\s*([ABO][+-]|[ABO]\s*(?:positive|negative))\b/i', $text, $m)) {
-            $typeStr = strtoupper(trim($m[2]));
-            $typeStr = str_replace(['POSITIVE', 'POS'], '+', $typeStr);
-            $typeStr = str_replace(['NEGATIVE', 'NEG'], '-', $typeStr);
-            $typeStr = str_replace(' ', '', $typeStr);
-            if (in_array($typeStr, ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'], true)) {
-                $bloodType = $typeStr;
-            }
-        }
-
-        // Hemoglobin: e.g. 120-160 g/L or 12.0-16.0 g/dL
-        $hemoglobin = $this->extractNumericField($text, ['hemoglobin', 'hgb', 'hb']);
-
-        // Hematocrit: e.g. 0.37-0.54 or 37-54%
-        $hematocrit = $this->extractNumericField($text, ['hematocrit', 'hct']);
-
-        // WBC: e.g. 4.5-11.0 x10^9/L or 4,500 - 11,000
-        $wbc = $this->extractNumericField($text, ['white blood cells', 'white blood count', 'wbc count', 'wbc', 'leukocytes']);
-
-        // Platelet Count: e.g. 150-450 x10^9/L or 150,000 - 450,000
-        $plateletCount = $this->extractNumericField($text, ['platelet count', 'platelet', 'plt']);
+        $bloodType = $this->extractCbcBloodType($lines);
+        $hemoglobin = $this->extractCbcHemoglobin($lines);
+        $hematocrit = $this->extractCbcHematocrit($lines);
+        $wbc = $this->extractCbcWbc($lines);
+        $plateletCount = $this->extractCbcPlatelet($lines);
 
         return [
             'date' => $date,
@@ -289,6 +338,134 @@ class OcrService
             'bloodType' => $bloodType,
             'rawText' => $text,
         ];
+    }
+
+    protected function extractCbcBloodType(array $lines): ?string
+    {
+        $validTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = $lines[$i];
+            if (!preg_match('/\b(?:blood\s*(?:type|group|typing)|abo(?:\/?rh)?|abo\s*group|rh(?:esus)?(?:\s*type)?)\b/i', $line)) {
+                continue;
+            }
+
+            // Same line checks
+            $cleaned = str_replace(['"', "'"], ' ', $line);
+            if (preg_match('/\b(AB|A|B|O)\s*([+-])(?:\s|$|[.,;])/i', $cleaned, $m)) {
+                $type = strtoupper($m[1]) . $m[2];
+                if (in_array($type, $validTypes, true)) return $type;
+            }
+            if (preg_match('/\b(AB|A|B|O)\b\s*(?:Rh(?:D|\(D\))?\s*)?([+-]|positive|negative|pos|neg)\b/i', $cleaned, $m)) {
+                $rh = $this->normalizeBloodRh($m[2]);
+                $type = strtoupper($m[1]) . $rh;
+                if (in_array($type, $validTypes, true)) return $type;
+            }
+
+            // Check nearby lines (down up to 8 lines)
+            for ($j = $i + 1; $j < min(count($lines), $i + 9); $j++) {
+                $nearby = str_replace(['"', "'"], ' ', $lines[$j]);
+                if (preg_match('/^\s*(AB|A|B|O)\s*([+-])\s*$/i', $nearby, $m)) {
+                    $type = strtoupper($m[1]) . $m[2];
+                    if (in_array($type, $validTypes, true)) return $type;
+                }
+                if (preg_match('/\b(AB|A|B|O)\s*([+-])(?:\s|$|[.,;])/i', $nearby, $m)) {
+                    $type = strtoupper($m[1]) . $m[2];
+                    if (in_array($type, $validTypes, true)) return $type;
+                }
+                if (preg_match('/\b(AB|A|B|O)\b\s*(?:Rh(?:D|\(D\))?\s*)?([+-]|positive|negative|pos|neg)\b/i', $nearby, $m)) {
+                    $rh = $this->normalizeBloodRh($m[2]);
+                    $type = strtoupper($m[1]) . $rh;
+                    if (in_array($type, $validTypes, true)) return $type;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    protected function normalizeBloodRh(string $val): string
+    {
+        $v = strtolower(trim(str_replace(['(', ')'], '', $val)));
+        if (in_array($v, ['+', 'positive', 'pos', 'reactive', 'rh+', 'rhd+', 'dpositive', 'dpos'], true)) return '+';
+        if (in_array($v, ['-', 'negative', 'neg', 'nonreactive', 'rh-', 'rhd-', 'dnegative', 'dneg'], true)) return '-';
+        return '';
+    }
+
+    protected function extractCbcHemoglobin(array $lines): ?string
+    {
+        foreach ($lines as $line) {
+            if (!preg_match('/\b(?:hemoglobin|hgb|hb)\b/i', $line)) continue;
+            if (preg_match('/\b(?:hemoglobin|hgb|hb)\b\s*[:=;\-–—]?\s*([^\s,;:]+)/i', $line, $m)) {
+                $token = $m[1];
+                if (preg_match('/^\d+(?:\.\d+)?$/', $token)) {
+                    $val = (float)$token;
+                    if ($val >= 10 && $val <= 300) {
+                        return (string)(floor($val) == $val ? (int)$val : round($val, 2));
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    protected function extractCbcHematocrit(array $lines): ?string
+    {
+        foreach ($lines as $line) {
+            if (!preg_match('/\b(?:hematocrit|hct|pcv)\b/i', $line)) continue;
+            if (preg_match('/\b(?:hematocrit|hct|pcv)\b\s*[:=;\-–—]?\s*([^\s,;:]+)/i', $line, $m)) {
+                $token = ltrim($m[1], '.');
+                if ($m[1][0] === '.') $token = '0.' . $token;
+                if (preg_match('/^\d+(?:\.\d+)?$/', $token)) {
+                    $val = (float)$token;
+                    if ($val > 5 && $val <= 100) $val = $val / 100;
+                    if ($val >= 0.05 && $val <= 1.00) {
+                        return sprintf('%.2f', $val);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    protected function extractCbcWbc(array $lines): ?string
+    {
+        foreach ($lines as $line) {
+            if (!preg_match('/\b(?:white\s*blood|wbc(?:\s*count)?|leukocytes)\b/i', $line)) continue;
+            if (preg_match('/\b(?:white\s*blood(?:\s*count)?|wbc(?:\s*count)?|leukocytes)\b\s*[:=;\-–—]?\s*([^\s,;:]+)/i', $line, $m)) {
+                $token = ltrim($m[1], '.');
+                if ($m[1][0] === '.') $token = '0.' . $token;
+                if (preg_match('/^\d+(?:\.\d+)?$/', $token)) {
+                    $val = (float)$token;
+                    if ($val >= 500 && $val <= 100000) $val = $val / 1000;
+                    if ($val >= 0.1 && $val <= 200) {
+                        return (string)(floor($val) == $val ? (int)$val : round($val, 2));
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    protected function extractCbcPlatelet(array $lines): ?string
+    {
+        foreach ($lines as $line) {
+            if (!preg_match('/\b(?:platelet(?:\s*count)?|plt)\b/i', $line)) continue;
+            if (preg_match('/\b(ADEQUATE|THROMBOCYTOPENIA|THROMBOCYTOSIS)\b/i', $line, $m)) {
+                return ucfirst(strtolower($m[1]));
+            }
+            if (preg_match('/\b(?:platelet(?:\s*count)?|plt)\b\s*[:=;\-–—]?\s*([^\s;:]+)/i', $line, $m)) {
+                $raw = str_replace(',', '', $m[1]);
+                if (preg_match('/^\d+(?:\.\d+)?$/', $raw)) {
+                    $val = (float)$raw;
+                    if ($val > 10000) $val = $val / 1000;
+                    if ($val >= 10 && $val <= 2000) {
+                        return (string)round($val);
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -314,6 +491,45 @@ class OcrService
      */
     protected function extractDate(string $text): ?string
     {
+        $lines = preg_split('/\r\n|\r|\n/', $text);
+        $lines = array_values(array_filter(array_map('trim', $lines)));
+
+        // 1. Released date / report date / exam date specifically
+        foreach ($lines as $line) {
+            if (preg_match('/\b(?:birth|dob|bday|birthdate)\b/i', $line)) {
+                continue;
+            }
+            if (preg_match('/\b(?:released|release|reported|received|result\s*date|exam(?:ined)?\s*date)\b/i', $line)) {
+                $d = $this->parseDateCandidate($line);
+                if ($d) return $d;
+            }
+        }
+
+        // 2. Generic Date:
+        foreach ($lines as $line) {
+            if (preg_match('/\b(?:birth|dob|bday|birthdate)\b/i', $line)) {
+                continue;
+            }
+            if (preg_match('/\bdate\b/i', $line)) {
+                $d = $this->parseDateCandidate($line);
+                if ($d) return $d;
+            }
+        }
+
+        // 3. Any line not birthdate
+        foreach ($lines as $line) {
+            if (preg_match('/\b(?:birth|dob|bday|birthdate)\b/i', $line)) {
+                continue;
+            }
+            $d = $this->parseDateCandidate($line);
+            if ($d) return $d;
+        }
+
+        return null;
+    }
+
+    protected function parseDateCandidate(string $text): ?string
+    {
         // ISO format YYYY-MM-DD
         if (preg_match('/\b(20\d{2})[-\/.](0?[1-9]|1[0-2])[-\/.](0?[1-9]|[12]\d|3[01])\b/', $text, $m)) {
             return sprintf('%04d-%02d-%02d', (int) $m[1], (int) $m[2], (int) $m[3]);
@@ -328,20 +544,6 @@ class OcrService
             return sprintf('%04d-%02d-%02d', (int) $m[3], (int) $month, (int) $m[2]);
         }
 
-        return null;
-    }
-
-    /**
-     * Extract numeric value following keyword
-     */
-    protected function extractNumericField(string $text, array $keywords): ?string
-    {
-        foreach ($keywords as $kw) {
-            $pattern = '/\b' . preg_quote($kw, '/') . '\b\s*[:\-]?\s*([0-9]{1,6}(?:\.[0-9]{1,3})?)/i';
-            if (preg_match($pattern, $text, $matches)) {
-                return $matches[1];
-            }
-        }
         return null;
     }
 

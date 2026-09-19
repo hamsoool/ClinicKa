@@ -23,7 +23,8 @@ $registerApiRoutes = function () {
     Route::get('/reporting-term', [SettingsController::class, 'getReportingTerm']);
     Route::get('/session-policy', [SettingsController::class, 'getSessionPolicy']);
     Route::get('/student-announcements', [AnnouncementController::class, 'index']);
-    Route::get('/storage/file/{id}', [StorageController::class, 'streamFile'])->where('id', '.*');
+    Route::match(['get', 'head', 'options'], '/storage/file/{id}', [StorageController::class, 'streamFile'])->where('id', '.*');
+    Route::match(['get', 'head', 'options'], '/storage/announcements/{filename}', [AnnouncementController::class, 'streamAnnouncementImage'])->where('filename', '.*');
 
     // -------------------------------------------------------------------------
     // Public Authentication Endpoints
@@ -66,8 +67,6 @@ $registerApiRoutes = function () {
         Route::post('/student-profile-asset', [StorageController::class, 'upload'])->middleware('throttle:storage-upload');
         Route::post('/staff-signature/prepare', [StorageController::class, 'prepareUpload']);
         Route::post('/staff-signature/complete', [StorageController::class, 'completeUpload'])->middleware('throttle:storage-upload');
-        Route::post('/announcement-image/prepare', [StorageController::class, 'prepareUpload']);
-        Route::post('/announcement-image/complete', [StorageController::class, 'completeUpload'])->middleware('throttle:storage-upload');
 
         // Student Submissions
         Route::post('/submit-record', [SubmissionController::class, 'submitRecord']);
@@ -114,6 +113,8 @@ $registerApiRoutes = function () {
             Route::put('/announcements/{id}', [AnnouncementController::class, 'update']);
             Route::patch('/announcements/{id}', [AnnouncementController::class, 'update']);
             Route::delete('/announcements/{id}', [AnnouncementController::class, 'destroy']);
+            Route::post('/announcement-image/prepare', [StorageController::class, 'prepareUpload']);
+            Route::post('/announcement-image/complete', [StorageController::class, 'completeUpload'])->middleware('throttle:storage-upload');
 
             // Analytics & Summary Metrics
             Route::get('/analytics', [AdminController::class, 'getAnalytics']);
@@ -169,6 +170,7 @@ Route::middleware('auth:sanctum')->post('/auth/v1/logout', [AuthController::clas
 Route::middleware('auth:sanctum')->get('/auth/v1/user', [AuthController::class, 'getUser']);
 
 // Direct storage streaming routes (supports /api/storage/file/{id} with or without /v1)
-Route::get('/storage/file/{id}', [StorageController::class, 'streamFile'])->where('id', '.*');
+Route::match(['get', 'head', 'options'], '/storage/file/{id}', [StorageController::class, 'streamFile'])->where('id', '.*');
+Route::match(['get', 'head', 'options'], '/storage/announcements/{filename}', [AnnouncementController::class, 'streamAnnouncementImage'])->where('filename', '.*');
 Route::middleware('auth:sanctum')->get('/storage/ticket/{id}', [StorageController::class, 'createStreamingTicket'])->where('id', '.*');
 

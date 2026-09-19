@@ -1,4 +1,5 @@
 import '../lib/pdf-polyfills';
+import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Document as PdfDocument, Page, pdfjs } from 'react-pdf';
@@ -10,8 +11,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
-import { Download, Loader2, Printer, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react';
+import { Download, Loader2, Maximize2, Minimize2, Printer, RefreshCw, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from './ui/button';
+import { cn } from './ui/utils';
 import { createPdfFromElement } from '../lib/dom-pdf-export';
 import type { DomPdfPageFormat } from '../lib/dom-pdf-export';
 
@@ -50,11 +52,52 @@ export default function InlinePdfViewer({
   const [renderedPages, setRenderedPages] = useState<Set<number>>(() => new Set());
   const [containerWidth, setContainerWidth] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [error, setError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
+
+  const touchStartDistRef = useRef<number | null>(null);
+  const touchStartZoomRef = useRef<number>(1);
+  const lastTapRef = useRef<number>(0);
+
+  // Fullscreen management: lock body scroll, handle Escape key, and handle browser/mobile back button
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const historyStateKey = 'pdf-fullscreen-active';
+    window.history.pushState({ [historyStateKey]: true }, '');
+
+    let exitedViaPopstate = false;
+
+    const handlePopState = () => {
+      exitedViaPopstate = true;
+      setIsFullscreen(false);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFullscreen(false);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (!exitedViaPopstate && window.history.state?.[historyStateKey]) {
+        window.history.back();
+      }
+    };
+  }, [isFullscreen]);
 
   useEffect(() => {
     const element = viewerRef.current;
@@ -70,7 +113,7 @@ export default function InlinePdfViewer({
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [isFullscreen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -194,8 +237,50 @@ export default function InlinePdfViewer({
     }
   }, [fileName, pageFormat]);
 
-  return (
-    <div className="overflow-hidden rounded-lg border border-outline-variant/50 bg-white shadow-sm">
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY,
+      );
+      touchStartDistRef.current = dist;
+      touchStartZoomRef.current = zoom;
+    } else if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - lastTapRef.current < 300) {
+        setZoom((current) => (current > 1.2 ? 1.0 : 2.0));
+        lastTapRef.current = 0;
+      } else {
+        lastTapRef.current = now;
+      }
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && touchStartDistRef.current !== null) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY,
+      );
+      const ratio = dist / touchStartDistRef.current;
+      const newZoom = Math.min(3.0, Math.max(0.5, Number((touchStartZoomRef.current * ratio).toFixed(2))));
+      setZoom(newZoom);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length < 2) {
+      touchStartDistRef.current = null;
+    }
+  };
+
+  const viewerElement = (
+    <div
+      className={cn(
+        'overflow-hidden rounded-lg border border-outline-variant/50 bg-white shadow-sm transition-all',
+        isFullscreen && 'fixed inset-0 z-[9999] flex h-screen w-screen flex-col rounded-none border-0 bg-neutral-900',
+      )}
+    >
       <div
         aria-hidden="true"
         ref={sourceRef}
@@ -214,23 +299,84 @@ export default function InlinePdfViewer({
         {sourceContent}
       </div>
 
-      <div className="flex flex-col gap-3 border-b border-white/10 bg-primary px-3 py-3 text-white sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2.5 border-b border-white/10 bg-primary px-3 py-2.5 text-white sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{fileName}</p>
           <p className="text-xs text-white/70">{title}</p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 sm:gap-2">
+          {/* Zoom controls — fully visible on mobile & desktop */}
+          <div className="flex items-center gap-1 rounded-lg bg-black/20 p-0.5 sm:gap-1.5">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setZoom((value) => Math.max(0.5, Number((value - 0.25).toFixed(2))))}
+              disabled={loading}
+              title="Zoom out"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <button
+              type="button"
+              onClick={() => setZoom(1.0)}
+              title="Click to reset zoom (100%)"
+              className="min-w-10 rounded px-1.5 py-0.5 text-center text-xs font-bold text-white transition-colors hover:bg-white/15 active:scale-95"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setZoom((value) => Math.min(3.0, Number((value + 0.25).toFixed(2))))}
+              disabled={loading}
+              title="Zoom in"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Fullscreen / Maximize toggle */}
+          {isFullscreen ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5 px-3 font-semibold bg-red-600 hover:bg-red-700 text-white shadow-sm sm:h-9"
+              onClick={() => setIsFullscreen(false)}
+              title="Exit fullscreen (Esc or Back)"
+            >
+              <X className="h-4 w-4" />
+              <span className="text-xs font-bold">Exit</span>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:gap-1.5 sm:px-3"
+              onClick={() => setIsFullscreen(true)}
+              title="View fullscreen"
+            >
+              <Maximize2 className="h-4 w-4" />
+              <span className="hidden sm:inline text-xs">Full</span>
+            </Button>
+          )}
+
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            className="h-9 gap-1.5 px-3"
+            className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:gap-1.5 sm:px-3"
             onClick={handleDownload}
             disabled={!pdfBlob || loading || actionLoading}
             title="Download PDF"
           >
             <Download className="h-4 w-4" />
-            <span className="text-xs sm:hidden">Download</span>
+            <span className="hidden sm:inline text-xs">Download</span>
           </Button>
           {/* Print button — hidden on mobile since it doesn't work on most Android browsers */}
           <Button
@@ -249,45 +395,25 @@ export default function InlinePdfViewer({
             type="button"
             variant="secondary"
             size="sm"
-            className="h-9 px-3"
+            className="h-8 w-8 p-0 sm:h-9 sm:px-3"
             onClick={() => setReloadToken((value) => value + 1)}
             disabled={loading}
             title="Refresh PDF"
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          {/* Zoom controls — hidden on very small screens to prevent overflow */}
-          <div className="hidden items-center gap-2 sm:flex">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-9 px-3"
-              onClick={() => setZoom((value) => Math.max(0.75, Number((value - 0.1).toFixed(2))))}
-              disabled={loading}
-              title="Zoom out"
-            >
-              <ZoomOut className="h-4 w-4" />
-            </Button>
-            <span className="min-w-12 text-center text-xs font-semibold">{Math.round(zoom * 100)}%</span>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-9 px-3"
-              onClick={() => setZoom((value) => Math.min(1.6, Number((value + 0.1).toFixed(2))))}
-              disabled={loading}
-              title="Zoom in"
-            >
-              <ZoomIn className="h-4 w-4" />
-            </Button>
-          </div>
         </div>
       </div>
 
       {error ? <div className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
 
-      <div ref={viewerRef} className="relative min-h-[70vh] bg-neutral-800">
+      <div
+        ref={viewerRef}
+        className={cn(
+          'relative bg-neutral-800',
+          isFullscreen ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'min-h-[70vh]',
+        )}
+      >
         {loading ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-neutral-900/90 text-white">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -304,8 +430,18 @@ export default function InlinePdfViewer({
           </div>
         ) : null}
 
+
         {pdfBlob ? (
-          <div ref={pagesRef} className="h-[70vh] min-h-[620px] overflow-auto bg-neutral-800 px-3 py-4">
+          <div
+            ref={pagesRef}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className={cn(
+              'overflow-auto bg-neutral-800 p-2 sm:p-4 touch-pan-x touch-pan-y',
+              isFullscreen ? 'flex-1 h-full min-h-0' : 'h-[70vh] min-h-[620px]',
+            )}
+          >
             <PdfDocument
               file={pdfBlob}
               loading={<p className="py-10 text-center text-sm text-white/80">Loading PDF pages...</p>}
@@ -322,7 +458,7 @@ export default function InlinePdfViewer({
               {Array.from({ length: numPages }, (_, index) => {
                 const pageNumber = index + 1;
                 return (
-                  <div key={pageNumber} className="mb-4 flex justify-center last:mb-0">
+                  <div key={pageNumber} className="mb-4 flex min-w-full w-max justify-center last:mb-0">
                     <Page
                       pageNumber={pageNumber}
                       width={pageWidth}
@@ -350,4 +486,10 @@ export default function InlinePdfViewer({
       </div>
     </div>
   );
+
+  if (isFullscreen && typeof document !== 'undefined') {
+    return createPortal(viewerElement, document.body);
+  }
+
+  return viewerElement;
 }

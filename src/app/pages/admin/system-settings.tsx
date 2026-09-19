@@ -57,7 +57,7 @@ const autoArchiveOptions = [
 const UPCOMING_ACADEMIC_YEAR_OPTION_COUNT = 8;
 
 type SettingSectionProps = {
-  icon: LucideIcon;
+  icon?: LucideIcon;
   title: string;
   children: ReactNode;
 };
@@ -67,29 +67,22 @@ type SettingRowProps = {
   children: ReactNode;
 };
 
-function SettingSection({ icon: Icon, title, children }: SettingSectionProps) {
+function SettingSection({ title, children }: SettingSectionProps) {
   return (
-    <Card className="overflow-hidden border-outline-variant/35 bg-surface-container-lowest">
-      <CardHeader className="border-b border-outline-variant/30 bg-surface-container-lowest">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-container/35 text-primary">
-            <Icon className="h-5 w-5" />
-          </span>
-          <div>
-            <CardTitle className="text-lg font-semibold text-on-surface">{title}</CardTitle>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="divide-y divide-outline-variant/25 p-0">{children}</CardContent>
-    </Card>
+    <div className="space-y-4">
+      <div className="border-b border-border/40 pb-2">
+        <h4 className="text-base font-semibold text-foreground">{title}</h4>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </div>
   );
 }
 
 function SettingRow({ title, children }: SettingRowProps) {
   return (
-    <div className="grid gap-4 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6">
+    <div className="grid gap-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
-        <p className="font-medium text-on-surface">{title}</p>
+        <p className="text-sm font-medium text-foreground">{title}</p>
       </div>
       <div className="min-w-0 sm:justify-self-end">{children}</div>
     </div>
@@ -249,7 +242,7 @@ export default function AdminSystemSettings() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-6">
+    <div className="w-full min-w-0 space-y-8">
       <PortalPageIntro
         title="Administrative Settings"
         actions={(
@@ -377,18 +370,14 @@ export default function AdminSystemSettings() {
           </SettingRow>
         </SettingSection>
 
-        <PasswordChangeCard title="Administrator Password" />
+        <PasswordChangeCard title="Administrator Password" variant="plain" />
 
-        <Card className="border-outline-variant/35 bg-surface-container-lowest">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <MailCheck className="h-5 w-5 text-primary" />
-              <div>
-                <CardTitle className="text-lg font-semibold text-on-surface">Save Administrative Settings</CardTitle>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+        <div className="space-y-4">
+          <div className="border-b border-border/40 pb-2">
+            <h4 className="text-base font-semibold text-foreground">Save Administrative Settings</h4>
+            <p className="text-xs text-muted-foreground">Apply pending system-wide configuration updates.</p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
             <Button
               variant="outline"
               disabled={isSaving || !hasChanges}
@@ -401,10 +390,19 @@ export default function AdminSystemSettings() {
               <Save className="mr-2 h-4 w-4" />
               {isSaving ? 'Saving...' : 'Save Settings'}
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <SettingsLogoutCard className="flex justify-end" />
+        <div className="space-y-3 pt-4">
+          <div className="border-b border-destructive/30 pb-2">
+            <h4 className="text-base font-semibold text-destructive">Account Session</h4>
+            <p className="text-xs text-muted-foreground">Sign out of this administrative session on this device.</p>
+          </div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">End your current administrator login session.</p>
+            <SettingsLogoutCard className="w-full sm:w-auto" />
+          </div>
+        </div>
       </div>
 
       <AlertDialog open={warningOpen} onOpenChange={setWarningOpen}>

@@ -169,349 +169,329 @@ export default function StaffSettings() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-6">
+    <div className="w-full min-w-0 space-y-8">
       <PortalPageIntro
         title="Settings"
         description="Manage your account profile, workspace preferences, and login credentials."
       />
 
-      <div className="mx-auto w-full max-w-[56rem] space-y-8 p-4 md:p-0">
-        <div className="space-y-6">
-          <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <User className="h-5 w-5 text-primary" />
-              <div>
-                <CardTitle>Profile Settings</CardTitle>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="min-w-0">
-                <Label htmlFor="staffFirstName">First Name</Label>
-                <Input
-                  id="staffFirstName"
-                  value={profile.firstName}
-                  onChange={(event) => updateProfileField('firstName', event.target.value)}
-                  placeholder="Enter your first name"
-                />
-              </div>
-              <div className="min-w-0">
-                <Label htmlFor="staffLastName">Last Name</Label>
-                <Input
-                  id="staffLastName"
-                  value={profile.lastName}
-                  onChange={(event) => updateProfileField('lastName', event.target.value)}
-                  placeholder="Enter your last name"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="min-w-0">
-                <Label htmlFor="staffEmail">Email</Label>
-                <Input
-                  id="staffEmail"
-                  type="email"
-                  value={profile.email}
-                  readOnly
-                  disabled
-                  className="cursor-not-allowed opacity-80"
-                  placeholder="Enter your email"
-                />
-              </div>
-              <div className="min-w-0">
-                <Label htmlFor="staffPhone">Phone Number</Label>
-                <Input
-                  id="staffPhone"
-                  value={profile.phone}
-                  onChange={(event) => updateProfileField('phone', event.target.value)}
-                  inputMode="numeric"
-                  maxLength={11}
-                  placeholder="09XXXXXXXXX"
-                />
-                {profile.phone.trim() && !isValidPhilippinePhoneNumber(profile.phone) ? (
-                  <p className="mt-2 text-xs text-red-600">Use exactly 11 digits starting with 09.</p>
-                ) : null}
-              </div>
-            </div>
-            <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground sm:max-w-md">
-                {hasProfileChanges
-                  ? 'You have unsaved profile updates.'
-                  : 'Your profile details are already up to date.'}
-              </p>
-              <Button
-                onClick={requestSaveConfirmation}
-                disabled={savingProfile || !hasProfileChanges || !isProfileValid}
-                className="w-full sm:w-auto"
-              >
-                {savingProfile ? 'Saving...' : 'Save Profile'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-          <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <ClipboardCheck className="h-5 w-5 text-primary" />
-              <div>
-                <CardTitle>Review Workspace</CardTitle>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="min-w-0">
-                <Label htmlFor="dashboardQueueTab">Dashboard default queue tab</Label>
-                <Select
-                  value={workspacePreferences.dashboardQueueTab}
-                  onValueChange={(value) => updateWorkspacePreference('dashboardQueueTab', value as StaffWorkspacePreferences['dashboardQueueTab'])}
-                >
-                  <SelectTrigger id="dashboardQueueTab">
-                    <SelectValue placeholder="Choose a starting tab" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Pending review</SelectItem>
-                    <SelectItem value="in_review">In review</SelectItem>
-                    <SelectItem value="returned">Returned</SelectItem>
-                    <SelectItem value="resubmitted">Resubmitted</SelectItem>
-                    <SelectItem value="all">All action items</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="min-w-0">
-                <Label htmlFor="reviewQueueStatus">Review queue default filter</Label>
-                <Select
-                  value={workspacePreferences.reviewQueueStatus}
-                  onValueChange={(value) => updateWorkspacePreference('reviewQueueStatus', value as StaffWorkspacePreferences['reviewQueueStatus'])}
-                >
-                  <SelectTrigger id="reviewQueueStatus">
-                    <SelectValue placeholder="Choose a default filter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="action_needed">Needs action</SelectItem>
-                    <SelectItem value="pending">Pending review</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="returned">Returned</SelectItem>
-                    <SelectItem value="resubmitted">Resubmitted</SelectItem>
-                    <SelectItem value="all">All records</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="min-w-0">
-                <Label htmlFor="reviewSortOrder">Review queue sort order</Label>
-                <Select
-                  value={workspacePreferences.reviewSortOrder}
-                  onValueChange={(value) => updateWorkspacePreference('reviewSortOrder', value as StaffWorkspacePreferences['reviewSortOrder'])}
-                >
-                  <SelectTrigger id="reviewSortOrder">
-                    <SelectValue placeholder="Choose a sort order" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="desc">Newest first</SelectItem>
-                    <SelectItem value="asc">Oldest first</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="min-w-0">
-                <Label htmlFor="autoRefreshInterval">Queue auto-refresh interval</Label>
-                <Select
-                  value={workspacePreferences.autoRefreshInterval}
-                  onValueChange={(value) => updateWorkspacePreference('autoRefreshInterval', value as StaffWorkspacePreferences['autoRefreshInterval'])}
-                >
-                  <SelectTrigger id="autoRefreshInterval">
-                    <SelectValue placeholder="Choose a refresh rate" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="off">Off (Manual)</SelectItem>
-                    <SelectItem value="1m">Every 1 minute</SelectItem>
-                    <SelectItem value="5m">Every 5 minutes</SelectItem>
-                    <SelectItem value="10m">Every 10 minutes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
+      <div className="w-full min-w-0 space-y-10">
+        {/* Section 1: Profile Settings */}
+        <div className="space-y-4">
+          <div className="border-b border-border/40 pb-2">
+            <h4 className="text-base font-semibold text-foreground">Profile Settings</h4>
+            <p className="text-xs text-muted-foreground">Manage your clinic staff name, email address, and active contact number.</p>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <div className="min-w-0">
-              <Label htmlFor="defaultCannedResponse">Default canned review response</Label>
-              <Textarea
-                id="defaultCannedResponse"
-                value={workspacePreferences.defaultCannedResponse}
-                onChange={(event) => updateWorkspacePreference('defaultCannedResponse', event.target.value)}
-                placeholder="Enter a default message to request additional student documentation..."
-                rows={3}
+              <Label htmlFor="staffFirstName">First Name</Label>
+              <Input
+                id="staffFirstName"
+                value={profile.firstName}
+                onChange={(event) => updateProfileField('firstName', event.target.value)}
+                placeholder="Enter your first name"
+              />
+            </div>
+            <div className="min-w-0">
+              <Label htmlFor="staffLastName">Last Name</Label>
+              <Input
+                id="staffLastName"
+                value={profile.lastName}
+                onChange={(event) => updateProfileField('lastName', event.target.value)}
+                placeholder="Enter your last name"
+              />
+            </div>
+            <div className="min-w-0">
+              <Label htmlFor="staffEmail">Email</Label>
+              <Input
+                id="staffEmail"
+                type="email"
+                value={profile.email}
+                readOnly
+                disabled
+                className="cursor-not-allowed opacity-80"
+                placeholder="Enter your email"
+              />
+            </div>
+            <div className="min-w-0">
+              <Label htmlFor="staffPhone">Phone Number</Label>
+              <Input
+                id="staffPhone"
+                value={profile.phone}
+                onChange={(event) => updateProfileField('phone', event.target.value)}
+                inputMode="numeric"
+                maxLength={11}
+                placeholder="09XXXXXXXXX"
+              />
+              {profile.phone.trim() && !isValidPhilippinePhoneNumber(profile.phone) ? (
+                <p className="mt-2 text-xs text-red-600">Use exactly 11 digits starting with 09.</p>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex flex-col gap-4 border-t border-border/40 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {hasProfileChanges
+                ? 'You have unsaved profile updates.'
+                : 'Your profile details are already up to date.'}
+            </p>
+            <Button
+              onClick={requestSaveConfirmation}
+              disabled={savingProfile || !hasProfileChanges || !isProfileValid}
+              className="w-full sm:w-auto px-6"
+            >
+              {savingProfile ? 'Saving...' : 'Save Profile'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Section 2: Review Workspace */}
+        <div className="space-y-4 pt-2">
+          <div className="border-b border-border/40 pb-2">
+            <h4 className="text-base font-semibold text-foreground">Review Workspace</h4>
+            <p className="text-xs text-muted-foreground">Configure queue preferences, automated refresh rates, and canned responses.</p>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="min-w-0">
+              <Label htmlFor="dashboardQueueTab">Dashboard default queue tab</Label>
+              <Select
+                value={workspacePreferences.dashboardQueueTab}
+                onValueChange={(value) => updateWorkspacePreference('dashboardQueueTab', value as StaffWorkspacePreferences['dashboardQueueTab'])}
+              >
+                <SelectTrigger id="dashboardQueueTab">
+                  <SelectValue placeholder="Choose a starting tab" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending review</SelectItem>
+                  <SelectItem value="in_review">In review</SelectItem>
+                  <SelectItem value="returned">Returned</SelectItem>
+                  <SelectItem value="resubmitted">Resubmitted</SelectItem>
+                  <SelectItem value="all">All action items</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-0">
+              <Label htmlFor="reviewQueueStatus">Review queue default filter</Label>
+              <Select
+                value={workspacePreferences.reviewQueueStatus}
+                onValueChange={(value) => updateWorkspacePreference('reviewQueueStatus', value as StaffWorkspacePreferences['reviewQueueStatus'])}
+              >
+                <SelectTrigger id="reviewQueueStatus">
+                  <SelectValue placeholder="Choose a default filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="action_needed">Needs action</SelectItem>
+                  <SelectItem value="pending">Pending review</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="returned">Returned</SelectItem>
+                  <SelectItem value="resubmitted">Resubmitted</SelectItem>
+                  <SelectItem value="all">All records</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-0">
+              <Label htmlFor="reviewSortOrder">Review queue sort order</Label>
+              <Select
+                value={workspacePreferences.reviewSortOrder}
+                onValueChange={(value) => updateWorkspacePreference('reviewSortOrder', value as StaffWorkspacePreferences['reviewSortOrder'])}
+              >
+                <SelectTrigger id="reviewSortOrder">
+                  <SelectValue placeholder="Choose a sort order" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Newest first</SelectItem>
+                  <SelectItem value="asc">Oldest first</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-0">
+              <Label htmlFor="autoRefreshInterval">Queue auto-refresh interval</Label>
+              <Select
+                value={workspacePreferences.autoRefreshInterval}
+                onValueChange={(value) => updateWorkspacePreference('autoRefreshInterval', value as StaffWorkspacePreferences['autoRefreshInterval'])}
+              >
+                <SelectTrigger id="autoRefreshInterval">
+                  <SelectValue placeholder="Choose a refresh rate" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">Off (Manual)</SelectItem>
+                  <SelectItem value="1m">Every 1 minute</SelectItem>
+                  <SelectItem value="5m">Every 5 minutes</SelectItem>
+                  <SelectItem value="10m">Every 10 minutes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="min-w-0 pt-2">
+            <Label htmlFor="defaultCannedResponse">Default canned review response</Label>
+            <Textarea
+              id="defaultCannedResponse"
+              value={workspacePreferences.defaultCannedResponse}
+              onChange={(event) => updateWorkspacePreference('defaultCannedResponse', event.target.value)}
+              placeholder="Enter a default message to request additional student documentation..."
+              rows={3}
+            />
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2 pt-2">
+            <div className="flex items-center justify-between gap-4 rounded-[18px] border border-border/50 p-4">
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">Show advanced filters on open</p>
+                <p className="text-xs text-muted-foreground">Keep filter drawer open by default in submission queue.</p>
+              </div>
+              <Switch
+                checked={workspacePreferences.showAdvancedQueueFilters}
+                onCheckedChange={(checked) => updateWorkspacePreference('showAdvancedQueueFilters', checked)}
+                aria-label="Show advanced filters on open"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4 rounded-[18px] border border-border/50 p-4">
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">Enable sound alerts</p>
+                <p className="text-xs text-muted-foreground">Play a notification chime when new submissions arrive.</p>
+              </div>
+              <Switch
+                checked={workspacePreferences.enableSoundAlerts}
+                onCheckedChange={(checked) => updateWorkspacePreference('enableSoundAlerts', checked)}
+                aria-label="Enable sound alerts"
+              />
+            </div>
+          </div>
+
+          {!isDoctor && (
+            <div className="flex flex-col gap-4 border-t border-border/40 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                {hasWorkspacePreferenceChanges
+                  ? 'You have unsaved workspace preference changes.'
+                  : 'Your workflow settings are already up to date.'}
+              </p>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setWorkspacePreferences(savedWorkspacePreferences)}
+                  disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                  className="w-full sm:w-auto"
+                >
+                  Reset
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleWorkspacePreferenceSave}
+                  disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                  className="w-full sm:w-auto"
+                >
+                  {savingWorkspacePreferences ? 'Saving...' : 'Save Workspace Settings'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section 3: Certificate Workspace (Doctor Only) */}
+        {isDoctor && (
+          <div className="space-y-4 pt-2">
+            <div className="border-b border-border/40 pb-2">
+              <h4 className="text-base font-semibold text-foreground">Certificate Workspace</h4>
+              <p className="text-xs text-muted-foreground">Manage clearance certificate presets, signatory metadata, and preview preferences.</p>
+            </div>
+            <div className="grid gap-5 sm:grid-cols-3">
+              <div className="min-w-0">
+                <Label htmlFor="certificatesDefaultView">Default certificate view</Label>
+                <Select
+                  value={workspacePreferences.certificatesDefaultView}
+                  onValueChange={(value) =>
+                    updateWorkspacePreference('certificatesDefaultView', value as StaffWorkspacePreferences['certificatesDefaultView'])
+                  }
+                >
+                  <SelectTrigger id="certificatesDefaultView">
+                    <SelectValue placeholder="Choose a default view" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="form">Medical record form</SelectItem>
+                    <SelectItem value="medical-clearance">Medical clearance</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-0">
+                <Label htmlFor="defaultSignatoryName">Default signatory name</Label>
+                <Input
+                  id="defaultSignatoryName"
+                  value={workspacePreferences.defaultSignatoryName}
+                  onChange={(event) => updateWorkspacePreference('defaultSignatoryName', event.target.value)}
+                  placeholder="e.g., Dr. Jane Doe, MD"
+                />
+              </div>
+              <div className="min-w-0">
+                <Label htmlFor="defaultSignatoryTitle">Default signatory title</Label>
+                <Input
+                  id="defaultSignatoryTitle"
+                  value={workspacePreferences.defaultSignatoryTitle}
+                  onChange={(event) => updateWorkspacePreference('defaultSignatoryTitle', event.target.value)}
+                  placeholder="e.g., College Physician"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-[18px] border border-border/50 p-4">
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">Remember last selected student</p>
+                <p className="text-xs text-muted-foreground">Keep the previously examined student selected when navigating between certificate forms.</p>
+              </div>
+              <Switch
+                checked={workspacePreferences.rememberLastCertificateStudent}
+                onCheckedChange={(checked) => updateWorkspacePreference('rememberLastCertificateStudent', checked)}
+                aria-label="Remember last selected student"
               />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="flex flex-col justify-center rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="font-medium text-on-surface">Show advanced filters on open</p>
-                  </div>
-                  <Switch
-                    checked={workspacePreferences.showAdvancedQueueFilters}
-                    onCheckedChange={(checked) => updateWorkspacePreference('showAdvancedQueueFilters', checked)}
-                    aria-label="Show advanced filters on open"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col justify-center rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="font-medium text-on-surface">Enable sound alerts</p>
-                  </div>
-                  <Switch
-                    checked={workspacePreferences.enableSoundAlerts}
-                    onCheckedChange={(checked) => updateWorkspacePreference('enableSoundAlerts', checked)}
-                    aria-label="Enable sound alerts"
-                  />
-                </div>
+            <div className="flex flex-col gap-4 border-t border-border/40 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                {hasWorkspacePreferenceChanges
+                  ? 'You have unsaved workspace preference changes.'
+                  : 'Your workflow settings are already up to date.'}
+              </p>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setWorkspacePreferences(savedWorkspacePreferences)}
+                  disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                  className="w-full sm:w-auto"
+                >
+                  Reset
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleWorkspacePreferenceSave}
+                  disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
+                  className="w-full sm:w-auto"
+                >
+                  {savingWorkspacePreferences ? 'Saving...' : 'Save Workspace Settings'}
+                </Button>
               </div>
             </div>
-
-            {!isDoctor && (
-              <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground sm:max-w-xl">
-                  {hasWorkspacePreferenceChanges
-                    ? 'You have unsaved workspace preference changes.'
-                    : 'Your workflow settings are already up to date.'}
-                </p>
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setWorkspacePreferences(savedWorkspacePreferences)}
-                    disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
-                    className="w-full sm:w-auto"
-                  >
-                    Reset
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={handleWorkspacePreferenceSave}
-                    disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
-                    className="w-full sm:w-auto"
-                  >
-                    {savingWorkspacePreferences ? 'Saving...' : 'Save Workspace Settings'}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-          {isDoctor && (
-            <Card className="overflow-hidden rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <Award className="h-5 w-5 text-primary" />
-                  <div>
-                    <CardTitle>Certificate Workspace</CardTitle>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="min-w-0">
-                    <Label htmlFor="certificatesDefaultView">Default certificate view</Label>
-                    <Select
-                      value={workspacePreferences.certificatesDefaultView}
-                      onValueChange={(value) =>
-                        updateWorkspacePreference('certificatesDefaultView', value as StaffWorkspacePreferences['certificatesDefaultView'])
-                      }
-                    >
-                      <SelectTrigger id="certificatesDefaultView">
-                        <SelectValue placeholder="Choose a default view" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="form">Medical record form</SelectItem>
-                        <SelectItem value="medical-clearance">Medical clearance</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col justify-end rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="font-medium text-on-surface">Remember last selected student</p>
-                      </div>
-                      <Switch
-                        checked={workspacePreferences.rememberLastCertificateStudent}
-                        onCheckedChange={(checked) => updateWorkspacePreference('rememberLastCertificateStudent', checked)}
-                        aria-label="Remember last selected student"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="min-w-0">
-                    <Label htmlFor="defaultSignatoryName">Default signatory name</Label>
-                    <Input
-                      id="defaultSignatoryName"
-                      value={workspacePreferences.defaultSignatoryName}
-                      onChange={(event) => updateWorkspacePreference('defaultSignatoryName', event.target.value)}
-                      placeholder="Enter signatory name (e.g., Dr. Jane Doe, MD)"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <Label htmlFor="defaultSignatoryTitle">Default signatory title</Label>
-                    <Input
-                      id="defaultSignatoryTitle"
-                      value={workspacePreferences.defaultSignatoryTitle}
-                      onChange={(event) => updateWorkspacePreference('defaultSignatoryTitle', event.target.value)}
-                      placeholder="Enter signatory title (e.g., College Physician)"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3 rounded-[18px] border border-outline-variant/30 bg-surface-container-low p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-muted-foreground sm:max-w-xl">
-                    {hasWorkspacePreferenceChanges
-                      ? 'You have unsaved workspace preference changes.'
-                      : 'Your workflow settings are already up to date.'}
-                  </p>
-                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setWorkspacePreferences(savedWorkspacePreferences)}
-                      disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
-                      className="w-full sm:w-auto"
-                    >
-                      Reset
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={handleWorkspacePreferenceSave}
-                      disabled={savingWorkspacePreferences || !hasWorkspacePreferenceChanges}
-                      className="w-full sm:w-auto"
-                    >
-                      {savingWorkspacePreferences ? 'Saving...' : 'Save Workspace Settings'}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-        </div>
+          </div>
+        )}
 
         {/* Danger Zone */}
-        <div className="space-y-4 pt-6 border-t border-rose-500/20">
+        <div className="space-y-6 pt-6 border-t border-rose-500/20">
           <div>
             <h3 className="text-lg font-bold text-rose-700">Danger Zone</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               Security-sensitive settings. Please be cautious when performing these actions.
             </p>
           </div>
-          <PasswordChangeCard title="Change Password" />
-          <div className="flex justify-end pt-2">
+
+          <PasswordChangeCard title="Change Password" variant="plain" />
+
+          <div className="flex flex-col gap-4 border-t border-rose-500/20 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h4 className="text-base font-semibold text-foreground">Sign Out</h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Sign out of your active clinic staff session on this device.
+              </p>
+            </div>
             <SettingsLogoutCard />
           </div>
         </div>

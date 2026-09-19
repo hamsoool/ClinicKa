@@ -1,6 +1,6 @@
 import { Document, Image, Page, StyleSheet, Text, View, pdf } from '@react-pdf/renderer';
 import type { ReactNode } from 'react';
-import { DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
+import { abbreviateCourseDept, DATA_PRIVACY_PREVIEW_TEXT } from '../pages/student/medical-form/constants';
 import { formatAcademicYearLabel, getRecordAcademicYear, getSubmissionSlotLabel, normalizeSubmissionSlot } from './academic-year';
 import { formatOperationDetailsForDisplay } from './operation-details';
 import type { LabResults, SubmissionRecord } from './record-types';
@@ -114,14 +114,18 @@ function safePdfImageUrl(value?: string | null) {
   const rawValue = text(value);
   if (!rawValue) return '';
   if (rawValue.startsWith('data:') || rawValue.startsWith('blob:')) return rawValue;
-  if (typeof window === 'undefined') return rawValue;
-
-  try {
-    const url = new URL(rawValue, window.location.origin);
-    return url.origin === window.location.origin ? url.href : '';
-  } catch {
-    return '';
+  if (/^https?:\/\//i.test(rawValue)) return rawValue;
+  if (rawValue.startsWith('/')) {
+    if (typeof window !== 'undefined') {
+      try {
+        return new URL(rawValue, window.location.origin).href;
+      } catch {
+        return rawValue;
+      }
+    }
+    return rawValue;
   }
+  return rawValue;
 }
 
 function normalizeExaminerName(value?: string | null) {
@@ -155,14 +159,6 @@ function formatLocalPhone(value?: string | null) {
   normalized = normalized.slice(0, 10);
   if (normalized.length === 10 && normalized.startsWith('9')) return `0${normalized}`;
   return text(value);
-}
-
-function abbreviateCourseDept(value: string) {
-  const raw = text(value);
-  const acronymInParens = raw.match(/\(([A-Za-z0-9&.\- ]+)\)\s*$/);
-  if (acronymInParens?.[1]) return acronymInParens[1].trim();
-  const upperCode = raw.match(/\b([A-Z]{2,}(?:[-/][A-Z]{2,})?)\b/);
-  return upperCode?.[1]?.trim() || raw;
 }
 
 function formatXrayResult(value?: string | null) {

@@ -11,6 +11,7 @@ import {
   Loader2,
   Save,
   ScanText,
+  XCircle,
 } from 'lucide-react';
 import {
   Dialog,
@@ -23,7 +24,7 @@ import {
 import { toast } from 'sonner';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import FilePickerButton from '../../components/file-picker-button';
 import { StudentProfileFormCard } from '../../components/student-profile-form-card';
 
@@ -889,7 +890,7 @@ function getStatusBadge(status: ReviewStatus) {
 
 function StaffRecordReviewSkeleton() {
   return (
-    <div aria-busy="true" aria-live="polite" className="mx-auto w-full max-w-[100rem] space-y-6">
+    <div aria-busy="true" aria-live="polite" className="w-full min-w-0 space-y-8">
       <div className="space-y-3">
         <Skeleton className="h-9 w-72 bg-primary/15" />
         <Skeleton className="h-4 w-full max-w-2xl bg-surface-container-high" />
@@ -980,7 +981,7 @@ export default function StaffRecordReview() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { me } = useAuth();
-  const currentStaffId = String(me?.staff?.id || '').trim();
+  const currentStaffId = String(me?.profile?.id || '').trim();
   const isDoctorWorkspace =
     ['clinic doctor', 'doctor'].includes(String(me?.staff?.position || '').trim().toLowerCase())
     || me?.profile.role === 'admin';
@@ -2053,6 +2054,19 @@ export default function StaffRecordReview() {
         xrayFindings: findings || previousAssessmentForm.xrayFindings,
         xrayResult: result.result || previousAssessmentForm.xrayResult,
       });
+      const ocrDetectedFields: Array<keyof AssessmentForm> = [];
+      if (detectedXrayDate) ocrDetectedFields.push('xrayDate');
+      if (findings) ocrDetectedFields.push('xrayFindings');
+      if (result.result) ocrDetectedFields.push('xrayResult');
+
+      setUpdatedAssessmentFields((prev) => {
+        const next = { ...prev };
+        ocrDetectedFields.forEach((field) => {
+          next[field] = true;
+        });
+        return next;
+      });
+
       setXrayOcrState({
         confidence: result.confidence,
         fieldsDetected: detectedFieldCount,
@@ -2136,6 +2150,22 @@ export default function StaffRecordReview() {
         ...previousAssessmentForm,
         ...fields,
       });
+      const ocrDetectedFields: Array<keyof AssessmentForm> = [];
+      if (fields.cbcDate) ocrDetectedFields.push('cbcDate');
+      if (fields.hemoglobin) ocrDetectedFields.push('hemoglobin');
+      if (fields.hematocrit) ocrDetectedFields.push('hematocrit');
+      if (fields.wbc) ocrDetectedFields.push('wbc');
+      if (fields.plateletCount) ocrDetectedFields.push('plateletCount');
+      if (fields.bloodType) ocrDetectedFields.push('bloodType');
+
+      setUpdatedAssessmentFields((prev) => {
+        const next = { ...prev };
+        ocrDetectedFields.forEach((field) => {
+          next[field] = true;
+        });
+        return next;
+      });
+
       setCbcOcrState({
         fieldsDetected: detectedFieldCount,
         message: detectedDateOutOfRange
@@ -2216,6 +2246,19 @@ export default function StaffRecordReview() {
         ...previousAssessmentForm,
         ...fields,
       });
+      const ocrDetectedFields: Array<keyof AssessmentForm> = [];
+      if (fields.urinalysisDate) ocrDetectedFields.push('urinalysisDate');
+      if (fields.urinalysisGlucose) ocrDetectedFields.push('urinalysisGlucose');
+      if (fields.urinalysisProtein) ocrDetectedFields.push('urinalysisProtein');
+
+      setUpdatedAssessmentFields((prev) => {
+        const next = { ...prev };
+        ocrDetectedFields.forEach((field) => {
+          next[field] = true;
+        });
+        return next;
+      });
+
       setUrinalysisOcrState({
         fieldsDetected: detectedFieldCount,
         message: detectedDateOutOfRange
@@ -2446,7 +2489,7 @@ export default function StaffRecordReview() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-6">
+    <div className="w-full min-w-0 space-y-8">
       <Dialog
         open={showAutoFillReplaceDialog}
         onOpenChange={(open) => {
@@ -2488,7 +2531,7 @@ export default function StaffRecordReview() {
         className="pl-0 text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Submissions
+        Back to Review Queue
       </Button>
 
       <header className="border-b border-border/70 pb-5">
@@ -2585,6 +2628,7 @@ export default function StaffRecordReview() {
             yearLevelLabel="Year Level"
             extraFields={[{ id: 'recordSlot', label: 'Record Slot', value: recordSlotLabel }]}
           />
+
 
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
             <Card>
@@ -2787,11 +2831,6 @@ export default function StaffRecordReview() {
                       {typeof xrayOcrState.fieldsDetected === 'number' ? (
                         <Badge variant="outline" className="w-fit bg-white/70">
                           {xrayOcrState.fieldsDetected} field{xrayOcrState.fieldsDetected === 1 ? '' : 's'}
-                        </Badge>
-                      ) : null}
-                      {typeof xrayOcrState.confidence === 'number' ? (
-                        <Badge variant="outline" className="w-fit bg-white/70">
-                          Confidence {Math.round(xrayOcrState.confidence)}%
                         </Badge>
                       ) : null}
                     </div>
@@ -3585,45 +3624,60 @@ export default function StaffRecordReview() {
               variant="outline"
               onClick={() => previousReviewStep && changeReviewStep(previousReviewStep)}
               disabled={!previousReviewStep}
+              className="h-10 px-4 rounded-xl font-medium"
             >
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Previous
+              <ChevronLeft className="mr-1.5 h-4 w-4" />
+              Previous Step
             </Button>
             {nextReviewStep ? (
-              <Button type="button" onClick={() => changeReviewStep(nextReviewStep)}>
-                Next
-                <ChevronRight className="ml-2 h-4 w-4" />
+              <Button
+                type="button"
+                onClick={() => changeReviewStep(nextReviewStep)}
+                className="h-10 px-5 rounded-xl font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+              >
+                Next Step
+                <ChevronRight className="ml-1.5 h-4 w-4" />
               </Button>
             ) : null}
           </div>
         </CardContent>
       </Card>
 
-      <Card className="border-primary/20">
+      <Card className="border-primary/25 bg-gradient-to-r from-card to-primary/[0.02] shadow-sm">
         <CardContent className="flex flex-col gap-4 pt-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="font-semibold text-foreground">
-              {isDoctorWorkspace ? 'Finalize the clinic review' : 'Finalize the clearance'}
+            <p className="text-base font-bold text-foreground">
+              {isDoctorWorkspace ? 'Finalize Clinic Review' : 'Finalize Student Clearance'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Save your progress as draft, return with corrections, or issue clearance.
             </p>
           </div>
 
           {!isApprovedLocked ? (
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
               <Button
                 variant="outline"
                 onClick={() => queueBackgroundReview('save', isArchiveEditMode ? 'approved' : undefined)}
                 disabled={backgroundReviewMutation.isPending}
                 loading={backgroundReviewMutation.isPending && savingAction === 'save'}
+                className="h-11 px-5 rounded-xl font-medium border-border/80 hover:bg-accent shadow-sm"
               >
-                <Save className="mr-2 h-4 w-4" />
-                {backgroundReviewMutation.isPending && savingAction === 'save' ? 'Saving...' : 'Save Review'}
+                <Save className="mr-2 h-4 w-4 text-muted-foreground" />
+                {backgroundReviewMutation.isPending && savingAction === 'save' ? 'Saving Progress...' : 'Save Draft'}
               </Button>
               {!isArchiveEditMode ? (
-                <Button variant="destructive" onClick={() => {
-                  setReturnReason(staffNotes);
-                  setShowReturnDialog(true);
-                }} disabled={backgroundReviewMutation.isPending}>
-                  Decline
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setReturnReason(staffNotes);
+                    setShowReturnDialog(true);
+                  }}
+                  disabled={backgroundReviewMutation.isPending}
+                  className="h-11 px-5 rounded-xl font-semibold border-rose-300 text-rose-700 hover:bg-rose-50 hover:border-rose-400 shadow-sm"
+                >
+                  <XCircle className="mr-2 h-4 w-4 text-rose-600" />
+                  Decline & Return
                 </Button>
               ) : null}
               {canFinalizeClearance && !isArchiveEditMode ? (
@@ -3631,15 +3685,17 @@ export default function StaffRecordReview() {
                   onClick={() => queueBackgroundReview('cleared', 'approved')}
                   disabled={backgroundReviewMutation.isPending}
                   loading={backgroundReviewMutation.isPending && savingAction === 'cleared'}
-                  className="bg-green-600 text-white hover:bg-green-700"
+                  className="h-11 px-6 rounded-xl font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/25 transition-transform hover:scale-[1.02]"
                 >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  {backgroundReviewMutation.isPending && savingAction === 'cleared' ? 'Clearing...' : 'Cleared'}
+                  <CheckCircle2 className="mr-2 h-5 w-5" />
+                  {backgroundReviewMutation.isPending && savingAction === 'cleared' ? 'Issuing Clearance...' : 'Approve & Issue Clearance'}
                 </Button>
               ) : null}
             </div>
           ) : (
-            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Cleared</Badge>
+            <Badge className="bg-green-100 text-green-800 hover:bg-green-100 px-3 py-1.5 text-sm font-semibold rounded-lg">
+              <CheckCircle2 className="mr-1.5 h-4 w-4" /> Cleared & Approved
+            </Badge>
           )}
         </CardContent>
       </Card>

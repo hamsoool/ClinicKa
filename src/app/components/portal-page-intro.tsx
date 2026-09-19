@@ -49,7 +49,7 @@ export default function PortalPageIntro({
             {description ? (
               <p
                 className={cn(
-                  'mt-2.5 max-w-3xl text-base leading-relaxed tracking-[-0.01em] text-on-surface-variant sm:text-xl',
+                  'mt-2 max-w-3xl text-sm leading-relaxed tracking-tight text-neutral-600 sm:text-base',
                   descriptionClassName,
                 )}
               >

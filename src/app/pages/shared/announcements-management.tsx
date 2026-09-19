@@ -4,6 +4,7 @@ import {
   createAnnouncement,
   deleteAnnouncement,
   getManagedAnnouncements,
+  normalizeStorageFileUrl,
   updateAnnouncement,
   uploadAnnouncementImage,
   type AnnouncementUpsertInput,
@@ -82,8 +83,15 @@ function ConfirmationModal({
   const isDelete = action.type === 'delete';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40-sm">
-      <div className="w-full max-w-sm rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in-0 duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isPending) {
+          onCancel();
+        }
+      }}
+    >
+      <div className="w-full max-w-sm rounded-[18px] border border-outline-variant/55 bg-surface-container-lowest p-6 shadow-2xl animate-in zoom-in-95 duration-200">
         <div className="flex items-start gap-4">
           <div
             className={`flex h-12 w-12 items-center justify-center rounded-full ${
@@ -266,7 +274,7 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
       isPublished: Boolean(item.isPublished),
       imagePath: item.imagePath || '',
     });
-    setLocalImagePreviewUrl(item.imageUrl || item.imagePath || '');
+    setLocalImagePreviewUrl(item.imageUrl || (item.imagePath ? normalizeStorageFileUrl(item.imagePath) : '') || '');
     setIsFormVisible(true);
   };
 
@@ -315,12 +323,12 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
     }
   };
 
-  const formPreviewUrl = localImagePreviewUrl || form.imagePath;
+  const formPreviewUrl = localImagePreviewUrl || (form.imagePath ? normalizeStorageFileUrl(form.imagePath) : '') || form.imagePath;
   const isOwner = (item: ManagedAnnouncement) => isAdmin || String(item.createdBy || '') === authUserId;
   const formHeading = form.id ? 'Edit Announcement' : 'Create Announcement';
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-5 sm:space-y-6">
+    <div className="w-full min-w-0 space-y-8">
       <PortalPageIntro
         title="Announcements"
       />
@@ -498,17 +506,23 @@ export default function AnnouncementsManagement({ mode }: { mode: ManagementMode
                       key={item.id}
                       className="overflow-hidden rounded-[18px] border border-outline-variant/55 bg-white transition-colors hover:border-primary/35"
                     >
-                      {item.imageUrl ? (
-                        <div className="border-b border-outline-variant/35 bg-surface-container-low">
-                          <img
-                            src={item.imageUrl}
-                            alt={item.title}
-                            className="h-auto max-h-[38rem] w-full object-contain"
-                          />
-                        </div>
-                      ) : (
-                        <div className="h-3 w-full bg-primary" />
-                      )}
+                      {(() => {
+                        const displayImage = item.imageUrl || (item.imagePath ? normalizeStorageFileUrl(item.imagePath) : null);
+                        return displayImage ? (
+                          <div className="border-b border-outline-variant/35 bg-surface-container-low">
+                            <img
+                              src={displayImage}
+                              alt={item.title}
+                              className="h-auto max-h-[38rem] w-full object-contain"
+                              onError={(e) => {
+                                (e.currentTarget.parentElement as HTMLElement | null)?.style.setProperty('display', 'none');
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="h-3 w-full bg-primary" />
+                        );
+                      })()}
 
                       <div className="p-5">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

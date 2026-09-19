@@ -14,13 +14,13 @@ import PortalShell, {
   type PortalNavItem,
   type PortalTopAction,
 } from '../../components/portal-shell';
-import { prefetchPortalRoutes } from '../../route-modules';
+import { prefetchPortalExperience } from '../../lib/login-prefetch';
 import { useAuth } from '../../lib/auth';
 import { getRoleLabel, isDoctorPosition } from '../../lib/api';
 
 const navItems = [
-  { path: '/staff', label: 'Dashboard', mobileLabel: 'Home', icon: Home },
   { path: '/staff/submissions', label: 'Review Queue', mobileLabel: 'Queue', icon: ClipboardCheck },
+  { path: '/staff/dashboard', label: 'Dashboard', mobileLabel: 'Dashboard', icon: Home },
   { path: '/staff/records', label: 'Records & Certificates', mobileLabel: 'Records', icon: FileText },
   { path: '/staff/reports', label: 'Reports', mobileLabel: 'Reports', icon: Activity },
   { path: '/staff/announcements', label: 'Announcements', mobileLabel: 'Posts', icon: Megaphone },
@@ -51,13 +51,13 @@ export default function StaffLayout() {
     if (typeof window === 'undefined') return;
     if (typeof window.requestIdleCallback === 'function') {
       const callbackId = window.requestIdleCallback(() => {
-        prefetchPortalRoutes('staff');
+        prefetchPortalExperience('staff', me);
       });
       return () => window.cancelIdleCallback?.(callbackId);
     }
-    const timerId = window.setTimeout(() => prefetchPortalRoutes('staff'), 250);
+    const timerId = window.setTimeout(() => prefetchPortalExperience('staff', me), 250);
     return () => window.clearTimeout(timerId);
-  }, []);
+  }, [me]);
 
   return (
     <PortalShell

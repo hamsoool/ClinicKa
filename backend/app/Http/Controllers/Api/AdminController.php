@@ -29,7 +29,11 @@ class AdminController extends Controller
 
         $archivedUserIds = ArchivedAccount::pluck('user_id')->flip()->all();
 
-        $profiles = Profile::with(['student', 'staff'])->orderBy('created_at', 'desc')->get();
+        // Super administrators have higher role authority and should not be displayed or counted in general user accounts
+        $profiles = Profile::with(['student', 'staff'])
+            ->where('role', '!=', 'super_admin')
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         $users = $profiles
             ->filter(fn ($p) => ! isset($archivedUserIds[$p->id]))
@@ -119,7 +123,9 @@ class AdminController extends Controller
      */
     public function getArchivedAccounts(Request $request): JsonResponse
     {
-        $archived = ArchivedAccount::orderBy('archived_at', 'desc')->get();
+        $archived = ArchivedAccount::where('role', '!=', 'super_admin')
+            ->orderBy('archived_at', 'desc')
+            ->get();
 
         $users = $archived->map(function ($a) {
             $data = $a->original_profile_data ?? [];

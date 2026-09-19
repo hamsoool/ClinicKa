@@ -1,14 +1,13 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import ListPagination from '../../components/list-pagination';
 import PortalPageIntro from '../../components/portal-page-intro';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { ChevronDown, ChevronUp, Eye, Search, X, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, Search, X, SlidersHorizontal, ArrowRight, ClipboardCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../components/ui/utils';
 import type { SubmissionSummaryRecord } from '../../lib/record-types';
@@ -93,7 +92,7 @@ export default function StaffSubmissions() {
     () => loadStaffWorkspacePreferences(staffPreferenceId, staffRoleLabel),
     [staffPreferenceId, staffRoleLabel],
   );
-  const currentStaffId = String(me?.staff?.id || '').trim();
+  const currentStaffId = String(me?.profile?.id || '').trim();
   const defaultStatusFilter = workspacePreferences.reviewQueueStatus;
   const defaultSortOrder = workspacePreferences.reviewSortOrder;
   const defaultShowAdvancedFilters = workspacePreferences.showAdvancedQueueFilters;
@@ -152,13 +151,23 @@ export default function StaffSubmissions() {
     }
   }, [isError]);
 
-  const counts = data?.counts || {
-    pending: 0,
-    inReview: 0,
-    returned: 0,
-    resubmitted: 0,
-    actionNeeded: 0,
-  };
+  const counts = useMemo(() => {
+    const raw = (data?.counts || {}) as Record<string, unknown>;
+    const pending = Number(raw.pending ?? 0) || 0;
+    const inReview = Number(raw.inReview ?? raw.in_review ?? 0) || 0;
+    const returned = Number(raw.returned ?? 0) || 0;
+    const resubmitted = Number(raw.resubmitted ?? 0) || 0;
+    const actionNeeded = Number(raw.actionNeeded ?? raw.action_needed ?? 0) || 0;
+
+    return {
+      pending,
+      inReview,
+      returned,
+      resubmitted,
+      actionNeeded,
+    };
+  }, [data?.counts]);
+
   const pendingDisplayCount =
     counts.actionNeeded === (counts.pending + counts.returned + counts.resubmitted)
       ? counts.pending
@@ -231,43 +240,47 @@ export default function StaffSubmissions() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[100rem]">
+    <div className="w-full min-w-0 space-y-8">
       <PortalPageIntro
-        className="mb-8"
-        title="Student Submissions"
+        title="Review Queue"
       />
 
-      <Card className="mb-6">
-        <CardContent className="pt-6 space-y-4">
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <button
               type="button"
               onClick={() => updateStatusFilter('pending')}
-              className={`rounded-[12px] sm:rounded-[18px] border p-2 sm:px-3 sm:py-3 text-left transition-colors ${
-                statusFilter === 'pending' ? 'border-amber-300 bg-amber-50' : 'border-border hover:bg-accent/50'
+              className={`rounded-[14px] sm:rounded-[18px] border p-2.5 sm:px-4 sm:py-3.5 text-left transition-all cursor-pointer ${
+                statusFilter === 'pending'
+                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-300/40 shadow-sm'
+                  : 'border-border bg-card hover:border-amber-300 hover:bg-amber-50/40'
               }`}
             >
-              <p className="text-[9px] sm:text-xs font-semibold uppercase tracking-wider sm:tracking-[0.16em] text-muted-foreground line-clamp-1">Pending</p>
+              <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground line-clamp-1">Pending Review</p>
               <p className="mt-1 text-lg sm:text-2xl font-bold text-foreground leading-none">{pendingDisplayCount}</p>
             </button>
             <button
               type="button"
               onClick={() => updateStatusFilter('returned')}
-              className={`rounded-[12px] sm:rounded-[18px] border p-2 sm:px-3 sm:py-3 text-left transition-colors ${
-                statusFilter === 'returned' ? 'border-red-300 bg-red-50' : 'border-border hover:bg-accent/50'
+              className={`rounded-[14px] sm:rounded-[18px] border p-2.5 sm:px-4 sm:py-3.5 text-left transition-all cursor-pointer ${
+                statusFilter === 'returned'
+                  ? 'border-rose-400 bg-rose-50 ring-2 ring-rose-300/40 shadow-sm'
+                  : 'border-border bg-card hover:border-rose-300 hover:bg-rose-50/40'
               }`}
             >
-              <p className="text-[9px] sm:text-xs font-semibold uppercase tracking-wider sm:tracking-[0.16em] text-muted-foreground line-clamp-1">Returned</p>
+              <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground line-clamp-1">Returned</p>
               <p className="mt-1 text-lg sm:text-2xl font-bold text-foreground leading-none">{counts.returned}</p>
             </button>
             <button
               type="button"
               onClick={() => updateStatusFilter('resubmitted')}
-              className={`rounded-[12px] sm:rounded-[18px] border p-2 sm:px-3 sm:py-3 text-left transition-colors ${
-                statusFilter === 'resubmitted' ? 'border-orange-300 bg-orange-50' : 'border-border hover:bg-accent/50'
+              className={`rounded-[14px] sm:rounded-[18px] border p-2.5 sm:px-4 sm:py-3.5 text-left transition-all cursor-pointer ${
+                statusFilter === 'resubmitted'
+                  ? 'border-orange-400 bg-orange-50 ring-2 ring-orange-300/40 shadow-sm'
+                  : 'border-border bg-card hover:border-orange-300 hover:bg-orange-50/40'
               }`}
             >
-              <p className="text-[9px] sm:text-xs font-semibold uppercase tracking-wider sm:tracking-[0.16em] text-muted-foreground line-clamp-1">Resubmitted</p>
+              <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground line-clamp-1">Resubmitted</p>
               <p className="mt-1 text-lg sm:text-2xl font-bold text-foreground leading-none">{counts.resubmitted}</p>
             </button>
           </div>
@@ -294,18 +307,25 @@ export default function StaffSubmissions() {
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5 pt-1">
             <Button
               variant={statusFilter === 'action_needed' ? 'default' : 'outline'}
-              size="sm"
+              size="default"
               onClick={() => updateStatusFilter('action_needed')}
+              className={`h-9 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                statusFilter === 'action_needed' ? 'shadow-sm' : 'hover:bg-accent'
+              }`}
             >
-              Needs Action
+              <ClipboardCheck className="w-4 h-4 mr-1.5" />
+              Needs Action ({counts.actionNeeded})
             </Button>
             <Button
               variant={statusFilter === 'all' ? 'default' : 'outline'}
-              size="sm"
+              size="default"
               onClick={() => updateStatusFilter('all')}
+              className={`h-9 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                statusFilter === 'all' ? 'shadow-sm' : 'hover:bg-accent'
+              }`}
             >
               All Records
             </Button>
@@ -404,17 +424,15 @@ export default function StaffSubmissions() {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Submissions ({total}
-            {hasActiveFilters && <span className="text-sm font-normal text-muted-foreground ml-1">matching current filters</span>})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        <div className="space-y-4">
+          <div className="border-b border-border/40 pb-2">
+            <h3 className="text-base font-semibold text-foreground">
+              Submissions ({total}
+              {hasActiveFilters && <span className="text-sm font-normal text-muted-foreground ml-1">matching current filters</span>})
+            </h3>
+          </div>
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">Loading submissions...</div>
           ) : submissions.length === 0 ? (
@@ -423,49 +441,97 @@ export default function StaffSubmissions() {
             </div>
           ) : (
             <div className="space-y-3">
-              {submissions.map((submission) => (
-                <div
-                  key={submission.id}
-                  className="flex flex-col justify-between gap-4 rounded-[18px] border p-4 transition-colors hover:bg-accent/50 sm:flex-row sm:items-center"
-                >
-                  <div className="flex gap-4 items-start w-full sm:w-auto">
-                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground text-lg font-bold flex-shrink-0">
-                      {submission.firstName?.[0]}{submission.lastName?.[0]}
+              {submissions.map((submission) => {
+                const isNeedsAction = submission.status === 'pending' || submission.status === 'resubmitted' || submission.status === 'in_review';
+                const isMyReview = submission.status === 'in_review' && submission.reviewedByStaffId === currentStaffId;
+                const isOtherStaffReview = submission.status === 'in_review' && submission.reviewedByStaffId && submission.reviewedByStaffId !== currentStaffId;
+
+                return (
+                  <div
+                    key={submission.id}
+                    onClick={() => navigate(`/staff/review/${submission.id}`)}
+                    onFocus={() => prefetchSubmissionDetail(submission.id)}
+                    onMouseEnter={() => prefetchSubmissionDetail(submission.id)}
+                    className="group flex flex-col justify-between gap-4 rounded-[18px] border border-border/80 bg-card p-4 sm:p-5 transition-all hover:border-primary/50 hover:bg-accent/30 hover:shadow-md sm:flex-row sm:items-center cursor-pointer"
+                  >
+                    <div className="flex gap-4 items-start w-full sm:w-auto">
+                      <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center text-base font-bold flex-shrink-0">
+                        {submission.firstName?.[0]}{submission.lastName?.[0]}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2.5 mb-2">
+                          <h4 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
+                            {submission.firstName} {submission.lastName}
+                          </h4>
+                          <Badge variant="outline" className="bg-secondary/60 text-secondary-foreground font-medium">
+                            {formatStudentYearLevel(submission.studentYearLevel)}
+                          </Badge>
+                          {getStatusBadge(submission.status)}
+                        </div>
+                        <div className="text-xs sm:text-sm text-muted-foreground space-y-0.5">
+                          <p><span className="font-medium text-foreground/80">Student ID:</span> {submission.studentId}</p>
+                          <p>
+                            {submission.department ? (
+                              <>
+                                <span className="font-medium text-foreground/80">{submission.department}</span>
+                                {submission.course && submission.course !== submission.department ? (
+                                  <span className="ml-1.5 opacity-75">• {submission.course}</span>
+                                ) : null}
+                              </>
+                            ) : (
+                              <span>{submission.course}</span>
+                            )}
+                          </p>
+                          <p><span className="font-medium text-foreground/80">Record Slot:</span> {YEAR_LABELS[String(submission.year || '')] || 'Record Slot --'}</p>
+                          <p><span className="font-medium text-foreground/80">Submitted:</span> {formatTimestamp(submission.submittedAt)}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-3 mb-2">
-                        <h4 className="font-semibold">
-                          {submission.firstName} {submission.lastName}
-                        </h4>
-                        <Badge variant="outline" className="bg-secondary/50 text-secondary-foreground">
-                          {formatStudentYearLevel(submission.studentYearLevel)}
-                        </Badge>
-                        {getStatusBadge(submission.status)}
-                      </div>
-                      <div className="text-sm text-muted-foreground space-y-0.5">
-                        <p>Student ID: {submission.studentId}</p>
-                        <p>{submission.department || submission.course}</p>
-                        <p>Record Slot: {YEAR_LABELS[String(submission.year || '')] || 'Record Slot --'}</p>
-                        <p>Submitted: {formatTimestamp(submission.submittedAt)}</p>
-                      </div>
+                    <div className="mt-3 sm:mt-0 flex-shrink-0">
+                      {isOtherStaffReview ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="w-full sm:w-auto h-11 px-5 rounded-xl font-medium shadow-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/staff/review/${submission.id}`);
+                          }}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Record
+                        </Button>
+                      ) : isNeedsAction ? (
+                        <Button
+                          type="button"
+                          className="w-full sm:w-auto h-11 px-6 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20 flex items-center justify-center gap-2 group-hover:scale-[1.02] transition-transform"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/staff/review/${submission.id}`);
+                          }}
+                        >
+                          <ClipboardCheck className="w-4 h-4" />
+                          <span>{isMyReview ? 'Continue Review' : 'Start Review'}</span>
+                          <ArrowRight className="w-4 h-4 ml-0.5" />
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full sm:w-auto h-11 px-5 rounded-xl font-medium border-border/80 hover:bg-accent shadow-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/staff/review/${submission.id}`);
+                          }}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Details
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  <div className="mt-4 sm:mt-0">
-                    <Button
-                      onClick={() => navigate(`/staff/review/${submission.id}`)}
-                      onFocus={() => prefetchSubmissionDetail(submission.id)}
-                      onMouseEnter={() => prefetchSubmissionDetail(submission.id)}
-                      variant="outline"
-                      className="w-full sm:w-auto"
-                    >
-                      <Eye className="w-4 h-4 mr-2" />
-                      {submission.status === 'in_review' && submission.reviewedByStaffId && submission.reviewedByStaffId !== currentStaffId
-                        ? 'View'
-                        : 'Review'}
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -481,8 +547,7 @@ export default function StaffSubmissions() {
               onPageSizeChange={setPageSize}
             />
           ) : null}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+        </div>
+      </div>
+    );
+  }
