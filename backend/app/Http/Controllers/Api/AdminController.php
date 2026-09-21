@@ -502,31 +502,6 @@ class AdminController extends Controller
     }
 
     /**
-     * POST /super-admin/send-create-admin-otp
-     */
-    public function sendCreateAdminOtp(Request $request): JsonResponse
-    {
-        /** @var Profile $user */
-        $user = $request->user();
-        $otp = (string) random_int(100000, 999999);
-        $cacheKey = 'create_admin_otp_' . $user->id;
-        Cache::put($cacheKey, $otp, now()->addMinutes(10));
-
-        try {
-            Mail::raw("Your ClinicKa administrator creation authorization code is: {$otp}. Expires in 10 minutes.", function ($msg) use ($user) {
-                $msg->to($user->email)->subject('ClinicKa Admin Provisioning Code');
-            });
-        } catch (\Throwable) {
-            // Local fallback
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Authorization OTP sent to Super Administrator email.',
-        ]);
-    }
-
-    /**
      * POST /super-admin/administrators
      */
     public function createAdministrator(Request $request): JsonResponse
@@ -538,19 +513,7 @@ class AdminController extends Controller
             'password' => ['required', 'string', 'min:8'],
             'firstName' => ['required', 'string'],
             'lastName' => ['required', 'string'],
-            'otp' => ['nullable', 'string'],
         ]);
-
-        $cacheKey = 'create_admin_otp_' . $currentUser->id;
-        $cachedOtp = Cache::get($cacheKey);
-
-        if ($cachedOtp && (! empty($validated['otp']) && $cachedOtp !== $validated['otp'])) {
-            return response()->json(['error' => 'Invalid or expired OTP code.'], 422);
-        }
-
-        if ($cachedOtp) {
-            Cache::forget($cacheKey);
-        }
 
         $admin = Profile::create([
             'email' => trim(strtolower($validated['email'])),

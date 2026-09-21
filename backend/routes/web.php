@@ -12,7 +12,6 @@ Route::post('/auth/v1/resend', [\App\Http\Controllers\Api\AuthController::class,
 Route::get('/auth/v1/verify', [\App\Http\Controllers\Api\AuthController::class, 'verifyEmail']);
 Route::post('/auth/v1/verify', [\App\Http\Controllers\Api\AuthController::class, 'verifyEmail']);
 Route::post('/auth/v1/token', [\App\Http\Controllers\Api\AuthController::class, 'login']);
-Route::post('/auth/v1/recover', [\App\Http\Controllers\Api\AuthController::class, 'sendPasswordChangeOtp']);
 Route::middleware('auth:sanctum')->post('/auth/v1/logout', [\App\Http\Controllers\Api\AuthController::class, 'logout']);
  
 // Public announcement and static storage route

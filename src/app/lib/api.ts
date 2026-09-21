@@ -56,8 +56,6 @@ export type { AdminSystemSettings } from './admin-system-settings';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
 export const AUTH_STORAGE_KEY = 'gc_supabase_session';
-export const PASSWORD_RESET_COOLDOWN_SECONDS = 300;
-const PASSWORD_RESET_COOLDOWN_KEY_PREFIX = 'lastPasswordResetEmailSent_';
 const LAB_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 const IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 const LAB_UPLOAD_IMAGE_OPTIMIZE_THRESHOLD_BYTES = 1 * 1024 * 1024;
@@ -329,6 +327,83 @@ async function prepareImageFileForUpload(file: File, label: string) {
 }
 
 export type UserRole = 'student' | 'staff' | 'admin' | 'super_admin';
+
+export type AuditLog = {
+  id: string;
+  actor: string;
+  actorRole?: string | null;
+  action: string;
+  category: string;
+  targetType?: string | null;
+  targetId?: string | null;
+  studentId?: string | null;
+  result: 'SUCCESS' | 'DENIED' | 'FAILURE' | string;
+  reason?: string | null;
+  createdAt?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type AuditLogFilters = {
+  page?: number;
+  perPage?: number;
+  from?: string;
+  to?: string;
+  actorName?: string;
+  actorRole?: string;
+  action?: string;
+  category?: string;
+  result?: string;
+  studentName?: string;
+  targetId?: string;
+};
+
+export type AuditLogPage = {
+  data: AuditLog[];
+  meta: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+};
+
+function buildAuditLogQuery(filters: AuditLogFilters = {}) {
+  const params = new URLSearchParams();
+  const values: Record<string, string | number | undefined> = {
+    page: filters.page,
+    per_page: filters.perPage,
+    from: filters.from,
+    to: filters.to,
+    actor_name: filters.actorName,
+    actor_role: filters.actorRole,
+    action: filters.action,
+    category: filters.category,
+    result: filters.result,
+    student_name: filters.studentName,
+    target_id: filters.targetId,
+  };
+
+  Object.entries(values).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  });
+
+  return params.toString();
+}
+
+export async function getAuditLogs(scope: 'admin' | 'super-admin', filters: AuditLogFilters = {}) {
+  const query = buildAuditLogQuery(filters);
+  return apiRequest<AuditLogPage>(
+    `/functions/v1/server/${scope}/audit-logs${query ? `?${query}` : ''}`,
+  );
+}
+
+export async function getStudentAuditHistory(studentId: string) {
+  return apiRequest<{ data: AuditLog[] }>(
+    `/functions/v1/server/audit-logs/student/${encodeURIComponent(studentId)}`,
+  );
+}
 
 export type AuthSession = {
   access_token: string;
@@ -728,36 +803,6 @@ function buildAuthRedirectUrl(path: string) {
   if (!origin) return undefined;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${origin}${normalizedPath}`;
-}
-
-function getPasswordResetCooldownStorageKey(normalizedEmail: string) {
-  return `${PASSWORD_RESET_COOLDOWN_KEY_PREFIX}${normalizedEmail}`;
-}
-
-export function getPasswordResetCooldownRemaining(email: string) {
-  if (typeof window === 'undefined') return 0;
-
-  const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) return 0;
-
-  const storageKey = getPasswordResetCooldownStorageKey(normalizedEmail);
-  const rawLastSent = window.localStorage.getItem(storageKey);
-  if (!rawLastSent) return 0;
-
-  const lastSent = Number.parseInt(rawLastSent, 10);
-  if (!Number.isFinite(lastSent) || lastSent <= 0) {
-    window.localStorage.removeItem(storageKey);
-    return 0;
-  }
-
-  const elapsedSeconds = Math.floor((Date.now() - lastSent) / 1000);
-  const remaining = PASSWORD_RESET_COOLDOWN_SECONDS - elapsedSeconds;
-  if (remaining <= 0) {
-    window.localStorage.removeItem(storageKey);
-    return 0;
-  }
-
-  return remaining;
 }
 
 function isGCDomainEmail(email?: string | null) {
@@ -1477,7 +1522,7 @@ function mapStaffMeasurements(row: any, examinedBySignatureUrl?: string | null) 
     extremities: row.extremities,
     others: row.others,
     examinedBy: row.examined_by,
-    examinedBySignatureUrl: normalizeStorageFileUrl(row.examined_by_signature_url || examinedBySignatureUrl || null),
+    examinedBySignatureUrl: normalizeStorageFileUrl(examinedBySignatureUrl || row.examined_by_signature_url || null),
     updatedAt: row.updated_at || null,
   };
 }
@@ -1936,6 +1981,29 @@ function mapSubmission(row: any, related: Record<string, any>) {
   };
 }
 
+async function resolveSecureStorageFileUrl(value?: string | null) {
+  const normalizedUrl = normalizeStorageFileUrl(value || null);
+  if (!normalizedUrl) return undefined;
+
+  const fileIdMatch = normalizedUrl.match(/\/storage\/file\/([^/?#]+)/i);
+  if (!fileIdMatch?.[1]) return normalizedUrl;
+
+  try {
+    return await getSecureStreamingTicket(decodeURIComponent(fileIdMatch[1]));
+  } catch {
+    return normalizedUrl;
+  }
+}
+
+async function secureStaffSignatureFiles(files: any[]) {
+  return Promise.all(
+    files.map(async (file) => ({
+      ...file,
+      url: await resolveSecureStorageFileUrl(file?.url),
+    })),
+  );
+}
+
 async function loadRelatedData(rows: any[]) {
   const submissionIds = rows.map((row) => row.id);
   const studentIds = [...new Set(rows.map((row) => row.student_id).filter(Boolean))];
@@ -2044,7 +2112,7 @@ async function loadRelatedData(rows: any[]) {
     ).catch(() => [])
     : [];
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
-    await normalizeFileRows(staffSignatureFilesRaw, token),
+    await secureStaffSignatureFiles(await normalizeFileRows(staffSignatureFilesRaw, token)),
   );
   const staffSignaturesByProfileId = normalizedStaffSignatureFiles.reduce((acc, file) => {
     if (!file?.uploaded_by) return acc;
@@ -2247,7 +2315,7 @@ async function loadCertificatePreviewRelatedData(rows: any[]) {
     ).catch(() => [])
     : [];
   const normalizedStaffSignatureFiles = normalizeStaffSignatureRows(
-    await normalizeFileRows(staffSignatureFilesRaw, token),
+    await secureStaffSignatureFiles(await normalizeFileRows(staffSignatureFilesRaw, token)),
   );
   const staffSignaturesByProfileId = normalizedStaffSignatureFiles.reduce((acc, file) => {
     if (!file?.uploaded_by) return acc;
@@ -2498,40 +2566,6 @@ export async function resendVerificationEmail(email: string) {
       email,
     }),
   });
-
-  return { success: true as const };
-}
-
-export async function sendPasswordResetEmail(email: string) {
-  const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) {
-    throw new Error('Please enter your email first.');
-  }
-
-  const cooldownRemaining = getPasswordResetCooldownRemaining(normalizedEmail);
-  if (cooldownRemaining > 0) {
-    const minutes = Math.floor(cooldownRemaining / 60);
-    const seconds = cooldownRemaining % 60;
-    const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    throw new Error(`Please wait ${formatted} before requesting another password reset email.`);
-  }
-
-  try {
-    await apiRequest('/functions/v1/server/auth/send-password-change-otp', {
-      method: 'POST',
-      body: JSON.stringify({ email: normalizedEmail }),
-    });
-  } catch (error) {
-    await authRequest('/auth/v1/recover', {
-      method: 'POST',
-      body: JSON.stringify({ email: normalizedEmail }),
-    });
-  }
-
-  if (typeof window !== 'undefined') {
-    const storageKey = getPasswordResetCooldownStorageKey(normalizedEmail);
-    window.localStorage.setItem(storageKey, Date.now().toString());
-  }
 
   return { success: true as const };
 }
@@ -3057,7 +3091,7 @@ export async function getStaffSignature(): Promise<StaffSignatureAsset> {
     }>('/functions/v1/server/staff-signature');
 
     return {
-      signatureUrl: normalizeStorageFileUrl(payload.signatureUrl || null) || null,
+      signatureUrl: (await resolveSecureStorageFileUrl(payload.signatureUrl || null)) || null,
       signatureFileName: payload.signatureFileName || null,
     };
   } catch (error) {
@@ -3077,7 +3111,7 @@ export async function getStaffSignature(): Promise<StaffSignatureAsset> {
     `profile_id=eq.${encodeURIComponent(profileId)}&select=signature_url&limit=1`,
     `profile_id=eq.${encodeURIComponent(profileId)}&select=id&limit=1`,
   ).catch(() => []);
-  const directSignatureUrl = normalizeStorageFileUrl(staffRows[0]?.signature_url || null);
+  const directSignatureUrl = await resolveSecureStorageFileUrl(staffRows[0]?.signature_url || null);
   if (directSignatureUrl) {
     return {
       signatureUrl: directSignatureUrl,
@@ -3092,9 +3126,26 @@ export async function getStaffSignature(): Promise<StaffSignatureAsset> {
   const latest = latestFilesByType(normalizeStaffSignatureRows(await normalizeFileRows(rows, token))).staff_signature;
 
   return {
-    signatureUrl: normalizeStorageFileUrl(latest?.url || null) || null,
+    signatureUrl: (await resolveSecureStorageFileUrl(latest?.url || null)) || null,
     signatureFileName: latest?.file_name || null,
   };
+}
+
+export async function getClearanceSignatories(): Promise<string[]> {
+  const response = await apiRequest<{ signatories?: unknown }>('/functions/v1/server/staff/clearance-signatories');
+  return Array.isArray(response?.signatories)
+    ? response.signatories.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+}
+
+export async function addClearanceSignatory(name: string): Promise<{ name: string; signatories: string[] }> {
+  return apiRequest<{ name: string; signatories: string[] }>('/functions/v1/server/staff/clearance-signatories', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name }),
+  });
 }
 
 export async function uploadStaffSignature(file: File) {
@@ -4174,13 +4225,71 @@ export async function getStaffApprovedStudents(filters: StaffApprovedStudentFilt
   params.set('pageSize', String(pageSize));
 
   try {
-    return await apiRequest<{
-      students: ApprovedStudentSummary[];
-      availableCourses: string[];
-      total: number;
-      page: number;
-      pageSize: number;
+    const response = await apiRequest<{
+      students?: ApprovedStudentSummary[];
+      items?: Array<{
+        submissionId?: string;
+        studentId?: string;
+        firstName?: string;
+        lastName?: string;
+        middleInitial?: string;
+        course?: string;
+        department?: string;
+        yearLevel?: string;
+        submittedAt?: string;
+        approvedAt?: string;
+      }>;
+      availableCourses?: string[];
+      total?: number;
+      page?: number;
+      pageSize?: number;
     }>(`/functions/v1/server/staff/approved-students?${params.toString()}`);
+
+    if (Array.isArray(response?.students)) {
+      return response;
+    }
+
+    const groupedStudents = new Map<string, ApprovedStudentSummary>();
+    for (const item of response?.items || []) {
+      const studentId = String(item.studentId || '').trim();
+      const submissionId = String(item.submissionId || '').trim();
+      if (!studentId || !submissionId) continue;
+
+      const record = {
+        id: submissionId,
+        year: String(item.yearLevel || '').trim(),
+        submittedAt: item.submittedAt || item.approvedAt || '',
+        updatedAt: item.approvedAt || item.submittedAt || undefined,
+      };
+      const existing = groupedStudents.get(studentId);
+      if (existing) {
+        existing.approvedCount += 1;
+        existing.records.push(record);
+        continue;
+      }
+
+      groupedStudents.set(studentId, {
+        studentId,
+        firstName: String(item.firstName || '').trim(),
+        lastName: String(item.lastName || '').trim(),
+        middleInitial: String(item.middleInitial || '').trim(),
+        course: String(item.course || '').trim(),
+        department: String(item.department || '').trim(),
+        latestSubmittedAt: item.submittedAt,
+        latestUpdatedAt: item.approvedAt || item.submittedAt,
+        approvedCount: 1,
+        records: [record],
+      });
+    }
+
+    const students = Array.from(groupedStudents.values());
+    return {
+      students,
+      availableCourses: response?.availableCourses || [],
+      total: response?.total || students.length,
+      page: response?.page || page,
+      pageSize: response?.pageSize || pageSize,
+    };
   } catch (error) {
     if (!shouldFallbackToRest(error)) {
       throw error;
@@ -5783,12 +5892,6 @@ type SuperAdminCreateAdministratorInput = {
   lastName?: string;
   otp?: string;
 };
-
-export async function sendSuperAdminCreateAdminOtp() {
-  return apiRequest<{ success: boolean }>('/functions/v1/server/super-admin/send-create-admin-otp', {
-    method: 'POST',
-  });
-}
 
 export async function getSuperAdminAdministrators() {
   const data = await apiRequest<{

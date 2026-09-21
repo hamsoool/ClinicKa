@@ -6,6 +6,7 @@ import { PortalPageSkeleton, PortalShellSkeleton, PublicPageSkeleton } from './c
 import { RedirectIfAuthenticated, RequireAuth } from './lib/auth';
 import {
   loadAdminAnnouncements,
+  loadAdminAuditLogs,
   loadAdminDashboard,
   loadAdminLayout,
   loadAdminReports,
@@ -31,7 +32,9 @@ import {
   loadStudentAnnouncements,
   loadStudentYearSelection,
   loadSuperAdminAdministrators,
+  loadSuperAdminAuditLogs,
   loadSuperAdminLayout,
+  loadSuperAdminSettings,
 } from './route-modules';
 const CheckEmailPage = lazy(loadCheckEmailPage);
 const CreatePasswordPage = lazy(loadCreatePasswordPage);
@@ -58,8 +61,11 @@ const AdminSystemSettings = lazy(loadAdminSystemSettings);
 const AdminUserAccounts = lazy(loadAdminUserAccounts);
 const AdminReports = lazy(loadAdminReports);
 const AdminAnnouncements = lazy(loadAdminAnnouncements);
+const AdminAuditLogs = lazy(loadAdminAuditLogs);
 const SuperAdminLayout = lazy(loadSuperAdminLayout);
 const SuperAdminAdministrators = lazy(loadSuperAdminAdministrators);
+const SuperAdminSettings = lazy(loadSuperAdminSettings);
+const SuperAdminAuditLogs = lazy(loadSuperAdminAuditLogs);
 
 type RouteSkeletonVariant =
   | 'marketing'
@@ -186,6 +192,7 @@ export const router = createBrowserRouter([
       { path: "users", element: withSuspense(AdminUserAccounts) },
       { path: "reports", element: withSuspense(AdminReports) },
       { path: "announcements", element: withSuspense(AdminAnnouncements) },
+      { path: "audit-logs", element: withSuspense(AdminAuditLogs, 'portal-table') },
     ],
   },
   {
@@ -197,6 +204,8 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: withSuspense(SuperAdminAdministrators, 'portal-table') },
+      { path: 'settings', element: withSuspense(SuperAdminSettings, 'portal-table') },
+      { path: 'audit-logs', element: withSuspense(SuperAdminAuditLogs, 'portal-table') },
     ],
   },
 ], { basename: basePath });

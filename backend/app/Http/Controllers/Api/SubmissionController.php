@@ -18,6 +18,7 @@ use App\Models\Student;
 use App\Models\StudentNotification;
 use App\Models\Submission;
 use App\Models\SystemSetting;
+use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -424,6 +425,12 @@ class SubmissionController extends Controller
         // Strict authorization: Only staff, doctors, nurses, admins or the specific student themselves
         $isStaff = $user->isStaff();
         if (! $isStaff && ($user->role !== 'student' || $user->student_id !== $targetId)) {
+            app(AuditService::class)->recordDenied('VIEW_MEDICAL_RECORD', 'Medical record access denied.', [
+                'target_type' => 'student',
+                'target_id' => $targetId,
+                'student_id' => $targetId,
+            ], $request);
+
             return response()->json([
                 'error' => 'Forbidden. You do not have permission to view this medical record.',
             ], 403);
@@ -435,6 +442,12 @@ class SubmissionController extends Controller
             ->get();
 
         $mapped = $submissions->map(fn ($s) => $this->mapSubmissionDetail($s));
+
+        app(AuditService::class)->record('VIEW_MEDICAL_RECORD', [
+            'student_id' => $targetId,
+            'target_type' => 'student',
+            'target_id' => $targetId,
+        ], $request);
 
         return response()->json([
             'records' => $mapped,
@@ -454,6 +467,10 @@ class SubmissionController extends Controller
 
         // Strict authorization: Only clinic staff, doctors, nurses, and admins can view all submissions
         if (! $user->isStaff()) {
+            app(AuditService::class)->recordDenied('VIEW_MEDICAL_RECORD', 'All-submissions access denied.', [
+                'target_type' => 'submission_collection',
+            ], $request);
+
             return response()->json([
                 'error' => 'Forbidden. Only clinic staff, doctors, and admins can view all submissions.',
             ], 403);
@@ -490,12 +507,24 @@ class SubmissionController extends Controller
         // Strict authorization: Only staff, doctors, nurses, admins or the student who owns the submission
         $isStaff = $user->isStaff();
         if (! $isStaff && ($user->role !== 'student' || $user->student_id !== $submission->student_id)) {
+            app(AuditService::class)->recordDenied('VIEW_MEDICAL_RECORD', 'Medical submission access denied.', [
+                'target_type' => 'submission',
+                'target_id' => $submission->id,
+                'student_id' => $submission->student_id,
+            ], $request);
+
             return response()->json([
                 'error' => 'Forbidden. You do not have permission to view this medical submission.',
             ], 403);
         }
 
         $detail = $this->mapSubmissionDetail($submission);
+
+        app(AuditService::class)->record('VIEW_MEDICAL_RECORD', [
+            'target_type' => 'submission',
+            'target_id' => $submission->id,
+            'student_id' => $submission->student_id,
+        ], $request);
 
         return response()->json(array_merge($detail, [
             'submission' => $detail,
@@ -511,6 +540,16 @@ class SubmissionController extends Controller
         $user = $request->user();
         $submission = Submission::find($id);
 
+        if (! $user || ! $user->isStaff()) {
+            app(AuditService::class)->recordDenied('UPDATE_CLEARANCE_STATUS', 'Clearance status update denied.', [
+                'target_type' => 'submission',
+                'target_id' => $id,
+                'student_id' => $submission?->student_id,
+            ], $request);
+
+            return response()->json(['error' => 'Forbidden.'], 403);
+        }
+
         if (! $submission) {
             return response()->json(['error' => 'Submission record not found.'], 404);
         }
@@ -520,6 +559,7 @@ class SubmissionController extends Controller
             'staffNotes' => ['nullable', 'string'],
         ]);
 
+        $oldStatus = $submission->status;
         $submission->status = $validated['status'];
         if (array_key_exists('staffNotes', $validated)) {
             $submission->staff_notes = $validated['staffNotes'];
@@ -556,7 +596,7 @@ class SubmissionController extends Controller
 
         AuditLog::logAction('STATUS_UPDATE', $user->id, $user->role, $submission->student_id, $submission->id, null, [
             'new_status' => $submission->status,
-            'notes' => $submission->staff_notes,
+            'old_status' => $oldStatus,
         ]);
 
         return response()->json([
@@ -574,6 +614,16 @@ class SubmissionController extends Controller
         /** @var Profile $user */
         $user = $request->user();
         $submission = Submission::find($id);
+
+        if (! $user || ! $user->isStaff()) {
+            app(AuditService::class)->recordDenied('UPDATE_PHYSICAL_EXAM', 'Physical examination update denied.', [
+                'target_type' => 'submission',
+                'target_id' => $id,
+                'student_id' => $submission?->student_id,
+            ], $request);
+
+            return response()->json(['error' => 'Forbidden.'], 403);
+        }
 
         if (! $submission) {
             return response()->json(['error' => 'Submission not found.'], 404);

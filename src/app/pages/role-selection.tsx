@@ -938,8 +938,8 @@ export default function RoleSelection() {
                   <h3 className="text-xl sm:text-2xl font-bold tracking-tight">Need more help?</h3>
                   <p className="mt-3 text-base sm:text-lg leading-relaxed text-white/85 break-words [overflow-wrap:anywhere]">
                     Contact the Gordon College health services unit at{' '}
-                    <a href="mailto:digitalduo.clinicka@gmail.com" className="underline decoration-white/30 hover:decoration-white hover:text-[#85f6ae] transition-colors font-medium break-all [overflow-wrap:anywhere]">
-                      digitalduo.clinicka@gmail.com
+                    <a href="mailto:webadmin@gordoncollege.edu.ph" className="underline decoration-white/30 hover:decoration-white hover:text-[#85f6ae] transition-colors font-medium break-all [overflow-wrap:anywhere]">
+                      webadmin@gordoncollege.edu.ph
                     </a>{' '}
                     or call us at{' '}
                     <a href="tel:+639280410729" className="underline decoration-white/30 hover:decoration-white hover:text-[#85f6ae] transition-colors font-medium whitespace-nowrap">
@@ -1006,7 +1006,7 @@ export default function RoleSelection() {
                   `Contact: ${CONTACT_EMAIL}`,
                 ]}
                 sections={privacySections}
-                footer="This policy presentation is aligned with the Gordon College General Privacy Notice and is intended to help users understand how personal data is handled inside the clinic portal."
+                    footer="This ClinicKa notice summarizes the Gordon College General Privacy Notice as it applies to the clinic portal. It does not replace the Gordon College Data Privacy Manual or applicable law."
                 triggerClassName="text-left font-normal transition-colors hover:text-white text-white/70 text-sm"
               />
               <LegalDialog
@@ -1020,7 +1020,7 @@ export default function RoleSelection() {
                   'Covers account use, submissions, and access',
                 ]}
                 sections={termsSections}
-                footer="By using the portal, you acknowledge that records submitted through the system may be reviewed and managed by authorized Gordon College personnel as part of official clinic operations."
+                footer="By using ClinicKa, you acknowledge that information and documents submitted through the portal may be reviewed and managed by authorized Gordon College personnel as part of official clinic operations and student health-clearance workflows."
                 triggerClassName="text-left font-normal transition-colors hover:text-white text-white/70 text-sm"
               />
             </div>
@@ -1032,8 +1032,8 @@ export default function RoleSelection() {
             <div className="flex flex-col gap-2.5">
               <div className="flex items-start gap-2.5 text-white/70">
                 <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#00b274]" />
-                <a href="mailto:digitalduo.clinicka@gmail.com" className="transition-colors hover:text-white break-all sm:break-normal">
-                  digitalduo.clinicka@gmail.com
+                <a href="mailto:webadmin@gordoncollege.edu.ph" className="transition-colors hover:text-white break-all sm:break-normal">
+                  webadmin@gordoncollege.edu.ph
                 </a>
               </div>
               <div className="flex items-center gap-2.5 text-white/70">
@@ -1056,7 +1056,7 @@ export default function RoleSelection() {
             <h4 className="text-xs font-bold uppercase tracking-wider text-white">Connect With Us</h4>
             <div className="flex flex-col gap-2.5">
               <a
-                href="https://www.facebook.com/gchealthservicesunit"
+                href="https://www.facebook.com/profile.php?id=61594318924358"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2.5 text-white/70 transition-colors hover:text-white"

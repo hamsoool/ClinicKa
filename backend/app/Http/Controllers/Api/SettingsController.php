@@ -13,6 +13,48 @@ use Illuminate\Support\Facades\Mail;
 
 class SettingsController extends Controller
 {
+    private const CLEARANCE_SIGNATORIES_KEY = 'clearance_signatories';
+
+    public function getClearanceSignatories(): JsonResponse
+    {
+        $stored = SystemSetting::getVal(self::CLEARANCE_SIGNATORIES_KEY, '[]');
+        $signatories = json_decode($stored ?: '[]', true);
+
+        if (! is_array($signatories)) {
+            $signatories = [];
+        }
+
+        return response()->json([
+            'signatories' => array_values(array_filter($signatories, static fn ($value) => is_string($value) && trim($value) !== '')),
+        ]);
+    }
+
+    public function addClearanceSignatory(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:80'],
+        ]);
+
+        $name = trim($validated['name']);
+        $stored = SystemSetting::getVal(self::CLEARANCE_SIGNATORIES_KEY, '[]');
+        $signatories = json_decode($stored ?: '[]', true);
+        $signatories = is_array($signatories) ? array_values(array_filter($signatories, 'is_string')) : [];
+
+        $alreadyExists = collect($signatories)->contains(
+            static fn (string $existing) => mb_strtolower(trim($existing)) === mb_strtolower($name),
+        );
+
+        if (! $alreadyExists) {
+            $signatories[] = $name;
+            SystemSetting::setVal(self::CLEARANCE_SIGNATORIES_KEY, json_encode(array_values($signatories)));
+        }
+
+        return response()->json([
+            'name' => $name,
+            'signatories' => array_values($signatories),
+        ]);
+    }
+
     public function getAcademicYear(): JsonResponse
     {
         $ay = SystemSetting::getVal('current_academic_year', 'SY 2025-2026');

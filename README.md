@@ -152,6 +152,8 @@ ClinicKa/
 - **EXIF Sanitization**: Camera metadata, GPS coordinates, and device timestamps are stripped from uploaded images prior to storage.
 - **Audit Trail**: Read and write access to student medical records is logged to an immutable audit table.
 
+See [docs/audit-logging.md](docs/audit-logging.md) for the audit event catalog, role-based visibility, append-only behavior, privacy rules, and developer guidance for adding events.
+
 ---
 
 ## Environment Configuration
@@ -166,8 +168,6 @@ Refer to [`.env.example`](.env.example) for the full list of configuration optio
 | `DB_CONNECTION` | Database driver (`mariadb` or `mysql`). |
 | `DB_DATABASE` | Database name (`clinicka`). |
 | `APP_KEY` | 32-character Laravel encryption key (`php artisan key:generate`). |
-| `SMTP_HOST` | Hostname of your SMTP email provider. |
-| `SMTP_PORT` | Port for SMTP mail delivery (e.g., `587` or `465`). |
 | `OCR_PROVIDER` | Active OCR engine (`ocr-space` or `azure`). |
 | `OCR_SPACE_API_KEY` | API key for OCR.space document parsing. |
 

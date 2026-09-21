@@ -4,114 +4,174 @@ export type LegalSection = {
   bullets?: string[];
 };
 
-export const POLICY_UPDATED_AT = 'April 29, 2026';
-export const CONTACT_EMAIL = 'digitalduo.clinicka@gmail.com';
+export const POLICY_UPDATED_AT = 'September 21, 2026';
+export const CONTACT_EMAIL = 'dpo@gordoncollege.edu.ph';
 
 export const termsSections: LegalSection[] = [
   {
-    title: 'Who may use the portal',
+    title: 'Purpose and authorized users',
     body:
-      'The Clinic Management System is intended for Gordon College students, clinic staff, and authorized administrators handling school health records and related transactions.',
+      'ClinicKa is Gordon College’s clinic management and student health-record portal. It supports annual medical-clearance submissions, clinic review, document handling, account administration, and related health-services workflows.',
     bullets: [
-      'Access is limited to users with a valid Gordon College account.',
-      'Clinic workflows and records may only be handled by authorized personnel.',
+      'Students may use the portal for their own profile, medical-clearance, and related clinic transactions.',
+      'Clinic staff and authorized medical personnel may review and process records within their assigned responsibilities.',
+      'Administrators may manage approved operational and account workflows. Administrative access does not automatically grant unrestricted clinical access.',
+      'Super Administrators may manage administrator accounts and system oversight functions according to their assigned permissions.',
     ],
   },
   {
-    title: 'Account responsibility',
+    title: 'Account and credential responsibility',
     body:
-      'You are responsible for protecting your password and for all actions performed under your account.',
+      'You are responsible for maintaining the confidentiality of your account credentials and for activity performed through your authenticated session.',
     bullets: [
-      'Do not share credentials or allow another person to use your account.',
-      'Report suspected account compromise or unauthorized access immediately.',
+      'Do not share passwords, authentication tokens, one-time codes, or account access with another person.',
+      'Use only the account issued or registered for you and provide accurate account information.',
+      'Use the Password Support instructions in the sign-in screen for password-reset requests; ClinicKa does not provide self-service password resets.',
+      'Report suspected compromise, impersonation, or unauthorized access to the Gordon College web administrator or Data Privacy Office.',
     ],
   },
   {
-    title: 'Accurate submissions',
+    title: 'Medical submissions and documents',
     body:
-      'All information and uploaded files submitted through the portal must be truthful, complete, and reasonably current.',
+      'Information submitted through ClinicKa is used for Gordon College clinic workflows and must be truthful, complete, relevant, and reasonably current.',
     bullets: [
-      'Use your real student details and current contact information.',
-      'Do not upload altered, misleading, or unrelated medical documents.',
+      'Submit only your own information or information you are authorized to submit on behalf of the relevant person.',
+      'Upload clear, valid, and relevant laboratory, examination, and supporting documents requested by the clinic.',
+      'Do not upload altered, misleading, malicious, unlawful, or unrelated files.',
+      'Keep physical originals when the clinic requires them for verification or examination.',
     ],
   },
   {
-    title: 'Acceptable use',
+    title: 'Authorized access and acceptable use',
     body:
-      'The portal must not be used in a way that harms the system, other users, or Gordon College operations.',
+      'ClinicKa must be used only for legitimate Gordon College clinic, health-record, account, and administrative purposes. Access to another person’s information must be authorized by role, workflow, and applicable policy.',
     bullets: [
-      "Malicious files, impersonation, and misuse of another person's records are prohibited.",
-      'Users must follow applicable school policies, privacy rules, and law.',
+      'Do not search for, view, download, alter, disclose, or attempt to retrieve records outside your authorization.',
+      'Do not bypass authentication, role checks, encrypted storage, signed document access, rate limits, or other security controls.',
+      'Do not probe endpoints, enumerate students or files, forge audit events, impersonate users, or submit arbitrary client-defined security data.',
+      'Do not interfere with availability, integrity, confidentiality, or normal operation of the portal.',
     ],
   },
   {
-    title: 'Clinic review',
+    title: 'Clinic review and decisions',
     body:
-      'Submitted records may be reviewed, returned for correction, or processed by authorized clinic personnel as part of health compliance and school record management.',
+      'Submitted records may be reviewed, verified, returned for correction, updated, approved, rejected, or otherwise processed by authorized clinic personnel as part of Gordon College health compliance and record management.',
+    bullets: [
+      'ClinicKa supports administrative record handling and does not replace professional medical judgment, emergency care, or a direct consultation with qualified healthcare personnel.',
+      'A submission or uploaded document is not considered accepted until the applicable clinic workflow confirms its status.',
+      'Users must follow instructions from authorized clinic personnel regarding physical documents, examinations, corrections, and follow-up.',
+    ],
   },
   {
-    title: 'Service changes',
+    title: 'Security and accountability',
     body:
-      'Gordon College may update the portal, its workflows, and related rules when needed for operations, security, or compliance.',
+      'ClinicKa uses authentication, role-based authorization, protected document delivery, encryption, integrity checks, and audit logging to support secure clinic operations.',
+    bullets: [
+      'Access to sensitive records and security-relevant changes may be logged for accountability, investigation, and compliance purposes.',
+      'Audit records are designed to be append-only and may be visible only to authorized administrative roles according to the application’s access rules.',
+      'Users must cooperate with security reviews and must not attempt to conceal, alter, or remove evidence of portal activity.',
+    ],
+  },
+  {
+    title: 'Service availability and changes',
+    body:
+      'Gordon College may update, suspend, restrict, or change ClinicKa and its workflows when necessary for maintenance, security, privacy, legal compliance, data protection, or operational requirements.',
+    bullets: [
+      'The portal may be temporarily unavailable during maintenance or infrastructure work.',
+      'Users should not rely on ClinicKa as the only copy of information they are required to retain or present to the clinic.',
+      'Gordon College may restrict or suspend an account when required to protect users, records, or system operations, subject to applicable policy and procedures.',
+    ],
+  },
+  {
+    title: 'Privacy and governing requirements',
+    body:
+      'Use of ClinicKa is subject to the Gordon College General Privacy Notice, Gordon College data-protection and records-management policies, the Data Privacy Act of 2012 and its Implementing Rules and Regulations, applicable National Privacy Commission issuances, and other applicable laws and institutional rules.',
+    bullets: [
+      'The Privacy Policy presented in this portal explains how these requirements apply to ClinicKa’s data processing activities.',
+      'Where a conflict exists, applicable law and official Gordon College policy take precedence over a general portal description.',
+    ],
   },
 ];
 
 export const privacySections: LegalSection[] = [
   {
-    title: 'Overview',
+    title: 'Purpose of this notice',
     body:
-      'This notice explains how personal data is handled in the Gordon College Clinic Management System. It reflects the Gordon College General Privacy Notice and applies to account registration, record submission, and clinic-related workflows in the portal.',
+      'This notice explains how Gordon College processes personal data through ClinicKa, the Gordon College clinic management and student health-record system. It is a privacy notice, not a consent form, and should be read together with the Gordon College General Privacy Notice and applicable data-protection policies.',
   },
   {
-    title: 'Information we collect',
+    title: 'Processing activities',
     body:
-      'The portal may collect personal, academic, contact, and medical information needed to manage clinic transactions and student health requirements.',
+      'Gordon College processes personal data to perform its obligations and functions as a government instrumentality and higher education institution, administer clinic services, and meet applicable legal, regulatory, academic, administrative, audit, and reporting requirements.',
     bullets: [
-      'Identity details such as name, birth date, sex, civil status, and affiliations.',
-      'Contact details such as address, email address, and mobile number.',
-      'Academic details such as course, department, year level, and school-related standing.',
-      'Medical details such as history, physical measurements, laboratory files, and clinic submissions.',
+      'ClinicKa uses account and session information to authenticate users and enforce role-based access.',
+      'ClinicKa uses submitted information to process annual medical clearance and related clinic workflows.',
+      'ClinicKa records relevant access and changes in an append-only audit trail for accountability and security review.',
     ],
   },
   {
-    title: 'Why we process your data',
+    title: 'Personal data collected',
     body:
-      'Gordon College processes personal data to support its obligations as a higher education institution and to administer clinic-related services and compliance requirements.',
+      'Depending on the workflow, ClinicKa may collect personal, contact, academic, account, and health-related information supplied by a student or authorized Gordon College personnel.',
     bullets: [
-      'To manage medical record submissions and clinic review workflows.',
-      'To support school health requirements, documentation, and follow-up.',
-      'To comply with academic, administrative, legal, and regulatory obligations.',
+      'Name, birth date, sex, civil status, student number, course, department, year level, and affiliations.',
+      'Address, email address, telephone or mobile number, and emergency-contact information.',
+      'Medical history, allergies, physical examination information, measurements, laboratory information, clearance details, and uploaded medical documents.',
+      'Account, role, authentication, device, IP-address, browser, and activity information needed for security and audit purposes.',
     ],
   },
   {
-    title: 'How data is collected',
+    title: 'Collection methods',
     body:
-      'Personal data may be collected through online forms, uploaded files, email-based registration, and related supporting documents submitted through the portal or school processes.',
+      'Gordon College may collect data physically through forms and supporting documents, and electronically through ClinicKa forms, secure file uploads, account processes, email, and information entered by authorized users during clinic review.',
+  },
+  {
+    title: 'Use and disclosure',
+    body:
+      'Personal data is used proportionately for legitimate Gordon College purposes and is disclosed only to authorized personnel, service providers, or government and institutional recipients when necessary for the stated purposes, legal obligations, or applicable records and privacy requirements.',
+    bullets: [
+      'Clinic staff and authorized medical personnel access records only within their assigned workflow and role permissions.',
+      'Administrators may manage system operations and accountability without automatically receiving unrestricted clinical access.',
+      'Audit records identify access and changes without intentionally storing medical results or document contents.',
+    ],
+  },
+  {
+    title: 'Security safeguards',
+    body:
+      'Gordon College applies administrative, technical, and organizational safeguards appropriate to the information processed through ClinicKa.',
+    bullets: [
+      'Authentication and server-side role-based authorization protect portal and record access.',
+      'Sensitive medical documents are encrypted at rest using AES-256-GCM and checked with SHA-256 integrity verification.',
+      'Documents are served through authorized, short-lived HMAC-signed streaming tickets rather than permanent public medical-file URLs.',
+      'Access and security events are recorded through an append-only audit log. Audit metadata is allowlisted and excludes passwords, tokens, keys, medical values, and document contents.',
+      'Uploaded images undergo available metadata and EXIF sanitization controls before storage.',
+    ],
   },
   {
     title: 'Storage, transfer, and retention',
     body:
-      'Records may be stored in physical or electronic systems managed or controlled by Gordon College. Data may be retained and transferred in accordance with school policy and applicable privacy rules.',
+      'Personal data may be stored in physical records and electronic systems managed or controlled by Gordon College, including institution-managed servers or approved cloud services. Transfers are handled in accordance with the Data Privacy Act of 2012, its Implementing Rules and Regulations, National Privacy Commission issuances, and Gordon College policies.',
     bullets: [
-      'Electronic records may be stored in secure cloud-based or institution-managed systems.',
-      'Retention periods follow applicable Gordon College records management practices.',
+      'Retention follows the Gordon College Records Management Policy and applicable records-retention requirements.',
+      'Where no specific retention rule applies, the responsible office retains data according to applicable government and institutional practice.',
+      'Audit records are retained for accountability and security purposes according to the configured operational retention policy.',
     ],
   },
   {
-    title: 'Your rights as a data subject',
+    title: 'Rights and responsibilities',
     body:
-      'Subject to school policy and applicable law, data subjects may exercise rights over their personal data.',
+      'Subject to Gordon College policy and applicable law, stakeholders may exercise their rights as data subjects and are expected to help protect personal data.',
     bullets: [
-      'Right to be informed.',
-      'Right to access and request correction of personal data.',
-      'Right to object where applicable.',
-      'Right to erasure or blocking where legally permitted.',
+      'Rights include being informed, access, rectification, objection where applicable, and erasure or blocking where legally permitted.',
+      'Provide true and accurate information and obtain appropriate authority before submitting another person’s data.',
+      'Respect the privacy of other students and do not disclose or misuse non-public clinic information.',
+      'Report suspected unauthorized access, security incidents, or personal-data breaches to the Gordon College Data Privacy Office.',
     ],
   },
   {
     title: 'Data Privacy Office',
     body:
-      'For privacy-related concerns, requests, or questions, you may contact Gordon College through its Data Privacy Office.',
+      'Privacy inquiries, requests, and concerns may be directed to the Gordon College Data Privacy Office.',
     bullets: [
       `Email: ${CONTACT_EMAIL}`,
       'Phone: (047) 222-4080',

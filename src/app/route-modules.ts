@@ -30,9 +30,12 @@ export const loadAdminSystemSettings = () => import('./pages/admin/system-settin
 export const loadAdminUserAccounts = () => import('./pages/admin/user-accounts');
 export const loadAdminReports = () => import('./pages/admin/reports');
 export const loadAdminAnnouncements = () => import('./pages/admin/announcements');
+export const loadAdminAuditLogs = () => import('./pages/admin/audit-logs');
 
 export const loadSuperAdminLayout = () => import('./pages/super-admin/layout');
 export const loadSuperAdminAdministrators = () => import('./pages/super-admin/administrators');
+export const loadSuperAdminSettings = () => import('./pages/super-admin/settings');
+export const loadSuperAdminAuditLogs = () => import('./pages/super-admin/audit-logs');
 
 const preloadedLoaders = new Set<RouteLoader>();
 
@@ -73,10 +76,13 @@ const portalLoadersByRole: Record<AppRole, readonly RouteLoader[]> = {
     loadAdminUserAccounts,
     loadAdminReports,
     loadAdminAnnouncements,
+    loadAdminAuditLogs,
   ],
   super_admin: [
     loadSuperAdminLayout,
     loadSuperAdminAdministrators,
+    loadSuperAdminSettings,
+    loadSuperAdminAuditLogs,
   ],
 };
 
@@ -110,7 +116,10 @@ const pathToLoaderMap: Record<string, RouteLoader> = {
   '/admin/system-settings': loadAdminSystemSettings,
   '/admin/reports': loadAdminReports,
   '/admin/announcements': loadAdminAnnouncements,
+  '/admin/audit-logs': loadAdminAuditLogs,
   '/super-admin': loadSuperAdminAdministrators,
+  '/super-admin/settings': loadSuperAdminSettings,
+  '/super-admin/audit-logs': loadSuperAdminAuditLogs,
 };
 
 export function prefetchRouteByPath(path: string) {

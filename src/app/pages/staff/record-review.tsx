@@ -9,6 +9,7 @@ import {
   ChevronRight,
   FileUp,
   Loader2,
+  Plus,
   Save,
   ScanText,
   XCircle,
@@ -48,6 +49,8 @@ import {
   extractChestXrayFindings,
   extractUrinalysisFields,
   getStaffSignature,
+  getClearanceSignatories,
+  addClearanceSignatory,
   isDoctorPosition,
   saveSubmissionReview,
   updateSubmissionStatus,
@@ -299,6 +302,9 @@ const MAX_EXAMINED_BY_LENGTH = 40;
 const MAX_CLINIC_NOTES_LENGTH = 100;
 const MAX_CLEARANCE_DIAGNOSIS_LENGTH = 50;
 const MAX_CLEARANCE_REMARKS_LENGTH = 50;
+const MAX_CLEARANCE_SIGNATORY_NAME_LENGTH = 80;
+const CLEARANCE_ADD_NEW_SIGNATORY_VALUE = '__add_new_clearance_signatory__';
+const NORMAL_FIELD_VALUE = 'Normal';
 const SEX_BASE_OPTIONS = ['male', 'female'] as const;
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated', 'Divorced'] as const;
 const MEDICAL_RECORD_DATE_RANGE_MONTHS = 6;
@@ -767,7 +773,9 @@ function matchClearanceSignatoryName(value?: string | null) {
 }
 
 function normalizeClearanceSignatoryName(value?: string | null) {
-  return matchClearanceSignatoryName(value) || CLEARANCE_DOCTORS[0];
+  return matchClearanceSignatoryName(value)
+    || sanitizeSafeText(String(value || ''), MAX_CLEARANCE_SIGNATORY_NAME_LENGTH).trim()
+    || CLEARANCE_DOCTORS[0];
 }
 
 function isClearanceSignatoryName(value?: string | null) {
@@ -858,8 +866,12 @@ function createAssessmentForm(submission?: SubmissionDetails | null): Assessment
 
 function createClearanceForm(submission?: SubmissionDetails | null): ClearanceForm {
   const fallbackIssuedDate = getTodayDateInputValue();
-  const savedSignatory = matchClearanceSignatoryName(submission?.clearanceInfo?.signatoryName);
-  const legacySignatory = matchClearanceSignatoryName(submission?.staffMeasurements?.examinedBy);
+  const savedSignatory = submission?.clearanceInfo?.signatoryName
+    ? normalizeClearanceSignatoryName(submission.clearanceInfo.signatoryName)
+    : '';
+  const legacySignatory = submission?.staffMeasurements?.examinedBy
+    ? normalizeClearanceSignatoryName(submission.staffMeasurements.examinedBy)
+    : '';
   return {
     findingsNormal: submission?.clearanceInfo?.findingsNormal ?? true,
     diagnosis: sanitizeSafeText(submission?.clearanceInfo?.diagnosis || '', MAX_CLEARANCE_DIAGNOSIS_LENGTH),
@@ -992,6 +1004,10 @@ export default function StaffRecordReview() {
   const [recordForm, setRecordForm] = useState<RecordForm>(() => createRecordForm());
   const [assessmentForm, setAssessmentForm] = useState<AssessmentForm>(() => createAssessmentForm());
   const [clearanceForm, setClearanceForm] = useState<ClearanceForm>(() => createClearanceForm());
+  const [isAddingClearanceSignatory, setIsAddingClearanceSignatory] = useState(false);
+  const [newClearanceSignatoryName, setNewClearanceSignatoryName] = useState('');
+  const [clearanceSignatories, setClearanceSignatories] = useState<string[]>([]);
+  const [savingClearanceSignatory, setSavingClearanceSignatory] = useState(false);
   const [saveLicenseNoChecked, setSaveLicenseNoChecked] = useState(() => {
     if (typeof window === 'undefined') return false;
     const staffId = String(me?.staff?.id || '').trim();
@@ -1025,6 +1041,13 @@ export default function StaffRecordReview() {
       }
     }
   };
+
+  useEffect(() => {
+    if (!canFinalizeClearance) return;
+    getClearanceSignatories()
+      .then(setClearanceSignatories)
+      .catch(() => setClearanceSignatories([]));
+  }, [canFinalizeClearance]);
   const [staffNotes, setStaffNotes] = useState('');
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('pending');
   const [activeReviewStep, setActiveReviewStep] = useState<ReviewStep>('record');
@@ -1082,6 +1105,7 @@ export default function StaffRecordReview() {
   const defaultSignatoryName = isDoctor && rawDefaultSignatoryName && !rawDefaultSignatoryName.startsWith('Dr. ')
     ? `Dr. ${rawDefaultSignatoryName}`
     : rawDefaultSignatoryName;
+  const availableClearanceSignatories = Array.from(new Set([...CLEARANCE_DOCTORS, ...clearanceSignatories]));
   const currentStaffSignatureUrl = signaturePreviewUrl || staffSignature.signatureUrl || null;
   const {
     data: submissionData,
@@ -1798,6 +1822,38 @@ export default function StaffRecordReview() {
     updateAssessmentField('visualAcuity', value);
   }
 
+  function toggleNormalAssessmentField(field: PhysicalExamRequiredField) {
+    const isNormal = assessmentForm[field].trim().toLowerCase() === NORMAL_FIELD_VALUE.toLowerCase();
+    updateAssessmentField(field, (isNormal ? '' : NORMAL_FIELD_VALUE) as AssessmentForm[typeof field]);
+  }
+
+  function toggleNormalClearanceField(field: 'diagnosis' | 'remarks') {
+    const isNormal = clearanceForm[field].trim().toLowerCase() === NORMAL_FIELD_VALUE.toLowerCase();
+    updateClearanceField(field, isNormal ? '' : NORMAL_FIELD_VALUE);
+  }
+
+  async function handleAddClearanceSignatory() {
+    const name = sanitizeSafeText(newClearanceSignatoryName, MAX_CLEARANCE_SIGNATORY_NAME_LENGTH).trim();
+    if (!name) {
+      toast.error('Enter a signatory name before adding it.');
+      return;
+    }
+
+    setSavingClearanceSignatory(true);
+    try {
+      const result = await addClearanceSignatory(name);
+      setClearanceSignatories(result.signatories);
+      setNewClearanceSignatoryName('');
+      setIsAddingClearanceSignatory(false);
+      updateClearanceField('signatoryName', result.name);
+      toast.success('Clearance signatory added.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to add the clearance signatory.');
+    } finally {
+      setSavingClearanceSignatory(false);
+    }
+  }
+
   function updateClearanceField<K extends keyof ClearanceForm>(field: K, value: ClearanceForm[K]) {
     setClearanceForm((prev) => ({
       ...prev,
@@ -1813,7 +1869,9 @@ export default function StaffRecordReview() {
                 : field === 'licenseNo'
                   ? sanitizeLicenseNo(String(value))
                   : field === 'signatoryName'
-                    ? normalizeClearanceSignatoryName(String(value))
+                    ? String(value).trim()
+                      ? normalizeClearanceSignatoryName(String(value))
+                      : ''
                     : value,
     }));
   }
@@ -3242,7 +3300,13 @@ export default function StaffRecordReview() {
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div>
-                <Label htmlFor="skin">Skin</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="skin">Skin</Label>
+                  <label htmlFor="skin-normal" className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Checkbox id="skin-normal" checked={assessmentForm.skin.trim().toLowerCase() === 'normal'} onCheckedChange={() => toggleNormalAssessmentField('skin')} className="size-5" />
+                    Normal
+                  </label>
+                </div>
                 <Textarea
                   id="skin"
                   value={assessmentForm.skin}
@@ -3262,7 +3326,13 @@ export default function StaffRecordReview() {
                 ) : null}
               </div>
               <div>
-                <Label htmlFor="heent">HEENT</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="heent">HEENT</Label>
+                  <label htmlFor="heent-normal" className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Checkbox id="heent-normal" checked={assessmentForm.heent.trim().toLowerCase() === 'normal'} onCheckedChange={() => toggleNormalAssessmentField('heent')} className="size-5" />
+                    Normal
+                  </label>
+                </div>
                 <Textarea
                   id="heent"
                   value={assessmentForm.heent}
@@ -3282,7 +3352,13 @@ export default function StaffRecordReview() {
                 ) : null}
               </div>
               <div>
-                <Label htmlFor="chestLungs">Chest / Lungs</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="chestLungs">Chest / Lungs</Label>
+                  <label htmlFor="chestLungs-normal" className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Checkbox id="chestLungs-normal" checked={assessmentForm.chestLungs.trim().toLowerCase() === 'normal'} onCheckedChange={() => toggleNormalAssessmentField('chestLungs')} className="size-5" />
+                    Normal
+                  </label>
+                </div>
                 <Textarea
                   id="chestLungs"
                   value={assessmentForm.chestLungs}
@@ -3302,7 +3378,13 @@ export default function StaffRecordReview() {
                 ) : null}
               </div>
               <div>
-                <Label htmlFor="heart">Heart</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="heart">Heart</Label>
+                  <label htmlFor="heart-normal" className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Checkbox id="heart-normal" checked={assessmentForm.heart.trim().toLowerCase() === 'normal'} onCheckedChange={() => toggleNormalAssessmentField('heart')} className="size-5" />
+                    Normal
+                  </label>
+                </div>
                 <Textarea
                   id="heart"
                   value={assessmentForm.heart}
@@ -3322,7 +3404,13 @@ export default function StaffRecordReview() {
                 ) : null}
               </div>
               <div>
-                <Label htmlFor="abdomen">Abdomen</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="abdomen">Abdomen</Label>
+                  <label htmlFor="abdomen-normal" className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Checkbox id="abdomen-normal" checked={assessmentForm.abdomen.trim().toLowerCase() === 'normal'} onCheckedChange={() => toggleNormalAssessmentField('abdomen')} className="size-5" />
+                    Normal
+                  </label>
+                </div>
                 <Textarea
                   id="abdomen"
                   value={assessmentForm.abdomen}
@@ -3342,7 +3430,13 @@ export default function StaffRecordReview() {
                 ) : null}
               </div>
               <div>
-                <Label htmlFor="extremities">Extremities</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="extremities">Extremities</Label>
+                  <label htmlFor="extremities-normal" className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Checkbox id="extremities-normal" checked={assessmentForm.extremities.trim().toLowerCase() === 'normal'} onCheckedChange={() => toggleNormalAssessmentField('extremities')} className="size-5" />
+                    Normal
+                  </label>
+                </div>
                 <Textarea
                   id="extremities"
                   value={assessmentForm.extremities}
@@ -3389,9 +3483,6 @@ export default function StaffRecordReview() {
                   <div className="space-y-4">
                     <div>
                       <p className="text-sm font-medium text-on-surface">Staff signature</p>
-                      <p className="text-xs text-on-surface-variant">
-                        Upload once here to save your signature for the Examined by section.
-                      </p>
                     </div>
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                       <div className="flex min-h-16 flex-1 items-center rounded-lg border bg-white px-3 py-2">
@@ -3496,20 +3587,45 @@ export default function StaffRecordReview() {
                   <div className="xl:col-span-6">
                     <Label htmlFor="clearanceSignatory">Clearance Signatory</Label>
                     <Select
-                      value={clearanceForm.signatoryName || CLEARANCE_DOCTORS[0]}
-                      onValueChange={(value) => updateClearanceField('signatoryName', value)}
+                      value={isAddingClearanceSignatory ? CLEARANCE_ADD_NEW_SIGNATORY_VALUE : clearanceForm.signatoryName || CLEARANCE_DOCTORS[0]}
+                      onValueChange={(value) => {
+                        if (value === CLEARANCE_ADD_NEW_SIGNATORY_VALUE) {
+                          setIsAddingClearanceSignatory(true);
+                          setNewClearanceSignatoryName('');
+                          updateClearanceField('signatoryName', '');
+                          return;
+                        }
+                        setIsAddingClearanceSignatory(false);
+                        updateClearanceField('signatoryName', value);
+                      }}
                     >
                       <SelectTrigger id="clearanceSignatory" className="mt-2">
                         <SelectValue placeholder="Select doctor" />
                       </SelectTrigger>
                       <SelectContent>
-                        {CLEARANCE_DOCTORS.map((doctor) => (
+                        {availableClearanceSignatories.map((doctor) => (
                           <SelectItem key={doctor} value={doctor}>
                             {doctor}
                           </SelectItem>
                         ))}
+                        <SelectItem value={CLEARANCE_ADD_NEW_SIGNATORY_VALUE}>Add new signatory</SelectItem>
                       </SelectContent>
                     </Select>
+                    {isAddingClearanceSignatory ? (
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                        <Input
+                          aria-label="New clearance signatory name"
+                          value={newClearanceSignatoryName}
+                          onChange={(event) => setNewClearanceSignatoryName(event.target.value)}
+                          maxLength={MAX_CLEARANCE_SIGNATORY_NAME_LENGTH}
+                          placeholder="Enter employee name and credentials"
+                        />
+                        <Button type="button" onClick={handleAddClearanceSignatory} disabled={savingClearanceSignatory || !newClearanceSignatoryName.trim()} className="shrink-0">
+                          {savingClearanceSignatory ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                          Add
+                        </Button>
+                      </div>
+                    ) : null}
                     <p className="mt-2 text-xs text-muted-foreground">This name will appear on the medical certificate.</p>
                   </div>
 
@@ -3581,7 +3697,13 @@ export default function StaffRecordReview() {
                   </div>
 
                   <div className="xl:col-span-6">
-                    <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="diagnosis">Diagnosis / Impression</Label>
+                      <label htmlFor="diagnosis-normal" className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Checkbox id="diagnosis-normal" checked={clearanceForm.diagnosis.trim().toLowerCase() === 'normal'} onCheckedChange={() => toggleNormalClearanceField('diagnosis')} className="size-5" />
+                        Normal
+                      </label>
+                    </div>
                     <Textarea
                       id="diagnosis"
                       value={clearanceForm.diagnosis}
@@ -3593,7 +3715,13 @@ export default function StaffRecordReview() {
                   </div>
 
                   <div className="xl:col-span-6">
-                    <Label htmlFor="remarks">Clearance Remarks</Label>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="remarks">Clearance Remarks</Label>
+                      <label htmlFor="remarks-normal" className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Checkbox id="remarks-normal" checked={clearanceForm.remarks.trim().toLowerCase() === 'normal'} onCheckedChange={() => toggleNormalClearanceField('remarks')} className="size-5" />
+                        Normal
+                      </label>
+                    </div>
                     <Textarea
                       id="remarks"
                       value={clearanceForm.remarks}

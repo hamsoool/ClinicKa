@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import {
   ShieldPlus,
   UserRoundCog,
+  Settings,
+  ShieldAlert,
 } from 'lucide-react';
 import PortalShell, {
   formatEmailName,
@@ -18,6 +20,18 @@ const navItems = [
     mobileLabel: 'Admins',
     icon: UserRoundCog,
     mobileEmphasis: true,
+  },
+  {
+    path: '/super-admin/audit-logs',
+    label: 'Audit Logs',
+    mobileLabel: 'Audit',
+    icon: ShieldAlert,
+  },
+  {
+    path: '/super-admin/settings',
+    label: 'Settings',
+    mobileLabel: 'Settings',
+    icon: Settings,
   },
 ] as const satisfies readonly PortalNavItem[];
 

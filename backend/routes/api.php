@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AnnouncementController;
+use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CertificateController;
 use App\Http\Controllers\Api\NotificationController;
@@ -30,8 +31,6 @@ $registerApiRoutes = function () {
     // Public Authentication Endpoints
     // -------------------------------------------------------------------------
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
-    Route::post('/auth/send-password-change-otp', [AuthController::class, 'sendPasswordChangeOtp'])->middleware('throttle:otp-requests');
-    Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware('throttle:auth-login');
     Route::post('/auth/reject-google-account', [AuthController::class, 'rejectGoogleAccount']);
 
     // GoTrue Auth & Email Confirmation
@@ -48,6 +47,10 @@ $registerApiRoutes = function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::post('/auth/send-password-change-otp', [AuthController::class, 'sendPasswordChangeOtp'])->middleware('throttle:otp-requests');
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword'])->middleware('throttle:auth-login');
+
+        Route::get('/audit-logs/student/{studentId}', [AuditLogController::class, 'studentHistory']);
 
         // Profile Management
         Route::put('/student-profile', [ProfileController::class, 'updateStudentProfile']);
@@ -97,6 +100,8 @@ $registerApiRoutes = function () {
             Route::get('/staff/approved-students', [SubmissionController::class, 'getApprovedStudents']);
             Route::put('/submission/{id}/status', [SubmissionController::class, 'updateStatus']);
             Route::put('/submission/{id}/measurements', [SubmissionController::class, 'updateMeasurements']);
+            Route::get('/staff/clearance-signatories', [SettingsController::class, 'getClearanceSignatories']);
+            Route::post('/staff/clearance-signatories', [SettingsController::class, 'addClearanceSignatory']);
 
             // Certificate Issuance
             Route::post('/issue-certificate', [CertificateController::class, 'issueCertificate']);
@@ -124,6 +129,7 @@ $registerApiRoutes = function () {
         // Administrator Routes
         // ---------------------------------------------------------------------
         Route::middleware('role:admin,super_admin')->group(function () {
+            Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
             Route::get('/admin/system-settings', [SettingsController::class, 'getSystemSettings']);
             Route::post('/admin/send-settings-change-otp', [SettingsController::class, 'sendSettingsChangeOtp'])->middleware('throttle:otp-requests');
             Route::match(['post', 'put'], '/admin/system-settings', [SettingsController::class, 'updateSystemSettings']);
@@ -142,8 +148,8 @@ $registerApiRoutes = function () {
         // Super Administrator Routes
         // ---------------------------------------------------------------------
         Route::middleware('role:super_admin')->group(function () {
+            Route::get('/super-admin/audit-logs', [AuditLogController::class, 'index']);
             Route::get('/super-admin/administrators', [AdminController::class, 'getAdministrators']);
-            Route::post('/super-admin/send-create-admin-otp', [AdminController::class, 'sendCreateAdminOtp'])->middleware('throttle:otp-requests');
             Route::post('/super-admin/administrators', [AdminController::class, 'createAdministrator']);
             Route::post('/super-admin/administrators/{userId}/archive', [AdminController::class, 'archiveAdminAccount']);
             Route::post('/super-admin/administrators/{archiveId}/restore', [AdminController::class, 'restoreAccount']);
@@ -165,7 +171,6 @@ Route::post('/auth/v1/resend', [AuthController::class, 'resendVerification'])->m
 Route::get('/auth/v1/verify', [AuthController::class, 'verifyEmail']);
 Route::post('/auth/v1/verify', [AuthController::class, 'verifyEmail']);
 Route::post('/auth/v1/token', [AuthController::class, 'login'])->middleware('throttle:auth-login');
-Route::post('/auth/v1/recover', [AuthController::class, 'sendPasswordChangeOtp'])->middleware('throttle:otp-requests');
 Route::middleware('auth:sanctum')->post('/auth/v1/logout', [AuthController::class, 'logout']);
 Route::middleware('auth:sanctum')->get('/auth/v1/user', [AuthController::class, 'getUser']);
 

@@ -202,7 +202,15 @@ export default function StudentYearSelection() {
                 </div>
 
                 <div className={`mt-5 rounded-lg px-4 py-3 text-xs leading-relaxed ${summaryInnerBoxStyles}`}>
-                  {nextSlot ? 'You can submit relevant requirements again next year.' : 'No additional record cycles are available.'}
+                  {currentAcademicYearRecord
+                    ? isApproved
+                      ? 'Your clearance for this school year has been approved.'
+                      : isReturned
+                        ? 'Please address the clinic feedback and resubmit your record.'
+                        : 'Your submission is being reviewed by the clinic staff.'
+                    : nextSlot
+                      ? `You can start your ${selectedSlotLabel} submission for ${academicYearLabel}.`
+                      : 'No additional record cycles are available.'}
                 </div>
               </div>
             </div>

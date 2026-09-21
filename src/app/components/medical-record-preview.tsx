@@ -389,10 +389,12 @@ const MedicalRecordPreviewBase = forwardRef(function MedicalRecordPreviewBase(
   const getSlotLab = (slot: number) => getSlotRecord(slot)?.labResults || {};
 
   const getSlotExaminer = (slot: number) => {
-    const sourceExam = getSlotRecord(slot)?.staffMeasurements || {};
+    const sourceRecord = getSlotRecord(slot);
+    const sourceExam = sourceRecord?.staffMeasurements || {};
+
     return {
-      name: String(sourceExam?.examinedBy || '').trim(),
-      signatureUrl: normalizeStorageFileUrl(String(sourceExam?.examinedBySignatureUrl || '').trim()) || '',
+      name: String(sourceExam.examinedBy || '').trim(),
+      signatureUrl: normalizeStorageFileUrl(String(sourceExam.examinedBySignatureUrl || '').trim()) || '',
     };
   };
 

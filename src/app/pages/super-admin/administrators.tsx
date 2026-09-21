@@ -36,7 +36,6 @@ import {
   archiveSuperAdminAdministrator,
   createSuperAdminAdministrator,
   restoreSuperAdminAdministrator,
-  sendSuperAdminCreateAdminOtp,
   type SuperAdminAdministrator,
   type SuperAdminArchivedAdministrator,
 } from '../../lib/api';
@@ -107,9 +106,6 @@ export default function SuperAdminAdministrators() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [showOtpField, setShowOtpField] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [sendingOtp, setSendingOtp] = useState(false);
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -157,7 +153,7 @@ export default function SuperAdminAdministrators() {
     [administrators],
   );
 
-  const requestOtp = async () => {
+  const submitCreate = async () => {
     if (!form.email.trim() || !form.password) {
       toast.error('Email and password are required');
       return;
@@ -172,31 +168,12 @@ export default function SuperAdminAdministrators() {
     }
 
     try {
-      setSendingOtp(true);
-      await sendSuperAdminCreateAdminOtp();
-      toast.success('Verification code sent to your email');
-      setShowOtpField(true);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to send verification email');
-    } finally {
-      setSendingOtp(false);
-    }
-  };
-
-  const submitCreate = async () => {
-    if (!otp.trim()) {
-      toast.error('Verification code (OTP) is required');
-      return;
-    }
-
-    try {
       setIsSubmitting(true);
       await createSuperAdminAdministrator({
         email: form.email.trim(),
         password: form.password,
         firstName: form.firstName.trim() || undefined,
         lastName: form.lastName.trim() || undefined,
-        otp: otp.trim(),
       });
       toast.success('Administrator account created');
       setOpenCreate(false);
@@ -207,8 +184,6 @@ export default function SuperAdminAdministrators() {
         firstName: '',
         lastName: '',
       });
-      setOtp('');
-      setShowOtpField(false);
       await invalidateSuperAdminWorkflowQueries(queryClient);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to create administrator');
@@ -329,8 +304,7 @@ export default function SuperAdminAdministrators() {
         </Card>
       </div>
 
-      <div className="grid gap-8 2xl:grid-cols-[minmax(0,1.45fr)_minmax(28rem,0.75fr)] 2xl:items-start">
-        <div className="space-y-4">
+      <div className="space-y-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-2">
             <div>
               <h3 className="text-base font-semibold text-foreground">System Administrators</h3>
@@ -535,18 +509,12 @@ export default function SuperAdminAdministrators() {
           </div>
         </div>
 
-        <div className="space-y-6 2xl:sticky 2xl:top-24">
-          <PasswordChangeCard title="Super Admin Password" variant="plain" />
-        </div>
-      </div>
 
       <Dialog
         open={openCreate}
         onOpenChange={(open) => {
           setOpenCreate(open);
           if (!open) {
-            setShowOtpField(false);
-            setOtp('');
             setForm({
               email: '',
               password: '',
@@ -561,158 +529,36 @@ export default function SuperAdminAdministrators() {
           <DialogHeader>
             <DialogTitle>Add Administrator</DialogTitle>
             <DialogDescription>
-              {showOtpField
-                ? 'Verify your identity to complete administrator creation.'
-                : 'Create an administrator account with access to the admin portal.'}
+              Create an administrator account with access to the admin portal. Email confirmation is not required.
             </DialogDescription>
           </DialogHeader>
           <form
             className="grid gap-3 py-2"
             onSubmit={(event) => {
               event.preventDefault();
-              if (showOtpField) {
-                void submitCreate();
-              } else {
-                void requestOtp();
-              }
+              void submitCreate();
             }}
           >
-            {showOtpField ? (
-              <div className="space-y-4">
-                <div className="rounded-lg border border-primary-container/30 bg-primary-container/10 p-3.5 text-sm space-y-2">
-                  <div className="flex justify-between items-center border-b border-primary-container/20 pb-2">
-                    <span className="font-semibold text-on-surface">Confirm Details</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-primary hover:text-primary-hover px-2"
-                      onClick={() => setShowOtpField(false)}
-                    >
-                      Edit
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1 text-xs">
-                    <span className="text-on-surface-variant">Email:</span>
-                    <span className="font-medium text-on-surface truncate">{form.email}</span>
-                    <span className="text-on-surface-variant">Name:</span>
-                    <span className="font-medium text-on-surface truncate font-sans">
-                      {[form.firstName, form.lastName].filter(Boolean).join(' ') || '-'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-yellow-200 bg-yellow-50/50 p-3 text-xs text-yellow-800 dark:border-yellow-900/30 dark:bg-yellow-950/20 dark:text-yellow-400 font-sans">
-                  A 6-digit verification code has been sent to your super administrator email. Please check your inbox.
-                </div>
-
-                <div className="grid gap-1.5 font-sans">
-                  <Label htmlFor="sa-otp">Verification Code</Label>
-                  <Input
-                    id="sa-otp"
-                    type="text"
-                    maxLength={6}
-                    placeholder="Enter 6-digit code"
-                    className="text-center text-lg font-semibold tracking-[0.25em]"
-                    value={otp}
-                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                    required
-                  />
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="sa-email">Email</Label>
-                  <Input
-                    id="sa-email"
-                    type="email"
-                    value={form.email}
-                    onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-                    required
-                  />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="sa-password">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="sa-password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={form.password}
-                      onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-                      className="pr-10"
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="sa-confirm-password">Confirm Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="sa-confirm-password"
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        value={form.confirmPassword}
-                        onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
-                        className="pr-10"
-                        required
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                        onClick={() => setShowConfirmPassword((prev) => !prev)}
-                        aria-label={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'}
-                      >
-                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <PasswordStrengthMeter password={form.password} userInputs={passwordInputs} />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="sa-first">First Name</Label>
-                    <Input
-                      id="sa-first"
-                      value={form.firstName}
-                      onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="sa-last">Last Name</Label>
-                    <Input
-                      id="sa-last"
-                      value={form.lastName}
-                      onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
+            <div className="grid gap-1.5">
+              <Label htmlFor="sa-email">Email</Label>
+              <Input id="sa-email" type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} required />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="sa-password">Password</Label>
+              <Input id="sa-password" type={showPassword ? 'text' : 'password'} value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="sa-confirm-password">Confirm Password</Label>
+              <Input id="sa-confirm-password" type={showConfirmPassword ? 'text' : 'password'} value={form.confirmPassword} onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))} required />
+            </div>
+            <PasswordStrengthMeter password={form.password} userInputs={passwordInputs} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5"><Label htmlFor="sa-first">First Name</Label><Input id="sa-first" value={form.firstName} onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))} /></div>
+              <div className="grid gap-1.5"><Label htmlFor="sa-last">Last Name</Label><Input id="sa-last" value={form.lastName} onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))} /></div>
+            </div>
             <DialogFooter className="pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpenCreate(false)}
-                disabled={isSubmitting || sendingOtp}
-              >
-                Cancel
-              </Button>
-              {showOtpField ? (
-                <Button type="submit" disabled={isSubmitting || !otp || otp.length < 6}>
-                  {isSubmitting ? 'Verifying...' : 'Verify & Create'}
-                </Button>
-              ) : (
-                <Button type="submit" disabled={sendingOtp}>
-                  {sendingOtp ? 'Sending Code...' : 'Create New Account'}
-                </Button>
-              )}
+              <Button type="button" variant="outline" onClick={() => setOpenCreate(false)} disabled={isSubmitting}>Cancel</Button>
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating...' : 'Create New Account'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

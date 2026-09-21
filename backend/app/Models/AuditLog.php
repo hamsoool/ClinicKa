@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class AuditLog extends Model
 {
@@ -16,6 +17,14 @@ class AuditLog extends Model
 
     protected $fillable = [
         'id',
+        'actor_user_id',
+        'actor_role',
+        'category',
+        'target_type',
+        'target_id',
+        'student_id',
+        'result',
+        'reason',
         'user_id',
         'role',
         'action',
@@ -43,6 +52,14 @@ class AuditLog extends Model
                 $model->id = (string) Str::uuid();
             }
         });
+
+        static::updating(function () {
+            throw new RuntimeException('Audit logs are append-only and cannot be updated.');
+        });
+
+        static::deleting(function () {
+            throw new RuntimeException('Audit logs are append-only and cannot be deleted.');
+        });
     }
 
     public static function logAction(
@@ -54,20 +71,13 @@ class AuditLog extends Model
         ?string $fileId = null,
         ?array $metadata = null
     ): void {
-        try {
-            static::create([
-                'user_id' => $userId,
-                'role' => $role,
-                'action' => $action,
-                'target_student_id' => $targetStudentId,
-                'submission_id' => $submissionId,
-                'file_id' => $fileId,
-                'ip_address' => request()->ip(),
-                'user_agent' => request()->userAgent(),
-                'metadata' => $metadata,
-            ]);
-        } catch (\Throwable) {
-            // Non-blocking for audit logging
-        }
+        app(\App\Services\AuditService::class)->record($action, [
+            'actor_user_id' => $userId,
+            'actor_role' => $role,
+            'target_student_id' => $targetStudentId,
+            'submission_id' => $submissionId,
+            'file_id' => $fileId,
+            'metadata' => $metadata,
+        ]);
     }
 }

@@ -148,10 +148,10 @@ export default function PasswordChangeCard({
 
   const isPlain = variant === 'plain';
   const gridClass = isPlain
-    ? 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3'
-    : 'grid gap-5 md:grid-cols-2';
-  const currentPasswordColClass = isPlain ? 'min-w-0 sm:col-span-2 lg:col-span-1' : 'min-w-0 md:col-span-2';
-  const fullWidthColClass = isPlain ? 'min-w-0 sm:col-span-2 lg:col-span-3' : 'min-w-0 md:col-span-2';
+    ? 'grid gap-5'
+    : 'grid gap-5 sm:grid-cols-2';
+  const currentPasswordColClass = 'min-w-0';
+  const fullWidthColClass = 'min-w-0';
 
   const formContent = (
     <form onSubmit={handleSubmit} className={gridClass}>

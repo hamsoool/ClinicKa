@@ -53,7 +53,7 @@ type PortalShellProps = {
 };
 
 function isRouteActive(pathname: string, path: string) {
-  if (path === '/student' || path === '/staff/dashboard' || path === '/admin') {
+  if (path === '/student' || path === '/staff/dashboard' || path === '/admin' || path === '/super-admin') {
     return pathname === path;
   }
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Profile;
 use App\Models\Student;
+use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -32,12 +33,26 @@ class AuthController extends Controller
         $profile = Profile::where('email', $email)->first();
 
         if (! $profile || ! Hash::check($validated['password'], $profile->password_hash)) {
+            app(AuditService::class)->record('LOGIN_FAILED', [
+                'category' => 'auth',
+                'result' => AuditService::RESULT_DENIED,
+                'reason' => 'Invalid credentials.',
+            ], $request);
+
             return response()->json([
                 'error' => 'Invalid email or password.',
             ], 401);
         }
 
         if ($profile->is_banned) {
+            app(AuditService::class)->record('LOGIN_FAILED', [
+                'actor_user_id' => $profile->id,
+                'actor_role' => $profile->role,
+                'category' => 'auth',
+                'result' => AuditService::RESULT_DENIED,
+                'reason' => 'Account is disabled.',
+            ], $request);
+
             return response()->json([
                 'error' => 'This account is not available. Contact the administrator for assistance.',
             ], 403);
@@ -45,6 +60,14 @@ class AuthController extends Controller
 
         // Enforce Gordon College domain restriction for students
         if ($profile->role === 'student' && ! str_ends_with($email, '@' . self::GC_DOMAIN)) {
+            app(AuditService::class)->record('LOGIN_FAILED', [
+                'actor_user_id' => $profile->id,
+                'actor_role' => $profile->role,
+                'category' => 'auth',
+                'result' => AuditService::RESULT_DENIED,
+                'reason' => 'Student email domain restriction.',
+            ], $request);
+
             return response()->json([
                 'error' => 'Only @' . self::GC_DOMAIN . ' email accounts are allowed for students.',
             ], 403);
@@ -52,6 +75,12 @@ class AuthController extends Controller
 
         // Create Sanctum personal access token
         $token = $profile->createToken('auth-token')->plainTextToken;
+
+        app(AuditService::class)->record('LOGIN_SUCCESS', [
+            'actor_user_id' => $profile->id,
+            'actor_role' => $profile->role,
+            'category' => 'auth',
+        ], $request);
 
         return response()->json([
             'access_token' => $token,
@@ -151,6 +180,12 @@ class AuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         $user = $request->user();
+        if ($user) {
+            app(AuditService::class)->record('LOGOUT', [
+                'category' => 'auth',
+            ], $request);
+        }
+
         if ($user && $user->currentAccessToken()) {
             $user->currentAccessToken()->delete();
         }
@@ -174,6 +209,12 @@ class AuthController extends Controller
             // Return success to avoid email enumeration
             return response()->json(['success' => true]);
         }
+
+        app(AuditService::class)->record('PASSWORD_RESET_REQUESTED', [
+            'actor_user_id' => $profile->id,
+            'actor_role' => $profile->role,
+            'category' => 'auth',
+        ], $request);
 
         $otp = (string) random_int(100000, 999999);
         $cacheKey = 'password_otp_' . md5($email);
@@ -213,6 +254,12 @@ class AuthController extends Controller
         $cached = Cache::get($cacheKey);
 
         if (! $cached || $cached['otp'] !== $validated['otp']) {
+            app(AuditService::class)->record('PASSWORD_CHANGE_FAILED', [
+                'category' => 'auth',
+                'result' => AuditService::RESULT_DENIED,
+                'reason' => 'Invalid or expired password verification code.',
+            ], $request);
+
             return response()->json([
                 'error' => 'Invalid or expired verification code.',
             ], 422);
@@ -220,6 +267,12 @@ class AuthController extends Controller
 
         $profile = Profile::find($cached['profile_id']);
         if (! $profile) {
+            app(AuditService::class)->record('PASSWORD_CHANGE_FAILED', [
+                'category' => 'auth',
+                'result' => AuditService::RESULT_FAILURE,
+                'reason' => 'Password reset profile was not found.',
+            ], $request);
+
             return response()->json(['error' => 'User profile not found.'], 404);
         }
 
@@ -228,6 +281,12 @@ class AuthController extends Controller
         $profile->save();
 
         Cache::forget($cacheKey);
+
+        app(AuditService::class)->record('PASSWORD_CHANGED', [
+            'actor_user_id' => $profile->id,
+            'actor_role' => $profile->role,
+            'category' => 'auth',
+        ], $request);
 
         return response()->json([
             'success' => true,

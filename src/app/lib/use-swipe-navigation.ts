@@ -40,7 +40,7 @@ function isBlockedRoute(p: string): boolean {
 
 function findActiveIndex(pathname: string, items: readonly PortalNavItem[]): number {
   return items.findIndex(({ path }) => {
-    if (path === '/student' || path === '/staff/dashboard' || path === '/admin')
+    if (path === '/student' || path === '/staff/dashboard' || path === '/admin' || path === '/super-admin')
       return pathname === path;
     if (path === '/staff/submissions')
       return (

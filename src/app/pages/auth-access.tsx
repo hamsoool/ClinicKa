@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, type FormEvent, type CSSProperties } from 'react';
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, Stethoscope } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, Send, Stethoscope } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import {
   Dialog,
@@ -8,12 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../components/ui/dialog';
-import {
-  getPasswordResetCooldownRemaining,
-  PASSWORD_RESET_COOLDOWN_SECONDS,
-  sendPasswordResetEmail,
-  type UserRole,
-} from '../lib/api';
+import type { UserRole } from '../lib/api';
 import { inferRoleFromEmail, prefetchLikelyPortalRoutes, prefetchPortalExperience } from '../lib/login-prefetch';
 import { getPasswordPolicyMessage, getPasswordStrengthResult } from '../lib/password-policy';
 import { useAuth } from '../lib/auth';
@@ -22,6 +17,7 @@ import { PasswordSetupScreen } from './auth/password-setup-screen';
 import { CONTACT_EMAIL, POLICY_UPDATED_AT, privacySections, termsSections } from './auth/legal-content';
 
 const GC_DOMAIN = 'gordoncollege.edu.ph';
+const REMEMBERED_LOGIN_EMAIL_KEY = 'gc-remembered-login-email';
 const AUTH_LOGO_SRC = '/logo.png';
 const DASHBOARD_PREVIEW_SRC = '/previews/student_dashboard.png';
 
@@ -200,18 +196,15 @@ export default function AuthAccessPage() {
   );
   const [logoVisible, setLogoVisible] = useState(true);
   const [signInForm, setSignInForm] = useState({
-    email: '',
+    email: typeof window === 'undefined' ? '' : window.localStorage.getItem(REMEMBERED_LOGIN_EMAIL_KEY) || '',
     password: '',
-    remember: false,
+    remember: typeof window !== 'undefined' && Boolean(window.localStorage.getItem(REMEMBERED_LOGIN_EMAIL_KEY)),
   });
   const [passwordRecoveryForm, setPasswordRecoveryForm] = useState({
     password: '',
     confirmPassword: '',
   });
-  const [sendingResetEmail, setSendingResetEmail] = useState(false);
-  const [forgotPasswordDialogOpen, setForgotPasswordDialogOpen] = useState(false);
-  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
-  const [resetCooldown, setResetCooldown] = useState(0);
+  const [passwordSupportDialogOpen, setPasswordSupportDialogOpen] = useState(false);
 
   const passwordRecoveryInputs = useMemo(
     () => ({
@@ -249,21 +242,6 @@ export default function AuthAccessPage() {
   }, [authReason]);
 
   useEffect(() => {
-    if (!forgotPasswordDialogOpen) return;
-
-    const remaining = getPasswordResetCooldownRemaining(forgotPasswordEmail);
-    setResetCooldown(remaining);
-  }, [forgotPasswordDialogOpen, forgotPasswordEmail]);
-
-  useEffect(() => {
-    if (resetCooldown <= 0) return;
-    const timer = window.setInterval(() => {
-      setResetCooldown((prev) => Math.max(prev - 1, 0));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [resetCooldown]);
-
-  useEffect(() => {
     prefetchLikelyPortalRoutes(signInForm.email);
   }, [signInForm.email]);
 
@@ -286,41 +264,10 @@ export default function AuthAccessPage() {
   }
 
 
-  function openForgotPasswordDialog() {
+  function openPasswordSupportDialog() {
     setError(null);
     setSuccessMessage(null);
-    const nextEmail = signInForm.email.trim();
-    setForgotPasswordEmail(nextEmail);
-    setResetCooldown(getPasswordResetCooldownRemaining(nextEmail));
-    setForgotPasswordDialogOpen(true);
-  }
-
-  async function handleForgotPassword() {
-    setError(null);
-    setSuccessMessage(null);
-
-    if (!forgotPasswordEmail.trim()) {
-      setError('Please enter your email first.');
-      return;
-    }
-
-    if (resetCooldown > 0) {
-      setError(`Please wait ${formatCooldown(resetCooldown)} before requesting another password reset email.`);
-      return;
-    }
-
-    setSendingResetEmail(true);
-    try {
-      await sendPasswordResetEmail(forgotPasswordEmail);
-      setResetCooldown(getPasswordResetCooldownRemaining(forgotPasswordEmail));
-      setForgotPasswordDialogOpen(false);
-      setSuccessMessage('If the account exists, password reset instructions have been sent to your email.');
-    } catch (nextError) {
-      setResetCooldown(getPasswordResetCooldownRemaining(forgotPasswordEmail));
-      setError(nextError instanceof Error ? nextError.message : 'Unable to send password reset email. Please try again.');
-    } finally {
-      setSendingResetEmail(false);
-    }
+    setPasswordSupportDialogOpen(true);
   }
 
   async function handlePasswordRecovery(event: FormEvent<HTMLFormElement>) {
@@ -345,12 +292,6 @@ export default function AuthAccessPage() {
         nextError instanceof Error ? nextError.message : 'Unable to reset password. Please try again.',
       );
     }
-  }
-
-  function formatCooldown(seconds: number) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
 
   const googleErrorMessage =
@@ -637,7 +578,13 @@ export default function AuthAccessPage() {
                       required
                       value={signInForm.email}
                       onChange={(event) =>
-                        setSignInForm((prev) => ({ ...prev, email: event.target.value }))
+                        setSignInForm((prev) => {
+                          const email = event.target.value;
+                          if (prev.remember) {
+                            window.localStorage.setItem(REMEMBERED_LOGIN_EMAIL_KEY, email.trim());
+                          }
+                          return { ...prev, email };
+                        })
                       }
                       placeholder={`name@${GC_DOMAIN}`}
                       className={iconInputClassName}
@@ -678,7 +625,15 @@ export default function AuthAccessPage() {
                       type="checkbox"
                       checked={signInForm.remember}
                       onChange={(event) =>
-                        setSignInForm((prev) => ({ ...prev, remember: event.target.checked }))
+                        setSignInForm((prev) => {
+                          const remember = event.target.checked;
+                          if (remember) {
+                            window.localStorage.setItem(REMEMBERED_LOGIN_EMAIL_KEY, prev.email.trim());
+                          } else {
+                            window.localStorage.removeItem(REMEMBERED_LOGIN_EMAIL_KEY);
+                          }
+                          return { ...prev, remember };
+                        })
                       }
                       className="h-4 w-4 rounded border-[#b8c7c3] text-[#065f46] focus:ring-[#065f46]"
                     />
@@ -687,12 +642,12 @@ export default function AuthAccessPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      openForgotPasswordDialog();
+                      openPasswordSupportDialog();
                     }}
-                    disabled={loading || sendingResetEmail}
+                    disabled={loading}
                     className="font-semibold text-[#006d3c] hover:text-[#004532] disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    Forgot password?
+                    Password support
                   </button>
                 </div>
 
@@ -733,7 +688,7 @@ export default function AuthAccessPage() {
                       'Covers account use, submissions, and access',
                     ]}
                     sections={termsSections}
-                    footer="By using the portal, you acknowledge that records submitted through the system may be reviewed and managed by authorized Gordon College personnel as part of official clinic operations."
+                    footer="By using ClinicKa, you acknowledge that information and documents submitted through the portal may be reviewed and managed by authorized Gordon College personnel as part of official clinic operations and student health-clearance workflows."
                   />{' '}
                   and{' '}
                   <LegalDialog
@@ -747,66 +702,44 @@ export default function AuthAccessPage() {
                       `Contact: ${CONTACT_EMAIL}`,
                     ]}
                     sections={privacySections}
-                    footer="This policy presentation is aligned with the Gordon College General Privacy Notice and is intended to help users understand how personal data is handled inside the clinic portal."
+                    footer="This ClinicKa notice summarizes the Gordon College General Privacy Notice as it applies to the clinic portal. It does not replace the Gordon College Data Privacy Manual or applicable law."
                   />
                   .
                 </p>
               </form>
 
-              <Dialog open={forgotPasswordDialogOpen} onOpenChange={setForgotPasswordDialogOpen}>
-                <DialogContent className="sm:max-w-md">
+              <Dialog open={passwordSupportDialogOpen} onOpenChange={setPasswordSupportDialogOpen}>
+                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
                   <DialogHeader>
-                    <DialogTitle>Reset password</DialogTitle>
+                    <DialogTitle className="flex items-center gap-2 text-xl">
+                      <Send className="h-5 w-5 text-[#006d3c]" />
+                      Password support
+                    </DialogTitle>
                     <DialogDescription>
-                      Enter your email and we will send you a password reset link.
+                      Self-service password reset is not available. Send your request directly to the Gordon College web administrator.
                     </DialogDescription>
                   </DialogHeader>
-                  <form
-                    className="space-y-4"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void handleForgotPassword();
-                    }}
-                  >
-                    <input
-                      type="email"
-                      required
-                      value={forgotPasswordEmail}
-                      onChange={(event) => {
-                        const nextEmail = event.target.value;
-                        setForgotPasswordEmail(nextEmail);
-                        setResetCooldown(getPasswordResetCooldownRemaining(nextEmail));
-                      }}
-                      placeholder={`name@${GC_DOMAIN}`}
-                      className="h-12 w-full rounded-full border border-[#d8e4d7] bg-white px-4 text-sm text-[#161d18] outline-none transition focus:border-[#006d3c] focus:ring-2 focus:ring-[#006d3c]/18"
-                    />
-                    <p className="text-xs leading-6 text-[#4a5b68]">
-                      {resetCooldown > 0
-                        ? `You can request another reset link in ${formatCooldown(resetCooldown)}.`
-                        : `You can request one reset email every ${Math.floor(PASSWORD_RESET_COOLDOWN_SECONDS / 60)} minutes.`}
+                  <div className="space-y-5 text-sm leading-6 text-[#3d4a3f]">
+                    <p>
+                      For password reset requests and other reports for both GC Systems and Google Workspace accounts, kindly send an email to <a className="font-semibold text-[#006d3c] underline underline-offset-2" href="mailto:webadmin@gordoncollege.edu.ph">webadmin@gordoncollege.edu.ph</a> using your domain email account or your registered alternate personal email account.
                     </p>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setForgotPasswordDialogOpen(false)}
-                        disabled={sendingResetEmail}
-                        className="rounded-full border border-[#d8e4d7] px-4 py-2 text-sm font-normal text-[#3d4a3f] transition hover:bg-[#eef6ec] disabled:opacity-70"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={sendingResetEmail || resetCooldown > 0}
-                        className="rounded-full bg-[#006d3c] px-4 py-2 text-sm font-normal text-white transition active:scale-95 hover:bg-[#005f34] disabled:opacity-70"
-                      >
-                        {sendingResetEmail
-                          ? 'Sending...'
-                          : resetCooldown > 0
-                            ? `Try again in ${formatCooldown(resetCooldown)}`
-                            : 'Send reset link'}
-                      </button>
+                    <div className="rounded-2xl border border-[#d8e4d7] bg-[#f4faf2] p-4 sm:p-5">
+                      <p className="font-semibold text-[#161d18]">Use this format:</p>
+                      <div className="mt-3 space-y-2 font-mono text-xs leading-5 text-[#3d4a3f] sm:text-sm">
+                        <p><strong>Subject:</strong> Password RESET Request for [GCES/GCLAMP/Google Account] (or the issue)</p>
+                        <p><strong>Student Number:</strong> [your student number]</p>
+                        <p><strong>Student's Name (LN, FN MI):</strong> [lastname, firstname, middle initial]</p>
+                        <p><strong>Reason:</strong> [state your reason here]</p>
+                      </div>
                     </div>
-                  </form>
+                    <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+                      Attach clear and verifiable screenshot(s) of the reported issue. Only requests sent from a GC domain account or the registered alternate personal email account will be processed online. Otherwise, proceed to the MIS office on the 3rd floor, Room 302.
+                    </p>
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <button type="button" onClick={() => setPasswordSupportDialogOpen(false)} className="rounded-full border border-[#d8e4d7] px-4 py-2.5 text-sm font-semibold text-[#3d4a3f] transition hover:bg-[#eef6ec]">Close</button>
+                      <a href="mailto:webadmin@gordoncollege.edu.ph?subject=Password%20RESET%20Request%20for%20%5BGCES%2FGCLAMP%2FGoogle%20Account%5D&body=Student%20Number%3A%20%0AStudent%27s%20Name%20(LN%2C%20FN%20MI)%3A%20%0AReason%3A%20%0A%0AAttach%20clear%20and%20verifiable%20screenshots%20of%20the%20reported%20issue." className="inline-flex items-center justify-center rounded-full bg-[#006d3c] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#005f34]">Open email</a>
+                    </div>
+                  </div>
                 </DialogContent>
               </Dialog>
 

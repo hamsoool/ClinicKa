@@ -11,4 +11,5 @@ Artisan::command('inspire', function () {
 // Scheduled automated server maintenance routines
 Schedule::command('app:server-backup')->dailyAt('02:00');
 Schedule::command('sanctum:prune-expired --hours=48')->daily();
+Schedule::command('audit:prune')->dailyAt('02:30');
 Schedule::command('cache:prune-stale-tags')->hourly();

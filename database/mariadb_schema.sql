@@ -429,10 +429,18 @@ CREATE TABLE `ocr_calls_log` (
 DROP TABLE IF EXISTS `audit_logs`;
 CREATE TABLE `audit_logs` (
   `id` CHAR(36) NOT NULL,
+  `actor_user_id` CHAR(36) NULL,
+  `actor_role` VARCHAR(40) NULL,
+  `category` VARCHAR(40) NOT NULL DEFAULT 'medical_record',
+  `target_type` VARCHAR(60) NULL,
+  `target_id` VARCHAR(191) NULL,
+  `student_id` VARCHAR(50) NULL,
+  `result` VARCHAR(20) NOT NULL DEFAULT 'SUCCESS',
+  `reason` VARCHAR(255) NULL,
   `user_id` CHAR(36) NULL,
   `role` VARCHAR(50) NULL,
-  `action` VARCHAR(100) NOT NULL, -- 'FILE_VIEW', 'FILE_UPLOAD', 'STATUS_CHANGE', etc.
   `target_student_id` VARCHAR(50) NULL,
+  `action` VARCHAR(100) NOT NULL,
   `submission_id` CHAR(36) NULL,
   `file_id` CHAR(36) NULL,
   `ip_address` VARCHAR(45) NULL,
@@ -440,9 +448,14 @@ CREATE TABLE `audit_logs` (
   `metadata` JSON NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  KEY `audit_logs_actor_created_idx` (`actor_user_id`, `created_at`),
   KEY `audit_logs_user_idx` (`user_id`, `created_at`),
   KEY `audit_logs_target_student_idx` (`target_student_id`, `created_at`),
-  KEY `audit_logs_action_idx` (`action`, `created_at`)
+  KEY `audit_logs_student_created_idx` (`student_id`, `created_at`),
+  KEY `audit_logs_action_idx` (`action`, `created_at`),
+  KEY `audit_logs_category_created_idx` (`category`, `created_at`),
+  KEY `audit_logs_result_created_idx` (`result`, `created_at`),
+  KEY `audit_logs_target_idx` (`target_type`, `target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------

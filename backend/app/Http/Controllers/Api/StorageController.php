@@ -13,6 +13,7 @@ use App\Models\StaffUser;
 use App\Models\Student;
 use App\Models\Submission;
 use App\Services\StorageService;
+use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -299,6 +300,13 @@ class StorageController extends Controller
 
         // Enforce strict access control
         if ($file->type !== 'announcement' && ! $this->isAuthorizedToAccessFile($user, $file)) {
+            app(AuditService::class)->recordDenied('VIEW_MEDICAL_DOCUMENT', 'Medical document access denied.', [
+                'target_type' => 'file',
+                'target_id' => $file->id,
+                'file_id' => $file->id,
+                'submission_id' => $file->submission_id,
+            ], $request);
+
             return response()->json([
                 'error' => 'Forbidden. You do not have permission to access this medical document.',
             ], Response::HTTP_FORBIDDEN);
@@ -334,6 +342,7 @@ class StorageController extends Controller
         $cleanId = preg_replace('/\.[a-zA-Z0-9]+$/', '', $id);
         $user = $request->user();
         $authenticatedViaUrlToken = false;
+        $invalidStreamingTicket = false;
 
         // 1. Check for short-lived HMAC ticket first (tickets are time-limited, safe in URLs)
         if (! $user && $request->filled('ticket')) {
@@ -342,6 +351,8 @@ class StorageController extends Controller
                 ?: $this->storageService->verifyStreamingTicket($ticket, $id);
             if ($ticketUserId) {
                 $user = Profile::find($ticketUserId);
+            } else {
+                $invalidStreamingTicket = true;
             }
         }
 
@@ -373,6 +384,13 @@ class StorageController extends Controller
 
             // Block direct navigation (address bar paste, link click, bookmark)
             if ($secFetchDest === 'document' || $secFetchSite === 'none') {
+                app(AuditService::class)->recordDenied('VIEW_MEDICAL_DOCUMENT', 'Direct secure-file navigation denied.', [
+                    'target_type' => 'file',
+                    'target_id' => $file->id,
+                    'file_id' => $file->id,
+                    'submission_id' => $file->submission_id,
+                ], $request);
+
                 return response()->json([
                     'error' => 'Direct access to secure medical files is not allowed. Please access files through the application.',
                 ], Response::HTTP_FORBIDDEN);
@@ -382,15 +400,38 @@ class StorageController extends Controller
         // Announcements are public banners visible on login / student board
         if ($file->type !== 'announcement') {
             if (! $user) {
+                app(AuditService::class)->recordDenied('VIEW_MEDICAL_DOCUMENT', $invalidStreamingTicket
+                    ? 'Invalid or expired streaming ticket.'
+                    : 'Authentication required for medical document access.', [
+                    'target_type' => 'file',
+                    'target_id' => $file->id,
+                    'file_id' => $file->id,
+                    'submission_id' => $file->submission_id,
+                ], $request);
+
                 return response()->json(['error' => 'Unauthenticated.'], Response::HTTP_UNAUTHORIZED);
             }
 
             if ($user->is_banned) {
+                app(AuditService::class)->recordDenied('VIEW_MEDICAL_DOCUMENT', 'Disabled account attempted medical document access.', [
+                    'target_type' => 'file',
+                    'target_id' => $file->id,
+                    'file_id' => $file->id,
+                    'submission_id' => $file->submission_id,
+                ], $request);
+
                 return response()->json(['error' => 'Account is deactivated.'], Response::HTTP_FORBIDDEN);
             }
 
             // 5. Strict Authorization gate: Clinic staff/nurses OR student owner
             if (! $this->isAuthorizedToAccessFile($user, $file)) {
+                app(AuditService::class)->recordDenied('VIEW_MEDICAL_DOCUMENT', 'Medical document authorization denied.', [
+                    'target_type' => 'file',
+                    'target_id' => $file->id,
+                    'file_id' => $file->id,
+                    'submission_id' => $file->submission_id,
+                ], $request);
+
                 return response()->json([
                     'error' => 'Forbidden. You do not have permission to view this medical document.',
                 ], Response::HTTP_FORBIDDEN);
@@ -407,10 +448,14 @@ class StorageController extends Controller
         }
 
         // 6. Audit log file access for Data Privacy compliance
-        AuditLog::logAction('FILE_VIEW', $user?->id, $user?->role, null, $file->submission_id, $file->id, [
-            'file_name' => $file->file_name,
+        app(AuditService::class)->record('VIEW_MEDICAL_DOCUMENT', [
+            'target_type' => 'file',
+            'target_id' => $file->id,
+            'file_id' => $file->id,
+            'submission_id' => $file->submission_id,
+            'student_id' => $file->submission?->student_id,
             'category' => $file->type,
-        ]);
+        ], $request);
 
         $safeName = preg_replace('/[^\p{L}\p{N}._-]/u', '_', basename(str_replace("\0", '', (string) $file->file_name)));
 

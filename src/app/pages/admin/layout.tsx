@@ -5,6 +5,7 @@ import {
   Megaphone,
   Settings,
   ShieldCheck,
+  ShieldAlert,
   ShieldPlus,
   Users,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ const navItems = [
   { path: '/admin/reports', label: 'Reports', mobileLabel: 'Reports', icon: BarChart3 },
   { path: '/admin/users', label: 'User Accounts', mobileLabel: 'Users', icon: Users },
   { path: '/admin/announcements', label: 'Announcements', mobileLabel: 'Posts', icon: Megaphone },
+  { path: '/admin/audit-logs', label: 'Audit Logs', mobileLabel: 'Audit', icon: ShieldAlert },
   { path: '/admin/settings', label: 'System Settings', mobileLabel: 'Settings', icon: Settings },
 ] as const satisfies readonly PortalNavItem[];
 
